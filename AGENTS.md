@@ -230,11 +230,18 @@ turns off the bottom button bar. `UIMode=Kiosk` is still set on top, because
 it is the only thing that closes "GAME OPTIONS (HOLD)" — a long press of the
 *launch* button, which cannot be unmapped without breaking launching.
 
+Locking also hides Batocera's own systems. `HiddenSystems` in
+`es_settings.cfg` carries the list: locked, the carousel is only the four MQT
+games; unlocked, SNES/NES/Mega Drive/C64 and the rest come back, each with
+the freeware ROM Batocera ships. `LOCKED_HIDDEN_SYSTEMS` in `kiosk.py` is the
+list to trim if one of them should be public too.
+
 **Unlocking at the cabinet, with no laptop:** `batocera/unlock_daemon.py`
-watches the pads underneath ES and runs `kiosk.py --unlock` when it sees
+watches the pads underneath ES and runs `kiosk.py --toggle` when it sees
 **L R L R X** (either pad, within 6 seconds). `unlock_daemon.py --install`
 writes `/userdata/system/custom.sh`, which `S99userservices` runs on every
-boot. That sequence cannot fire by accident: the lockdown unmaps x, y,
+boot. It **toggles** -- an unlock-only code leaves no way back into kiosk
+mode from the cabinet, which is the whole point of not needing a laptop. That sequence cannot fire by accident: the lockdown unmaps x, y,
 pageup and pagedown from `es_input.cfg`, and L/R *were* pageup/pagedown, so
 all three buttons are inert in ES — and inside a game they are live, which is
 why the daemon ignores everything while a ROM is running.

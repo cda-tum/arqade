@@ -59,6 +59,14 @@ MENU_INPUTS = ("start", "select", "x", "y", "pageup", "pagedown")
 UI_MODE = "Kiosk"
 UI_PASSKEY = "xyxyxyxyxy"
 
+# Which systems the menu shows. Locked, the cabinet is only the four MQT
+# games; unlocked, Batocera's own bundled systems come back (each ships a
+# freeware ROM or two, so they are really playable, not empty shelves).
+# ES reads this at start-up, and lock/unlock restart ES anyway.
+# Trim LOCKED_HIDDEN_SYSTEMS if you ever want one of these public too.
+LOCKED_HIDDEN_SYSTEMS = "c64;pcengine;nes;snes;gba;mrboom;ports;prboom;sdlpop;odcommander;megadrive"
+UNLOCKED_HIDDEN_SYSTEMS = ""
+
 _CONFIG_OPEN = re.compile(r"<inputConfig\b[^>]*type=\"joystick\"")
 _CONFIG_CLOSE = re.compile(r"</inputConfig>")
 _MENU_INPUT = re.compile(r"<input\s+name=\"(%s)\"" % "|".join(MENU_INPUTS))
@@ -156,6 +164,7 @@ def lock() -> None:
     INPUT_CFG.write_text(text, encoding="utf-8")
     print(f"removed {dropped} menu-button mappings from {INPUT_CFG}")
     set_setting("bool", "ShowHelpPrompts", "false")
+    set_setting("string", "HiddenSystems", LOCKED_HIDDEN_SYSTEMS)
     set_setting("string", "UIMode", UI_MODE)
     set_setting("string", "UIMode_passkey", UI_PASSKEY)
     if was_running:
@@ -171,6 +180,7 @@ def unlock() -> None:
     shutil.copy2(INPUT_BACKUP, INPUT_CFG)
     print(f"restored {INPUT_CFG}")
     set_setting("bool", "ShowHelpPrompts", "true")
+    set_setting("string", "HiddenSystems", UNLOCKED_HIDDEN_SYSTEMS)
     set_setting("string", "UIMode", "Full")
     if was_running:
         start_es()
@@ -219,7 +229,7 @@ def status() -> None:
     _, would_drop = strip_menu_inputs(live)
     print(f"joystick menu-button mappings still present: {would_drop}")
     print(f"locked: {would_drop == 0}")
-    for name in ("ShowHelpPrompts", "UIMode", "UIMode_passkey"):
+    for name in ("ShowHelpPrompts", "UIMode", "UIMode_passkey", "HiddenSystems"):
         print(f"{name}: {get_setting(name)}")
     print(f"backup present: {INPUT_BACKUP.exists()}")
     print(f"the L R L R X sequence would: {'unlock' if would_drop == 0 else 'lock'}")
