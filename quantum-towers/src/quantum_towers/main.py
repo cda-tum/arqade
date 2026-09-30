@@ -1,0 +1,511 @@
+"""Entry point: CLI args, window setup, screen flow, game loop.
+
+Two players climbing side by side, each with their own tower, target chain,
+and charges; reaching CHARGES_TO_ATTACK fires an automatic knockback attack
+on the opponent. Not unit tested (no headless assertions on rendered output
+make sense); verify by running it and by the --input-test smoke path.
+"""
+
+from __future__ import annotations
+
+import argparse
+import random
+import sys
+from dataclasses import replace
+
+import pygame
+import pygame.gfxdraw
+
+from quantum_towers import config, fonts, screens, sound, visuals
+from quantum_towers.display import make_display, present
+from quantum_towers.input import (
+    keyboard_quit_held,
+    pressed_edge,
+    read_player_raw_input,
+    should_quit,
+)
+from quantum_towers.notation import render_state
+from quantum_towers.player import PlayerState, apply_action, confirm_climb, knockback, new_player
+from quantum_towers.quantum import ACTIONS, states_equal
+from quantum_towers.targets import generate_target_sequence
+
+# Per-half vertical layout (px). The tower fills whatever's left between the
+# header and the info strip below it (state + charge bar, kept near the
+# climber rather than up at the top); the button legend is shared and shown
+# once across the full width, not per half.
+TOWER_TOP = 18
+INFO_HEIGHT = 32
+LEGEND_HEIGHT = 40
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Quantum Towers")
+    parser.add_argument(
+        "--input-test",
+        action="store_true",
+        help="Show live joystick/keyboard state instead of running the game",
+    )
+    parser.add_argument(
+        "--fullscreen", action="store_true", help="Run fullscreen at desktop resolution"
+    )
+    parser.add_argument("--fps", action="store_true", help="Force the FPS overlay on")
+    parser.add_argument(
+        "--window-size",
+        default="960x540",
+        help="Windowed size as WxH, e.g. 960x540 (ignored with --fullscreen)",
+    )
+    return parser.parse_args(argv)
+
+
+def _poll_players(keys: pygame.key.ScancodeWrapper) -> tuple:
+    return read_player_raw_input("p1", keys), read_player_raw_input("p2", keys)
+
+
+def _wants_quit(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> bool:
+    return should_quit(
+        p1_start=p1_raw.start_held,
+        p1_select=p1_raw.select_held,
+        p2_start=p2_raw.start_held,
+        p2_select=p2_raw.select_held,
+        keyboard_quit=keyboard_quit_held(keys),
+    )
+
+
+def _wants_start(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> bool:
+    return (
+        p1_raw.start_held
+        or p2_raw.start_held
+        or keys[pygame.K_RETURN]
+        or keys[pygame.K_SPACE]
+    )
+
+
+def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> str:
+    """Attract/title screen. Returns 'start' or 'quit'."""
+    internal = surface
+    clock = pygame.time.Clock()
+    title_font = fonts.load_font(22)
+    legend_font = fonts.load_font(9)
+    prompt_font = fonts.load_font(12)
+    grid_gate_font = fonts.load_font(8)
+    grid_label_font = fonts.load_font(7)
+    t = 0.0
+
+    while True:
+        dt = clock.tick(config.FPS) / 1000.0
+        t += dt
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+
+        keys = pygame.key.get_pressed()
+        p1_raw, p2_raw = _poll_players(keys)
+
+        if _wants_quit(p1_raw, p2_raw, keys):
+            return "quit"
+        if _wants_start(p1_raw, p2_raw, keys):
+            return "start"
+
+        screens.draw_title_screen(
+            internal, title_font, legend_font, prompt_font, grid_gate_font, grid_label_font,
+            screens.blink_visible(t, config.TITLE_BLINK_PERIOD),
+            p1_pressed=p1_raw.button_held, p2_pressed=p2_raw.button_held,
+        )
+        present(internal, window)
+        pygame.display.flip()
+
+
+def run_winner_screen(
+    surface: pygame.Surface, window: pygame.Surface | None, winner: str, floors: dict[str, int]
+) -> str:
+    """Returns 'continue' (back to title) or 'quit'."""
+    internal = surface
+    clock = pygame.time.Clock()
+    big_font = fonts.load_font(18)
+    small_font = fonts.load_font(12)
+    label = "PLAYER 1" if winner == "p1" else "PLAYER 2"
+    t = 0.0
+
+    while True:
+        dt = clock.tick(config.FPS) / 1000.0
+        t += dt
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+
+        keys = pygame.key.get_pressed()
+        p1_raw, p2_raw = _poll_players(keys)
+
+        if _wants_quit(p1_raw, p2_raw, keys):
+            return "quit"
+        if t >= config.WINNER_SCREEN_DURATION or _wants_start(p1_raw, p2_raw, keys):
+            return "continue"
+
+        screens.draw_winner_screen(internal, big_font, small_font, label, floors)
+        present(internal, window)
+        pygame.display.flip()
+
+
+def _draw_player_half(
+    surface: pygame.Surface,
+    half: pygame.Rect,
+    label: str,
+    player: PlayerState,
+    visual_floor: float,
+    climb_progress: float | None,
+    attack_progress: float | None,
+    stun_progress: float | None,
+    color: tuple[int, int, int],
+    header_font: pygame.font.Font,
+    state_font: pygame.font.Font,
+    block_fonts: list[pygame.font.Font],
+    game_time: float,
+    climber_side: str,
+) -> tuple[int, int]:
+    """Returns the climber's (x, y) screen position, for the attack-beam and
+    perfect-floor effects."""
+    visuals.blit_outlined_text(
+        surface, header_font, f"{label}  FLOOR {player.floor}/{config.TOWER_HEIGHT}",
+        config.COLOR_TEXT, (half.x + 8, half.y + 4),
+    )
+
+    tower_region = pygame.Rect(
+        half.x + 16, half.y + TOWER_TOP, half.width - 32,
+        half.height - TOWER_TOP - INFO_HEIGHT - LEGEND_HEIGHT,
+    )
+    climber_pos = visuals.draw_tower(
+        surface, tower_region, player.floor, visual_floor, player.current_target, player.next_target,
+        color, block_fonts, game_time, climber_side=climber_side, climb_progress=climb_progress,
+        attack_progress=attack_progress, stun_progress=stun_progress,
+    )
+
+    # State and charges sit right below the tower -- near the climber's own
+    # position, not up in the top HUD row -- since they're about *this
+    # player, right now*, not a persistent scoreboard.
+    info_y = tower_region.bottom + 4
+    bar_rect = pygame.Rect(half.x + 8, info_y, half.width - 16, 8)
+    visuals.draw_charge_bar(surface, bar_rect, player.charges, config.CHARGES_TO_ATTACK)
+
+    you_prefix_rect = visuals.blit_outlined_text(
+        surface, state_font, "YOU:", color, (half.x + 8, info_y + 12),
+    )
+    visuals.blit_outlined_text(
+        surface, state_font, render_state(player.state), config.COLOR_TEXT,
+        (you_prefix_rect.right + 4, info_y + 12),
+    )
+
+    return climber_pos
+
+
+def _draw_attack_beam(
+    surface: pygame.Surface,
+    from_pos: tuple[int, int],
+    to_pos: tuple[int, int],
+    color: tuple[int, int, int],
+    progress: float,
+) -> None:
+    """A brief traveling spark from the attacker's climber to the victim's,
+    so the knockback reads as one player shooting the other."""
+    pygame.draw.line(surface, color, from_pos, to_pos, 2)
+    spark_x = round(from_pos[0] + (to_pos[0] - from_pos[0]) * progress)
+    spark_y = round(from_pos[1] + (to_pos[1] - from_pos[1]) * progress)
+    pygame.gfxdraw.filled_circle(surface, spark_x, spark_y, 5, color)
+    pygame.gfxdraw.aacircle(surface, spark_x, spark_y, 5, color)
+
+
+def _handle_attacks(
+    players: dict[str, PlayerState], rng: random.Random
+) -> tuple[dict[str, PlayerState], str | None]:
+    """If either player has enough charges, fire their attack: knock the
+    opponent down and reset the attacker's charges. At most one attack per
+    call (mirrors "one event resolved per frame" used elsewhere in this
+    codebase's sibling project) -- with two players this just means a
+    simultaneous double-charge is resolved over two consecutive frames."""
+    for attacker_key, victim_key in (("p1", "p2"), ("p2", "p1")):
+        attacker = players[attacker_key]
+        if attacker.charges >= config.CHARGES_TO_ATTACK:
+            victim = knockback(players[victim_key], config.KNOCKBACK_FLOORS, rng)
+            new_attacker = replace(attacker, charges=0)
+            return {**players, attacker_key: new_attacker, victim_key: victim}, attacker_key
+    return players, None
+
+
+def run_game(
+    surface: pygame.Surface, window: pygame.Surface | None, sounds: sound.Sounds, show_fps: bool
+) -> tuple[str, dict[str, PlayerState]]:
+    """Play one match. Returns (result, players); result is 'p1'/'p2'
+    (reached the top), 'quit', or 'idle'."""
+    internal = surface
+    clock = pygame.time.Clock()
+    font = fonts.load_font(10)
+    header_font = fonts.load_font(11)
+    state_font = fonts.load_font(9)
+    # Biggest-first: most block labels fit at 11px, but a general state with
+    # a magnitude and an angle (e.g. "1/√2|1>@315°") needs a smaller size to
+    # avoid spilling out of the block.
+    block_fonts = [fonts.load_font(11), fonts.load_font(9), fonts.load_font(7)]
+    grid_gate_font = fonts.load_font(8)
+    grid_label_font = fonts.load_font(7)
+    perfect_font = fonts.load_font(9)
+    background = visuals.make_background(config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)
+    button_grid_data = screens.button_grid()
+
+    rng = random.Random()
+    # One shared chain of targets for the whole match -- both players climb
+    # the exact same sequence of floors, so neither's puzzles are randomly
+    # easier or harder than the other's. +2 so the final floor (TOWER_HEIGHT)
+    # can still look up its own next_target without running off the end.
+    target_sequence = generate_target_sequence(rng, config.TOWER_HEIGHT + 2)
+    players = {"p1": new_player(target_sequence), "p2": new_player(target_sequence)}
+    prev_held = {"p1": {name: False for name in ACTIONS}, "p2": {name: False for name in ACTIONS}}
+    prev_up_held = {"p1": False, "p2": False}
+    game_time = 0.0
+    idle_seconds = 0.0
+    attack_flash: tuple[str, float] | None = None  # (attacker_key, started_at)
+    perfect_flash: dict[str, float | None] = {"p1": None, "p2": None}  # started_at per player
+    # Matching the target no longer auto-climbs -- pushing up confirms it.
+    # Confirming on the WRONG state locks that player's input out until
+    # `stun_until[pk]`; `correct_since[pk]` times how long they've been
+    # sitting on a correct-but-unconfirmed state, to drive the "push up" hint.
+    stun_until: dict[str, float] = {"p1": 0.0, "p2": 0.0}
+    correct_since: dict[str, float | None] = {"p1": None, "p2": None}
+
+    # Animated camera position per player -- eases toward the real (logical)
+    # floor whenever it changes, rather than snapping, so the tower visibly
+    # scrolls and the climber's pose has something to sync a "pulling up"
+    # motion to. `climb_anim[pk]` is (from_floor, to_floor, started_at) while
+    # a transition is in flight, else None.
+    visual_floor = {pk: float(players[pk].floor) for pk in ("p1", "p2")}
+    climb_anim: dict[str, tuple[float, float, float] | None] = {"p1": None, "p2": None}
+
+    left_half = pygame.Rect(0, 0, config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT)
+    right_half = pygame.Rect(
+        config.INTERNAL_WIDTH // 2, 0, config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT
+    )
+
+    while True:
+        dt = clock.tick(config.FPS) / 1000.0
+        game_time += dt
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit", players
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F3:
+                show_fps = not show_fps
+
+        keys = pygame.key.get_pressed()
+        p1_raw, p2_raw = _poll_players(keys)
+        raws = {"p1": p1_raw, "p2": p2_raw}
+
+        if _wants_quit(p1_raw, p2_raw, keys):
+            return "quit", players
+
+        any_input = any(raws[pk].button_held[a] for pk in ("p1", "p2") for a in ACTIONS) or any(
+            raws[pk].up_held for pk in ("p1", "p2")
+        )
+        idle_seconds = 0.0 if any_input else idle_seconds + dt
+        if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
+            return "idle", players
+
+        for player_key in ("p1", "p2"):
+            raw = raws[player_key]
+            stunned = game_time < stun_until[player_key]
+            if not stunned:
+                for name in ACTIONS:
+                    if pressed_edge(prev_held[player_key][name], raw.button_held[name]):
+                        players[player_key] = apply_action(players[player_key], name)
+
+                if pressed_edge(prev_up_held[player_key], raw.up_held):
+                    before = players[player_key]
+                    after, advanced = confirm_climb(before, target_sequence)
+                    if advanced:
+                        players[player_key] = after
+                        sounds.climb.play()
+                        if after.charges > before.charges:
+                            perfect_flash[player_key] = game_time
+                            sounds.perfect.play()
+                    else:
+                        stun_until[player_key] = game_time + config.STUN_DURATION
+
+            for name in ACTIONS:
+                prev_held[player_key][name] = raw.button_held[name]
+            prev_up_held[player_key] = raw.up_held
+
+            is_correct_now = states_equal(
+                players[player_key].state, players[player_key].current_target
+            )
+            if is_correct_now:
+                if correct_since[player_key] is None:
+                    correct_since[player_key] = game_time
+            else:
+                correct_since[player_key] = None
+
+        players, attacker = _handle_attacks(players, rng)
+        if attacker:
+            attack_flash = (attacker, game_time)
+            sounds.shot.play()
+
+        attack_progress = {"p1": None, "p2": None}
+        if attack_flash is not None:
+            attacker_key, started_at = attack_flash
+            age = game_time - started_at
+            if age < config.ATTACK_BEAM_DURATION:
+                attack_progress[attacker_key] = age / config.ATTACK_BEAM_DURATION
+
+        perfect_progress = {"p1": None, "p2": None}
+        for pk in ("p1", "p2"):
+            started_at = perfect_flash[pk]
+            if started_at is not None:
+                age = game_time - started_at
+                if age < config.PERFECT_FLASH_DURATION:
+                    perfect_progress[pk] = age / config.PERFECT_FLASH_DURATION
+                else:
+                    perfect_flash[pk] = None
+
+        stun_progress = {"p1": None, "p2": None}
+        for pk in ("p1", "p2"):
+            remaining = stun_until[pk] - game_time
+            if remaining > 0:
+                stun_progress[pk] = 1.0 - remaining / config.STUN_DURATION
+
+        push_up_hint = {"p1": False, "p2": False}
+        for pk in ("p1", "p2"):
+            started_at = correct_since[pk]
+            if started_at is not None and game_time - started_at >= config.PUSH_UP_HINT_DELAY:
+                push_up_hint[pk] = True
+
+        climb_progress = {"p1": None, "p2": None}
+        for pk in ("p1", "p2"):
+            actual_floor = float(players[pk].floor)
+            active = climb_anim[pk]
+            if active is None or active[1] != actual_floor:
+                # Floor changed since the last frame (a climb or a knockback)
+                # -- (re)start the camera animation from wherever it visually
+                # is right now toward the new floor, so an interruption (e.g.
+                # a knockback landing mid-climb) blends smoothly rather than
+                # snapping.
+                active = (visual_floor[pk], actual_floor, game_time)
+                climb_anim[pk] = active
+
+            start_v, target_v, started_at = active
+            if start_v == target_v:
+                climb_anim[pk] = None
+                continue
+            progress = min(1.0, (game_time - started_at) / config.CLIMB_ANIM_DURATION)
+            eased = 1 - (1 - progress) ** 2  # ease-out
+            visual_floor[pk] = start_v + (target_v - start_v) * eased
+            climb_progress[pk] = progress
+            if progress >= 1.0:
+                climb_anim[pk] = None
+
+        internal.blit(background, (0, 0))
+        pygame.draw.line(
+            internal, config.COLOR_TOWER_TRIM,
+            (config.INTERNAL_WIDTH // 2, 0), (config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT), 2,
+        )
+
+        p1_climber_pos = _draw_player_half(
+            internal, left_half, "P1", players["p1"], visual_floor["p1"], climb_progress["p1"],
+            attack_progress["p1"], stun_progress["p1"], config.COLOR_PLAYER_1, header_font,
+            state_font, block_fonts, game_time, climber_side="right",
+        )
+        p2_climber_pos = _draw_player_half(
+            internal, right_half, "P2", players["p2"], visual_floor["p2"], climb_progress["p2"],
+            attack_progress["p2"], stun_progress["p2"], config.COLOR_PLAYER_2, header_font,
+            state_font, block_fonts, game_time, climber_side="left",
+        )
+
+        legend_y = config.INTERNAL_HEIGHT - LEGEND_HEIGHT // 2
+        visuals.draw_button_grid(
+            internal, (config.INTERNAL_WIDTH // 4, legend_y), button_grid_data,
+            grid_gate_font, grid_label_font,
+            accent_color=config.COLOR_PLAYER_1, pressed=raws["p1"].button_held,
+        )
+        visuals.draw_button_grid(
+            internal, (config.INTERNAL_WIDTH * 3 // 4, legend_y), button_grid_data,
+            grid_gate_font, grid_label_font,
+            accent_color=config.COLOR_PLAYER_2, pressed=raws["p2"].button_held,
+        )
+
+        climber_pos_by_player = {"p1": p1_climber_pos, "p2": p2_climber_pos}
+        color_by_player = {"p1": config.COLOR_PLAYER_1, "p2": config.COLOR_PLAYER_2}
+        for pk in ("p1", "p2"):
+            if attack_progress[pk] is not None:
+                visuals.draw_muzzle_flash(
+                    internal, *climber_pos_by_player[pk], color_by_player[pk], attack_progress[pk]
+                )
+            if perfect_progress[pk] is not None:
+                visuals.draw_perfect_flash(
+                    internal, *climber_pos_by_player[pk], color_by_player[pk], perfect_progress[pk],
+                    perfect_font,
+                )
+            if stun_progress[pk] is not None:
+                visuals.draw_stun_flash(internal, *climber_pos_by_player[pk], stun_progress[pk], perfect_font)
+            elif push_up_hint[pk]:
+                visuals.draw_push_up_hint(internal, *climber_pos_by_player[pk], perfect_font)
+
+        if attack_flash is not None:
+            attacker_key, started_at = attack_flash
+            age = game_time - started_at
+            if age < config.ATTACK_BEAM_DURATION:
+                from_pos = p1_climber_pos if attacker_key == "p1" else p2_climber_pos
+                to_pos = p2_climber_pos if attacker_key == "p1" else p1_climber_pos
+                _draw_attack_beam(
+                    internal, from_pos, to_pos,
+                    config.COLOR_PLAYER_1 if attacker_key == "p1" else config.COLOR_PLAYER_2,
+                    age / config.ATTACK_BEAM_DURATION,
+                )
+            else:
+                attack_flash = None
+
+        if show_fps:
+            fps_surf = font.render(f"{clock.get_fps():.0f} fps", False, config.COLOR_FPS)
+            internal.blit(fps_surf, (4, 4))
+
+        present(internal, window)
+        pygame.display.flip()
+
+        if players["p1"].floor >= config.TOWER_HEIGHT:
+            return "p1", players
+        if players["p2"].floor >= config.TOWER_HEIGHT:
+            return "p2", players
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+
+    pygame.init()
+    pygame.joystick.init()
+    surface, window = make_display(args.fullscreen, args.window_size)
+    pygame.display.set_caption("Quantum Towers")
+
+    if args.input_test:
+        from quantum_towers.input_test import run_input_test
+
+        run_input_test(surface, window)
+    else:
+        sounds = sound.load_sounds()
+        show_fps = args.fps or config.SHOW_FPS_DEFAULT
+
+        while True:
+            action = run_title_screen(surface, window)
+            if action == "quit":
+                break
+
+            result, players = run_game(surface, window, sounds, show_fps)
+            if result == "quit":
+                break
+            if result in ("p1", "p2"):
+                floors = {"p1": players["p1"].floor, "p2": players["p2"].floor}
+                if run_winner_screen(surface, window, result, floors) == "quit":
+                    break
+            # result == "idle" falls straight back to the title screen
+
+    pygame.quit()
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
