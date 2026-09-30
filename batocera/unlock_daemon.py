@@ -1,9 +1,10 @@
-"""Unlock the cabinet from the cabinet itself -- no laptop, no keyboard.
+"""Lock and unlock the cabinet from the cabinet itself -- no laptop needed.
 
 `kiosk.py --lock` takes START/SELECT/X/Y away from EmulationStation, so there
 is no way back in from the pads through ES. This watches the joysticks
 directly, underneath ES, for a secret button sequence and runs
-`kiosk.py --unlock` when it sees it.
+`kiosk.py --toggle` when it sees it -- locking if unlocked and unlocking if
+locked, so the same code gets you both in and out.
 
     python3 unlock_daemon.py            # run it (this is what boot does)
     python3 unlock_daemon.py --install  # start it on every boot
@@ -118,14 +119,20 @@ def game_running() -> bool:
     return False
 
 
-def unlock() -> None:
-    log("sequence matched -- unlocking")
+def toggle_lock() -> None:
+    """Hand off to kiosk.py --toggle: lock if unlocked, unlock if locked.
+
+    It must toggle. An unlock-only sequence leaves no way back *into* kiosk
+    mode from the cabinet, so re-entering the code just unlocks an already
+    unlocked machine and you are stuck in admin mode without a laptop.
+    """
+    log("sequence matched -- toggling the lock")
     result = subprocess.run(
-        [sys.executable, str(KIOSK), "--unlock"], capture_output=True, text=True
+        [sys.executable, str(KIOSK), "--toggle"], capture_output=True, text=True
     )
     for line in (result.stdout + result.stderr).splitlines():
         log(f"  kiosk.py: {line}")
-    log(f"unlock finished (rc={result.returncode})")
+    log(f"toggle finished (rc={result.returncode})")
 
 
 def run(watch_only: bool = False) -> None:
@@ -134,7 +141,7 @@ def run(watch_only: bool = False) -> None:
         log(f"watching {description}")
     if not pads:
         log("no gamepads yet -- will keep looking")
-    log("sequence is L R L R X" + (" (watch mode, will not unlock)" if watch_only else ""))
+    log("sequence is L R L R X" + (" (watch mode, changes nothing)" if watch_only else ""))
 
     progress = 0
     started = 0.0
@@ -179,7 +186,7 @@ def run(watch_only: bool = False) -> None:
                     progress += 1
                     if progress == len(SEQUENCE):
                         progress = 0
-                        unlock()
+                        toggle_lock()
                 else:
                     # A wrong button restarts, but still counts as a first
                     # press if it happens to be the sequence's own opener.

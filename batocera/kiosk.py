@@ -177,6 +177,28 @@ def unlock() -> None:
         print("restarted EmulationStation")
 
 
+def is_locked() -> bool:
+    """Locked means there is nothing left to strip from es_input.cfg."""
+    _, still_there = strip_menu_inputs(INPUT_CFG.read_text(encoding="utf-8"))
+    return still_there == 0
+
+
+def toggle() -> None:
+    """Lock if unlocked, unlock if locked.
+
+    This is what the button sequence on the cabinet calls. It has to be a
+    toggle: with an unlock-only action there is no way to get back *into*
+    kiosk mode without a laptop, which defeats the point of having a way in
+    without one.
+    """
+    if is_locked():
+        print("currently locked -> unlocking")
+        unlock()
+    else:
+        print("currently unlocked -> locking")
+        lock()
+
+
 def controls() -> None:
     """Put EmulationStation's confirm/back on the cabinet's A/B convention.
 
@@ -200,6 +222,7 @@ def status() -> None:
     for name in ("ShowHelpPrompts", "UIMode", "UIMode_passkey"):
         print(f"{name}: {get_setting(name)}")
     print(f"backup present: {INPUT_BACKUP.exists()}")
+    print(f"the L R L R X sequence would: {'unlock' if would_drop == 0 else 'lock'}")
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -207,6 +230,7 @@ group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--lock", action="store_true", help="public-facing: no menus from the pads")
 group.add_argument("--unlock", action="store_true", help="restore normal menu access")
 group.add_argument("--status", action="store_true", help="report the current state")
+group.add_argument("--toggle", action="store_true", help="lock if unlocked, unlock if locked")
 group.add_argument("--controls", action="store_true", help="A confirms / B goes back in ES")
 args = parser.parse_args()
 
@@ -214,6 +238,8 @@ if args.lock:
     lock()
 elif args.unlock:
     unlock()
+elif args.toggle:
+    toggle()
 elif args.controls:
     controls()
 else:
