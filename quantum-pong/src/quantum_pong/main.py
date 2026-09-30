@@ -19,8 +19,10 @@ from quantum_pong.display import make_display, present
 from quantum_pong.gates import Gate
 from quantum_pong.input import (
     keyboard_quit_held,
+    read_keys,
     read_player_raw_input,
     resolve_paddle_direction,
+    set_keyboard_enabled,
     should_quit,
 )
 from quantum_pong.pong import (
@@ -50,6 +52,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--window-size",
         default="960x540",
         help="Windowed size as WxH, e.g. 960x540 (ignored with --fullscreen)",
+    )
+    parser.add_argument(
+        "--no-keyboard",
+        action="store_true",
+        help="Ignore the keyboard, joysticks only (used on the Batocera cabinet)",
     )
     return parser.parse_args(argv)
 
@@ -144,7 +151,7 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
             if event.type == pygame.QUIT:
                 return "quit"
 
-        keys = pygame.key.get_pressed()
+        keys = read_keys()
         p1_raw, p2_raw = _poll_players(keys)
 
         if _wants_quit(p1_raw, p2_raw, keys):
@@ -179,7 +186,7 @@ def run_winner_screen(
             if event.type == pygame.QUIT:
                 return "quit"
 
-        keys = pygame.key.get_pressed()
+        keys = read_keys()
         p1_raw, p2_raw = _poll_players(keys)
 
         if _wants_quit(p1_raw, p2_raw, keys):
@@ -233,7 +240,7 @@ def run_game(
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_F3:
                 show_fps = not show_fps
 
-        keys = pygame.key.get_pressed()
+        keys = read_keys()
         p1_raw, p2_raw = _poll_players(keys)
 
         if _wants_quit(p1_raw, p2_raw, keys):
@@ -354,6 +361,7 @@ def run_game(
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    set_keyboard_enabled(not args.no_keyboard)
 
     pygame.init()
     pygame.joystick.init()

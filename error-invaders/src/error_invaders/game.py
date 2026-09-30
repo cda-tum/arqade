@@ -25,7 +25,7 @@ from error_invaders.config import (
     SHOW_SCANLINES,
 )
 from error_invaders.display import make_display, present
-from error_invaders.input import Input
+from error_invaders.input import Input, keyboard_enabled
 
 # =====================================================================
 # Constants
@@ -832,12 +832,12 @@ def draw_title(S):
     text(S, "P2  SURFACE PATCH", 10, WHITE, W/2 + 200, 490)
     text(S, "3 colors", 8, (153, 170, 170), W/2 - 200, 508)
     text(S, "2 colors · faster fire", 8, (153, 170, 170), W/2 + 200, 508)
-    if KEY_PRESET == "default":
+    if keyboard_enabled() and KEY_PRESET == "default":
         text(S, "WASD · Y fire · X color", 8, (153, 170, 170), W/2 - 200, 526)
         text(S, "Arrows · , fire · . color", 8, (153, 170, 170), W/2 + 200, 526)
     else:
-        text(S, "Stick · B1 fire · B2 color", 8, (153, 170, 170), W/2 - 200, 526)
-        text(S, "Stick · B1 fire · B2 color", 8, (153, 170, 170), W/2 + 200, 526)
+        text(S, "Stick · A fire · B color", 8, (153, 170, 170), W/2 - 200, 526)
+        text(S, "Stick · A fire · B color", 8, (153, 170, 170), W/2 + 200, 526)
 
     for i, c in enumerate(("spread", "bomb", "bias", "lattice")):
         x, y = 150 + i * 220, 585

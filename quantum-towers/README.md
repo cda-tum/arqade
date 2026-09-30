@@ -118,6 +118,10 @@ observe. That's the single place all button mappings live.
 
 On the cabinet, quit is Start+Select held together on either controller.
 
+The cabinet loader runs the game with `--no-keyboard`: Batocera also turns P1's pad into
+keystrokes (arrow keys, numpad, letters, Enter/Space — see `../AGENTS.md`), which would
+otherwise let P1's stick or buttons drive P2 or fire two actions at once.
+
 P1's dev keys deliberately avoid L/X/R/B/Y/A: the real cabinet's P1 encoder emits a keyboard
 keystroke matching each button's own printed letter *in addition to* its joystick signal, and a
 dev fallback key that collided with one of those would double-fire two actions from a single real

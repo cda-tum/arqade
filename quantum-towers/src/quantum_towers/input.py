@@ -14,6 +14,35 @@ import pygame
 from quantum_towers.config import ACTION_NAMES, AXIS_DEADZONE, INPUT_CONFIG
 
 
+# Batocera's pygame system runs evmapy, which turns player 1's pad into
+# keyboard presses (d-pad -> arrow keys, a/b/x/y -> A/B/X/Y, start -> Enter,
+# select -> Space, ...). Those fake keys collide with the dev keyboard layout
+# (P1's stick moving P2, one button firing two actions), so the cabinet
+# loader passes --no-keyboard and only the joysticks are read.
+_keyboard_enabled = True
+
+
+def set_keyboard_enabled(enabled: bool) -> None:
+    global _keyboard_enabled
+    _keyboard_enabled = enabled
+
+
+def keyboard_enabled() -> bool:
+    return _keyboard_enabled
+
+
+class _NoKeys:
+    """Stands in for pygame.key.get_pressed() while the keyboard is off."""
+
+    def __getitem__(self, key: int) -> bool:
+        return False
+
+
+def read_keys():
+    """pygame.key.get_pressed(), or an all-released stand-in with --no-keyboard."""
+    return pygame.key.get_pressed() if _keyboard_enabled else _NoKeys()
+
+
 def pressed_edge(previous: bool, current: bool) -> bool:
     """True only on the frame a button transitions from not-held to held."""
     return current and not previous

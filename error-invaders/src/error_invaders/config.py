@@ -1,8 +1,8 @@
 """Single source of truth for input mapping and tuning constants.
 
-Button/axis indices follow the same cabinet layout as Quantum Pong / Quantum
-Towers (joystick 0 = P1, joystick 1 = P2, Start = 8, Select = 9). They are
-still placeholders -- run `--input-test` on the real hardware and fill them in.
+Joystick 0 = P1, joystick 1 = P2, same as Quantum Pong / Quantum Towers. The
+fire/swap button numbers are confirmed on the cabinet; Start = 8 / Select = 9
+are still placeholders -- check them with `--input-test`.
 """
 
 from pathlib import Path
@@ -34,16 +34,17 @@ KEY_PRESETS = {
 KEYS_CONFIRM = ["K_RETURN", "K_KP_ENTER", "K_1", "K_2"]
 KEYS_BACK = ["K_ESCAPE"]
 
-# Joysticks. The stick is read both as axes and as a hat (d-pad), so it works
-# whichever way the cabinet's encoder reports it.
+# Joysticks. Raw button numbers confirmed on the cabinet (both pads, see
+# ../AGENTS.md): printed L X R / Y B A = raw 4 0 5 / 3 2 1. The stick is an
+# analog axis there; the hat is only read as a fallback for other pads.
 INPUT_CONFIG = {
     "p1": {
         "joystick_index": 0,
         "hat_index": 0,
         "axes": (0, 1),  # (x axis, y axis)
         "buttons": {
-            "fire": [0],
-            "swap": [1, 2],
+            "fire": [1],  # printed A
+            "swap": [2],  # printed B
         },
     },
     "p2": {
@@ -51,8 +52,8 @@ INPUT_CONFIG = {
         "hat_index": 0,
         "axes": (0, 1),
         "buttons": {
-            "fire": [0],
-            "swap": [1, 2],
+            "fire": [1],  # printed A
+            "swap": [2],  # printed B
         },
     },
     "system": {

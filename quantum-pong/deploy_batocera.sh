@@ -40,7 +40,7 @@ sys.path.insert(0, "${GAMES_DIR}")
 from quantum_pong.main import main
 
 if __name__ == "__main__":
-    main(["--fullscreen"])
+    main(["--fullscreen", "--no-keyboard"])
 EOF
 chmod +x "$STAGE_DIR/${GAME_NAME}.pygame"
 

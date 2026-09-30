@@ -206,6 +206,22 @@ things at once": physical A fired raw button 1 *and* the keystroke `a`, and
 `a` happened to be that game's dev fallback key for a different gate. Pick
 P1 dev-fallback keys from letters outside `{l, x, r, b, y, a}`.
 
+Where the keystrokes come from: Batocera runs **evmapy** for the pygame system
+with `batocera-pygame/evmapy.keys` (installed as `/usr/share/evmapy/pygame.keys`).
+It only has `actions_player1`, which is why only P1's pad does this. Besides the
+six button letters (plus `m`/`s`/`n`/`t` for L2/R2/L3/R3), it maps the d-pad
+directions to the **arrow keys**, the left analog stick to **numpad 4/6/8/2**,
+start to **Enter**, select to **Space** and hotkey to **h**. So avoiding the six
+letters isn't enough on its own. Error Invaders used the arrow keys for P2, so
+P1's stick also moved P2.
+
+The fix used by every game's loader: `deploy_batocera.sh` calls
+`main(["--fullscreen", "--no-keyboard"])`. `--no-keyboard` makes each game's
+`input.read_keys()` (and its keyboard event handling) ignore the keyboard
+completely, so only the real joystick signals count. The keyboard fallback
+still works for local dev runs without the flag. New games should follow the
+same pattern.
+
 ### The joystick's directional movement is an analog axis, not a hat
 
 Both players' sticks report direction as an **analog axis** (`joystick.get_axis(1)`,

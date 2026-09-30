@@ -15,6 +15,7 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame  # noqa: E402
 
 from error_invaders import config, game  # noqa: E402
+from error_invaders.input import set_keyboard_enabled  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -33,11 +34,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="960x720",
         help="Windowed size as WxH, e.g. 960x720 (ignored with --fullscreen)",
     )
+    parser.add_argument(
+        "--no-keyboard",
+        action="store_true",
+        help="Ignore the keyboard, joysticks only (used on the Batocera cabinet)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    set_keyboard_enabled(not args.no_keyboard)
     game.run(
         fullscreen=args.fullscreen,
         window_size=args.window_size,

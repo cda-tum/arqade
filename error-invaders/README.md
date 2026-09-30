@@ -5,9 +5,8 @@ IconicArcade Raspberry Pi 4 cabinet (Batocera, `pygame` system). A pygame port o
 browser version, packaged the same way as Quantum Pong and Quantum Towers.
 
 **Status:** full game (1 or 2 players, EASY/HARD mode, power-ups, lattice surgery,
-high scores), in-game input-test mode, and a Batocera deploy script. Button/axis
-indices in `INPUT_CONFIG` use the same placeholders as the quantum games and still need
-an `--input-test` run on the real cabinet.
+high scores), in-game input-test mode, and a Batocera deploy script. Fire/swap use the
+button numbers confirmed on the cabinet. Start/Select (8/9) are still unconfirmed.
 
 ## Gameplay
 
@@ -58,13 +57,16 @@ axis mappings live there.
 | | P1 | P2 |
 |---|---|---|
 | Move | Stick / WASD | Stick / arrow keys |
-| Fire / confirm | Button 0 / Y (or Z) | Button 0 / `,` |
-| Switch color / back | Button 1, 2 / X | Button 1, 2 / `.` |
+| Fire / confirm | A / Y (or Z) | A / `,` |
+| Switch color / back | B / X | B / `.` |
 
 - **Start** (or Enter) confirms in menus. **Select** (or Esc) goes back to the menu during
   play.
 - **Quit:** hold Start and Select together on either controller. You can also hold Select
   (or press Esc) for 2 s on the first menu page.
+- The keyboard keys are a dev fallback only. On the cabinet the loader passes
+  `--no-keyboard`, because Batocera turns P1's pad into keystrokes as well (see
+  `../AGENTS.md`), which made P1 move P2 and one button fire two actions.
 - For a keyboard-emulating encoder with MAME defaults, set `KEY_PRESET = "mame"` in
   `config.py`. P1 is then arrows + LCtrl/LAlt, and P2 is R/F/D/G + A/S.
 

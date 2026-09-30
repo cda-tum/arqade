@@ -1,7 +1,12 @@
+import pygame
+
 from quantum_pong.input import (
     axis_to_direction,
+    keyboard_enabled,
     pressed_edge,
+    read_keys,
     resolve_paddle_direction,
+    set_keyboard_enabled,
     should_quit,
 )
 
@@ -60,3 +65,14 @@ def test_should_quit_on_keyboard_escape():
     assert should_quit(
         p1_start=False, p1_select=False, p2_start=False, p2_select=False, keyboard_quit=True
     )
+
+def test_read_keys_reports_nothing_held_with_keyboard_disabled():
+    set_keyboard_enabled(False)
+    try:
+        keys = read_keys()
+        assert not keys[pygame.K_a]
+        assert not keys[pygame.K_UP]
+        assert not keyboard_enabled()
+    finally:
+        set_keyboard_enabled(True)
+    assert keyboard_enabled()
