@@ -58,6 +58,14 @@ def test_full_menu_flow_into_every_level_and_out(app):
         frames(app, 2, p1={"pick"})
         assert type(app.scene).__name__ == "RoundScene" and app.scene.level is lv
         frames(app, 240, p1={"down"}, p2={"up"})
+        if lv.tutorial:
+            # Start skips the tutorial straight to the results
+            frames(app, 2, p1={"start"})
+            assert type(app.scene).__name__ == "ResultsScene"
+            frames(app, 90)
+            frames(app, 2, p1={"pick"})
+            assert type(app.scene).__name__ == "LevelSelectScene"
+            continue
         # pause -> quit to menu
         frames(app, 2, p1={"start"})
         assert app.scene.paused
@@ -100,3 +108,33 @@ def test_attract_mode_starts_when_the_title_is_left_alone(app):
         app.step(1 / 60, [])
     app.draw()
     assert app.scene.demo is not None
+
+
+def test_tutorial_can_be_completed_by_following_chef_ket(app):
+    from overquqed.bot import Bot
+    from overquqed.round_scene import RoundScene
+
+    rs = RoundScene(app, levels.TUTORIAL, [0, 1])
+    app.switch(rs)
+    bot = Bot(rs.world)
+    rs.chef_inputs = lambda inp: bot.update(1 / 60)
+    beats = []
+    for i in range(60 * 60):
+        if app.scene is not rs:
+            break
+        beats.append(rs.tutorial.i)
+        # read each line, then press A (the bot does the cooking)
+        frames(app, 1, p2={"pick"} if i % 90 == 89 else set())
+    assert type(app.scene).__name__ == "ResultsScene"
+    assert rs.world.stats.delivered == 3
+    assert max(beats) == len(__import__("overquqed.tutorial", fromlist=["SCRIPT"]).SCRIPT) - 1
+    assert i < 60 * 60  # well under a minute of play
+
+
+def test_start_skips_the_tutorial(app):
+    from overquqed.round_scene import RoundScene
+
+    app.switch(RoundScene(app, levels.TUTORIAL, [0]))
+    frames(app, 10)
+    frames(app, 2, p1={"start"})
+    assert type(app.scene).__name__ == "ResultsScene"
