@@ -1,0 +1,21 @@
+# Shell scripts must keep LF endings. With CRLF the shebang line reads as
+# "bash\r", so the kernel looks for an interpreter of that name and the script
+# refuses to run at all on Linux/macOS:
+#   /usr/bin/env: 'bash\r': No such file or directory
+# That happened twice to the deploy_batocera.sh scripts after merges, so pin it.
+*.sh text eol=lf
+
+# Binary assets: never line-ending-convert or diff these as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.mp4 binary
+*.ttf binary
+*.otf binary
+
+# Note: much of quantum-pong/ is still committed with CRLF (sources, README,
+# pyproject...). That's untidy but harmless -- Python and the tooling read it
+# fine -- so it's deliberately left alone rather than renormalised here, which
+# would rewrite ~25 files in one go and collide with anything in flight. To do
+# it later, add `* text=auto eol=lf` above and run `git add --renormalize .`
+# as its own separate commit.
