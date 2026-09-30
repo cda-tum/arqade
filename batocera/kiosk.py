@@ -30,11 +30,22 @@ a game.
 """
 
 import argparse
+import os
 import re
 import shutil
+import signal
 import subprocess
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+# The compositor session ES has to draw on. Same values `grim` needs for a
+# remote screenshot, and the same reason: an SSH session inherits none of it.
+SWAY_ENV = {
+    "XDG_RUNTIME_DIR": "/var/run",
+    "WAYLAND_DISPLAY": "wayland-1",
+    "SWAYSOCK": "/var/run/sway-ipc.0.sock",
+}
 
 ES_CONFIG = Path("/userdata/system/configs/emulationstation")
 INPUT_CFG = ES_CONFIG / "es_input.cfg"
@@ -59,13 +70,16 @@ MENU_INPUTS = ("start", "select", "x", "y", "pageup", "pagedown")
 UI_MODE = "Kiosk"
 UI_PASSKEY = "xyxyxyxyxy"
 
-# Which systems the menu shows. Locked, the cabinet is only the four MQT
-# games; unlocked, Batocera's own bundled systems come back (each ships a
-# freeware ROM or two, so they are really playable, not empty shelves).
+# Which systems the menu shows. The cabinet is the four MQT games in public;
+# in admin mode SNES joins them so it can double as a console. Everything
+# else Batocera ships stays hidden either way -- add a name to ADMIN_SYSTEMS
+# to reveal it in admin mode, or drop it from OTHER_SYSTEMS to make it public.
 # ES reads this at start-up, and lock/unlock restart ES anyway.
-# Trim LOCKED_HIDDEN_SYSTEMS if you ever want one of these public too.
-LOCKED_HIDDEN_SYSTEMS = "c64;pcengine;nes;snes;gba;mrboom;ports;prboom;sdlpop;odcommander;megadrive"
-UNLOCKED_HIDDEN_SYSTEMS = ""
+OTHER_SYSTEMS = ("c64", "pcengine", "nes", "snes", "gba", "mrboom", "ports",
+                 "prboom", "sdlpop", "odcommander", "megadrive")
+ADMIN_SYSTEMS = ("snes",)
+LOCKED_HIDDEN_SYSTEMS = ";".join(OTHER_SYSTEMS)
+UNLOCKED_HIDDEN_SYSTEMS = ";".join(s for s in OTHER_SYSTEMS if s not in ADMIN_SYSTEMS)
 
 _CONFIG_OPEN = re.compile(r"<inputConfig\b[^>]*type=\"joystick\"")
 _CONFIG_CLOSE = re.compile(r"</inputConfig>")
@@ -87,47 +101,82 @@ def strip_menu_inputs(text: str) -> tuple[str, int]:
     return "".join(kept), dropped
 
 
-def es_running() -> bool:
-    """True if EmulationStation is up.
+def es_pids() -> list[int]:
+    """PIDs of EmulationStation *and* of the wrapper that respawns it.
 
-    Not `pgrep -x emulationstation`: Linux truncates a process's comm to 15
-    characters, so it is really "emulationstatio" and the exact-match never
-    fires. Matching /proc/*/comm by prefix avoids both that and the opposite
-    trap of `pgrep -f`, which happily matches the shell running this script.
+    Both have to go, not just ES. /usr/bin/emulationstation-standalone is a
+    loop that relaunches ES whenever it exits, and `S31emulationstation stop`
+    does not take the boot-time wrapper down -- so stopping ES alone left the
+    old wrapper to start a second one, and the cabinet ended up with two
+    EmulationStations drawing at once.
+
+    Matching is done on /proc rather than with pgrep: comm is truncated to 15
+    characters ("emulationstatio"), so `pgrep -x emulationstation` never
+    fires, while `pgrep -f` matches the shell running this script.
     """
+    pids = []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():
             continue
         try:
-            if (entry / "comm").read_text().strip().startswith("emulationstatio"):
-                return True
+            comm = (entry / "comm").read_text().strip()
+            cmdline = (entry / "cmdline").read_bytes().decode("utf-8", "replace")
         except OSError:  # process exited while we looked
             continue
-    return False
+        if comm.startswith("emulationstatio") or "emulationstation-standalone" in cmdline:
+            pids.append(int(entry.name))
+    return pids
+
+
+def es_running() -> bool:
+    return bool(es_pids())
 
 
 def stop_es() -> bool:
-    """Stop ES and report whether it had been running.
+    """Stop ES and its wrapper; report whether anything had been running.
 
     ES rewrites es_settings.cfg from memory when it exits, so it has to be
     down *before* we touch that file or our edit is thrown away on quit.
     """
-    if not es_running():
+    if not es_pids():
         return False
-    subprocess.run(["/etc/init.d/S31emulationstation", "stop"], capture_output=True)
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in es_pids():
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+        for _ in range(30):  # up to ~3s per signal
+            if not es_pids():
+                return True
+            time.sleep(0.1)
+    print("WARNING: EmulationStation did not stop")
     return True
 
 
 def start_es() -> None:
-    # The init script does not return -- it keeps ES in the foreground -- so
-    # detach it, or running this over SSH hangs until the cabinet is switched
-    # off and killing the SSH session takes ES down with it.
+    """Start EmulationStation under the sway session that is already running.
+
+    NOT `S31emulationstation start`: all that does is `sway-launch &`, which
+    is a no-op when sway is already up -- so ES simply never came back and the
+    cabinet sat on the wallpaper. S31's *stop* kills sway too, which is why
+    the pair looked like it worked. Since stop_es() deliberately leaves sway
+    alone (killing it takes the whole UI down), the matching start is the
+    wrapper itself. It is a loop that keeps ES alive, so it must be detached
+    or this script never returns.
+    """
     subprocess.Popen(
-        ["/etc/init.d/S31emulationstation", "start"],
+        ["/usr/bin/emulationstation-standalone"],
         start_new_session=True,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        # Without these, ES started from an SSH session has no Wayland to draw
+        # on: SDL reports "No available video device", ES exits, the wrapper
+        # relaunches it, and the cabinet sits on the wallpaper crash-looping
+        # with nothing obviously wrong in `ps`. At boot ES inherits these from
+        # the session; over SSH we have to supply them.
+        env={**os.environ, **SWAY_ENV},
     )
 
 
