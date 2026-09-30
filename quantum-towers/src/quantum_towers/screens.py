@@ -72,7 +72,7 @@ def draw_title_screen(
     )
 
     if show_prompt:
-        prompt = prompt_font.render("PRESS START", False, config.COLOR_FPS)
+        prompt = prompt_font.render("PRESS A OR START", False, config.COLOR_FPS)
         surface.blit(
             prompt, prompt.get_rect(center=(config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT - 28))
         )

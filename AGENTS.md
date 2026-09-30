@@ -261,7 +261,7 @@ exists** — a game with no "back" simply has nothing to bind:
 |---|---|---|
 | Confirm / select a menu item | **A** | 1 |
 | Back / return to the previous screen | **B** | 2 |
-| Start the game from its title or main menu | **Start** | 8 |
+| Start the game from its title or main menu | **Start** | 9 |
 
 Notes and deliberate limits:
 
@@ -273,6 +273,11 @@ Notes and deliberate limits:
 - **Start must always work** to begin play from the title/main menu, even
   where A also does. It is the one button a visitor will try first.
 - Start + Select together is the universal quit combo, in every game.
+- **Start is raw 9 and Select is raw 8**, not the other way round. Every
+  game had these swapped at first, which made the button printed SELECT
+  confirm menus (the games read raw 8 as "start"). The quit combo needs
+  both, so it kept working and hid the mistake. EmulationStation's own
+  `es_input.cfg` for this pad has it right: `select id=8`, `start id=9`.
 - EmulationStation does not follow this by default — it confirms with B and
   goes back with A. `batocera/kiosk.py --controls` sets ES's `InvertButtons`
   to fix that; the bottom-right hints in the theme (`install.py`) must be kept

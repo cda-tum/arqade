@@ -1012,12 +1012,12 @@ class Game:
                 text(s, ch if ch != " " else "_", self.f_item, col, (x, y))
                 if i == self.seed_slot:
                     pygame.draw.rect(s, GOLD, (x - 10, y + 16, 20, 3))
-            text(s, "UP/DOWN change   LEFT/RIGHT move   BUTTON done   (empty = random)", self.f_tiny,
+            text(s, "UP/DOWN change   LEFT/RIGHT move   A or B done   (empty = random)", self.f_tiny,
                  TEXT_DIM, (W / 2, 236 + len(self.MAIN_ITEMS) * 42))
         lines = [
             "BLUE (P1): stick = select electrode / voltage",
             "RED (P2): stick = select electrode / voltage",
-            "Co-op: one shared waveform, one ion.   SELECT: menu",
+            "Co-op: one shared waveform, one ion.   A: confirm   B: back   SELECT: pause",
         ]
         for i, ln in enumerate(lines):
             text(s, ln, self.f_small, TEXT_DIM, (W / 2, 486 + i * 22))

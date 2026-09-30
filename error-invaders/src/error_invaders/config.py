@@ -1,7 +1,7 @@
 """Single source of truth for input mapping and tuning constants.
 
 Joystick 0 = P1, joystick 1 = P2, same as Quantum Pong / Quantum Towers. The
-fire/swap button numbers are confirmed on the cabinet; Start = 8 / Select = 9
+fire/swap button numbers are confirmed on the cabinet; Start = 9 / Select = 8
 are still placeholders -- check them with `--input-test`.
 """
 
@@ -59,8 +59,14 @@ INPUT_CONFIG = {
     "system": {
         # Start confirms, Select goes back (to the menu). Quit combo: Start +
         # Select held together, on either controller.
-        "start_button": 8,
-        "select_button": 9,
+        # Raw 9 is the button printed START and raw 8 is SELECT -- the
+        # reverse of what these were set to originally. EmulationStation's own
+        # es_input.cfg for this pad agrees (select id=8, start id=9), and the
+        # symptom was unmistakable: SELECT confirmed menus, because the game
+        # read raw 8 as "start". The quit combo is unaffected either way,
+        # which is why it went unnoticed for so long.
+        "start_button": 9,
+        "select_button": 8,
     },
     "axis_deadzone": 0.5,
 }
