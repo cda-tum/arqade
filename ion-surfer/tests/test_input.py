@@ -52,3 +52,29 @@ def test_read_keys_reports_nothing_held_with_keyboard_disabled():
     finally:
         set_keyboard_enabled(True)
     assert keyboard_enabled()
+
+
+def test_pad_knows_every_action_the_config_can_produce():
+    """Regression: a "confirm" action existed in INPUT_CONFIG but not in Pad's
+    hand-written action list, so the first press of A raised KeyError and the
+    game died mid-play. Pad derives the list from the config now; this asserts
+    the two can never drift apart again."""
+    from ion_surfer.config import INPUT_CONFIG, KEYMAP
+    from ion_surfer.input import PLAYERS, Pad
+
+    pad = Pad()
+    for player in PLAYERS:
+        for act in INPUT_CONFIG[player]["buttons"]:
+            pad.set(act, ("jb", 0), True)   # must not raise
+            assert pad.held(act)
+            pad.set(act, ("jb", 0), False)
+            assert not pad.held(act)
+    for mapping in KEYMAP.values():
+        for act in mapping:
+            pad.set(act, ("k", 0), True)
+            assert pad.held(act)
+
+
+def test_pad_treats_an_unknown_action_as_not_held():
+    from ion_surfer.input import Pad
+    assert Pad().held("no_such_action") is False

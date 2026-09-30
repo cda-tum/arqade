@@ -68,20 +68,33 @@ def keyboard_quit_held(keys: pygame.key.ScancodeWrapper) -> bool:
 class Pad:
     DIRS = ("left", "right", "up", "down")
 
+    # Every action a pad can carry, derived from the config rather than
+    # written out again here. This list used to be a hand-maintained copy of
+    # INPUT_CONFIG, and the moment the two disagreed -- a "confirm" action
+    # added to the config but not to the list -- the first press of that
+    # button raised KeyError and took the whole game down mid-play.
+    ACTIONS = tuple(dict.fromkeys(
+        [act for player in PLAYERS for act in INPUT_CONFIG[player]["buttons"]]
+        + [act for mapping in KEYMAP.values() for act in mapping]
+        + ["start", "select"]
+    ))
+
     def __init__(self):
-        self.src = {a: set() for a in ("left", "right", "up", "down", "a", "start", "select", "remove_ion", "add_ion", "cool", "passive_cool")}
+        self.src = {a: set() for a in self.ACTIONS}
         self.pressed = set()
         self.rep = {d: 0.0 for d in self.DIRS}
 
     def held(self, act):
-        return bool(self.src[act])
+        # .get, not [act]: an unknown action is "not held", never a crash.
+        return bool(self.src.get(act))
 
     def set(self, act, source, on):
         was = self.held(act)
+        sources = self.src.setdefault(act, set())
         if on:
-            self.src[act].add(source)
+            sources.add(source)
         else:
-            self.src[act].discard(source)
+            sources.discard(source)
         if on and not was:
             self.pressed.add(act)
             if act in self.rep:
