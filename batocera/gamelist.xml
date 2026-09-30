@@ -38,4 +38,11 @@
 		<image>./images/ion_surfer_sandbox-image.png</image>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./overquqed.pygame</path>
+		<name>Overquqed</name>
+		<desc>Co-op quantum kitchen: prepare |0&gt;, |+&gt;, Bell pairs and cat states with gate appliances, and serve them before they decohere.</desc>
+		<image>./images/overquqed-image.png</image>
+		<lang>en</lang>
+	</game>
 </gameList>
