@@ -52,7 +52,8 @@ def insert(data: dict, level_key: str, name: str, score: int, stars: int) -> int
     rows = table(data, level_key)
     if not qualifies(data, level_key, score):
         return -1
-    rows.append({"name": name[:3].upper(), "score": int(score)})
+    new = {"name": name[:3].upper(), "score": int(score)}
+    rows.append(new)
     rows.sort(key=lambda r: -r["score"])  # stable: earlier equal scores stay above
     entry["scores"] = rows[:TOP_N]
-    return next(i for i, r in enumerate(entry["scores"]) if r["name"] == name[:3].upper() and r["score"] == score)
+    return next(i for i, r in enumerate(entry["scores"]) if r is new)
