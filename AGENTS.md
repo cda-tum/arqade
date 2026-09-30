@@ -178,6 +178,44 @@ different session, not the deploy script itself, but the lesson stands:
   hardware the user has to physically power-cycle if something goes wrong,
   not something to restart speculatively.
 
+### Kiosk lockdown (`batocera/kiosk.py`)
+
+For public demos the cabinet runs locked: `python3 /userdata/kiosk.py --lock`
+(and `--unlock`, `--status`). Browsing and launching the four games works
+exactly as before; nothing else does.
+
+ES's own restricted UI modes are not enough on their own — Kiosk and Kid only
+*hide* menu entries, so START still opens a menu offering Kodi, Information
+and Quit. There is no "disable the menu" setting either (the binary has
+`ForceKiosk`, `ForceKid` and `ShowHelpPrompts`, and nothing else useful). So
+the lockdown works at the input layer instead: it strips `start`, `select`,
+`x`, `y`, `pageup` and `pagedown` from every joystick block in
+`es_input.cfg`, and ES then never sees the button at all. `ShowHelpPrompts`
+turns off the bottom button bar. `UIMode=Kiosk` is still set on top, because
+it is the only thing that closes "GAME OPTIONS (HOLD)" — a long press of the
+*launch* button, which cannot be unmapped without breaking launching.
+
+**The keyboard mapping is left intact deliberately**, and SSH `--unlock` is
+the documented way back in. The original `es_input.cfg` is kept beside it as
+`es_input.cfg.arqade-orig`, and `--lock` always rebuilds from that copy, so
+re-running never compounds.
+
+Two things to know if you touch this:
+
+- **ES rewrites `es_settings.cfg` from memory when it exits**, so stop ES
+  *before* editing that file or the edit is thrown away on quit. `kiosk.py`
+  does this in the right order.
+- `pgrep -x emulationstation` **never matches.** Linux truncates a process's
+  `comm` to 15 characters, so it is really `emulationstatio`. Match
+  `/proc/*/comm` by prefix; `pgrep -f` is the opposite trap and matches the
+  shell running your own script.
+
+`batocera/vpad.py` is the diagnostic that makes any of this checkable from a
+desk: it creates a uinput joystick with the cabinet encoders' exact
+bus/vendor/product/version, so SDL derives the same GUID and ES applies the
+same `es_input.cfg` entry to it. Real button presses, no cabinet required —
+that is how the lockdown above was verified rather than assumed.
+
 ## Input mapping: raw button numbers are NOT the print/position order
 
 This is the most important quirk, and the one most likely to bite a future
