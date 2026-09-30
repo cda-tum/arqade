@@ -335,7 +335,7 @@ def closest_named(psi: Vector) -> tuple[tuple[str, ...], float]:
 
 # --- the qubit item's state -----------------------------------------------------
 
-LABEL_EXACT = 0.97  # at or above: plain ket, e.g. |+>
+LABEL_EXACT = 0.90  # at or above: plain ket, e.g. |+> (matches the green fidelity bar)
 LABEL_APPROX = 0.80  # at or above: "~|+>"; below: "?"
 
 

@@ -4,9 +4,10 @@ Legend: # wall  = counter  . floor  F Dilution Fridge  X Pauli-X Flipper
 H Hadamard Blender  Z Phase Stirrer  c/t CNOT Waffle Iron control/target
 R Reset Sink  B Bin  P Pass  > < conveyor belts  1 2 chef spawns.
 
-Maps are 20 wide. Row 0 is drawn at the top of the kitchen area (below the
-HUD); the dining room with the guest queue is whatever is left below the
-map, under the pass.
+Maps are 20 wide and (apart from the tutorial) 9 rows tall. Row 0 is drawn at
+the top of the kitchen area (below the HUD); the dining room with the guest
+queue is whatever is left below the map, under the pass: 3 rows for a
+9-row map.
 """
 
 from __future__ import annotations
@@ -77,6 +78,7 @@ SNACK_BAR = Level(
         "#..1....====....2..#",
         "#.......=Z==.......#",
         "#..................#",
+        "#..................#",
         "#=B=====PPPP=====B=#",
         "####################",
     ),
@@ -98,6 +100,7 @@ TRATTORIA = Level(
         "#=F==X===##==H==Z=B#",
         "#........##........#",
         "#..1.....>>......2.#",
+        "#........##........#",
         "#........<<........#",
         "#........##........#",
         "#=R==ct==##==PPPP==#",
@@ -124,6 +127,7 @@ COSMIC_CAFE = Level(
         "#=F=X===H====Z==F==#",
         "#..................#",
         "#..1.....=c==t=..2.#",
+        "#..................#",
         "#..................#",
         "#..B...........R...#",
         "#=====PPPPPPP======#",

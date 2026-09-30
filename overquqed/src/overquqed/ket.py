@@ -27,6 +27,7 @@ _BRACKET = [  # the closing angle bracket, 2 px stroke like the font
 _BAR = ["##"] * 7
 _SUP_PLUS = [".#.", "###", ".#."]
 _SUP_MINUS = ["...", "###", "..."]
+_MINUS = ["......", "......", "......", ".####.", ".####.", "......", "......"]  # padded so |-> never reads as an arrow
 
 # token -> (base text, superscript or None)
 _TOKEN_PARTS = {
@@ -116,7 +117,10 @@ def ket_surface(
     else:
         for tok in tokens:
             base, sup = _TOKEN_PARTS.get(tok, (tok, None))
-            pieces.append((_glyphs(base, color), 0))
+            if base == "-":
+                pieces.append((_mask_surface(_MINUS, color), 0))
+            else:
+                pieces.append((_glyphs(base, color), 0))
             if sup is not None:
                 pieces.append((_mask_surface(_SUP_PLUS if sup == "+" else _SUP_MINUS, color), -1))
     pieces.append((_mask_surface(_BRACKET, color), 0))

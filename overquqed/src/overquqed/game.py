@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pygame
 
-from overquqed import config, palette
+from overquqed import config, hiscores, palette
 from overquqed.display import make_display, present
 from overquqed.fonts import text
 from overquqed.input import Input
@@ -30,26 +30,12 @@ class Scene:
     def draw(self, surf: pygame.Surface) -> None:
         pass
 
+    def on_idle(self) -> None:
+        """Called just before an idle timeout sends the cabinet to the title."""
 
-class TitleScene(Scene):
-    idle_resets = False
 
-    def __init__(self, app: "App") -> None:
-        super().__init__(app)
-        self.t = 0.0
-
-    def update(self, dt: float, inp: Input) -> None:
-        self.t += dt
-        if inp.select_held_time >= config.BACK_HOLD_TO_QUIT:
-            self.app.running = False
-
-    def draw(self, surf: pygame.Surface) -> None:
-        surf.fill(palette.BG)
-        logo = text("OVERQUQED", 32, palette.GOLD, shadow=palette.INK)
-        surf.blit(logo, ((config.INTERNAL_WIDTH - logo.get_width()) // 2, 110))
-        if int(self.t * 2) % 2 == 0:
-            prompt = text("PRESS START", 8, palette.TEXT)
-            surf.blit(prompt, ((config.INTERNAL_WIDTH - prompt.get_width()) // 2, 240))
+def _is_title(scene: Scene) -> bool:
+    return type(scene).__name__ == "TitleScene"
 
 
 class App:
@@ -61,13 +47,32 @@ class App:
         self.inp = Input()
         self.running = True
         self.idle = 0.0
-        self.scene: Scene = TitleScene(self)
+        self.session: dict = {}  # per-power-on memory, e.g. "played_tutorial"
+        self.hiscores = hiscores.load(config.HISCORE_FILE)
+        self.audio = None
+        self.scene: Scene = Scene(self)
+        self.to_title()
 
     def switch(self, scene: Scene) -> None:
         self.scene = scene
 
     def to_title(self) -> None:
+        from overquqed.scenes import TitleScene
+
         self.switch(TitleScene(self))
+
+    # --- audio hooks (no-ops until audio.py is wired in) ---
+    def sfx(self, name: str) -> None:
+        if self.audio is not None:
+            self.audio.play(name)
+
+    def music(self, name: str) -> None:
+        if self.audio is not None:
+            self.audio.music(name)
+
+    def music_tempo(self, fast: bool) -> None:
+        if self.audio is not None:
+            self.audio.tempo(fast)
 
     def input_test(self) -> None:
         from overquqed.input_test import run_input_test
@@ -83,17 +88,18 @@ class App:
                 self.running = False
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_F3:
                 self.show_fps = not self.show_fps
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F1 and isinstance(self.scene, TitleScene):
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F1 and _is_title(self.scene):
                 self.input_test()
                 return
             self.inp.handle(event)
         self.inp.update(dt)
-        if self.inp.quit_combo() or (self.inp.keyboard_quit and isinstance(self.scene, TitleScene)):
+        if self.inp.quit_combo() or (self.inp.keyboard_quit and _is_title(self.scene)):
             self.running = False
             return
         self.idle = 0.0 if self.inp.activity else self.idle + dt
         if self.idle >= config.IDLE_TIMEOUT and self.scene.idle_resets:
             self.idle = 0.0
+            self.scene.on_idle()
             self.to_title()
             return
         self.scene.update(dt, self.inp)
