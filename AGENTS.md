@@ -121,11 +121,27 @@ a tmpfs (`mount | grep overlay` → `upperdir=/overlay_root/overlay`, and
 `/overlay` is `tmpfs`), so the swapped `logo.png` is RAM-only and the
 Batocera logo silently comes back on the next boot. This bit us once: the
 wallpaper was verified by screenshot, then reverted unnoticed at the next
-power cycle. `install.py` therefore also writes `/boot/boot-custom.sh`,
-which `/etc/init.d/S00bootcustom` runs early on every boot — before sway and
-ES start — to copy the logo back out of `/userdata/splash/` (a real
-partition). Batocera's own `batocera-save-overlay` is the alternative, but it
-carves a 100 MB ext4 image out of `/boot` to snapshot the whole of `/`.
+power cycle. `install.py` therefore also writes `/boot/boot-custom.sh`, which
+`/etc/init.d/S00bootcustom` runs on every boot — before sway and ES start —
+to copy the logo back. Batocera's own `batocera-save-overlay` is the
+alternative, but it carves a 100 MB ext4 image out of `/boot` to snapshot the
+whole of `/`.
+
+**`S00bootcustom` runs before `/userdata` exists.** It is the *first* init
+script; `/userdata` is not mounted until `S11share` (see the `S…` ordering in
+`/etc/init.d/`). A hook that reads from `/userdata` therefore finds nothing
+and silently does nothing — which is exactly how the wallpaper fix failed on
+its first attempt, and it was missed because the hook was tested *by hand
+after boot*, when `/userdata` was mounted. **Testing a boot hook anywhere but
+an actual reboot proves nothing.** The image now lives at
+`/boot/arqade-logo.png`, alongside the script, and the hook writes a line to
+`/tmp/arqade-boot.log` so the next failure is visible instead of silent:
+
+```bash
+ssh root@batocera.local "cat /tmp/arqade-boot.log; md5sum /usr/share/emulationstation/resources/logo.png /boot/arqade-logo.png"
+```
+
+Anything `/boot/boot-custom.sh` touches must already be on `/boot`.
 
 Anything that must persist belongs under `/userdata` or `/boot`; treat
 `/usr`, `/etc` and `/tmp` as scratch.

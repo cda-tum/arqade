@@ -48,21 +48,34 @@ SWAYSOCK = "/var/run/sway-ipc.0.sock"
 # ...and / does not survive a reboot. It's an overlay whose upper layer is a
 # tmpfs (`mount | grep overlay`), so the wallpaper above is RAM-only and the
 # Batocera logo comes back on every boot. /boot is a real partition, and
-# /etc/init.d/S00bootcustom runs /boot/boot-custom.sh before sway and
-# EmulationStation start, so re-apply it from /userdata (also persistent)
-# there. Batocera's own batocera-save-overlay would work too, but it carves a
-# 100 MB image out of /boot to snapshot all of /, which is a lot of machinery
-# for one file.
+# /etc/init.d/S00bootcustom runs /boot/boot-custom.sh on the way up, so put it
+# back from there. Batocera's own batocera-save-overlay would work too, but it
+# carves a 100 MB image out of /boot to snapshot all of /, which is a lot of
+# machinery for one file.
+#
+# The source image has to live on /boot as well. S00bootcustom is the *first*
+# init script; /userdata is not mounted until S11share, so a hook that copies
+# out of /userdata finds nothing there and silently does nothing. That is
+# exactly how this failed the first time -- and testing the hook by hand after
+# boot hid it, because by then /userdata was mounted. Anything this script
+# touches at S00 must already be on /boot.
 BOOT_CUSTOM = Path("/boot/boot-custom.sh")
+BOOT_WALLPAPER = Path("/boot/arqade-logo.png")
 WALLPAPER_SOURCE = BOOT_SPLASH_DIR / "arqade_splash.png"
 BOOT_MARKER = "# arqade-wallpaper"
 BOOT_SCRIPT = f"""#!/bin/sh
 {BOOT_MARKER}: / is a tmpfs overlay, so /usr edits are lost on reboot. Put
 # the ARQADE logo back before sway reads it as its wallpaper -- it is what
 # shows behind EmulationStation's loading bar and in the gap while a game
-# launches and exits.
-if [ "$1" = "start" ] && [ -f "{WALLPAPER_SOURCE}" ]; then
-    cp "{WALLPAPER_SOURCE}" "{WALLPAPER}"
+# launches and exits. Source lives on /boot because this runs at S00, before
+# /userdata is mounted. Leaves a line in /tmp so a failed boot is diagnosable.
+[ "$1" = "stop" ] && exit 0
+if [ -f "{BOOT_WALLPAPER}" ]; then
+    cp "{BOOT_WALLPAPER}" "{WALLPAPER}" \\
+        && echo "arqade: wallpaper restored" > /tmp/arqade-boot.log \\
+        || echo "arqade: copy to {WALLPAPER} failed" > /tmp/arqade-boot.log
+else
+    echo "arqade: {BOOT_WALLPAPER} missing" > /tmp/arqade-boot.log
 fi
 """
 
@@ -113,6 +126,12 @@ def install_boot_hook() -> None:
     try:
         BOOT_CUSTOM.write_text(BOOT_SCRIPT)
         print(f"wrote   {BOOT_CUSTOM}")
+        source = HERE / "splash" / "arqade_splash.png"
+        if source.exists():
+            shutil.copy2(source, BOOT_WALLPAPER)
+            print(f"copied  {BOOT_WALLPAPER}")
+        else:
+            print(f"SKIPPED {BOOT_WALLPAPER}: {source} missing -- hook will no-op")
     finally:
         subprocess.run(["mount", "-o", "remount,ro", "/boot"], capture_output=True)
 
