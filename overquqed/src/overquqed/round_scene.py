@@ -43,9 +43,11 @@ class RoundScene(Scene):
         self.score_flash = 0.0
         self.shake = 0.0
         self.paused = False
+        app.music(level.key)
         self.pause_index = 0
         self.ending = 0.0  # "TIME UP" banner countdown
         self.clock = 0.0
+        self._whirr = 0.0
         self.tutorial = None
         self.idle_resets = True
         if level.tutorial:
@@ -108,6 +110,13 @@ class RoundScene(Scene):
         if self.tutorial is not None:
             inputs = self.tutorial.filter_inputs(inputs, inp)
         self.world.update(dt, inputs)
+        self._whirr -= dt
+        if self._whirr <= 0 and any(
+            c.working and (st := self.world.station_at(c.target)) is not None and st.kind == "h"
+            for c in self.world.chefs
+        ):
+            self.app.sfx("whirr")
+            self._whirr = 0.12
         for ev in self.world.events:
             self._on_event(ev)
             if self.tutorial is not None:

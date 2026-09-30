@@ -93,6 +93,8 @@ class App:
                 return
             self.inp.handle(event)
         self.inp.update(dt)
+        if self.audio is not None:
+            self.audio.update()
         if self.inp.quit_combo() or (self.inp.keyboard_quit and _is_title(self.scene)):
             self.running = False
             return
@@ -120,9 +122,15 @@ class App:
 
 
 def run(*, fullscreen: bool, window_size: str, show_fps: bool) -> None:
+    from overquqed.audio import SAMPLE_RATE, make_audio
+
+    pygame.mixer.pre_init(SAMPLE_RATE, -16, 1, 512)
     pygame.init()
     pygame.joystick.init()
     surface, window = make_display(fullscreen, window_size)
     pygame.display.set_caption("Overquqed")
     pygame.mouse.set_visible(not fullscreen)
-    App(surface, window, show_fps).run()
+    app = App(surface, window, show_fps)
+    app.audio = make_audio()
+    app.to_title()  # restart the title so its music request reaches the audio
+    app.run()
