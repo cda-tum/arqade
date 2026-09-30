@@ -46,10 +46,8 @@ def stock_kitchen(rs) -> None:
     counters = [s for s in w.stations.values() if s.kind == "counter" and s.item is None]
     rng.shuffle(counters)
 
-    def item(ops, n=1, age=0.0):
+    def item(ops, age=0.0):
         s = QState.fresh(w.t - age)
-        if n >= 2:
-            s = cnot_merge(QState.fresh(w.t - age), QState.fresh(w.t - age)) if False else s
         for op in ops:
             s.apply(op)
         it = Item(s)

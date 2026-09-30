@@ -56,7 +56,6 @@ class Bot:
         self._paths: dict[int, list[tuple[int, int]]] = {}
         self._repath: dict[int, float] = {}
         self.inputs = [IDLE, IDLE]
-        self.served_ids: set[int] = set()
 
     # --- geometry -------------------------------------------------------------------------
     def _regions(self) -> dict[tuple[int, int], int]:

@@ -220,7 +220,7 @@ def _guest_accessory(key: str, surf: pygame.Surface, look) -> None:
         pygame.draw.rect(surf, ink, (3, 0, 10, 6))
         pygame.draw.rect(surf, (70, 60, 140), (4, 1, 8, 4))
         pygame.draw.rect(surf, ink, (2, 5, 12, 1))
-        for i, (x, y) in enumerate(((5, 2), (7, 2), (9, 2), (11, 2), (6, 3), (8, 3), (10, 3))):
+        for x, y in ((5, 2), (7, 2), (9, 2), (11, 2), (6, 3), (8, 3), (10, 3)):
             surf.set_at((x - 1, y), (255, 230, 90))
     elif key == "grover":
         # magnifying glass in hand
