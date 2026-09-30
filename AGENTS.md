@@ -1,8 +1,9 @@
 # Arcade cabinet & hardware notes
 
 This directory holds independent pygame games (`quantum-pong/`, `quantum-towers/`,
-more later) built for the same physical target: a Batocera-based arcade cabinet
-("IconicArcade"), a Raspberry Pi 4 with two 6-button joystick pads. This file
+`error-invaders/`, `ion-surfer/`, `overquqed/`, more later) built for the same
+physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
+Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. This file
 collects hardware facts and hard-won quirks that apply **across games**, so a
 future session doesn't have to rediscover them from scratch. Per-game specifics
 (gameplay, architecture, tests) belong in each game's own `README.md`.
@@ -26,6 +27,16 @@ future session doesn't have to rediscover them from scratch. Per-game specifics
   cabinet's actual address is if mDNS isn't resolving) reliably works once
   keys are set up. A benign `X11 forwarding request failed on channel 0`
   warning shows up on every connection — ignore it, the session still works.
+
+### Display: pick an internal resolution that divides 1080
+
+The panel is 1920x1080 (confirmed by the user). Games render at a fixed
+internal size and let SDL's `SCALED` fullscreen upscale it, so a size whose
+height divides 1080 scales by a whole number and pixel art stays crisp:
+480x270 (x4) and 480x360 (x3, 4:3, used by Overquqed) do; 960x720 (x1.5) and
+640x480 (x2.25) don't, and nearest-neighbour then doubles some pixel rows but
+not others. Overquqed also sets `SDL_RENDER_SCALE_QUALITY=nearest` before
+pygame starts, so the upscale is never blurred.
 
 ## Line endings: LF (Linux) everywhere
 
@@ -346,7 +357,14 @@ the resulting bitmaps:
 - The Unicode minus sign `−` (U+2212) is also missing (renders identically to
   the same invisible box) — use the ASCII hyphen-minus `-` instead.
 - Confirmed present and safe to use: ASCII `-`, `>`, `<`, plus `√`, `π`, `°`,
-  `@`, and `i`.
+  `@`, and `i`. Also Greek capitals `Φ` and `Ψ` (and lower-case `α β γ φ ψ`),
+  checked the same way for Overquqed's Bell-state labels.
+- Also missing: the superscripts `⁺` `⁻` (U+207A/B) and the circuit symbols
+  `●` `⊕` (U+25CF, U+2295).
+- Proper kets are still possible: `overquqed/src/overquqed/ket.py` builds
+  `|Φ⁺⟩` from the font's `|` and `Φ` plus a pixel-drawn `⟩` bracket and
+  superscript, at the font's native 8 px, then integer-scales. Copy it if
+  another game wants real bra-ket labels.
 
 If a future game wants a glyph not listed here, don't assume it's present —
 verify the same way (render it, hash the bitmap, compare against a
