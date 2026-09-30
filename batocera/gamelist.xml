@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<gameList>
+	<game>
+		<path>./quantum_pong.pygame</path>
+		<name>Quantum Pong</name>
+		<desc>Pong, but gates warp the ball: split it in two, bounce it off a wall, or teleport and reverse it.</desc>
+		<image>./images/quantum_pong-image.png</image>
+		<playcount>6</playcount>
+		<lastplayed>20260929T175055</lastplayed>
+		<gametime>1598</gametime>
+		<lang>en</lang>
+	</game>
+	<game>
+		<path>./quantum_towers.pygame</path>
+		<name>Qlimbers</name>
+		<desc>Race a rival to the top of your tower by matching each floor's target qubit state before they do.</desc>
+		<image>./images/quantum_towers-image.png</image>
+		<lang>en</lang>
+	</game>
+	<game>
+		<path>./error_invaders.pygame</path>
+		<name>Error Invaders</name>
+		<desc>Retro meets quantum error correction: only the matching color code clears an invader.</desc>
+		<image>./images/error_invaders-image.png</image>
+		<lang>en</lang>
+	</game>
+	<game>
+		<path>./ion_surfer.pygame</path>
+		<name>Ion Surfer</name>
+		<desc>Shape the trap potential to keep your ion riding the wave.</desc>
+		<image>./images/ion_surfer-image.png</image>
+		<lang>en</lang>
+	</game>
+</gameList>

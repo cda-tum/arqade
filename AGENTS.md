@@ -46,6 +46,96 @@ Each game ships its own `deploy_batocera.sh` (see `quantum-pong/` and
 - Registering a **new** ROM for the first time (or after deleting one) does
   need an ES rescan/restart to show up in the menu.
 
+### Game names and per-game icons (gamelist.xml)
+
+Without a `gamelist.xml`, EmulationStation shows a ROM's bare filename as its
+name — which is why the games first appeared in the menu as `quantum_pong`,
+underscores and all. Display names, descriptions and icons all come from
+`/userdata/roms/pygame/gamelist.xml`, whose format is standard ES:
+
+```xml
+<game>
+  <path>./quantum_towers.pygame</path>   <!-- relative to the system's rom dir -->
+  <name>Qlimbers</name>
+  <desc>…</desc>
+  <image>./images/quantum_towers-image.png</image>
+</game>
+```
+
+The repo's copy lives in `batocera/gamelist.xml`, with the matching icons in
+`batocera/icons/` (regenerate them with `batocera/icons/generate_icons.py`;
+it's standalone and only needs pygame). Copy the icons to
+`/userdata/roms/pygame/images/` and the XML over the cabinet's own.
+
+Two things to be careful about:
+
+- **ES owns this file too.** It writes play statistics (`<playcount>`,
+  `<lastplayed>`, `<gametime>`) back into it as games are played, so back it
+  up and preserve those fields rather than clobbering the whole file — you'd
+  otherwise wipe the play history.
+- The display name is *only* this `<name>` field. Renaming a game for the
+  menu (e.g. Quantum Towers → **Qlimbers**) needs no change to the ROM
+  filename, the Python package, or the deploy script.
+
+### Splash screens (boot, menu, and game-launch)
+
+There are three separate splashes, and they come from different places:
+
+| Splash | Shown by | Source |
+|---|---|---|
+| Boot (at power-on) | `/etc/init.d/S28splash` | a file in `/userdata/splash/` |
+| ES start-up (logo + progress bar) | sway wallpaper behind ES | `/etc/sway/config` → `/usr/share/emulationstation/resources/logo.png` |
+| Game start/exit (brief flash) | sway wallpaper, in the gap | same `logo.png` |
+| Menu start/reload | EmulationStation | theme's `_splash.xml` |
+| Game launch ("loading…") | EmulationStation | theme's `gamesplash.xml` |
+
+**The sway wallpaper is the sneaky one.** `/etc/sway/config` has
+`output * bg /usr/share/emulationstation/resources/logo.png fill`. That
+Batocera logo is what's visible *behind* ES's start-up progress bar and in
+the gap while a game launches and exits — so patching every themed splash
+still leaves the OS branding flashing up twice. `/` is a writable overlay,
+so `install.py` swaps that file (keeping `logo.png.batocera-orig` beside it)
+and reloads it live via `swaymsg output '*' bg … fill` — no reboot needed.
+
+The theme in use is `mqt` (`ThemeSet` in
+`/userdata/system/configs/emulationstation/es_settings.cfg`), and the two
+XML files are patched by `quantum-pong/batocera/arqade-theme/install.py` to
+point at `./art/mqt_splash.png`.
+
+**Artwork must be 8-bit PNG.** The original ARQADE splash art was saved as
+*16-bit/color* PNG. Nothing in this stack can read that: `fbv` (used for the
+boot splash) fails, and EmulationStation fails to load it for the menu and
+game-launch splashes — all three silently fall back to Batocera's own logo,
+with no error in any log. If a splash "doesn't take", check bit depth first:
+
+```bash
+python3 -c "import struct;d=open('FILE.png','rb').read(33);print('bitdepth',d[24])"
+```
+
+**The boot splash prefers video.** `S28splash` searches `/userdata/splash/`
+for a video (`*.mp4`) first, then an image (`*.png/jpg/jpeg`), and otherwise
+plays Batocera's built-in `/usr/share/batocera/splash/splash.mp4` — the
+stock logo. The image branch additionally requires `/dev/fb0` *and* `fbv`,
+so shipping a `.mp4` is the dependable route (that's the path Batocera's own
+default uses, via mpv on DRM). Match the stock video's ~10s length: the
+splash is killed when ES takes over, so a short clip just leaves a black
+screen for the rest of the boot.
+
+**Watch file permissions.** `install.py` copies with `shutil.copy2`, which
+preserves the source's mode — a 600 source file lands as 600 on the cabinet.
+It now chmods everything to 644 explicitly.
+
+Debugging notes: `/userdata/system/logs/display.log` and `mpv.log` are only
+written by the *video* branch, so a stale copy from an older boot will make
+it look like a video played when it didn't — check their timestamps (a date
+of 1970/1980 means it predates NTP setting the clock). Verify what the boot
+script would actually pick with the script's own matcher:
+
+```bash
+find /userdata/splash -maxdepth 1 -regex '.*\.\(mp4\|MP4\)' -type f
+find /userdata/splash -maxdepth 1 -regex '.*\.\(jpg\|jpeg\|png\)' -type f
+```
+
 ### The black-screen incident (be careful with ES config)
 
 Editing EmulationStation's own config (e.g. `es_systems_*.cfg`) and restarting

@@ -6,15 +6,69 @@ Then reboot (do not restart only the menu over SSH).
 
 Safe to run several times: the splash XML files are always rebuilt from
 their original .bak copies, so edits never stack up.
+
+Two things bit us once and are guarded against here -- see the "Splash
+screens" section of ../../../AGENTS.md for the full story:
+
+  - Artwork must be 8-bit PNG. The originals here were 16-bit/color PNGs,
+    which neither `fbv` (the boot-splash image renderer) nor EmulationStation
+    would load, so both silently fell back to Batocera's own logo.
+  - /userdata/splash is picked over by /etc/init.d/S28splash, which prefers a
+    VIDEO over an image and otherwise falls back to Batocera's built-in
+    splash.mp4. The image branch additionally needs /dev/fb0 + fbv, so a
+    .mp4 alongside the .png is the reliable option -- that's why
+    splash/ ships both.
+  - Files are chmod'd readable: shutil.copy2 preserves the source mode, and
+    a 600 source would otherwise land as a 600 file on the cabinet.
 """
 
+import os
 import shutil
+import subprocess
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 THEME = Path("/userdata/themes/mqt")
 BOOT_SPLASH_DIR = Path("/userdata/splash")
 SPLASH = "./art/mqt_splash.png"
+FILE_MODE = 0o644
+
+# The compositor's wallpaper. sway sets this in /etc/sway/config as
+#   output * bg /usr/share/emulationstation/resources/logo.png fill
+# and it's what's actually visible behind EmulationStation's start-up
+# progress bar and in the gap while a game launches/exits -- so leaving it
+# as Batocera's own logo means the OS branding still flashes up twice even
+# once every themed splash is replaced. / is a writable overlay, so we swap
+# the file and keep the original beside it.
+ES_RESOURCES = Path("/usr/share/emulationstation/resources")
+WALLPAPER = ES_RESOURCES / "logo.png"
+WALLPAPER_BACKUP = ES_RESOURCES / "logo.png.batocera-orig"
+SWAYSOCK = "/var/run/sway-ipc.0.sock"
+
+
+def _copy(src: Path, dst: Path) -> None:
+    shutil.copy2(src, dst)
+    dst.chmod(FILE_MODE)
+    print(f"copied  {dst}")
+
+
+def install_wallpaper() -> None:
+    source = HERE / "splash" / "arqade_splash.png"
+    if not source.exists() or not ES_RESOURCES.is_dir():
+        print(f"SKIPPED wallpaper: {source} or {ES_RESOURCES} missing")
+        return
+    if not WALLPAPER_BACKUP.exists() and WALLPAPER.exists():
+        shutil.copy2(WALLPAPER, WALLPAPER_BACKUP)
+        print(f"backed up {WALLPAPER} -> {WALLPAPER_BACKUP}")
+    _copy(source, WALLPAPER)
+    # Apply to the running compositor too, so it doesn't need a reboot.
+    if Path(SWAYSOCK).exists():
+        rc = subprocess.run(
+            ["swaymsg", "output", "*", "bg", str(WALLPAPER), "fill"],
+            env={**os.environ, "SWAYSOCK": SWAYSOCK},
+            capture_output=True,
+        ).returncode
+        print(f"swaymsg reload: {'ok' if rc == 0 else f'failed (rc={rc})'}")
 
 
 def copy_art() -> None:
@@ -23,8 +77,7 @@ def copy_art() -> None:
         if src.is_file():
             dst = THEME / src.relative_to(HERE)
             dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            print(f"copied  {dst}")
+            _copy(src, dst)
     # Boot splash shown right after power-on
     BOOT_SPLASH_DIR.mkdir(parents=True, exist_ok=True)
     # Batocera picks a random file from this folder, so drop the old MQT one
@@ -33,8 +86,7 @@ def copy_art() -> None:
         old.unlink()
         print(f"removed {old}")
     for src in (HERE / "splash").glob("*"):
-        shutil.copy2(src, BOOT_SPLASH_DIR / src.name)
-        print(f"copied  {BOOT_SPLASH_DIR / src.name}")
+        _copy(src, BOOT_SPLASH_DIR / src.name)
 
 
 def patch(name: str, edits: list[tuple[str, str]]) -> None:
@@ -54,6 +106,7 @@ def patch(name: str, edits: list[tuple[str, str]]) -> None:
 
 
 copy_art()
+install_wallpaper()
 
 # Menu start/reload screen: our image instead of the built-in Batocera logo
 patch("_splash.xml", [
