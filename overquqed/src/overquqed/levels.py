@@ -22,6 +22,7 @@ from overquqed.quantum import Noise
 class Level:
     key: str
     name: str
+    short: str  # fits the level-select list
     blurb: str
     map: tuple[str, ...]
     duration: float  # seconds
@@ -38,6 +39,9 @@ class Level:
     dirty_return_delay: float = 4.0  # served bowls come back to the pass
     two_chef_press: bool = False
     cosmic_rays: bool = False
+    # Star thresholds. Set from bot playthroughs (tests/test_bot.py): the bot
+    # is a fast, never-wrong upper bound, so 1/2/3 stars sit at roughly
+    # 22% / 42% / 62% of its score. Solo rounds scale them by 1/solo_spawn_scale.
     stars: tuple[int, int, int] = (60, 140, 220)
     show_hints: bool = True
     tutorial: bool = False
@@ -49,6 +53,7 @@ class Level:
 TUTORIAL = Level(
     key="tutorial",
     name="Training Day",
+    short="Training Day",
     blurb="Chef Ket shows you the ropes. Under a minute!",
     map=(
         "####################",
@@ -70,6 +75,7 @@ TUTORIAL = Level(
 SNACK_BAR = Level(
     key="snackbar",
     name="Superconducting Snack Bar",
+    short="Snack Bar",
     blurb="Fast gates, short coherence. Learn gate order!",
     map=(
         "####################",
@@ -88,12 +94,13 @@ SNACK_BAR = Level(
     guests=("surface", "steane", "grover", "dj"),
     spawn_interval=13.0,
     spawn_interval_end=8.0,
-    stars=(120, 260, 400),
+    stars=(200, 380, 560),
 )
 
 TRATTORIA = Level(
     key="trattoria",
     name="Ion Trap Trattoria",
+    short="Trattoria",
     blurb="Two trap zones, shuttle qubits on the belts. Needs both chefs!",
     map=(
         "####################",
@@ -115,12 +122,13 @@ TRATTORIA = Level(
     spawn_interval_end=12.0,
     patience_scale=1.3,
     fridge_capacity=4,
-    stars=(100, 220, 340),
+    stars=(100, 190, 280),
 )
 
 COSMIC_CAFE = Level(
     key="cosmic",
     name="Cosmic Cafe",
+    short="Cosmic Cafe",
     blurb="Two-chef Waffle Iron. Watch out for cosmic rays!",
     map=(
         "####################",
@@ -145,8 +153,14 @@ COSMIC_CAFE = Level(
     patience_scale=1.2,
     two_chef_press=True,
     cosmic_rays=True,
-    stars=(140, 300, 460),
+    stars=(220, 420, 620),
 )
+
+def star_thresholds(level: Level, solo: bool) -> tuple[int, int, int]:
+    if not solo:
+        return level.stars
+    return tuple(round(s / level.solo_spawn_scale) for s in level.stars)
+
 
 LEVELS: tuple[Level, ...] = (TUTORIAL, SNACK_BAR, TRATTORIA, COSMIC_CAFE)
 LEVELS_BY_KEY = {lv.key: lv for lv in LEVELS}

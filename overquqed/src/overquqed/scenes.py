@@ -11,10 +11,10 @@ from overquqed.config import INTERNAL_WIDTH
 from overquqed.fonts import text
 from overquqed.game import Scene
 from overquqed.guests import GUESTS
-from overquqed.hud import panel_box, receipt_surface, rich
+from overquqed.hud import panel_box, receipt_surface, rich, wrap
 from overquqed.input import PLAYERS, Input
 from overquqed.ket import ket_surface
-from overquqed.levels import LEVELS
+from overquqed.levels import LEVELS, SNACK_BAR, star_thresholds
 from overquqed.scoring import stars as stars_for
 
 
@@ -33,6 +33,23 @@ def draw_logo(surf: pygame.Surface, y: int, t: float) -> None:
         surf.blit(text(ch, 32, col), (x0 + i * font_w, y + bob))
 
 
+_BACKDROP: list[pygame.Surface] = []
+
+
+def _title_backdrop() -> pygame.Surface:
+    """The Snack Bar kitchen, darkened, behind the logo."""
+    if not _BACKDROP:
+        from overquqed.render import build_background
+        from overquqed.world import World
+
+        bg = build_background(World(SNACK_BAR)).copy()
+        shade_ = pygame.Surface(bg.get_size(), pygame.SRCALPHA)
+        shade_.fill((18, 14, 28, 150))
+        bg.blit(shade_, (0, 0))
+        _BACKDROP.append(bg)
+    return _BACKDROP[0]
+
+
 class TitleScene(Scene):
     idle_resets = False
 
@@ -42,6 +59,7 @@ class TitleScene(Scene):
         self.idle = 0.0
         self.demo = None  # attract-mode demo round (a bot kitchen)
         self.guest_keys = list(GUESTS)
+        self.backdrop = _title_backdrop()
         app.music("title")
 
     def update(self, dt: float, inp: Input) -> None:
@@ -74,41 +92,39 @@ class TitleScene(Scene):
             if int(self.t * 2) % 2 == 0:
                 center(surf, text("PRESS START", 8, P.WHITE, shadow=P.INK), 196)
             return
-        surf.fill(P.BG)
-        # a strip of kitchen floor behind the logo
-        for x in range(0, INTERNAL_WIDTH, 24):
-            for y in (216, 240):
-                c = P.FLOOR_A if (x // 24 + y // 24) % 2 == 0 else P.FLOOR_B
-                surf.fill(c, (x, y, 24, 24))
-        surf.fill(P.INK, (0, 215, INTERNAL_WIDTH, 1))
-        draw_logo(surf, 60, self.t)
-        center(surf, rich("the ancilla kitchen of a |0> quantum computer", P.TEXT_DIM), 104)
+        surf.blit(self.backdrop, (0, 0))
+        draw_logo(surf, 34, self.t)
+        center(surf, text("the ancilla kitchen of a", 8, P.TEXT, shadow=P.INK), 76)
+        center(surf, text("fault-tolerant quantum computer", 8, P.TEXT, shadow=P.INK), 88)
+        # guest intros
+        gi = int(self.t / 4.0) % len(self.guest_keys)
+        g = GUESTS[self.guest_keys[gi]]
+        card = panel_box(400, 74, fill=(255, 250, 236))
+        cx = (INTERNAL_WIDTH - 400) // 2
+        surf.blit(card, (cx, 112))
+        key = "alice" if g.key == "alicebob" else g.key
+        frame = sprites.guest_frames(key)[0]
+        surf.blit(pygame.transform.scale(frame, (32, 44)), (cx + 8, 122))
+        if g.duo:
+            surf.blit(pygame.transform.scale(sprites.guest_frames("bob")[0], (32, 44)), (cx + 30, 122))
+        tx = cx + (66 if g.duo else 48)
+        surf.blit(text(g.name.upper(), 8, (170, 120, 40)), (tx, 120))
+        surf.blit(rich("orders " + "  ".join(f"|{o}>" for o in g.orders), P.INK), (tx, 133))
+        for i, line in enumerate(wrap('"' + g.flavour + '"', (400 - (tx - cx) - 8) // 8)):
+            surf.blit(rich(line, (90, 80, 100)), (tx, 150 + i * 11))
         # two chefs walking across the floor
         for idx, col in enumerate(P.PLAYER_COLORS):
             frames = sprites.chef_frames(col)
-            period = 14.0
-            ph = ((self.t / period) + idx * 0.5) % 1.0
+            ph = ((self.t / 14.0) + idx * 0.5) % 1.0
             x = -20 + ph * (INTERNAL_WIDTH + 40)
             f = 1 + int(self.t * 8) % 2
-            surf.blit(frames[("right", f)], (round(x), 220))
-            # carrying a bowl
+            surf.blit(frames[("right", f)], (round(x), 222))
             k = ket_surface(("+",) if idx else ("0",))
             surf.blit(k, (round(x) + 2, 208))
-        # guest intros
-        gi = int(self.t / 3.5) % len(self.guest_keys)
-        g = GUESTS[self.guest_keys[gi]]
-        key = "alice" if g.key == "alicebob" else g.key
-        frame = sprites.guest_frames(key)[0]
-        surf.blit(pygame.transform.scale(frame, (32, 44)), (40, 128))
-        if g.duo:
-            surf.blit(pygame.transform.scale(sprites.guest_frames("bob")[0], (32, 44)), (62, 128))
-        surf.blit(text(g.name.upper(), 8, P.GOLD), (104, 136))
-        surf.blit(rich("orders " + " ".join(f"|{o}>" for o in g.orders), P.TEXT), (104, 150))
-        surf.blit(rich('"' + g.flavour[:44] + ('"' if len(g.flavour) <= 44 else '..."'), P.TEXT_DIM), (104, 164))
         if int(self.t * 2) % 2 == 0:
-            center(surf, text("PRESS START", 16, P.WHITE, shadow=P.INK), 282)
-        center(surf, text("A or START: JOIN      HOLD SELECT: QUIT", 8, P.TEXT_DIM), 322)
-        center(surf, text("MQSF gaming corner", 8, (90, 80, 110)), 344)
+            center(surf, text("PRESS START", 16, P.WHITE, shadow=P.INK), 268)
+        center(surf, text("A or START: JOIN      HOLD SELECT: QUIT", 8, P.TEXT, shadow=P.INK), 300)
+        center(surf, text("original game for the MQSF gaming corner", 8, (150, 140, 170)), 346)
 
 
 class JoinScene(Scene):
@@ -181,6 +197,7 @@ class LevelSelectScene(Scene):
         self.players = players
         self.index = 0 if not app.session.get("played_tutorial") else 1
         self.t = 0.0
+        self._thumbs: dict[str, pygame.Surface] = {}
         app.music("title")
 
     def update(self, dt: float, inp: Input) -> None:
@@ -203,76 +220,90 @@ class LevelSelectScene(Scene):
 
             self.app.switch(RoundScene(self.app, level, self.players))
 
+    def _thumb(self, level) -> pygame.Surface:
+        thumb = self._thumbs.get(level.key)
+        if thumb is None:
+            from overquqed.render import build_background
+            from overquqed.world import World
+
+            bg = build_background(World(level))
+            h = level_h = len(level.map) * 24
+            kitchen = bg.subsurface(pygame.Rect(0, config.KITCHEN_Y, INTERNAL_WIDTH, level_h))
+            thumb = pygame.transform.scale(kitchen, (INTERNAL_WIDTH // 2, h // 2))
+            self._thumbs[level.key] = thumb
+        return thumb
+
     def draw(self, surf: pygame.Surface) -> None:
         surf.fill(P.BG)
-        center(surf, text("CHOOSE A KITCHEN", 16, P.GOLD, shadow=P.INK), 14)
+        center(surf, text("CHOOSE A KITCHEN", 16, P.GOLD, shadow=P.INK), 12)
         data = self.app.hiscores
         for i, level in enumerate(LEVELS):
             sel = i == self.index
-            y = 48 + i * 42
-            box = panel_box(220, 36, fill=P.HUD_BG if not sel else (70, 50, 90), edge=P.GOLD if sel else (70, 56, 86))
-            surf.blit(box, (12, y))
-            surf.blit(text(level.name if len(level.name) <= 25 else level.name[:24] + ".", 8,
-                           P.WHITE if sel else P.TEXT), (20, y + 7))
+            y = 40 + i * 44
+            box = panel_box(200, 38, fill=P.HUD_BG if not sel else (70, 50, 90), edge=P.GOLD if sel else (70, 56, 86))
+            surf.blit(box, (8, y))
+            surf.blit(text(level.short, 8, P.WHITE if sel else P.TEXT), (18, y + 8))
             n = hiscores.best_stars(data, level.key)
             if level.tutorial:
                 tag = "NEW? START HERE!" if not self.app.session.get("played_tutorial") else "TUTORIAL"
-                surf.blit(text(tag, 8, P.GOOD if sel else P.TEXT_DIM), (20, y + 21))
+                surf.blit(text(tag, 8, P.GOOD if sel else P.TEXT_DIM), (18, y + 22))
             else:
                 for s in range(3):
-                    surf.blit(sprites.star(s < n), (20 + s * 11, y + 20))
+                    surf.blit(sprites.star(s < n), (18 + s * 11, y + 21))
                 m, sec = divmod(int(level.duration), 60)
-                surf.blit(text(f"{m}:{sec:02d}", 8, P.TEXT_DIM), (180, y + 21))
+                surf.blit(text(f"{m}:{sec:02d}", 8, P.TEXT_DIM), (160, y + 22))
             if sel:
-                surf.blit(text(">", 8, P.GOLD), (4 + (int(self.t * 4) % 2), y + 13))
+                surf.blit(text(">", 8, P.GOLD), (1 + (int(self.t * 4) % 2), y + 15))
         # detail panel
         level = LEVELS[self.index]
-        x = 244
-        panel = panel_box(226, 300, fill=P.HUD_BG, edge=(70, 56, 86))
-        surf.blit(panel, (x, 48))
-        yy = 58
-        for line in _wrap_px(level.blurb, 26):
+        x, w = 216, 256
+        panel = panel_box(w, 312, fill=P.HUD_BG, edge=(70, 56, 86))
+        surf.blit(panel, (x, 36))
+        surf.blit(text(level.name, 8, P.GOLD), (x + 8, 44))
+        thumb = self._thumb(level)
+        pygame.draw.rect(surf, P.INK, (x + 7, 55, thumb.get_width() + 2, thumb.get_height() + 2))
+        surf.blit(thumb, (x + 8, 56))
+        yy = 60 + thumb.get_height() + 4
+        for line in _wrap_px(level.blurb, 30):
             surf.blit(text(line, 8, P.TEXT), (x + 8, yy))
             yy += 11
-        yy += 6
-        surf.blit(text("ORDERS", 8, P.TEXT_DIM), (x + 8, yy))
-        yy += 12
+        yy += 4
         kx = x + 8
         for key in level.recipes:
             k = ket_surface((key,))
-            if kx + k.get_width() > x + 218:
+            if kx + k.get_width() > x + w - 8:
                 kx = x + 8
-                yy += 14
+                yy += 13
             surf.blit(k, (kx, yy))
             kx += k.get_width() + 4
-        yy += 18
+        yy += 15
+        facts = []
         if not level.noise.is_noiseless:
-            surf.blit(text(f"T1 {level.noise.t1:.0f}s  T2 {level.noise.t2:.0f}s", 8, P.KET_0), (x + 8, yy))
-            yy += 12
+            facts.append((f"T1 {level.noise.t1:.0f}s  T2 {level.noise.t2:.0f}s", P.KET_0))
         if level.gate_scale != 1:
-            surf.blit(text(f"slow gates x{level.gate_scale:g}", 8, P.TEXT_DIM), (x + 8, yy))
-            yy += 12
+            facts.append((f"slow gates x{level.gate_scale:g}", P.TEXT_DIM))
         if level.fridge_capacity:
-            surf.blit(text(f"only {level.fridge_capacity} qubits!", 8, P.WARN), (x + 8, yy))
-            yy += 12
+            facts.append((f"only {level.fridge_capacity} qubits in the fridge!", P.WARN))
+        if level.two_chef_press:
+            facts.append(("two-chef Waffle Iron", P.GOLD))
         if level.cosmic_rays:
-            surf.blit(text("cosmic rays!", 8, P.BAD), (x + 8, yy))
-            yy += 12
+            facts.append(("cosmic rays!", P.BAD))
+        for line, col in facts:
+            surf.blit(text(line, 8, col), (x + 8, yy))
+            yy += 11
         if not level.tutorial:
-            yy = max(yy + 6, 214)
-            surf.blit(text("TOP 5", 8, P.GOLD), (x + 8, yy))
-            yy += 14
             rows = hiscores.table(data, level.key)
+            yy = 252
+            surf.blit(text("TOP 5", 8, P.GOLD), (x + 8, yy))
             for r in range(hiscores.TOP_N):
                 if r < len(rows):
-                    line = f"{r + 1}. {rows[r]['name']:<3}  {rows[r]['score']:>5}"
+                    line = f"{r + 1}. {rows[r]['name']:<3} {rows[r]['score']:>5}"
                     col = P.TEXT
                 else:
-                    line = f"{r + 1}. ---    ---"
+                    line = f"{r + 1}. ---   ---"
                     col = (90, 80, 110)
-                surf.blit(text(line, 8, col), (x + 8, yy))
-                yy += 12
-        center(surf, text("A/START: COOK   SELECT: BACK", 8, P.TEXT_DIM), 348)
+                surf.blit(text(line, 8, col), (x + 8 + (r // 3) * 124, yy + 13 + (r % 3) * 11))
+        center(surf, text("A/START: COOK   SELECT: BACK", 8, P.TEXT_DIM), 350)
 
 
 def _wrap_px(s: str, chars: int) -> list[str]:
@@ -294,7 +325,8 @@ class ResultsScene(Scene):
         self.level = round_scene.level
         self.score = w.score
         self.stats = w.stats
-        self.stars = stars_for(w.score, self.level.stars) if not self.level.tutorial else 3
+        self.thresholds = star_thresholds(self.level, round_scene.solo)
+        self.stars = stars_for(w.score, self.thresholds) if not self.level.tutorial else 3
         self.t = 0.0
         self.entering = not self.level.tutorial and hiscores.qualifies(app.hiscores, self.level.key, self.score)
         self.initials = [0, 0, 0]
@@ -376,7 +408,7 @@ class ResultsScene(Scene):
             surf.blit(text("BEST DISH", 8, P.GOLD), (250, 134))
             surf.blit(self.receipt, (250, 146))
         if not self.level.tutorial:
-            th = "  ".join(str(v) for v in self.level.stars)
+            th = "  ".join(str(v) for v in self.thresholds)
             surf.blit(text(f"stars at {th}", 8, (110, 100, 130)), (40, 200))
         if self.entering:
             box = panel_box(260, 84, fill=P.HUD_BG, edge=P.GOLD)
