@@ -195,11 +195,16 @@ def install() -> None:
     wallpaper hook is the opposite case and has to run at S00 -- see AGENTS.md.)
     """
     marker = "# arqade-unlock"
+    # The stop pattern is bracketed on purpose. `pkill -f unlock_daemon.py`
+    # also matches any shell whose own command line contains that text --
+    # including the one running this script -- and kills it. Writing one
+    # character as a character class makes the pattern no longer match its
+    # own spelling, while still matching the daemon.
     script = f"""#!/bin/bash
 {marker}: watch the pads for the unlock sequence, see {SELF.name}
 case "$1" in
     start) setsid nohup python3 {SELF} >/dev/null 2>&1 < /dev/null & ;;
-    stop)  pkill -f {SELF.name} ;;
+    stop)  pkill -f 'unlock_daemo[n]\\.py' ;;
 esac
 """
     if CUSTOM_SH.exists() and marker not in CUSTOM_SH.read_text():

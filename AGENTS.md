@@ -230,6 +230,21 @@ turns off the bottom button bar. `UIMode=Kiosk` is still set on top, because
 it is the only thing that closes "GAME OPTIONS (HOLD)" — a long press of the
 *launch* button, which cannot be unmapped without breaking launching.
 
+**Unlocking at the cabinet, with no laptop:** `batocera/unlock_daemon.py`
+watches the pads underneath ES and runs `kiosk.py --unlock` when it sees
+**L R L R X** (either pad, within 6 seconds). `unlock_daemon.py --install`
+writes `/userdata/system/custom.sh`, which `S99userservices` runs on every
+boot. That sequence cannot fire by accident: the lockdown unmaps x, y,
+pageup and pagedown from `es_input.cfg`, and L/R *were* pageup/pagedown, so
+all three buttons are inert in ES — and inside a game they are live, which is
+why the daemon ignores everything while a ROM is running.
+
+It costs nothing: it blocks in `select()`, so the kernel does not schedule it
+until a button is pressed, and it opens the devices without `EVIOCGRAB`, so
+it only observes and can never take input from ES or a game. It rescans for
+new event nodes every few seconds, because a pad unplugged and replugged
+comes back as a different node.
+
 **The keyboard mapping is left intact deliberately**, and SSH `--unlock` is
 the documented way back in. The original `es_input.cfg` is kept beside it as
 `es_input.cfg.arqade-orig`, and `--lock` always rebuilds from that copy, so
