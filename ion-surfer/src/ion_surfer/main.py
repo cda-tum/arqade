@@ -36,6 +36,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Windowed size as WxH, e.g. 1200x640 (ignored with --fullscreen)",
     )
     parser.add_argument(
+        "--sandbox",
+        action="store_true",
+        help="Start straight in the quantum SANDBOX (its own ROM on the cabinet)",
+    )
+    parser.add_argument(
         "--no-keyboard",
         action="store_true",
         help="Ignore the keyboard, joysticks only (used on the Batocera cabinet)",
@@ -60,6 +65,7 @@ def main(argv: list[str] | None = None) -> None:
             fullscreen=args.fullscreen,
             window_size=args.window_size,
             show_fps=args.fps or config.SHOW_FPS_DEFAULT,
+            sandbox_only=args.sandbox,
         )
 
     pygame.quit()

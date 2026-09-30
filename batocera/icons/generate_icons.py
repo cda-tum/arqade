@@ -1,6 +1,6 @@
 """Regenerate the per-game icons shown in EmulationStation's game list.
 
-    python3 generate_icons.py            # writes all four PNGs next to this file
+    python3 generate_icons.py            # writes all five PNGs next to this file
 
 Output names match the gamelist.xml <image> convention Batocera/ES expects
 (`<rom-basename>-image.png`), so the results can be copied straight to
@@ -265,11 +265,73 @@ def ion_surfer() -> pygame.Surface:
     return surf
 
 
+# --- Ion Trap Sandbox (ion-surfer --sandbox) ---------------------------------
+# A harmonic well with a wave packet coloured by its phase (as drawn in the
+# sandbox), plus a squeezed phase-space ellipse orbiting the origin.
+
+
+def ion_surfer_sandbox() -> pygame.Surface:
+    surf = pygame.Surface((SIZE, SIZE))
+    surf.fill((8, 12, 28))
+    for g in range(0, SIZE, 48):
+        pygame.draw.line(surf, (24, 32, 56), (g, 0), (g, SIZE))
+        pygame.draw.line(surf, (24, 32, 56), (0, g), (SIZE, g))
+
+    purple = (199, 155, 255)  # ion_surfer game.py COOP
+    cx, floor = SIZE / 2, SIZE * 0.86
+
+    def well(x: float) -> float:
+        return floor - ((x - cx) / (SIZE * 0.5)) ** 2 * SIZE * 0.42
+
+    curve = [(x, well(x)) for x in range(0, SIZE + 4, 4)]
+    fill = pygame.Surface((SIZE, SIZE), pygame.SRCALPHA)
+    pygame.draw.polygon(fill, (*purple, 60), curve + [(SIZE, SIZE), (0, SIZE)])
+    surf.blit(fill, (0, 0))
+
+    # wave packet: displaced gaussian with a phase gradient -> rainbow stripes
+    x0, sigma, k = cx + 34, 38.0, 0.11
+    top = []
+    for x in range(int(x0 - 4 * sigma), int(x0 + 4 * sigma), 3):
+        h = math.exp(-0.5 * ((x - x0) / sigma) ** 2) * 190
+        y0 = well(x) - 3
+        c = pygame.Color(0)
+        c.hsva = (((x - x0) * k * 180 / math.pi) % 360, 55, 100, 100)
+        if h > 1:
+            pygame.draw.line(surf, c, (x, y0), (x, y0 - h), 4)
+        top.append((x, y0 - h))
+    pygame.draw.lines(surf, (250, 250, 255), False, top, 3)
+    pygame.draw.lines(surf, purple, False, curve, 5)
+    pygame.draw.lines(surf, (235, 225, 255), False, curve, 2)
+
+    # phase-space inset: axes, vacuum circle, squeezed blob on its orbit
+    ox, oy, r = SIZE * 0.24, SIZE * 0.24, 78
+    pygame.draw.line(surf, (60, 74, 120), (ox - r, oy), (ox + r, oy), 2)
+    pygame.draw.line(surf, (60, 74, 120), (ox, oy - r), (ox, oy + r), 2)
+    pygame.draw.circle(surf, (90, 105, 160), (ox, oy), 46, 2)
+    bx, by = ox + 32, oy - 32
+    blob = pygame.Surface((SIZE, SIZE), pygame.SRCALPHA)
+    cyan = (110, 220, 255)
+    ang = math.radians(-45)
+    for level, alpha in ((2.2, 50), (1.6, 90), (1.0, 150), (0.5, 220)):
+        poly = []
+        for j in range(40):
+            t = j * math.tau / 40
+            u, v = 26 * level * math.cos(t), 9 * level * math.sin(t)
+            poly.append((bx + u * math.cos(ang) - v * math.sin(ang),
+                         by + u * math.sin(ang) + v * math.cos(ang)))
+        pygame.draw.polygon(blob, (*cyan, alpha), poly)
+    surf.blit(blob, (0, 0))
+    pygame.draw.line(surf, (255, 211, 107), (ox, oy), (bx, by), 3)
+    pygame.draw.circle(surf, (255, 255, 255), (int(bx), int(by)), 5)
+    return surf
+
+
 ICONS = {
     "quantum_towers-image.png": qlimbers,
     "quantum_pong-image.png": quantum_pong,
     "error_invaders-image.png": error_invaders,
     "ion_surfer-image.png": ion_surfer,
+    "ion_surfer_sandbox-image.png": ion_surfer_sandbox,
 }
 
 

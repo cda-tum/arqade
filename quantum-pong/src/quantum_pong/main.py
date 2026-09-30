@@ -82,13 +82,7 @@ def _draw_gate(
     surface: pygame.Surface,
     label_surfaces: dict[str, pygame.Surface],
     gate: Gate,
-    game_time: float,
 ) -> None:
-    age = game_time - gate.spawned_at
-    remaining = config.GATE_LIFETIME - age
-    if remaining < config.GATE_BLINK_WARNING and int(age * config.GATE_BLINK_RATE) % 2 == 0:
-        return  # about to expire -- blink as a warning
-
     color = config.GATE_COLORS[gate.kind]
     size = config.GATE_RADIUS * 2
     rect = pygame.Rect(0, 0, size, size)
@@ -264,7 +258,6 @@ def run_game(
 
         balls = [step_ball(b, dt, config.INTERNAL_HEIGHT, config.BALL_RADIUS) for b in balls]
 
-        active_gates = gates_mod.expire_gates(active_gates, game_time)
         active_gates, last_gate_spawn_at = gates_mod.maybe_spawn_gate(
             active_gates, game_time, last_gate_spawn_at, rng
         )
@@ -328,7 +321,7 @@ def run_game(
         )
 
         for gate in active_gates:
-            _draw_gate(internal, gate_label_surfaces, gate, game_time)
+            _draw_gate(internal, gate_label_surfaces, gate)
 
         for ball in balls:
             _draw_ball(internal, ball)

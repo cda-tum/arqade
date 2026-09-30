@@ -61,18 +61,19 @@ WINNING_SCORE = 7
 # wall. SWAP teleports it to the mirrored spot across the field.
 GATE_RADIUS = 24  # sized to comfortably fit the 4-letter "SWAP" label
 GATE_SPAWN_INTERVAL = 2.5  # seconds between spawn attempts
-GATE_LIFETIME = 8.0  # seconds an unused gate stays on screen
-GATE_BLINK_WARNING = 1.5  # seconds before expiry that a gate starts blinking
-GATE_BLINK_RATE = 6.0  # blink toggles per second during the warning period
 MAX_GATES_ON_SCREEN = 3
 MAX_BALLS_ON_SCREEN = 4
 # Keep spawns out of a margin near each paddle.
 GATE_SPAWN_MARGIN_X = 120
 GATE_SPAWN_MARGIN_Y = 20
-# Minimum center-to-center distance from any existing gate, when there's
-# still room in the spawn area to satisfy it (falls back to the best
-# available spot otherwise, rather than refusing to spawn).
-GATE_MIN_SPACING = 64.0
+# Gates never overlap: a new gate's square keeps at least GATE_MIN_GAP px of
+# clear space to every existing gate's square (if no such spot exists, that
+# spawn attempt is skipped). Gates stay on screen until a ball touches them.
+GATE_MIN_GAP = 16
+# Spread: each spawn samples this many random valid spots and keeps the one
+# farthest from the existing gates -- random, but with a soft repulsion. Higher
+# = more evenly spread (and more predictable); 1 = plain uniform random.
+GATE_SPAWN_CANDIDATES = 8
 # Relative spawn chance per kind -- H spawns twice as often as the others.
 GATE_WEIGHTS = {"H": 2, "X": 1, "Z": 1, "SWAP": 1}
 

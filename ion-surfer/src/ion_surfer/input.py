@@ -69,7 +69,7 @@ class Pad:
     DIRS = ("left", "right", "up", "down")
 
     def __init__(self):
-        self.src = {a: set() for a in ("left", "right", "up", "down", "a", "start", "select", "remove_ion", "add_ion")}
+        self.src = {a: set() for a in ("left", "right", "up", "down", "a", "start", "select", "remove_ion", "add_ion", "cool", "passive_cool")}
         self.pressed = set()
         self.rep = {d: 0.0 for d in self.DIRS}
 

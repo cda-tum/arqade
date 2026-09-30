@@ -16,7 +16,7 @@ import pygame
 from ion_surfer.config import FPS, INTERNAL_HEIGHT, INTERNAL_WIDTH, SCORE_FILE
 from ion_surfer.display import make_display, present
 from ion_surfer.input import Controls, keyboard_enabled
-from ion_surfer.sandbox import KICK_TAP, SANDBOX_RATE, Sandbox, start_voltages
+from ion_surfer.sandbox import SANDBOX_RATE, Sandbox, start_voltages
 
 # ============================== TUNING ==============================
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT   # logical resolution (scaled to the display)
@@ -166,9 +166,13 @@ def text(surf, s, font, color, pos, anchor="center", alpha=None):
 
 
 # ------------------------------ game ------------------------------
+SANDBOX = 4  # mode number of the sandbox (its own ROM, see main.py --sandbox)
+
+
 class Game:
-    def __init__(self, screen):
+    def __init__(self, screen, sandbox_only=False):
         self.screen = screen
+        self.sandbox_only = sandbox_only
         self.running = True
         self.controls = Controls()
         self.f_title = load_font("Bungee-Regular.ttf", 54)
@@ -208,9 +212,10 @@ class Game:
         self.mode = 1
         self.current_seed = ""
         self.sandbox = None
-        self.start_hold = [0.0, 0.0]  # SANDBOX: how long each pad has held START
         self.new_world(random_seed())
         self.state = "menu"
+        if sandbox_only:
+            self.start(SANDBOX)
 
     # ---------- world setup ----------
     def glow(self, color, radius):
@@ -262,8 +267,7 @@ class Game:
             c.v = start_voltages(W // EW + 3, VMIN, VMAX)
             self.curves = [c]
             self.ions = []
-            self.cursors = [Cursor(c, RED, [1], 4), Cursor(c, BLUE, [0], 7)]
-            self.start_hold = [0.0, 0.0]
+            self.cursors = [Cursor(c, BLUE, [0], 4), Cursor(c, RED, [1], 7)]
             self.sandbox = Sandbox(lambda x: self.potential(c, x), W, H, GROUND,
                                    (self.f_big, self.f_small, self.f_tiny))
         for ion in self.ions:
@@ -577,7 +581,7 @@ class Game:
         for c in self.curves:
             c.changes.clear()
         changed = self.drive_electrodes(steps * STEP, 0, W // EW - 1, SANDBOX_RATE)
-        cooling = any(h >= KICK_TAP for h in self.start_hold)
+        cooling = self.controls.pads[1].held("cool")
         for k in range(steps):
             self.sandbox.step(STEP, changed and k == 0, cooling)
         self.t += steps * STEP
@@ -628,8 +632,11 @@ class Game:
         if self.controls.any_pressed("down"):
             self.menu_sel = (self.menu_sel + 1) % n
 
-    MAIN_ITEMS = ["1 PLAYER", "2 PLAYERS: VERSUS", "2 PLAYERS: CO-OP", "SANDBOX", "SEED", "QUIT"]
-    PAUSE_ITEMS = ["RESUME", "RESTART", "MAIN MENU"]
+    MAIN_ITEMS = ["1 PLAYER", "2 PLAYERS: VERSUS", "2 PLAYERS: CO-OP", "SEED", "QUIT"]
+
+    @property
+    def PAUSE_ITEMS(self):
+        return ["RESUME", "RESTART", "QUIT" if self.sandbox_only else "MAIN MENU"]
     OVER_ITEMS = ["SAME SEED", "NEW SEED", "MAIN MENU"]
 
     def update(self, dt):
@@ -646,19 +653,19 @@ class Game:
                     if "right" in c.pads[p].pressed:
                         cu.sel += 1
             self.acc += dt
-            if self.mode == 4:
+            if self.mode == SANDBOX:
+                # blue: L/R remove/add an ion; red: L cools while held, R
+                # toggles passive cooling; START on either pad: laser kick
+                blue, red = c.pads
+                if "add_ion" in blue.pressed:
+                    self.sandbox.add_ion()
+                elif "remove_ion" in blue.pressed:
+                    self.sandbox.remove_ion()
+                if "passive_cool" in red.pressed:
+                    self.sandbox.passive_cooling = not self.sandbox.passive_cooling
                 for pi, p in enumerate(c.pads):
-                    if "add_ion" in p.pressed:
-                        self.sandbox.add_ion()
-                    elif "remove_ion" in p.pressed:
-                        self.sandbox.remove_ion()
-                    # START: a short tap is a laser kick, holding it cools
-                    if p.held("start"):
-                        self.start_hold[pi] += dt
-                    else:
-                        if 0 < self.start_hold[pi] < KICK_TAP:
-                            self.sandbox.kick(pi)
-                        self.start_hold[pi] = 0.0
+                    if "start" in p.pressed:
+                        self.sandbox.kick(pi)
                 self.sandbox_frame()
                 self.sandbox.measure()
                 return
@@ -682,6 +689,8 @@ class Game:
                     self.state = "play"
                 elif self.menu_sel == 1:
                     self.start(self.mode, self.current_seed)
+                elif self.sandbox_only:
+                    self.running = False
                 else:
                     self.to_menu()
 
@@ -714,9 +723,9 @@ class Game:
             self.nav(len(self.MAIN_ITEMS))
             if self.confirm():
                 seed = self.seed_string() or None
-                if self.menu_sel in (0, 1, 2, 3):
+                if self.menu_sel in (0, 1, 2):
                     self.start(self.menu_sel + 1, seed)
-                elif self.menu_sel == 4:
+                elif self.menu_sel == 3:
                     self.seed_edit = True
                     self.seed_slot = 0
                 else:
@@ -726,7 +735,6 @@ class Game:
         self.state = "menu"
         self.menu_sel = 0
         self.sandbox = None
-        self.start_hold = [0.0, 0.0]  # SANDBOX: how long each pad has held START
         self.new_world(random_seed())
 
     # ---------- drawing ----------
@@ -914,7 +922,7 @@ class Game:
         for tx in self.texts:
             text(s, tx[2], self.f_big, tx[4], (X(tx[0]), sy(tx[1])), alpha=tx[3])
 
-        if self.mode != 4 or self.state == "menu":
+        if self.mode != SANDBOX or self.state == "menu":
             s.blit(self.warn, (0, 0))
 
         # electrode strip
@@ -973,12 +981,12 @@ class Game:
              (W / 2, t.bottom + 18))
         seed = self.seed_string()
         labels = list(self.MAIN_ITEMS)
-        labels[4] = f"SEED: {seed if seed else 'RANDOM'}"
+        labels[3] = f"SEED: {seed if seed else 'RANDOM'}"
         if self.seed_edit:
-            labels[4] = "SEED:"
-        self.draw_items(self.MAIN_ITEMS, 222, labels, spacing=38)
+            labels[3] = "SEED:"
+        self.draw_items(self.MAIN_ITEMS, 236, labels)
         if self.seed_edit:
-            y = 222 + 4 * 38
+            y = 236 + 3 * 42
             base = W / 2 + 40
             for i, ch in enumerate(self.seed_chars):
                 x = base + i * 26
@@ -987,11 +995,11 @@ class Game:
                 if i == self.seed_slot:
                     pygame.draw.rect(s, GOLD, (x - 10, y + 16, 20, 3))
             text(s, "UP/DOWN change   LEFT/RIGHT move   BUTTON done   (empty = random)", self.f_tiny,
-                 TEXT_DIM, (W / 2, 222 + 6 * 38))
+                 TEXT_DIM, (W / 2, 236 + 5 * 42))
         lines = [
             "BLUE (P1): stick = select electrode / voltage",
             "RED (P2): stick = select electrode / voltage",
-            "Co-op: one shared waveform, one ion.   Sandbox: quantum motion, 1-4 ions.",
+            "Co-op: one shared waveform, one ion.   SELECT: menu",
         ]
         for i, ln in enumerate(lines):
             text(s, ln, self.f_small, TEXT_DIM, (W / 2, 486 + i * 22))
@@ -1003,7 +1011,8 @@ class Game:
         s.blit(self.dim, (0, 0))
         text(s, "PAUSED", self.f_title, GOLD, (W / 2, 190))
         self.draw_items(self.PAUSE_ITEMS, 290)
-        text(s, f"SEED {self.current_seed}", self.f_small, TEXT_DIM, (W / 2, 440))
+        if self.mode != SANDBOX:
+            text(s, f"SEED {self.current_seed}", self.f_small, TEXT_DIM, (W / 2, 440))
 
     def draw_over(self):
         s = self.screen
@@ -1026,7 +1035,7 @@ class Game:
 
     def draw(self):
         self.draw_world()
-        if self.state != "menu" and self.mode == 4:
+        if self.state != "menu" and self.mode == SANDBOX:
             self.sandbox.draw(self.screen, sy)
         elif self.state != "menu":
             self.draw_hud()
@@ -1038,14 +1047,14 @@ class Game:
             self.draw_over()
 
 
-def run(*, fullscreen=False, window_size="1200x640", show_fps=False):
+def run(*, fullscreen=False, window_size="1200x640", show_fps=False, sandbox_only=False):
     pygame.init()
     pygame.joystick.init()
     surface, window = make_display(fullscreen, window_size)
-    pygame.display.set_caption("Ion Surfer")
+    pygame.display.set_caption("Ion Trap Sandbox" if sandbox_only else "Ion Surfer")
     pygame.mouse.set_visible(not fullscreen)
     clock = pygame.time.Clock()
-    game = Game(surface)
+    game = Game(surface, sandbox_only=sandbox_only)
     fps_font = load_font("Rubik-Medium.ttf", 15)
     while game.running:
         dt = min(0.1, clock.tick(FPS) / 1000)

@@ -40,8 +40,8 @@ Q_COULOMB = 2000.0        # ion-ion repulsion in rad/s * px (~100 px spacing in 
 MAX_IONS = 4
 CRYSTAL_DT = 1 / 120      # s per Crank-Nicolson step for the crystal modes (half the single-ion rate)
 KICK = 1.5                # laser kick, in units of 1/sigma0 (moves alpha by 1.5 i)
-KICK_TAP = 0.25           # s: releasing START sooner than this kicks, holding longer cools
-COOL_DAMPING = 0.6        # imaginary part of the time step while cooling
+COOL_DAMPING = 0.6        # imaginary part of the time step while red holds L (strong cooling)
+PASSIVE_DAMPING = 0.04    # ... and with passive cooling toggled on (red R): a slow, steady drain
 SANDBOX_RATE = 300        # electrode voltage change per second (a bit slower than the game)
 FOCK_LEVELS = 16
 SCOPE_SECONDS = 6.0
@@ -138,6 +138,7 @@ class Sandbox:
         self.unit = 10.0
         self._crystal_acc = 0.0
         self.cooling = False
+        self.passive_cooling = False  # toggled by red R, off by default
         self.views: list[ModeView] = []
         self.trails: list[deque] = []
         self.scope: deque = deque(maxlen=int(SCOPE_SECONDS * 60))
@@ -221,6 +222,8 @@ class Sandbox:
         self.cooling = cooling
         if potential_changed:
             self.sync_potential()
+        gamma = COOL_DAMPING if cooling else (PASSIVE_DAMPING if self.passive_cooling else 0.0)
+        damp = gamma > 0
         if self.crystal:
             # fixed, coarser steps: several mode packets per frame, and the
             # coefficient cache only hits for a constant dt
@@ -228,11 +231,10 @@ class Sandbox:
             while self._crystal_acc >= CRYSTAL_DT - 1e-9:
                 self._crystal_acc -= CRYSTAL_DT
                 h = CRYSTAL_DT
-                self.crystal.step(complex(h, -COOL_DAMPING * h) if cooling else h, damp=cooling)
+                self.crystal.step(complex(h, -gamma * h) if damp else h, damp=damp)
         else:
-            step_dt = complex(dt, -COOL_DAMPING * dt) if cooling else dt
-            self.wp.step(step_dt)
-            if cooling:
+            self.wp.step(complex(dt, -gamma * dt) if damp else dt)
+            if damp:
                 self.wp.normalize()
 
     def _view(self, name, color, wp, force_fock, old):
@@ -294,8 +296,8 @@ class Sandbox:
         self.draw_phase_space(surf)
         self.draw_scope(surf)
         self.draw_readout(surf)
-        _text(surf, "STICK electrode / voltage    START tap: laser kick, hold: cool    "
-                    "R add ion    L remove ion    SELECT menu",
+        _text(surf, "STICK electrode / voltage    START laser kick    BLUE  L remove / R add ion    "
+                    "RED  L hold: cool / R passive cooling    SELECT menu",
               self.f_tiny, DIM_C, (self.w / 2, PANEL_TOP + PANEL_H + 14))
 
     def _surface_y(self, sy, x):
@@ -525,3 +527,6 @@ class Sandbox:
                 y += 20
         if self.cooling:
             _text(surf, "LASER COOLING", self.f_small, CYAN, (self.w / 2, PANEL_TOP + PANEL_H + 36))
+        elif self.passive_cooling:
+            _text(surf, "PASSIVE COOLING ON", self.f_small, _dim(CYAN, 0.75),
+                  (self.w / 2, PANEL_TOP + PANEL_H + 36))

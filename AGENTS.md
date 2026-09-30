@@ -27,6 +27,25 @@ future session doesn't have to rediscover them from scratch. Per-game specifics
   keys are set up. A benign `X11 forwarding request failed on channel 0`
   warning shows up on every connection — ignore it, the session still works.
 
+## Line endings: LF (Linux) everywhere
+
+Every text file in this repo should use **LF** line endings: the target is a
+Linux box, and the repo is also edited from WSL. Write new files with LF, and
+don't let an editor or a Windows checkout turn existing ones into CRLF.
+
+- It matters most for shell scripts: with CRLF the shebang reads `bash\r` and
+  the script doesn't run at all on the cabinet or in WSL
+  (`/usr/bin/env: 'bash\r': No such file or directory`). `.gitattributes`
+  forces `*.sh` to LF for that reason.
+- Much of `quantum-pong/` (and part of `quantum-towers/`) is still committed
+  with CRLF from an earlier Windows checkout. When you touch those files, don't
+  mix the two styles within one file. Converting them to LF is the goal, but
+  do it as its own commit (`* text=auto eol=lf` in `.gitattributes` plus
+  `git add --renormalize .`, see the note there), not buried inside a feature
+  change, so the diff stays reviewable.
+- Check a file with `file <path>` (it says "with CRLF line terminators") or
+  list the whole repo with `git ls-files --eol`.
+
 ## Deploy pattern
 
 Each game ships its own `deploy_batocera.sh` (see `quantum-pong/` and

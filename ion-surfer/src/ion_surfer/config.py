@@ -20,7 +20,7 @@ KEYMAP = {
             remove_ion=["K_q"], add_ion=["K_e"]),
     1: dict(left=["K_d"], right=["K_g"], up=["K_r"], down=["K_f"],
             a=["K_a"], start=["K_2"],
-            remove_ion=["K_c"], add_ion=["K_v"]),
+            cool=["K_c"], passive_cool=["K_v"]),
 }
 SELECT_KEYS = ["K_ESCAPE"]
 
@@ -31,8 +31,9 @@ INPUT_CONFIG = {
         "axes": (0, 1),  # (x axis, y axis)
         # RAW button numbers (confirmed on the cabinet, see AGENTS.md):
         # printed L X R / Y B A = raw 4 0 5 / 3 2 1. The four face buttons
-        # double as a d-pad (Y left, A right, X up, B down); L and R confirm
-        # and, in SANDBOX, remove (L) / add (R) an ion.
+        # double as a d-pad (Y left, A right, X up, B down); L and R confirm.
+        # In the SANDBOX, blue's L/R remove/add an ion, red's L cools while
+        # held and R toggles passive cooling.
         "buttons": {"left": [3], "right": [1], "up": [0], "down": [2], "a": [4, 5],
                     "remove_ion": [4], "add_ion": [5]},
     },
@@ -41,7 +42,7 @@ INPUT_CONFIG = {
         "hat_index": 0,
         "axes": (0, 1),
         "buttons": {"left": [3], "right": [1], "up": [0], "down": [2], "a": [4, 5],
-                    "remove_ion": [4], "add_ion": [5]},
+                    "cool": [4], "passive_cool": [5]},
     },
     "system": {
         # Select opens the pause menu. Quit combo: Start + Select held

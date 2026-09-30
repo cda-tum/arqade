@@ -20,7 +20,7 @@ def test_start_and_select_are_not_action_buttons():
             assert not set(buttons) & system
 
 
-SANDBOX_ONLY = ("remove_ion", "add_ion")  # reuse the confirm buttons, only active in SANDBOX
+SANDBOX_ONLY = ("remove_ion", "add_ion", "cool", "passive_cool")  # reuse the confirm buttons, only active in SANDBOX
 
 
 def test_each_raw_button_maps_to_one_action():
@@ -30,9 +30,9 @@ def test_each_raw_button_maps_to_one_action():
         assert len(raw) == len(set(raw))
 
 
-def test_sandbox_ion_buttons_sit_on_the_confirm_buttons_not_on_movement():
-    for player in ("p1", "p2"):
+def test_sandbox_buttons_sit_on_the_confirm_buttons_not_on_movement():
+    # blue adds/removes ions, red cools -- both on L/R, which confirm in menus
+    for player, (left, right) in (("p1", ("remove_ion", "add_ion")), ("p2", ("cool", "passive_cool"))):
         buttons = INPUT_CONFIG[player]["buttons"]
-        ion_buttons = set(buttons["remove_ion"]) | set(buttons["add_ion"])
-        assert ion_buttons <= set(buttons["a"])
-        assert not set(buttons["remove_ion"]) & set(buttons["add_ion"])
+        assert set(buttons[left]) | set(buttons[right]) <= set(buttons["a"])
+        assert not set(buttons[left]) & set(buttons[right])

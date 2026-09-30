@@ -1,4 +1,7 @@
-"""Gate pickups: spawning, expiry, and deterministic per-ball effects.
+"""Gate pickups: spawning and deterministic per-ball effects.
+
+Gates never expire on their own -- they stay until a ball touches them -- and
+never overlap each other.
 
 No probability: each gate applies a fixed transform to whichever ball touches
 it, consuming the gate. H is the only one that changes the ball count -- it
@@ -17,9 +20,9 @@ import random
 from dataclasses import dataclass
 
 from quantum_pong.config import (
-    GATE_LIFETIME,
-    GATE_MIN_SPACING,
+    GATE_MIN_GAP,
     GATE_RADIUS,
+    GATE_SPAWN_CANDIDATES,
     GATE_SPAWN_INTERVAL,
     GATE_SPAWN_MARGIN_X,
     GATE_SPAWN_MARGIN_Y,
@@ -31,7 +34,8 @@ from quantum_pong.config import (
 )
 from quantum_pong.pong import Ball
 
-_POSITION_ATTEMPTS = 20  # bounded retries to find a spot away from other gates
+# Bounded sampling budget for finding GATE_SPAWN_CANDIDATES non-overlapping spots.
+_POSITION_ATTEMPTS = 50
 
 
 @dataclass(frozen=True)
@@ -47,23 +51,34 @@ def _pick_kind(rng: random.Random, weights: dict[str, int]) -> str:
     return rng.choices(kinds, weights=[weights[k] for k in kinds])[0]
 
 
-def _far_enough(x: float, y: float, existing_gates, min_spacing: float) -> bool:
-    return all(math.hypot(x - g.x, y - g.y) >= min_spacing for g in existing_gates)
+def _overlaps(x: float, y: float, gate: Gate) -> bool:
+    """Whether a gate square centered at (x, y) would overlap `gate`'s square
+    or come within GATE_MIN_GAP of it. Gates are axis-aligned squares, so this
+    is a Chebyshev (max-axis) distance check, not a circular one."""
+    min_center_distance = 2 * GATE_RADIUS + GATE_MIN_GAP
+    return max(abs(x - gate.x), abs(y - gate.y)) < min_center_distance
 
 
-def _pick_position(rng: random.Random, existing_gates) -> tuple[float, float]:
-    """A random spot in the spawn area, kept at least GATE_MIN_SPACING from
-    every existing gate when the field still has room for that; otherwise
-    falls back to the last candidate tried rather than spawning nowhere."""
-    candidate = (0.0, 0.0)
+def _pick_position(rng: random.Random, existing_gates) -> tuple[float, float] | None:
+    """A random non-overlapping spot in the spawn area, biased away from the
+    existing gates: sample up to GATE_SPAWN_CANDIDATES valid spots and keep the
+    one whose nearest existing gate is farthest away (best-candidate sampling).
+    Returns None if no valid spot turned up -- the caller skips the spawn."""
+    best: tuple[float, float] | None = None
+    best_score = -1.0
+    found = 0
     for _ in range(_POSITION_ATTEMPTS):
-        candidate = (
-            rng.uniform(GATE_SPAWN_MARGIN_X, INTERNAL_WIDTH - GATE_SPAWN_MARGIN_X),
-            rng.uniform(GATE_SPAWN_MARGIN_Y, INTERNAL_HEIGHT - GATE_SPAWN_MARGIN_Y),
-        )
-        if _far_enough(*candidate, existing_gates, GATE_MIN_SPACING):
-            return candidate
-    return candidate
+        x = rng.uniform(GATE_SPAWN_MARGIN_X, INTERNAL_WIDTH - GATE_SPAWN_MARGIN_X)
+        y = rng.uniform(GATE_SPAWN_MARGIN_Y, INTERNAL_HEIGHT - GATE_SPAWN_MARGIN_Y)
+        if any(_overlaps(x, y, g) for g in existing_gates):
+            continue
+        score = min((math.hypot(x - g.x, y - g.y) for g in existing_gates), default=0.0)
+        if score > best_score:
+            best, best_score = (x, y), score
+        found += 1
+        if found >= GATE_SPAWN_CANDIDATES:
+            break
+    return best
 
 
 def spawn_gate(
@@ -71,20 +86,20 @@ def spawn_gate(
     now: float,
     existing_gates=(),
     weights: dict[str, int] | None = None,
-) -> Gate:
+) -> Gate | None:
     """A gate at a random spot in the middle of the field, away from the
-    paddles and (space permitting) away from other gates already there."""
-    x, y = _pick_position(rng, existing_gates)
+    paddles and spread out from (never overlapping) the gates already there.
+    None if the field has no room left for one."""
+    position = _pick_position(rng, existing_gates)
+    if position is None:
+        return None
+    x, y = position
     return Gate(
         kind=_pick_kind(rng, weights if weights is not None else GATE_WEIGHTS),
         x=x,
         y=y,
         spawned_at=now,
     )
-
-
-def expire_gates(gates: list[Gate], now: float) -> list[Gate]:
-    return [g for g in gates if now - g.spawned_at < GATE_LIFETIME]
 
 
 def maybe_spawn_gate(
@@ -95,7 +110,10 @@ def maybe_spawn_gate(
         return gates, last_spawn_at
     if now - last_spawn_at < GATE_SPAWN_INTERVAL:
         return gates, last_spawn_at
-    return [*gates, spawn_gate(rng, now, existing_gates=gates)], now
+    gate = spawn_gate(rng, now, existing_gates=gates)
+    if gate is None:
+        return gates, now  # no room right now -- try again next interval
+    return [*gates, gate], now
 
 
 def apply_h(ball: Ball) -> list[Ball]:

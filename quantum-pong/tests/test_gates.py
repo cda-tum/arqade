@@ -2,8 +2,8 @@ import math
 import random
 
 from quantum_pong.config import (
-    GATE_LIFETIME,
-    GATE_MIN_SPACING,
+    GATE_MIN_GAP,
+    GATE_RADIUS,
     GATE_SPAWN_INTERVAL,
     GATE_SPAWN_MARGIN_X,
     GATE_SPAWN_MARGIN_Y,
@@ -19,7 +19,6 @@ from quantum_pong.gates import (
     apply_x,
     apply_z,
     check_gate_collisions,
-    expire_gates,
     maybe_spawn_gate,
     spawn_gate,
 )
@@ -63,39 +62,59 @@ def test_spawn_gate_h_is_more_frequent_than_others_with_default_weights():
     assert h_share > 0.3
 
 
-def test_spawn_gate_avoids_existing_gates_when_field_has_room():
+def _squares_clear(a: Gate, b: Gate) -> bool:
+    return max(abs(a.x - b.x), abs(a.y - b.y)) >= 2 * GATE_RADIUS + GATE_MIN_GAP
+
+
+def test_spawn_gate_never_overlaps_existing_gates():
     rng = random.Random(9)
     existing = [Gate(kind="X", x=240.0, y=135.0, spawned_at=0.0)]
-    for _ in range(30):
+    for _ in range(200):
         gate = spawn_gate(rng, now=0.0, existing_gates=existing)
-        distance = math.hypot(gate.x - 240.0, gate.y - 135.0)
-        assert distance >= GATE_MIN_SPACING
+        assert gate is not None
+        assert _squares_clear(gate, existing[0])
 
 
-def test_spawn_gate_falls_back_to_some_position_when_field_is_crowded():
+def test_repeated_spawns_up_to_the_cap_never_overlap():
+    for seed in range(200):
+        rng = random.Random(seed)
+        gates: list[Gate] = []
+        for _ in range(MAX_GATES_ON_SCREEN):
+            gate = spawn_gate(rng, now=0.0, existing_gates=gates)
+            assert gate is not None
+            gates.append(gate)
+        for i, a in enumerate(gates):
+            for b in gates[i + 1 :]:
+                assert _squares_clear(a, b)
+
+
+def test_spawn_gate_is_spread_out_further_than_plain_uniform():
+    # Best-candidate sampling should push the second gate noticeably further
+    # from the first on average than a single uniform sample would.
+    first = Gate(kind="X", x=160.0, y=80.0, spawned_at=0.0)
+    rng = random.Random(3)
+    spread = [spawn_gate(rng, 0.0, [first]) for _ in range(300)]
+    rng = random.Random(3)
+    uniform = [
+        (rng.uniform(GATE_SPAWN_MARGIN_X, INTERNAL_WIDTH - GATE_SPAWN_MARGIN_X),
+         rng.uniform(GATE_SPAWN_MARGIN_Y, INTERNAL_HEIGHT - GATE_SPAWN_MARGIN_Y))
+        for _ in range(300)
+    ]
+    avg_spread = sum(math.hypot(g.x - first.x, g.y - first.y) for g in spread) / 300
+    avg_uniform = sum(math.hypot(x - first.x, y - first.y) for x, y in uniform) / 300
+    assert avg_spread > avg_uniform * 1.2
+
+
+def test_spawn_gate_returns_none_when_field_is_crowded():
     rng = random.Random(10)
-    # Pack the whole spawn area with close-together gates so no spot is far
-    # enough from all of them -- spawning must still return a Gate, not hang.
+    # Pack the whole spawn area with gates so no spot is clear of all of them
+    # -- spawning must give up (not overlap, not hang).
     existing = [
         Gate(kind="X", x=x, y=y, spawned_at=0.0)
-        for x in range(int(GATE_SPAWN_MARGIN_X), int(INTERNAL_WIDTH - GATE_SPAWN_MARGIN_X), 20)
-        for y in range(int(GATE_SPAWN_MARGIN_Y), int(INTERNAL_HEIGHT - GATE_SPAWN_MARGIN_Y), 20)
+        for x in range(int(GATE_SPAWN_MARGIN_X), int(INTERNAL_WIDTH - GATE_SPAWN_MARGIN_X) + 1, 20)
+        for y in range(int(GATE_SPAWN_MARGIN_Y), int(INTERNAL_HEIGHT - GATE_SPAWN_MARGIN_Y) + 1, 20)
     ]
-    gate = spawn_gate(rng, now=0.0, existing_gates=existing)
-    assert gate.kind in ("H", "X", "Z", "SWAP")
-    assert GATE_SPAWN_MARGIN_X <= gate.x <= INTERNAL_WIDTH - GATE_SPAWN_MARGIN_X
-
-
-def test_expire_gates_drops_gates_older_than_lifetime():
-    gates = [Gate(kind="H", x=200.0, y=100.0, spawned_at=0.0)]
-    remaining = expire_gates(gates, now=GATE_LIFETIME + 0.1)
-    assert remaining == []
-
-
-def test_expire_gates_keeps_fresh_gates():
-    gates = [Gate(kind="H", x=200.0, y=100.0, spawned_at=10.0)]
-    remaining = expire_gates(gates, now=10.0 + GATE_LIFETIME - 0.1)
-    assert remaining == gates
+    assert spawn_gate(rng, now=0.0, existing_gates=existing) is None
 
 
 def test_maybe_spawn_gate_respects_max_on_screen():
@@ -128,8 +147,7 @@ def test_maybe_spawn_gate_keeps_new_gate_away_from_existing_ones():
     new_gates, _ = maybe_spawn_gate(existing, now=GATE_SPAWN_INTERVAL + 0.1, last_spawn_at=0.0, rng=rng)
     assert len(new_gates) == 2
     spawned = next(g for g in new_gates if g is not existing[0])
-    distance = math.hypot(spawned.x - 240.0, spawned.y - 135.0)
-    assert distance >= GATE_MIN_SPACING
+    assert _squares_clear(spawned, existing[0])
 
 
 def test_apply_h_returns_two_balls_one_continuing_one_reversed():

@@ -6,7 +6,7 @@ trap potential with the electrodes on the floor to keep your ion on screen while
 camera scrolls ever faster.
 
 **Status:** full game (solo, 2-player versus, 2-player co-op, seeded levels, records),
-a quantum SANDBOX mode (1–4 ions),
+a separate quantum sandbox ROM (**Ion Trap Sandbox**, 1–4 ions),
 `--input-test`, and a Batocera deploy script. Button/axis indices in `INPUT_CONFIG` use
 the same placeholders as the quantum games and still need an `--input-test` run on the
 real cabinet.
@@ -30,10 +30,17 @@ Your score is the distance transported plus bonuses.
 
 Levels are generated from a seed. You can enter a seed in the menu to replay a level.
 
-## Sandbox
+## Sandbox (Ion Trap Sandbox)
 
-A fixed screen without scrolling. Both players shape one shared potential, like in
-co-op. Instead of the classical ball, the ion's motion is simulated quantum
+The sandbox is its own entry in the Batocera menu, **Ion Trap Sandbox**
+(`ion_surfer_sandbox.pygame`). It runs the same package started with `--sandbox`,
+so it opens straight into the sandbox, and QUIT in its pause menu exits. The arcade
+game's own menu only has the three arcade modes. Locally, run it with
+`uv run python -m ion_surfer.main --sandbox`.
+
+It is a fixed screen without scrolling. Both players shape one shared potential,
+like in co-op: blue's cursor starts on the left, red's on the right, matching the
+joysticks. Instead of the classical ball, the ion's motion is simulated quantum
 mechanically:
 
 - **1 ion:** the full wave packet is simulated on a 400-point grid by solving the 1D
@@ -61,7 +68,8 @@ How to produce the effects:
 - **Displacement:** a laser kick, or moving the well suddenly.
 - **Squeezing and breathing:** tightening or loosening the well suddenly. A slow change
   is adiabatic and stays in the ground state.
-- **Cooling:** hold START to damp everything back to the ground state.
+- **Cooling:** red holds L to damp everything back to the ground state quickly. Red R
+  toggles passive cooling, a slow steady drain; it is off by default.
 - **COM vs stretch:** P1's kick pushes the leftmost ion right and P2's pushes the
   rightmost ion left. So one kick excites COM and stretch together, while both players
   kicking at the same moment gives an almost pure stretch.
@@ -111,8 +119,9 @@ and axis mappings live there.
 | Voltage | Stick up/down or X/B / ↑ ↓ | Stick up/down or X/B / R F |
 | Confirm | L or R / LCtrl, Space, Enter | L or R / A |
 | Start | Start / 1 | Start / 2 |
-| Sandbox: laser kick / cool | tap / hold Start | tap / hold Start |
-| Sandbox: add / remove ion | R / L (keys E / Q) | R / L (keys V / C) |
+| Sandbox: laser kick | Start / 1 | Start / 2 |
+| Sandbox: L | remove ion (key Q) | cool while held (key C) |
+| Sandbox: R | add ion (key E) | passive cooling on/off (key V) |
 
 - **Select** (or Esc) opens the pause menu.
 - **Quit:** hold Start and Select together on either controller, or choose QUIT in the
@@ -130,9 +139,12 @@ Records (solo and co-op) are saved to `~/.ion_surfer_scores.json`. On Batocera t
 ```
 
 This works the same way as the quantum games. The package goes to
-`/userdata/games/ion_surfer/`, and a small loader `/userdata/roms/pygame/ion_surfer.pygame`
-runs it fullscreen. After deploying, restart EmulationStation or rescan the pygame
-system.
+`/userdata/games/ion_surfer/`. Two small loaders go to `/userdata/roms/pygame/`:
+`ion_surfer.pygame` runs the arcade game fullscreen, and `ion_surfer_sandbox.pygame`
+runs the sandbox. After the first deploy of the sandbox loader, rescan the pygame
+system (or restart EmulationStation) so the new entry shows up. Its name and icon come
+from `../batocera/gamelist.xml` and `../batocera/icons/ion_surfer_sandbox-image.png`
+(see "Game names and per-game icons" in `../AGENTS.md`).
 
 ## Tests
 

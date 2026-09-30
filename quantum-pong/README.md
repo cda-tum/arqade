@@ -15,13 +15,15 @@ placeholders pending an `--input-test` run on the real cabinet.
 
 ## Gate mechanics
 
-Gates spawn randomly in the middle of the field (away from the paddles), kept
-at least `GATE_MIN_SPACING` apart from each other when there's still room to
-manage that (falls back to the best available spot if the field is crowded).
-Spawn kind is weighted via `GATE_WEIGHTS` in config — H spawns twice as often
-as X/Z/SWAP by default. At most a few gates on screen at once, and each
-disappears after a few seconds if unused. Touching one with any ball applies
-it and consumes the gate:
+Gates spawn randomly in the middle of the field (away from the paddles) and
+never overlap: each keeps at least `GATE_MIN_GAP` px of clear space to every
+other gate. Placement uses best-candidate sampling — `GATE_SPAWN_CANDIDATES`
+random valid spots are tried and the one farthest from the existing gates
+wins — so gates stay random but spread out, as if lightly repelling each
+other. Spawn kind is weighted via `GATE_WEIGHTS` in config — H spawns twice as
+often as X/Z/SWAP by default. At most a few gates on screen at once; they
+never vanish on their own. Touching one with any ball applies it and consumes
+the gate:
 
 - **H** — splits the ball into two: one keeps going the way it was, the other
   reverses horizontal direction and heads to the other paddle. No-op past the
