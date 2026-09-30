@@ -111,12 +111,18 @@ observe. That's the single place all button mappings live.
 
 | Action | P1 | P2 |
 |---|---|---|
-| X / Y / Z | A / S / D | Numpad 4 / 5 / 6 |
-| H / RESET | F / H | Numpad 7 / 9 |
+| X / Y / Z | Q / W / E | Numpad 4 / 5 / 6 |
+| H / RESET | D / F | Numpad 7 / 9 |
 | Push up (confirm climb) | Up arrow | Numpad 8 |
 | Quit | Esc (either player) | Esc (either player) |
 
 On the cabinet, quit is Start+Select held together on either controller.
+
+P1's dev keys deliberately avoid L/X/R/B/Y/A: the real cabinet's P1 encoder emits a keyboard
+keystroke matching each button's own printed letter *in addition to* its joystick signal, and a
+dev fallback key that collided with one of those would double-fire two actions from a single real
+button press (this is exactly what caused the first real-hardware mapping bug — see
+`config.py`).
 
 ## Tests
 

@@ -20,18 +20,16 @@ LEGEND_LINES = [
 ]
 
 
-def button_grid(player_key: str = "p1") -> list[list[tuple[str, str | None]]]:
+def button_grid() -> list[list[tuple[str, str | None]]]:
     """The cabinet's 6 physical buttons as they actually sit -- two rows of
     three -- each cell (button_label, gate_name), or (button_label, None)
-    for a button with no gate mapped to it. BUTTON_LABELS' index order is
-    row-major over that 2x3 grid (indices 0-2 top row, 3-5 bottom row), so
-    this never drifts out of sync with the actual mapping. Same button
-    layout is assumed for both players' pads."""
-    buttons = config.INPUT_CONFIG[player_key]["buttons"]
-    gate_by_index = {index: action for action, index in buttons.items()}
-    cells = [
-        (config.BUTTON_LABELS[i], gate_by_index.get(i)) for i in range(len(config.BUTTON_LABELS))
-    ]
+    for a position with no gate mapped to it. This reflects the cabinet's
+    fixed PRINTED layout (BUTTON_LABELS + GATE_AT_POSITION), which is the
+    same for both players' pads regardless of how each pad is individually
+    wired -- see INPUT_CONFIG's "buttons" dicts for the actual raw hardware
+    numbers, which are a completely separate mapping (deliberately not used
+    here; conflating the two was the first real-hardware mapping bug)."""
+    cells = list(zip(config.BUTTON_LABELS, config.GATE_AT_POSITION))
     return [cells[0:3], cells[3:6]]
 
 

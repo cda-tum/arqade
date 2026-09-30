@@ -1,7 +1,35 @@
 """Single source of truth for input mapping and tuning constants.
 
-Button indices are placeholders -- the IconicArcade cabinet's exact mapping
-is unknown. Run `--input-test` on the real hardware and fill these in.
+Two genuinely independent mappings are involved in "which gate does this
+physical button fire, and what does the on-screen legend call it" -- an
+earlier version of this file conflated them (using one number for both),
+which is exactly what caused the first real-hardware mapping bug:
+
+  - GATE_AT_POSITION: which gate is PRINTED/shown at each of the 6 physical
+    button positions (row-major, matching BUTTON_LABELS' order). This is
+    about the cabinet's fixed layout, not its wiring, and is the same for
+    both players' pads.
+  - INPUT_CONFIG[player]["buttons"]: which RAW hardware button number
+    (as `joystick.get_button(n)` sees it) each GATE is wired to. This is
+    hardware/wiring-specific and can differ from the position order
+    entirely -- confirmed via --input-test (2026-09-30) that on the real
+    IconicArcade cabinet it does NOT follow print order at all (e.g. the
+    button printed "X" is raw button 0, but the gate shown at that position,
+    Y, is wired to a different raw number than you'd guess from the label).
+
+If the cabinet's wiring ever changes (or this runs on different hardware),
+re-run --input-test and update the `buttons` dicts below; GATE_AT_POSITION
+and BUTTON_LABELS (the legend's fixed layout) should stay as-is since that
+layout was separately confirmed correct.
+
+P1's encoder also emits a keyboard keystroke matching each button's own
+printed letter (l/x/r/b/y/a) *in addition to* the joystick signal -- so P1's
+dev keyboard fallback below is deliberately chosen to avoid all six of those
+letters; a fallback key that collided would double-fire two actions from one
+real button press on the cabinet (this is exactly what caused the "one
+button does two things" symptom in the first bug report: physical "A" sent
+both raw button 1 *and* the keystroke "a", and "a" was gate X's old fallback
+key). P2's encoder does not emit keystrokes, so no such collision risk there.
 """
 
 # --- Internal render resolution (scaled + letterboxed onto the real screen) ---
@@ -14,31 +42,38 @@ INTERNAL_HEIGHT = 270
 # main.py's confirm-to-climb mechanic).
 ACTION_NAMES = ("X", "Y", "Z", "H", "RESET")
 
-# The IconicArcade cabinet's 6 physical buttons, in the same index order as
-# each player's "buttons" mapping below -- used only to label the on-screen
-# legend (index -> physical name), since a raw button *index* means nothing
-# to someone looking at the actual cabinet. Confirm/adjust the ORDER against
-# real hardware via --input-test; this is a naming guess, same placeholder
-# status as the indices themselves. Index 4 ("Y") has no gate mapped to it.
-BUTTON_LABELS = ("L", "X", "R", "B", "Y", "A")
+# The IconicArcade cabinet's 6 physical buttons' PRINTED labels, row-major
+# (index 0-2 top row, 3-5 bottom row) -- purely for the on-screen legend.
+# Confirmed against the real cabinet (2026-09-30): bottom row is Y, B, A
+# left-to-right -- NOT B, Y, A as an earlier version of this file assumed.
+BUTTON_LABELS = ("L", "X", "R", "Y", "B", "A")
+
+# Which gate is shown at each of those 6 positions (same order as
+# BUTTON_LABELS) -- None means no gate is mapped to that position. This is
+# about the cabinet's fixed physical layout, NOT wiring, so it's the same
+# for both players regardless of how their individual pads are wired (see
+# INPUT_CONFIG's "buttons" dicts for the actual raw hardware numbers). Must
+# move in lockstep with BUTTON_LABELS -- these two are parallel arrays over
+# the same 6 physical positions, not independently reorderable.
+GATE_AT_POSITION: tuple[str | None, ...] = ("X", "Y", "Z", None, "H", "RESET")
 
 INPUT_CONFIG = {
     "p1": {
         "joystick_index": 0,
         "hat_index": 0,  # digital d-pad/stick, read as a hat -- confirm on real hardware
         "buttons": {
-            "X": 0,
-            "Y": 1,
-            "Z": 2,
-            "H": 3,
-            "RESET": 5,
+            "X": 4,
+            "Y": 0,
+            "Z": 5,
+            "H": 2,
+            "RESET": 1,
         },
         "keyboard": {
-            "X": "K_a",
-            "Y": "K_s",
-            "Z": "K_d",
-            "H": "K_f",
-            "RESET": "K_h",
+            "X": "K_q",
+            "Y": "K_w",
+            "Z": "K_e",
+            "H": "K_d",
+            "RESET": "K_f",
         },
         "up_keyboard": "K_UP",
     },
@@ -46,11 +81,11 @@ INPUT_CONFIG = {
         "joystick_index": 1,
         "hat_index": 0,
         "buttons": {
-            "X": 0,
-            "Y": 1,
-            "Z": 2,
-            "H": 3,
-            "RESET": 5,
+            "X": 4,
+            "Y": 0,
+            "Z": 5,
+            "H": 2,
+            "RESET": 1,
         },
         "keyboard": {
             "X": "K_KP4",

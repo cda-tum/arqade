@@ -1,15 +1,16 @@
+from quantum_towers import config
 from quantum_towers.config import ACTION_NAMES, BUTTON_LABELS
 from quantum_towers.screens import blink_visible, button_grid
 
 
 def test_button_grid_is_two_rows_of_three():
-    grid = button_grid("p1")
+    grid = button_grid()
     assert len(grid) == 2
     assert all(len(row) == 3 for row in grid)
 
 
 def test_button_grid_covers_every_action_and_button_label_exactly_once():
-    grid = button_grid("p1")
+    grid = button_grid()
     cells = [cell for row in grid for cell in row]
     labels = [label for label, _ in cells]
     gates = [gate for _, gate in cells if gate is not None]
@@ -18,10 +19,21 @@ def test_button_grid_covers_every_action_and_button_label_exactly_once():
 
 
 def test_button_grid_has_exactly_one_unmapped_button():
-    grid = button_grid("p1")
+    grid = button_grid()
     cells = [cell for row in grid for cell in row]
     unmapped = [label for label, gate in cells if gate is None]
     assert unmapped == ["Y"]
+
+
+def test_button_grid_reflects_the_printed_layout_not_raw_hardware_numbers():
+    # Regression test for the first real-hardware mapping bug: the legend
+    # must show gates by their fixed GATE_AT_POSITION layout, never by
+    # inverting INPUT_CONFIG's wiring-specific raw button numbers (which
+    # can freely differ from the print/position order on real hardware).
+    grid = button_grid()
+    assert [cell for row in grid for cell in row] == list(
+        zip(config.BUTTON_LABELS, config.GATE_AT_POSITION)
+    )
 
 
 def test_blink_visible_true_at_start_of_period():
