@@ -16,10 +16,10 @@ INTERNAL_HEIGHT = 640
 # MAME / I-PAC keyboard-encoder layout. Pad 0 = P1 (blue), pad 1 = P2 (red).
 KEYMAP = {
     0: dict(left=["K_LEFT"], right=["K_RIGHT"], up=["K_UP"], down=["K_DOWN"],
-            a=["K_LCTRL", "K_SPACE", "K_RETURN"], start=["K_1"],
+            confirm=["K_LCTRL", "K_SPACE", "K_RETURN"], back=["K_BACKSPACE"], start=["K_1"],
             remove_ion=["K_q"], add_ion=["K_e"]),
     1: dict(left=["K_d"], right=["K_g"], up=["K_r"], down=["K_f"],
-            a=["K_a"], start=["K_2"],
+            confirm=["K_a"], back=["K_s"], start=["K_2"],
             cool=["K_c"], passive_cool=["K_v"]),
 }
 SELECT_KEYS = ["K_ESCAPE"]
@@ -31,17 +31,23 @@ INPUT_CONFIG = {
         "axes": (0, 1),  # (x axis, y axis)
         # RAW button numbers (confirmed on the cabinet, see AGENTS.md):
         # printed L X R / Y B A = raw 4 0 5 / 3 2 1. The four face buttons
-        # double as a d-pad (Y left, A right, X up, B down); L and R confirm.
+        # double as a d-pad in-game (Y left, A right, X up, B down).
+        # A and B additionally carry the cabinet-wide menu convention --
+        # A confirms, B goes back (see "Button convention" in ../AGENTS.md).
+        # One button can drive several actions; the menu code checks
+        # confirm/back first and returns, so B never also scrolls down.
         # In the SANDBOX, blue's L/R remove/add an ion, red's L cools while
         # held and R toggles passive cooling.
-        "buttons": {"left": [3], "right": [1], "up": [0], "down": [2], "a": [4, 5],
+        "buttons": {"left": [3], "right": [1], "up": [0], "down": [2],
+                    "confirm": [1], "back": [2],
                     "remove_ion": [4], "add_ion": [5]},
     },
     "p2": {
         "joystick_index": 1,
         "hat_index": 0,
         "axes": (0, 1),
-        "buttons": {"left": [3], "right": [1], "up": [0], "down": [2], "a": [4, 5],
+        "buttons": {"left": [3], "right": [1], "up": [0], "down": [2],
+                    "confirm": [1], "back": [2],
                     "cool": [4], "passive_cool": [5]},
     },
     "system": {

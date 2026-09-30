@@ -118,6 +118,8 @@ and axis mappings live there.
 | Voltage | Stick up/down or X/B / ↑ ↓ | Stick up/down or X/B / R F |
 | Confirm | L or R / LCtrl, Space, Enter | L or R / A |
 | Start | Start / 1 | Start / 2 |
+| Menu: confirm | **A** / Ctrl, Space, Enter | **A** / A |
+| Menu: back | **B** / Backspace | **B** / S |
 | Sandbox: laser kick | Start / 1 | Start / 2 |
 | Sandbox: L | remove ion (key Q) | cool while held (key C) |
 | Sandbox: R | add ion (key E) | passive cooling on/off (key V) |

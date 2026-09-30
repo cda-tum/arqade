@@ -624,7 +624,12 @@ class Game:
                 self.seed_slot = min(SEED_LEN - 1, self.seed_slot + 1)
 
     def confirm(self):
-        return self.controls.any_pressed("a") or self.controls.any_pressed("start")
+        # A, or Start -- the cabinet convention. L/R used to confirm too, which
+        # read as arbitrary next to every other game.
+        return self.controls.any_pressed("confirm") or self.controls.any_pressed("start")
+
+    def back(self):
+        return self.controls.any_pressed("back")
 
     def nav(self, n):
         if self.controls.any_pressed("up"):
@@ -685,7 +690,7 @@ class Game:
 
         elif self.state == "pause":
             self.acc = 0
-            if c.select:
+            if c.select or self.back():
                 self.state = "play"
                 return
             self.nav(3)
@@ -700,6 +705,9 @@ class Game:
                     self.to_menu()
 
         elif self.state == "over":
+            if self.back():
+                self.to_menu()
+                return
             self.nav(3)
             if self.confirm():
                 if self.menu_sel == 0:
@@ -712,6 +720,9 @@ class Game:
         elif self.state == "menu":
             self.t += dt
             if self.seed_edit:
+                if self.confirm() or self.back() or c.select:
+                    self.seed_edit = False
+                    return
                 sl = self.seed_slot
                 idx = SEED_CHARS.index(self.seed_chars[sl])
                 if c.any_pressed("up"):
@@ -722,8 +733,8 @@ class Game:
                     self.seed_slot = max(0, sl - 1)
                 if c.any_pressed("right"):
                     self.seed_slot = min(SEED_LEN - 1, sl + 1)
-                if self.confirm() or c.select:
-                    self.seed_edit = False
+                return
+            if self.back():
                 return
             self.nav(len(self.MAIN_ITEMS))
             if self.confirm():
