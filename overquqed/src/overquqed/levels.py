@@ -134,7 +134,10 @@ COSMIC_CAFE = Level(
         "####################",
     ),
     duration=180.0,
-    noise=Noise(t1=100.0, t2=45.0),
+    # Longer coherence than the Snack Bar: entangled dishes decay n times
+    # faster (a GHZ tray dephases 3x as fast as one bowl), so with T2 = 45 s
+    # even the bot's GHZ came out at F = 0.72. Cosmic rays are the hazard here.
+    noise=Noise(t1=240.0, t2=160.0),
     recipes=("0", "+", "-", "1", "Phi+", "Phi-", "Psi+", "GHZ", "Psi-"),
     guests=("surface", "steane", "grover", "dj", "alicebob", "knill", "shor"),
     spawn_interval=15.0,

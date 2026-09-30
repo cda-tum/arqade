@@ -39,7 +39,7 @@ GUESTS: dict[str, GuestType] = {
                   "Constant or balanced? Just one query, I promise."),
         GuestType("alicebob", "Alice & Bob", ("Phi+",), 70.0, 1.3,
                   "We share everything. Even our qubits!", duo=True),
-        GuestType("knill", "Knill", ("Phi+", "Psi+", "Phi-"), 70.0, 1.4,
+        GuestType("knill", "Knill", ("Phi+", "Psi+", "Phi-", "Psi-"), 70.0, 1.4,
                   "Bell pairs! I teleport my errors away."),
         GuestType("shor", "Shor", ("GHZ",), 85.0, 1.5,
                   "Meow. A cat state, alive AND dead."),
