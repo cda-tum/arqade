@@ -166,7 +166,7 @@ def text(surf, s, font, color, pos, anchor="center", alpha=None):
 
 
 # ------------------------------ game ------------------------------
-SANDBOX = 4  # mode number of the sandbox (its own ROM, see main.py --sandbox)
+SANDBOX = 4  # mode number of the sandbox, picked from the main menu
 
 
 class Game:
@@ -632,7 +632,12 @@ class Game:
         if self.controls.any_pressed("down"):
             self.menu_sel = (self.menu_sel + 1) % n
 
-    MAIN_ITEMS = ["1 PLAYER", "2 PLAYERS: VERSUS", "2 PLAYERS: CO-OP", "SEED", "QUIT"]
+    MAIN_ITEMS = ["1 PLAYER", "2 PLAYERS: VERSUS", "2 PLAYERS: CO-OP", "SANDBOX", "SEED", "QUIT"]
+    # The first three items start modes 1..3. These two are named because both
+    # the menu logic and the drawing code index into MAIN_ITEMS by row, and a
+    # bare 3 silently becomes the wrong row the moment an item is inserted.
+    SANDBOX_ITEM = 3
+    SEED_ITEM = 4
 
     @property
     def PAUSE_ITEMS(self):
@@ -725,7 +730,9 @@ class Game:
                 seed = self.seed_string() or None
                 if self.menu_sel in (0, 1, 2):
                     self.start(self.menu_sel + 1, seed)
-                elif self.menu_sel == 3:
+                elif self.menu_sel == self.SANDBOX_ITEM:
+                    self.start(SANDBOX)
+                elif self.menu_sel == self.SEED_ITEM:
                     self.seed_edit = True
                     self.seed_slot = 0
                 else:
@@ -981,12 +988,12 @@ class Game:
              (W / 2, t.bottom + 18))
         seed = self.seed_string()
         labels = list(self.MAIN_ITEMS)
-        labels[3] = f"SEED: {seed if seed else 'RANDOM'}"
+        labels[self.SEED_ITEM] = f"SEED: {seed if seed else 'RANDOM'}"
         if self.seed_edit:
-            labels[3] = "SEED:"
+            labels[self.SEED_ITEM] = "SEED:"
         self.draw_items(self.MAIN_ITEMS, 236, labels)
         if self.seed_edit:
-            y = 236 + 3 * 42
+            y = 236 + self.SEED_ITEM * 42
             base = W / 2 + 40
             for i, ch in enumerate(self.seed_chars):
                 x = base + i * 26
@@ -995,7 +1002,7 @@ class Game:
                 if i == self.seed_slot:
                     pygame.draw.rect(s, GOLD, (x - 10, y + 16, 20, 3))
             text(s, "UP/DOWN change   LEFT/RIGHT move   BUTTON done   (empty = random)", self.f_tiny,
-                 TEXT_DIM, (W / 2, 236 + 5 * 42))
+                 TEXT_DIM, (W / 2, 236 + len(self.MAIN_ITEMS) * 42))
         lines = [
             "BLUE (P1): stick = select electrode / voltage",
             "RED (P2): stick = select electrode / voltage",

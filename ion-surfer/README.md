@@ -6,7 +6,7 @@ trap potential with the electrodes on the floor to keep your ion on screen while
 camera scrolls ever faster.
 
 **Status:** full game (solo, 2-player versus, 2-player co-op, seeded levels, records),
-a separate quantum sandbox ROM (**Ion Trap Sandbox**, 1–4 ions),
+a quantum sandbox mode (**SANDBOX**, 1–4 ions),
 `--input-test`, and a Batocera deploy script. Button/axis indices in `INPUT_CONFIG` use
 the same placeholders as the quantum games and still need an `--input-test` run on the
 real cabinet.
@@ -30,13 +30,12 @@ Your score is the distance transported plus bonuses.
 
 Levels are generated from a seed. You can enter a seed in the menu to replay a level.
 
-## Sandbox (Ion Trap Sandbox)
+## Sandbox
 
-The sandbox is its own entry in the Batocera menu, **Ion Trap Sandbox**
-(`ion_surfer_sandbox.pygame`). It runs the same package started with `--sandbox`,
-so it opens straight into the sandbox, and QUIT in its pause menu exits. The arcade
-game's own menu only has the three arcade modes. Locally, run it with
-`uv run python -m ion_surfer.main --sandbox`.
+The sandbox is the **SANDBOX** entry in the game's own main menu, alongside the three
+arcade modes. Locally you can skip straight to it with
+`uv run python -m ion_surfer.main --sandbox`, which is a dev shortcut only -- on the
+cabinet it is reached through the menu like any other mode.
 
 It is a fixed screen without scrolling. Both players shape one shared potential,
 like in co-op: blue's cursor starts on the left, red's on the right, matching the
@@ -139,12 +138,10 @@ Records (solo and co-op) are saved to `~/.ion_surfer_scores.json`. On Batocera t
 ```
 
 This works the same way as the quantum games. The package goes to
-`/userdata/games/ion_surfer/`. Two small loaders go to `/userdata/roms/pygame/`:
-`ion_surfer.pygame` runs the arcade game fullscreen, and `ion_surfer_sandbox.pygame`
-runs the sandbox. After the first deploy of the sandbox loader, rescan the pygame
-system (or restart EmulationStation) so the new entry shows up. Its name and icon come
-from `../batocera/gamelist.xml` and `../batocera/icons/ion_surfer_sandbox-image.png`
-(see "Game names and per-game icons" in `../AGENTS.md`).
+`/userdata/games/ion_surfer/`, and one small loader, `ion_surfer.pygame`, goes to
+`/userdata/roms/pygame/` and runs the game fullscreen. Its name and icon come from
+`../batocera/gamelist.xml` and `../batocera/icons/ion_surfer-image.png` (see "Game
+names and per-game icons" in `../AGENTS.md`).
 
 ## Tests
 

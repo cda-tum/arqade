@@ -31,11 +31,4 @@
 		<image>./images/ion_surfer-image.png</image>
 		<lang>en</lang>
 	</game>
-	<game>
-		<path>./ion_surfer_sandbox.pygame</path>
-		<name>Ion Trap Sandbox</name>
-		<desc>Shape a real ion trap and watch the quantum motion: wave packets, Fock states, squeezing and the COM and stretch modes of up to four ions.</desc>
-		<image>./images/ion_surfer_sandbox-image.png</image>
-		<lang>en</lang>
-	</game>
 </gameList>

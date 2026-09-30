@@ -38,7 +38,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--sandbox",
         action="store_true",
-        help="Start straight in the quantum SANDBOX (its own ROM on the cabinet)",
+        help="Start straight in the quantum SANDBOX, skipping the menu (dev shortcut)",
     )
     parser.add_argument(
         "--no-keyboard",
