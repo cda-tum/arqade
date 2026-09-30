@@ -97,10 +97,37 @@ still leaves the OS branding flashing up twice. `/` is a writable overlay,
 so `install.py` swaps that file (keeping `logo.png.batocera-orig` beside it)
 and reloads it live via `swaymsg output '*' bg … fill` — no reboot needed.
 
+**…but writes to `/` do not survive a reboot.** The overlay's upper layer is
+a tmpfs (`mount | grep overlay` → `upperdir=/overlay_root/overlay`, and
+`/overlay` is `tmpfs`), so the swapped `logo.png` is RAM-only and the
+Batocera logo silently comes back on the next boot. This bit us once: the
+wallpaper was verified by screenshot, then reverted unnoticed at the next
+power cycle. `install.py` therefore also writes `/boot/boot-custom.sh`,
+which `/etc/init.d/S00bootcustom` runs early on every boot — before sway and
+ES start — to copy the logo back out of `/userdata/splash/` (a real
+partition). Batocera's own `batocera-save-overlay` is the alternative, but it
+carves a 100 MB ext4 image out of `/boot` to snapshot the whole of `/`.
+
+Anything that must persist belongs under `/userdata` or `/boot`; treat
+`/usr`, `/etc` and `/tmp` as scratch.
+
 The theme in use is `mqt` (`ThemeSet` in
 `/userdata/system/configs/emulationstation/es_settings.cfg`), and the two
 XML files are patched by `quantum-pong/batocera/arqade-theme/install.py` to
 point at `./art/mqt_splash.png`.
+
+`install.py` also patches `views/system.xml` (the main menu / system
+carousel): it blanks the three metadata labels top left — they come from
+`<manufacturer>`/`<fullname>`/`<release>` in `es_systems_mqt.cfg`, but
+emptying the *theme's* bindings avoids touching that file, which has taken
+the menu to a black screen before — and adds the bottom-right control hints.
+Those hints are theme `<text>` elements, deliberately **not** painted into
+`art/bg.png`: the theme draws that image through
+`<color>${backgroundColor}</color>` (`200000`, near-black), which would tint
+any baked-in text to invisibility.
+
+Every patch rebuilds from a `.bak` of the original, so `install.py` is safe
+to re-run; to see a theme change you must restart ES (or reboot).
 
 **Artwork must be 8-bit PNG.** The original ARQADE splash art was saved as
 *16-bit/color* PNG. Nothing in this stack can read that: `fbv` (used for the
