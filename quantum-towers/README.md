@@ -124,6 +124,10 @@ dev fallback key that collided with one of those would double-fire two actions f
 button press (this is exactly what caused the first real-hardware mapping bug — see
 `config.py`).
 
+"Push up" reads the stick as an analog axis (`vertical_axis`), not a hat switch — this cabinet's
+sticks don't send hat events at all. Same axis index and deadzone Quantum Pong already confirmed
+on this hardware for paddle movement.
+
 ## Tests
 
 ```bash

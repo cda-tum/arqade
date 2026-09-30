@@ -30,6 +30,14 @@ real button press on the cabinet (this is exactly what caused the "one
 button does two things" symptom in the first bug report: physical "A" sent
 both raw button 1 *and* the keystroke "a", and "a" was gate X's old fallback
 key). P2's encoder does not emit keystrokes, so no such collision risk there.
+
+The "push up to confirm" gesture reads the stick as an ANALOG AXIS
+(`vertical_axis`, SDL convention: negative = up), not a hat switch -- this
+cabinet's sticks don't send hat events at all. Confirmed by reusing the
+exact axis index and deadzone Quantum Pong already validated on this same
+hardware for paddle movement (`vertical_axis: 1`, `AXIS_DEADZONE = 0.25`);
+`hat_index` is kept as a harmless secondary check in case a future stick on
+this cabinet does have one, but the axis is what actually works today.
 """
 
 # --- Internal render resolution (scaled + letterboxed onto the real screen) ---
@@ -60,7 +68,8 @@ GATE_AT_POSITION: tuple[str | None, ...] = ("X", "Y", "Z", None, "H", "RESET")
 INPUT_CONFIG = {
     "p1": {
         "joystick_index": 0,
-        "hat_index": 0,  # digital d-pad/stick, read as a hat -- confirm on real hardware
+        "hat_index": 0,  # digital d-pad, if the stick has one -- most don't on this cabinet
+        "vertical_axis": 1,  # confirmed on this cabinet via Quantum Pong's paddle input
         "buttons": {
             "X": 4,
             "Y": 0,
@@ -80,6 +89,7 @@ INPUT_CONFIG = {
     "p2": {
         "joystick_index": 1,
         "hat_index": 0,
+        "vertical_axis": 1,
         "buttons": {
             "X": 4,
             "Y": 0,
@@ -103,6 +113,11 @@ INPUT_CONFIG = {
         "keyboard_quit": "K_ESCAPE",
     },
 }
+
+# How far the vertical axis must move (SDL convention: negative = up) before
+# it counts as "pushed up" -- same value Quantum Pong already confirmed on
+# this exact cabinet's sticks.
+AXIS_DEADZONE = 0.25
 
 # --- Tower ---
 TOWER_HEIGHT = 16  # floors to win

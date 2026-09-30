@@ -11,12 +11,19 @@ from dataclasses import dataclass
 
 import pygame
 
-from quantum_towers.config import ACTION_NAMES, INPUT_CONFIG
+from quantum_towers.config import ACTION_NAMES, AXIS_DEADZONE, INPUT_CONFIG
 
 
 def pressed_edge(previous: bool, current: bool) -> bool:
     """True only on the frame a button transitions from not-held to held."""
     return current and not previous
+
+
+def axis_indicates_up(axis_value: float, deadzone: float) -> bool:
+    """True when the vertical axis is pushed far enough toward "up" -- negative,
+    matching SDL's convention (same sign Quantum Pong already confirmed on this
+    exact cabinet's sticks)."""
+    return axis_value < -deadzone
 
 
 def should_quit(
@@ -66,6 +73,11 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
         if hat_index < num_hats:
             _hat_x, hat_y = joystick.get_hat(hat_index)
             up_held = up_held or hat_y > 0
+
+        num_axes = joystick.get_numaxes()
+        vertical_axis = cfg["vertical_axis"]
+        if vertical_axis < num_axes:
+            up_held = up_held or axis_indicates_up(joystick.get_axis(vertical_axis), AXIS_DEADZONE)
 
         system = INPUT_CONFIG["system"]
         if system["start_button"] < num_buttons:

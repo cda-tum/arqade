@@ -116,6 +116,23 @@ things at once": physical A fired raw button 1 *and* the keystroke `a`, and
 `a` happened to be that game's dev fallback key for a different gate. Pick
 P1 dev-fallback keys from letters outside `{l, x, r, b, y, a}`.
 
+### The joystick's directional movement is an analog axis, not a hat
+
+Both players' sticks report direction as an **analog axis** (`joystick.get_axis(1)`,
+SDL convention: negative = up, positive = down), not a digital hat switch. A
+game that reads `joystick.get_hat(n)` for up/down will silently get nothing —
+`get_numhats()` is 0 on this cabinet, so the hat branch never fires and no
+error is raised either, just an input that quietly never registers.
+
+Quantum Pong got this right from the start (paddle movement always read the
+axis: `vertical_axis: 1`, deadzone `0.25`). Quantum Towers' "push up to
+confirm" gesture initially assumed a hat switch instead and simply never
+worked on the real cabinet — the fix was reusing Pong's exact axis index and
+deadzone. Any future game that needs directional stick input on this cabinet
+should read the axis from the start; a hat check doesn't hurt as a secondary
+fallback (it's harmless when `get_numhats()` is 0) but isn't sufficient on
+its own.
+
 ### Diagnosing input issues on this cabinet
 
 Every game here should keep a `--input-test` mode (see either game's
