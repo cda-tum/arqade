@@ -211,7 +211,7 @@ different session, not the deploy script itself, but the lesson stands:
 ### Kiosk lockdown (`batocera/kiosk.py`)
 
 For public demos the cabinet runs locked: `python3 /userdata/kiosk.py --lock`
-(and `--unlock`, `--status`). Browsing and launching the four games works
+(and `--unlock`, `--status`). Browsing and launching the games works
 exactly as before; nothing else does.
 
 ES's own restricted UI modes are not enough on their own — Kiosk and Kid only
