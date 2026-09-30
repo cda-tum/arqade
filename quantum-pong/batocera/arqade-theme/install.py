@@ -63,20 +63,43 @@ BOOT_CUSTOM = Path("/boot/boot-custom.sh")
 BOOT_WALLPAPER = Path("/boot/arqade-logo.png")
 WALLPAPER_SOURCE = BOOT_SPLASH_DIR / "arqade_splash.png"
 BOOT_MARKER = "# arqade-wallpaper"
+
+# Every /usr path the boot hook rewrites. All of them reset with the tmpfs on
+# each boot, and all are read after S00, so one early copy covers them:
+#   - logo.png          sway's wallpaper (ES loading bar, game launch gap)
+#   - boot-logo*.png    the very first logo, painted to /dev/fb0 by
+#                       /etc/init.d/S03system-splash before anything else is
+#                       up. It picks boot-logo-<WxH>.png for the framebuffer
+#                       size and falls back to boot-logo.png, so write both.
+#                       fbv reads these, so they must be 8-bit PNGs (see the
+#                       bit-depth note above).
+BATOCERA_SPLASH = Path("/usr/share/batocera/splash")
+BOOT_TARGETS = [
+    WALLPAPER,
+    BATOCERA_SPLASH / "boot-logo.png",
+    BATOCERA_SPLASH / "boot-logo-1920x1080.png",
+]
 BOOT_SCRIPT = f"""#!/bin/sh
-{BOOT_MARKER}: / is a tmpfs overlay, so /usr edits are lost on reboot. Put
-# the ARQADE logo back before sway reads it as its wallpaper -- it is what
-# shows behind EmulationStation's loading bar and in the gap while a game
-# launches and exits. Source lives on /boot because this runs at S00, before
-# /userdata is mounted. Leaves a line in /tmp so a failed boot is diagnosable.
+{BOOT_MARKER}: / is a tmpfs overlay, so /usr edits are lost on reboot. Put the
+# ARQADE artwork back over Batocera's before anything reads it. Source lives
+# on /boot because this runs at S00, before /userdata is mounted. Writes
+# /tmp/arqade-boot.log so a failed boot is diagnosable instead of silent.
 [ "$1" = "stop" ] && exit 0
-if [ -f "{BOOT_WALLPAPER}" ]; then
-    cp "{BOOT_WALLPAPER}" "{WALLPAPER}" \\
-        && echo "arqade: wallpaper restored" > /tmp/arqade-boot.log \\
-        || echo "arqade: copy to {WALLPAPER} failed" > /tmp/arqade-boot.log
-else
-    echo "arqade: {BOOT_WALLPAPER} missing" > /tmp/arqade-boot.log
+SRC="{BOOT_WALLPAPER}"
+LOG=/tmp/arqade-boot.log
+: > "$LOG"
+if [ ! -f "$SRC" ]; then
+    echo "arqade: $SRC missing, nothing restored" >> "$LOG"
+    exit 0
 fi
+for dst in {" ".join(str(t) for t in BOOT_TARGETS)}
+do
+    if cp "$SRC" "$dst" 2>/dev/null; then
+        echo "arqade: ok      $dst" >> "$LOG"
+    else
+        echo "arqade: FAILED  $dst" >> "$LOG"
+    fi
+done
 """
 
 
@@ -219,7 +242,7 @@ patch("views/system.xml", [
     ("<text>${system.fullName}</text>", "<text></text>"),
     ("<text>${system.releaseYearOrNull}</text>", "<text></text>"),
     ('<image name="BottomBar" extra="static">',
-     hint("arqadeHintSelect", "Press B button to select games", 0.83)
-     + hint("arqadeHintBack", "Press A button to return", 0.875)
+     hint("arqadeHintSelect", "Press A button to select games", 0.83)
+     + hint("arqadeHintBack", "Press B button to return", 0.875)
      + '<image name="BottomBar" extra="static">'),
 ])

@@ -177,6 +177,21 @@ def unlock() -> None:
         print("restarted EmulationStation")
 
 
+def controls() -> None:
+    """Put EmulationStation's confirm/back on the cabinet's A/B convention.
+
+    Out of the box ES confirms with B and goes back with A, which is the
+    opposite of the convention the games follow (see "Button convention" in
+    AGENTS.md). ES has a setting for exactly this; it lives in es_settings.cfg,
+    so ES has to be down while we write it.
+    """
+    was_running = stop_es()
+    set_setting("bool", "InvertButtons", "true")
+    if was_running:
+        start_es()
+        print("restarted EmulationStation")
+
+
 def status() -> None:
     live = INPUT_CFG.read_text(encoding="utf-8")
     _, would_drop = strip_menu_inputs(live)
@@ -192,11 +207,14 @@ group = parser.add_mutually_exclusive_group(required=True)
 group.add_argument("--lock", action="store_true", help="public-facing: no menus from the pads")
 group.add_argument("--unlock", action="store_true", help="restore normal menu access")
 group.add_argument("--status", action="store_true", help="report the current state")
+group.add_argument("--controls", action="store_true", help="A confirms / B goes back in ES")
 args = parser.parse_args()
 
 if args.lock:
     lock()
 elif args.unlock:
     unlock()
+elif args.controls:
+    controls()
 else:
     status()

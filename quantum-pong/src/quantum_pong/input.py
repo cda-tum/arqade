@@ -82,6 +82,7 @@ class PlayerRawInput:
     axis_value: float
     start_held: bool
     select_held: bool
+    confirm_held: bool
 
 
 def get_joystick(index: int) -> pygame.joystick.JoystickType | None:
@@ -103,6 +104,7 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
     axis_value = 0.0
     start_held = False
     select_held = False
+    confirm_held = False
 
     joystick = get_joystick(cfg["joystick_index"])
     if joystick is not None:
@@ -115,6 +117,8 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
             start_held = bool(joystick.get_button(system["start_button"]))
         if system["select_button"] < num_buttons:
             select_held = bool(joystick.get_button(system["select_button"]))
+        if system["confirm_button"] < num_buttons:
+            confirm_held = bool(joystick.get_button(system["confirm_button"]))
 
     return PlayerRawInput(
         up_held=up_held,
@@ -122,6 +126,7 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
         axis_value=axis_value,
         start_held=start_held,
         select_held=select_held,
+        confirm_held=confirm_held,
     )
 
 

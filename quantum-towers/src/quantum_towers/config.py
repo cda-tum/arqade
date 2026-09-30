@@ -108,6 +108,11 @@ INPUT_CONFIG = {
     },
     "system": {
         # Quit combo: Start + Select held together, on either controller.
+        # Confirm button: printed A (raw 1). The cabinet-wide convention is
+        # A = confirm, B = back, Start = start the game -- see "Button
+        # convention" in ../AGENTS.md. This game has no menu to go back in,
+        # so it binds confirm only.
+        "confirm_button": 1,
         "start_button": 8,
         "select_button": 9,
         "keyboard_quit": "K_ESCAPE",

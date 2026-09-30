@@ -251,6 +251,33 @@ bus/vendor/product/version, so SDL derives the same GUID and ES applies the
 same `es_input.cfg` entry to it. Real button presses, no cabinet required —
 that is how the lockdown above was verified rather than assumed.
 
+## Button convention (all games must follow this)
+
+Players move between games and must not have to relearn the controls. Every
+game on this cabinet uses the same three bindings **wherever the action
+exists** — a game with no "back" simply has nothing to bind:
+
+| Action | Button | Raw index |
+|---|---|---|
+| Confirm / select a menu item | **A** | 1 |
+| Back / return to the previous screen | **B** | 2 |
+| Start the game from its title or main menu | **Start** | 8 |
+
+Notes and deliberate limits:
+
+- This is about **menus, title screens and game-over screens**. In-game, a
+  button may mean something else entirely — Error Invaders fires with A and
+  Qlimbers uses A for RESET — and that is fine. The convention is about how
+  you get *into* and *out of* a game, which is what a new player struggles
+  with.
+- **Start must always work** to begin play from the title/main menu, even
+  where A also does. It is the one button a visitor will try first.
+- Start + Select together is the universal quit combo, in every game.
+- EmulationStation does not follow this by default — it confirms with B and
+  goes back with A. `batocera/kiosk.py --controls` sets ES's `InvertButtons`
+  to fix that; the bottom-right hints in the theme (`install.py`) must be kept
+  in agreement with it.
+
 ## Input mapping: raw button numbers are NOT the print/position order
 
 This is the most important quirk, and the one most likely to bite a future

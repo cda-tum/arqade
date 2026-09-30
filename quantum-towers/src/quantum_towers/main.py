@@ -82,6 +82,8 @@ def _wants_start(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> bool:
     return (
         p1_raw.start_held
         or p2_raw.start_held
+        or p1_raw.confirm_held
+        or p2_raw.confirm_held
         or keys[pygame.K_RETURN]
         or keys[pygame.K_SPACE]
     )
