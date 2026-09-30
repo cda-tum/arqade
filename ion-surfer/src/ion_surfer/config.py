@@ -16,9 +16,11 @@ INTERNAL_HEIGHT = 640
 # MAME / I-PAC keyboard-encoder layout. Pad 0 = P1 (blue), pad 1 = P2 (red).
 KEYMAP = {
     0: dict(left=["K_LEFT"], right=["K_RIGHT"], up=["K_UP"], down=["K_DOWN"],
-            a=["K_LCTRL", "K_SPACE", "K_RETURN"], start=["K_1"]),
+            a=["K_LCTRL", "K_SPACE", "K_RETURN"], start=["K_1"],
+            remove_ion=["K_q"], add_ion=["K_e"]),
     1: dict(left=["K_d"], right=["K_g"], up=["K_r"], down=["K_f"],
-            a=["K_a"], start=["K_2"]),
+            a=["K_a"], start=["K_2"],
+            remove_ion=["K_c"], add_ion=["K_v"]),
 }
 SELECT_KEYS = ["K_ESCAPE"]
 
@@ -27,15 +29,19 @@ INPUT_CONFIG = {
         "joystick_index": 0,
         "hat_index": 0,
         "axes": (0, 1),  # (x axis, y axis)
-        # The game has a single action button, so every one of the six
-        # cabinet buttons triggers it -- no need to know the exact layout.
-        "buttons": {"a": [0, 1, 2, 3, 4, 5]},
+        # RAW button numbers (confirmed on the cabinet, see AGENTS.md):
+        # printed L X R / Y B A = raw 4 0 5 / 3 2 1. The four face buttons
+        # double as a d-pad (Y left, A right, X up, B down); L and R confirm
+        # and, in SANDBOX, remove (L) / add (R) an ion.
+        "buttons": {"left": [3], "right": [1], "up": [0], "down": [2], "a": [4, 5],
+                    "remove_ion": [4], "add_ion": [5]},
     },
     "p2": {
         "joystick_index": 1,
         "hat_index": 0,
         "axes": (0, 1),
-        "buttons": {"a": [0, 1, 2, 3, 4, 5]},
+        "buttons": {"left": [3], "right": [1], "up": [0], "down": [2], "a": [4, 5],
+                    "remove_ion": [4], "add_ion": [5]},
     },
     "system": {
         # Select opens the pause menu. Quit combo: Start + Select held

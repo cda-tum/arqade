@@ -15,6 +15,35 @@ from ion_surfer.config import INPUT_CONFIG, KEYMAP, SELECT_KEYS
 PLAYERS = ("p1", "p2")  # pad 0, pad 1
 
 
+# Batocera's pygame system runs evmapy, which turns player 1's pad into
+# keyboard presses (d-pad -> arrow keys, a/b/x/y -> A/B/X/Y, start -> Enter,
+# select -> Space, ...). Those fake keys collide with the dev keyboard layout
+# (P1's stick moving P2, one button firing two actions), so the cabinet
+# loader passes --no-keyboard and only the joysticks are read.
+_keyboard_enabled = True
+
+
+def set_keyboard_enabled(enabled: bool) -> None:
+    global _keyboard_enabled
+    _keyboard_enabled = enabled
+
+
+def keyboard_enabled() -> bool:
+    return _keyboard_enabled
+
+
+class _NoKeys:
+    """Stands in for pygame.key.get_pressed() while the keyboard is off."""
+
+    def __getitem__(self, key: int) -> bool:
+        return False
+
+
+def read_keys():
+    """pygame.key.get_pressed(), or an all-released stand-in with --no-keyboard."""
+    return pygame.key.get_pressed() if _keyboard_enabled else _NoKeys()
+
+
 def axis_to_direction(axis_value: float, deadzone: float) -> int:
     if axis_value < -deadzone:
         return -1
@@ -40,7 +69,7 @@ class Pad:
     DIRS = ("left", "right", "up", "down")
 
     def __init__(self):
-        self.src = {a: set() for a in ("left", "right", "up", "down", "a", "start", "select")}
+        self.src = {a: set() for a in ("left", "right", "up", "down", "a", "start", "select", "remove_ion", "add_ion")}
         self.pressed = set()
         self.rep = {d: 0.0 for d in self.DIRS}
 
@@ -96,6 +125,8 @@ class Controls:
 
     def handle(self, e):
         if e.type in (pygame.KEYDOWN, pygame.KEYUP):
+            if not _keyboard_enabled:
+                return
             on = e.type == pygame.KEYDOWN
             if on and e.key in self.select_keys:
                 self.select = True
@@ -123,8 +154,10 @@ class Controls:
                     self.select = True
             elif e.button == system["start_button"]:
                 pad.set("start", ("jb", e.button), on)
-            elif e.button in cfg["buttons"]["a"]:
-                pad.set("a", ("jb", e.button), on)
+            else:
+                for act, buttons in cfg["buttons"].items():
+                    if e.button in buttons:
+                        pad.set(act, ("jb", e.button), on)
         elif e.type == pygame.JOYAXISMOTION:
             pad = self._joy_pad(e)
             if pad is None:

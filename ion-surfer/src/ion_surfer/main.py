@@ -16,6 +16,7 @@ import pygame  # noqa: E402
 
 from ion_surfer import config, game  # noqa: E402
 from ion_surfer.display import make_display  # noqa: E402
+from ion_surfer.input import set_keyboard_enabled  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -34,11 +35,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="1200x640",
         help="Windowed size as WxH, e.g. 1200x640 (ignored with --fullscreen)",
     )
+    parser.add_argument(
+        "--no-keyboard",
+        action="store_true",
+        help="Ignore the keyboard, joysticks only (used on the Batocera cabinet)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    set_keyboard_enabled(not args.no_keyboard)
 
     if args.input_test:
         from ion_surfer.input_test import run_input_test

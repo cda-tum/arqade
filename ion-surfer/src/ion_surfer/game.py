@@ -15,7 +15,8 @@ import pygame
 
 from ion_surfer.config import FPS, INTERNAL_HEIGHT, INTERNAL_WIDTH, SCORE_FILE
 from ion_surfer.display import make_display, present
-from ion_surfer.input import Controls
+from ion_surfer.input import Controls, keyboard_enabled
+from ion_surfer.sandbox import KICK_TAP, SANDBOX_RATE, Sandbox, start_voltages
 
 # ============================== TUNING ==============================
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT   # logical resolution (scaled to the display)
@@ -206,6 +207,8 @@ class Game:
         self.menu_sel = 0
         self.mode = 1
         self.current_seed = ""
+        self.sandbox = None
+        self.start_hold = [0.0, 0.0]  # SANDBOX: how long each pad has held START
         self.new_world(random_seed())
         self.state = "menu"
 
@@ -247,11 +250,22 @@ class Game:
             self.curves = [cr, cb]
             self.ions = [Ion(cr, RED, "Red", 420), Ion(cb, BLUE, "Blue", 480)]
             self.cursors = [Cursor(cr, RED, [1], 3), Cursor(cb, BLUE, [0], 5)]
-        else:
+        elif mode == 3:
             c = Curve(COOP)
             self.curves = [c]
             self.ions = [Ion(c, COOP, "Team", 450)]
             self.cursors = [Cursor(c, RED, [1], 3), Cursor(c, BLUE, [0], 6)]
+        else:
+            # SANDBOX: fixed screen, one shared curve, a quantum wave packet
+            # instead of the classical ion.
+            c = Curve(COOP)
+            c.v = start_voltages(W // EW + 3, VMIN, VMAX)
+            self.curves = [c]
+            self.ions = []
+            self.cursors = [Cursor(c, RED, [1], 4), Cursor(c, BLUE, [0], 7)]
+            self.start_hold = [0.0, 0.0]
+            self.sandbox = Sandbox(lambda x: self.potential(c, x), W, H, GROUND,
+                                   (self.f_big, self.f_small, self.f_tiny))
         for ion in self.ions:
             ion.y = self.potential(ion.curve, ion.x) + R + 20
         self.state = "play"
@@ -510,19 +524,7 @@ class Game:
         for c in self.curves:
             c.changes.clear()
             self.ensure(c, last + 3)
-        pads = self.controls.pads
-        for cu in self.cursors:
-            cu.sel = clamp(cu.sel, first, last)
-            c = cu.curve
-            old = c.v[cu.sel]
-            nv = old
-            if any(pads[p].held("up") for p in cu.pads):
-                nv = min(VMAX, nv + RATE * dt)
-            if any(pads[p].held("down") for p in cu.pads):
-                nv = max(VMIN, nv - RATE * dt)
-            if nv != old:
-                c.v[cu.sel] = nv
-                c.changes.append((cu.sel, nv - old))
+        self.drive_electrodes(dt, first, last, RATE)
         for ion in self.ions:
             if ion.alive:
                 self.ion_physics(ion, dt)
@@ -545,6 +547,40 @@ class Game:
 
         if all(not i.alive for i in self.ions):
             self.game_over()
+
+    def drive_electrodes(self, dt, first, last, rate):
+        """Cursor voltage changes from held up/down. Returns True if any changed."""
+        pads = self.controls.pads
+        changed = False
+        for cu in self.cursors:
+            cu.sel = clamp(cu.sel, first, last)
+            c = cu.curve
+            old = c.v[cu.sel]
+            nv = old
+            if any(pads[p].held("up") for p in cu.pads):
+                nv = min(VMAX, nv + rate * dt)
+            if any(pads[p].held("down") for p in cu.pads):
+                nv = max(VMIN, nv - rate * dt)
+            if nv != old:
+                c.v[cu.sel] = nv
+                c.changes.append((cu.sel, nv - old))
+                changed = True
+        return changed
+
+    def sandbox_frame(self):
+        """Electrodes move once per frame (re-sampling the potential is the
+        expensive part), then the packet takes the frame's physics steps."""
+        steps = int(self.acc / STEP)
+        self.acc -= steps * STEP
+        if steps == 0:
+            return
+        for c in self.curves:
+            c.changes.clear()
+        changed = self.drive_electrodes(steps * STEP, 0, W // EW - 1, SANDBOX_RATE)
+        cooling = any(h >= KICK_TAP for h in self.start_hold)
+        for k in range(steps):
+            self.sandbox.step(STEP, changed and k == 0, cooling)
+        self.t += steps * STEP
 
     def score(self, ion):
         return int((ion.max_x - ion.start_x) / 10 + ion.bonus)
@@ -592,7 +628,7 @@ class Game:
         if self.controls.any_pressed("down"):
             self.menu_sel = (self.menu_sel + 1) % n
 
-    MAIN_ITEMS = ["1 PLAYER", "2 PLAYERS: VERSUS", "2 PLAYERS: CO-OP", "SEED", "QUIT"]
+    MAIN_ITEMS = ["1 PLAYER", "2 PLAYERS: VERSUS", "2 PLAYERS: CO-OP", "SANDBOX", "SEED", "QUIT"]
     PAUSE_ITEMS = ["RESUME", "RESTART", "MAIN MENU"]
     OVER_ITEMS = ["SAME SEED", "NEW SEED", "MAIN MENU"]
 
@@ -610,6 +646,22 @@ class Game:
                     if "right" in c.pads[p].pressed:
                         cu.sel += 1
             self.acc += dt
+            if self.mode == 4:
+                for pi, p in enumerate(c.pads):
+                    if "add_ion" in p.pressed:
+                        self.sandbox.add_ion()
+                    elif "remove_ion" in p.pressed:
+                        self.sandbox.remove_ion()
+                    # START: a short tap is a laser kick, holding it cools
+                    if p.held("start"):
+                        self.start_hold[pi] += dt
+                    else:
+                        if 0 < self.start_hold[pi] < KICK_TAP:
+                            self.sandbox.kick(pi)
+                        self.start_hold[pi] = 0.0
+                self.sandbox_frame()
+                self.sandbox.measure()
+                return
             while self.acc >= STEP and self.state == "play":
                 self.step(STEP)
                 self.acc -= STEP
@@ -662,9 +714,9 @@ class Game:
             self.nav(len(self.MAIN_ITEMS))
             if self.confirm():
                 seed = self.seed_string() or None
-                if self.menu_sel in (0, 1, 2):
+                if self.menu_sel in (0, 1, 2, 3):
                     self.start(self.menu_sel + 1, seed)
-                elif self.menu_sel == 3:
+                elif self.menu_sel == 4:
                     self.seed_edit = True
                     self.seed_slot = 0
                 else:
@@ -673,6 +725,8 @@ class Game:
     def to_menu(self):
         self.state = "menu"
         self.menu_sel = 0
+        self.sandbox = None
+        self.start_hold = [0.0, 0.0]  # SANDBOX: how long each pad has held START
         self.new_world(random_seed())
 
     # ---------- drawing ----------
@@ -860,7 +914,8 @@ class Game:
         for tx in self.texts:
             text(s, tx[2], self.f_big, tx[4], (X(tx[0]), sy(tx[1])), alpha=tx[3])
 
-        s.blit(self.warn, (0, 0))
+        if self.mode != 4 or self.state == "menu":
+            s.blit(self.warn, (0, 0))
 
         # electrode strip
         pygame.draw.rect(s, (8, 13, 29), (0, GROUND, W, H - GROUND))
@@ -899,13 +954,13 @@ class Game:
         text(s, f"{int(self.cam_x / 100)} µm transported", self.f_small, TEXT_DIM, (W / 2, 26))
         text(s, f"SEED {self.current_seed}", self.f_tiny, (110, 120, 160), (W / 2, 46))
 
-    def draw_items(self, items, y0, labels=None):
+    def draw_items(self, items, y0, labels=None, spacing=42):
         s = self.screen
         for i, it in enumerate(items):
             lab = labels[i] if labels else it
             sel = i == self.menu_sel
             col = GOLD if sel else (195, 203, 232)
-            r = text(s, lab, self.f_item, col, (W / 2, y0 + i * 42))
+            r = text(s, lab, self.f_item, col, (W / 2, y0 + i * spacing))
             if sel:
                 pygame.draw.polygon(s, GOLD, [(r.left - 26, r.centery - 8), (r.left - 26, r.centery + 8),
                                               (r.left - 12, r.centery)])
@@ -918,12 +973,12 @@ class Game:
              (W / 2, t.bottom + 18))
         seed = self.seed_string()
         labels = list(self.MAIN_ITEMS)
-        labels[3] = f"SEED: {seed if seed else 'RANDOM'}"
+        labels[4] = f"SEED: {seed if seed else 'RANDOM'}"
         if self.seed_edit:
-            labels[3] = "SEED:"
-        self.draw_items(self.MAIN_ITEMS, 236, labels)
+            labels[4] = "SEED:"
+        self.draw_items(self.MAIN_ITEMS, 222, labels, spacing=38)
         if self.seed_edit:
-            y = 236 + 3 * 42
+            y = 222 + 4 * 38
             base = W / 2 + 40
             for i, ch in enumerate(self.seed_chars):
                 x = base + i * 26
@@ -932,14 +987,14 @@ class Game:
                 if i == self.seed_slot:
                     pygame.draw.rect(s, GOLD, (x - 10, y + 16, 20, 3))
             text(s, "UP/DOWN change   LEFT/RIGHT move   BUTTON done   (empty = random)", self.f_tiny,
-                 TEXT_DIM, (W / 2, y + 36))
+                 TEXT_DIM, (W / 2, 222 + 6 * 38))
         lines = [
             "BLUE (P1): stick = select electrode / voltage",
             "RED (P2): stick = select electrode / voltage",
-            "Co-op: one shared waveform, one ion.   SELECT: menu",
+            "Co-op: one shared waveform, one ion.   Sandbox: quantum motion, 1-4 ions.",
         ]
         for i, ln in enumerate(lines):
-            text(s, ln, self.f_small, TEXT_DIM, (W / 2, 470 + i * 24))
+            text(s, ln, self.f_small, TEXT_DIM, (W / 2, 486 + i * 22))
         rec = f"Records  Solo {self.best.get('solo', 0)}   Co-op {self.best.get('coop', 0)}"
         text(s, rec, self.f_tiny, (110, 120, 160), (W / 2, 560))
 
@@ -971,7 +1026,9 @@ class Game:
 
     def draw(self):
         self.draw_world()
-        if self.state != "menu":
+        if self.state != "menu" and self.mode == 4:
+            self.sandbox.draw(self.screen, sy)
+        elif self.state != "menu":
             self.draw_hud()
         if self.state == "menu":
             self.draw_menu()
@@ -999,7 +1056,7 @@ def run(*, fullscreen=False, window_size="1200x640", show_fps=False):
             elif e.type == pygame.KEYDOWN and e.key == pygame.K_F3:
                 show_fps = not show_fps
                 continue
-            elif (game.text_input_active() and e.type == pygame.KEYDOWN
+            elif (keyboard_enabled() and game.text_input_active() and e.type == pygame.KEYDOWN
                   and (e.key == pygame.K_BACKSPACE or (e.unicode and e.unicode.isalnum()))):
                 game.type_key(e)
                 continue

@@ -1,4 +1,13 @@
-from ion_surfer.input import Pad, axis_to_direction, should_quit
+import pygame
+
+from ion_surfer.input import (
+    Pad,
+    axis_to_direction,
+    keyboard_enabled,
+    read_keys,
+    set_keyboard_enabled,
+    should_quit,
+)
 
 
 def test_axis_to_direction_respects_deadzone():
@@ -32,3 +41,14 @@ def test_pad_registers_press_once_then_auto_repeats_directions():
     assert "up" not in pad.pressed
     pad.update(0.1)  # past it
     assert "up" in pad.pressed
+
+def test_read_keys_reports_nothing_held_with_keyboard_disabled():
+    set_keyboard_enabled(False)
+    try:
+        keys = read_keys()
+        assert not keys[pygame.K_a]
+        assert not keys[pygame.K_UP]
+        assert not keyboard_enabled()
+    finally:
+        set_keyboard_enabled(True)
+    assert keyboard_enabled()
