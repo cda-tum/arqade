@@ -1,10 +1,9 @@
 """Single source of truth for resolution, input mapping and tuning constants.
 
 Joystick 0 = P1, joystick 1 = P2, same as the sibling games. A/B/Y raw
-numbers are confirmed on the cabinet (see ../../../AGENTS.md); Start = 8 /
-Select = 9 are still placeholders -- check them with `--input-test`. Because
-of that, every menu also accepts A as "confirm", so the game stays fully
-usable even if those two turn out wrong.
+numbers are confirmed on the cabinet (see ../../../AGENTS.md), and so are
+Start = 9 / Select = 8 (not the other way round). Every menu also accepts A
+as "confirm", per the cabinet's button convention.
 """
 
 from pathlib import Path
@@ -48,9 +47,9 @@ INPUT_CONFIG = {
     },
     "system": {
         # Start confirms / pauses, Select goes back. Quit: Start + Select held
-        # together on the same pad. PLACEHOLDERS, verify with --input-test.
-        "start_button": 8,
-        "select_button": 9,
+        # together on the same pad. Confirmed on the cabinet (see AGENTS.md).
+        "start_button": 9,
+        "select_button": 8,
     },
     "axis_deadzone": 0.5,
 }
