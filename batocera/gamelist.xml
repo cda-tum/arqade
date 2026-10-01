@@ -45,4 +45,11 @@
 		<image>./images/overquqed-image.png</image>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./qurves.pygame</path>
+		<name>Qurves</name>
+		<desc>Light cycles in superposition: split into mirrored copies and survive as long as one of them does. For 2 or 4 players.</desc>
+		<image>./images/qurves-image.png</image>
+		<lang>en</lang>
+	</game>
 </gameList>
