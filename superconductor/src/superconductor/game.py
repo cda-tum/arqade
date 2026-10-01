@@ -21,17 +21,28 @@ import pygame
 from superconductor import config
 from superconductor.display import make_display, present
 from superconductor.input import Input, keyboard_enabled
-from superconductor.lattice import Lattice
+from superconductor.lattice import LAYOUTS, Lattice
 from superconductor.rules import Board
 
 # =====================================================================
 # Look
 # =====================================================================
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
+# Layout numbers below are written for a 1280x720 design and multiplied by U,
+# so the game renders natively at the panel's 1920x1080 (no SDL upscale).
+U = H / 720
+
+
+def px(n):
+    """A design-pixel length (line width, offset, radius) in real pixels."""
+    return max(1, round(n * U))
+
+
 BG = (6, 8, 18)
 SUBSTRATE = (13, 17, 32)
 SUBSTRATE_EDGE = (40, 52, 84)
 COUPLER = (48, 62, 96)
+BRIDGE = (78, 100, 150)  # couplers linking blocks / modules
 QUBIT_IDLE = (86, 104, 146)
 WHITE = (255, 255, 255)
 GREY = (150, 156, 176)
@@ -62,10 +73,13 @@ MODE_DESC = {
     "coop": "Two routers share one chip and three lives.",
     "versus": "Same pairs on two chips. Highest score wins.",
 }
-LATTICE_LABEL = {"square": "SQUARE", "brick": "BRICK"}
+LATTICE_LABEL = {"square": "SQUARE", "brick": "BRICK", "bottleneck": "BOTTLENECK",
+                 "distributed": "DISTRIBUTED"}
 LATTICE_DESC = {
-    "square": "4 couplers per qubit, Google-style grid",
-    "brick": "3 couplers per qubit, hex / heavy-hex wiring",
+    "square": "5x5, 4 couplers per qubit, Google-style grid",
+    "brick": "5x5, 3 couplers per qubit, hex / heavy-hex wiring",
+    "bottleneck": "Two halves joined by just two couplers",
+    "distributed": "Four 3x3 modules, one link between neighbours",
 }
 
 
@@ -98,6 +112,8 @@ def font(size):
 
 
 def text(S, s, size, col, x, y, align="center", valign="middle", alpha=1.0):
+    """Draw text at real-pixel (x, y); `size` is in design pixels (scaled by U)."""
+    size = round(size * U)
     key = (s, size, col)
     surf = _text_cache.get(key)
     if surf is None:
@@ -150,17 +166,39 @@ def glow(S, x, y, r, col, strength=0.6):
 _scanlines = None
 
 
-def scanlines():
+def draw_scanlines(S):
+    """Darken every third row. A multiply blit of an opaque surface is much
+    cheaper than an alpha blit at 1920x1080."""
     global _scanlines
     if _scanlines is None:
-        _scanlines = pygame.Surface((W, H), pygame.SRCALPHA)
+        _scanlines = pygame.Surface((W, H)).convert()
+        _scanlines.fill((255, 255, 255))
         for y in range(0, H, 3):
-            pygame.draw.line(_scanlines, (0, 0, 0, 50), (0, y), (W, y))
-    return _scanlines
+            pygame.draw.line(_scanlines, (205, 205, 205), (0, y), (W, y))
+    S.blit(_scanlines, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+
+
+_veils: dict = {}
+
+
+def veil(S, rect, alpha):
+    """Darken a rect (cached, these are full-screen at 1080p)."""
+    rect = pygame.Rect(rect)
+    key = (rect.size, alpha)
+    surf = _veils.get(key)
+    if surf is None:
+        surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+        surf.fill((*BG, alpha))
+        _veils[key] = surf
+    S.blit(surf, rect)
 
 
 def dashed_path(S, col, pts, width, dash=10, gap=8, phase=0.0):
-    """A dashed polyline whose dashes march along it as `phase` grows."""
+    """A dashed polyline whose dashes march along it as `phase` grows.
+
+    `width`, `dash`, `gap` and `phase` are in design pixels (scaled by U).
+    """
+    width, dash, gap, phase = px(width), dash * U, gap * U, phase * U
     seglens = [math.hypot(x1 - x0, y1 - y0) for (x0, y0), (x1, y1) in zip(pts, pts[1:])]
     total = sum(seglens)
     if total <= 0:
@@ -273,28 +311,49 @@ def pump_sfx():
 # =====================================================================
 @dataclass
 class View:
+    """Where a chip sits on screen: centred in a box, as large as fits."""
+
     board: Board
     cx: float
     cy: float
-    spacing: float
+    box_w: float
+    box_h: float
     label: str = ""
+    max_spacing: float = 112 * U
     particles: list = field(default_factory=list)  # [x, y, vx, vy, life, max_life, col]
     rings: list = field(default_factory=list)  # [x, y, r0, r1, life, max_life, col]
     popups: list = field(default_factory=list)  # [x, y, text, col, size, life, max_life]
     shake: float = 0.0
     flash: float = 0.0
 
-    def xy(self, node) -> tuple[float, float]:
-        r, c = node
-        lat = self.board.lattice
-        return (self.cx + (c - (lat.cols - 1) / 2) * self.spacing,
-                self.cy + (r - (lat.rows - 1) / 2) * self.spacing)
+    PAD = 0.62  # substrate margin around the outer qubits, in spacings
+
+    def __post_init__(self):
+        y0, x0, y1, x1 = self.board.lattice.extent()
+        self._mid = ((y0 + y1) / 2, (x0 + x1) / 2)
+        self._span = (y1 - y0, x1 - x0)
+        self.spacing = min(self.box_w / (self._span[1] + 2 * self.PAD),
+                           self.box_h / (self._span[0] + 2 * self.PAD), self.max_spacing)
+
+    def xy(self, where) -> tuple[float, float]:
+        """Screen position of a node, or the middle of a tuple of nodes."""
+        if isinstance(where[0], tuple):
+            pts = [self.xy(n) for n in where]
+            return sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+        y, x = self.board.lattice.positions[where]
+        return (self.cx + (x - self._mid[1]) * self.spacing,
+                self.cy + (y - self._mid[0]) * self.spacing)
+
+    def qubit_xy(self, pair) -> tuple[float, float]:
+        n0, n1, f, jump = pair.segment()
+        if jump:
+            return self.xy(n0 if f < 0.5 else n1)
+        (x0, y0), (x1, y1) = self.xy(n0), self.xy(n1)
+        return x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
 
     def substrate_rect(self) -> pygame.Rect:
-        lat = self.board.lattice
-        pad = self.spacing * 0.62
-        w = (lat.cols - 1) * self.spacing + 2 * pad
-        h = (lat.rows - 1) * self.spacing + 2 * pad
+        w = (self._span[1] + 2 * self.PAD) * self.spacing
+        h = (self._span[0] + 2 * self.PAD) * self.spacing
         return pygame.Rect(int(self.cx - w / 2), int(self.cy - h / 2), int(w), int(h))
 
     # ------------------------------------------------------------ effects
@@ -302,17 +361,18 @@ class View:
         x, y = self.xy(node)
         for _ in range(n):
             a = random.uniform(0, 2 * math.pi)
-            v = random.uniform(0.3, 1.0) * speed
+            v = random.uniform(0.3, 1.0) * speed * U
             life = random.uniform(0.4, 0.9)
             self.particles.append([x, y, math.cos(a) * v, math.sin(a) * v, life, life, col])
 
     def ring(self, node, col, r0, r1, life=0.5):
+        """An expanding ring; r0 in design pixels, r1 usually spacing-based."""
         x, y = self.xy(node)
-        self.rings.append([x, y, r0, r1, life, life, col])
+        self.rings.append([x, y, r0 * U, r1, life, life, col])
 
     def popup(self, node, txt, col, size=12, life=1.2, dy=0):
         x, y = self.xy(node)
-        self.popups.append([x, y - 30 + dy, txt, col, size, life, life])
+        self.popups.append([x, y + (dy - 30) * U, txt, col, size, life, life])
 
     def consume_events(self):
         for e in self.board.events:
@@ -324,7 +384,7 @@ class View:
                 play("spawn")
             elif e.kind == "select":
                 if e.player is not None:
-                    self.ring(e.node, PLAYER_COLORS[e.player], self.spacing * 0.45, self.spacing * 0.3, 0.25)
+                    self.ring(e.node, PLAYER_COLORS[e.player], self.spacing * 0.45 / U, self.spacing * 0.3, 0.25)
                 play("select")
             elif e.kind == "step":
                 play("step")
@@ -332,7 +392,7 @@ class View:
                 play("back")
             elif e.kind == "blocked":
                 if e.node is not None:
-                    self.ring(e.node, RED, self.spacing * 0.2, self.spacing * 0.35, 0.25)
+                    self.ring(e.node, RED, self.spacing * 0.2 / U, self.spacing * 0.35, 0.25)
                 play("blocked")
             elif e.kind == "routed":
                 for n in (pair.a, pair.b):
@@ -395,7 +455,7 @@ class View:
             r[4] -= dt
         self.rings = [r for r in self.rings if r[4] > 0]
         for p in self.popups:
-            p[1] -= 22 * dt
+            p[1] -= 22 * U * dt
             p[5] -= dt
         self.popups = [p for p in self.popups if p[5] > 0]
         self.shake = max(0.0, self.shake - dt)
@@ -409,8 +469,13 @@ def draw_xmon(S, x, y, size, col, fill=True):
     """An Xmon-style cross-shaped transmon qubit."""
     arm = int(size * 0.24)
     thick = max(4, int(size * 0.09))
-    pygame.draw.rect(S, col, (x - arm, y - thick // 2, 2 * arm, thick), 0 if fill else 2, 2)
-    pygame.draw.rect(S, col, (x - thick // 2, y - arm, thick, 2 * arm), 0 if fill else 2, 2)
+    pygame.draw.rect(S, col, (x - arm, y - thick // 2, 2 * arm, thick), 0 if fill else 2, px(2))
+    pygame.draw.rect(S, col, (x - thick // 2, y - arm, thick, 2 * arm), 0 if fill else 2, px(2))
+
+
+def draw_x(S, x, y, k, col, width):
+    pygame.draw.line(S, col, (x - k, y - k), (x + k, y + k), width)
+    pygame.draw.line(S, col, (x - k, y + k), (x + k, y - k), width)
 
 
 def draw_board(S, v: View, t: float):
@@ -418,8 +483,8 @@ def draw_board(S, v: View, t: float):
     lat = b.lattice
     ox = oy = 0
     if v.shake > 0:
-        ox = random.uniform(-5, 5) * v.shake * 2
-        oy = random.uniform(-5, 5) * v.shake * 2
+        ox = random.uniform(-5, 5) * v.shake * 2 * U
+        oy = random.uniform(-5, 5) * v.shake * 2 * U
     sp = v.spacing
 
     def xy(n):
@@ -427,14 +492,15 @@ def draw_board(S, v: View, t: float):
         return x + ox, y + oy
 
     rect = v.substrate_rect().move(int(ox), int(oy))
-    pygame.draw.rect(S, SUBSTRATE, rect, 0, 18)
+    pygame.draw.rect(S, SUBSTRATE, rect, 0, px(18))
     edge_col = mix(SUBSTRATE_EDGE, RED, v.flash * 3)
-    pygame.draw.rect(S, edge_col, rect, 3, 18)
+    pygame.draw.rect(S, edge_col, rect, px(3), px(18))
     # bond pads around the rim, purely decorative
+    inset, pad = px(9), px(4)
     for i in range(1, 8):
-        for (px, py) in ((rect.left + rect.w * i / 8, rect.top + 9), (rect.left + rect.w * i / 8, rect.bottom - 9),
-                         (rect.left + 9, rect.top + rect.h * i / 8), (rect.right - 9, rect.top + rect.h * i / 8)):
-            pygame.draw.rect(S, (30, 38, 62), (px - 4, py - 4, 8, 8), 0, 2)
+        for (bx, by) in ((rect.left + rect.w * i / 8, rect.top + inset), (rect.left + rect.w * i / 8, rect.bottom - inset),
+                         (rect.left + inset, rect.top + rect.h * i / 8), (rect.right - inset, rect.top + rect.h * i / 8)):
+            pygame.draw.rect(S, (30, 38, 62), (bx - pad, by - pad, 2 * pad, 2 * pad), 0, px(2))
 
     # couplers
     for e in lat.edges:
@@ -445,19 +511,22 @@ def draw_board(S, v: View, t: float):
         blink = special is not None and special.life < 3 and int(t * 6) % 2 == 0
         if owner is not None:
             col = PAIR_COLORS[b.pairs[owner].color]
-            pygame.draw.line(S, mix(col, SUBSTRATE, 0.55), p0, p1, 12)
-            pygame.draw.line(S, col, p0, p1, 5)
+            pygame.draw.line(S, mix(col, SUBSTRATE, 0.55), p0, p1, px(12))
+            pygame.draw.line(S, col, p0, p1, px(5))
         elif special is not None and special.kind == "defect" and not blink:
             # broken in the middle, with an X over the gap
             mx, my = (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2
             for a in (p0, p1):
-                pygame.draw.line(S, mix(RED, SUBSTRATE, 0.4), a, (a[0] + (mx - a[0]) * 0.6, a[1] + (my - a[1]) * 0.6), 4)
-            k = sp * 0.09
-            pygame.draw.line(S, RED, (mx - k, my - k), (mx + k, my + k), 4)
-            pygame.draw.line(S, RED, (mx - k, my + k), (mx + k, my - k), 4)
+                pygame.draw.line(S, mix(RED, SUBSTRATE, 0.4), a,
+                                 (a[0] + (mx - a[0]) * 0.6, a[1] + (my - a[1]) * 0.6), px(4))
+            draw_x(S, mx, my, sp * 0.09, RED, px(4))
             continue
+        elif e in lat.bridges:
+            # links between blocks / modules: a hollow "waveguide" line
+            pygame.draw.line(S, BRIDGE, p0, p1, px(9))
+            pygame.draw.line(S, SUBSTRATE, p0, p1, px(3))
         else:
-            pygame.draw.line(S, COUPLER, p0, p1, 4)
+            pygame.draw.line(S, COUPLER, p0, p1, px(4))
         if special is not None and special.kind == "miscal" and not blink:
             # a wobbly orange trace on top: slow, noisy coupler
             dx, dy = p1[0] - p0[0], p1[1] - p0[1]
@@ -468,7 +537,7 @@ def draw_board(S, v: View, t: float):
                 f = i / 24
                 w = math.sin(f * math.pi * 6 + t * 5) * sp * 0.06 * math.sin(f * math.pi)
                 pts.append((p0[0] + dx * f + nx * w, p0[1] + dy * f + ny * w))
-            pygame.draw.lines(S, MISCAL_COL, False, pts, 3)
+            pygame.draw.lines(S, MISCAL_COL, False, pts, px(3))
 
     # Bell links: a faint marching line between the two qubits
     for special in b.specials:
@@ -512,9 +581,9 @@ def draw_board(S, v: View, t: float):
             r = sp * 0.36
             arc_rect = pygame.Rect(0, 0, 2 * r, 2 * r)
             arc_rect.center = (int(x), int(y))
-            pygame.draw.arc(S, mix(SUBSTRATE, col, 0.25), arc_rect, 0, 2 * math.pi, 2)
+            pygame.draw.arc(S, mix(SUBSTRATE, col, 0.25), arc_rect, 0, 2 * math.pi, px(2))
             if frac > 0.01:
-                pygame.draw.arc(S, arc_col, arc_rect, math.pi / 2, math.pi / 2 + 2 * math.pi * frac, 4)
+                pygame.draw.arc(S, arc_col, arc_rect, math.pi / 2, math.pi / 2 + 2 * math.pi * frac, px(4))
             continue
         if pair is not None:
             draw_xmon(S, x, y, sp * 1.05, PAIR_COLORS[pair.color])
@@ -528,26 +597,33 @@ def draw_board(S, v: View, t: float):
             glow(S, x, y, sp * 0.45, GOLD, 0.35)
             k = sp * 0.11
             for dx in (-k * 1.1, k * 0.5):
-                cx = x + dx + math.sin(t * 6) * 2
+                cx = x + dx + math.sin(t * 6) * 2 * U
                 pygame.draw.polygon(S, GOLD, [(cx - k * 0.6, y - k), (cx + k * 0.6, y), (cx - k * 0.6, y + k),
                                               (cx - k * 0.1, y)])
         elif special.kind == "bell":
             r = sp * (0.3 + 0.03 * math.sin(t * 4))
             col = BELL_COL if special.claimed_by is None else PAIR_COLORS[b.pairs[special.claimed_by].color]
             glow(S, x, y, sp * 0.5, col, 0.3)
-            pygame.draw.circle(S, col, (int(x), int(y)), int(r), 2)
-            pygame.draw.circle(S, col, (int(x), int(y)), int(r * 0.7), 2)
+            pygame.draw.circle(S, col, (int(x), int(y)), int(r), px(2))
+            pygame.draw.circle(S, col, (int(x), int(y)), int(r * 0.7), px(2))
 
     # travelling qubits
     for pair in b.travelling_pairs():
         col = PAIR_COLORS[pair.color]
-        r, c = pair.qubit_position()
-        x, y = xy((r, c))
+        x, y = v.qubit_xy(pair)
+        x, y = x + ox, y + oy
         glow(S, x, y, sp * 0.6, col, 0.8)
         pygame.draw.circle(S, mix(col, WHITE, 0.5), (int(x), int(y)), int(sp * 0.13))
-        pygame.draw.circle(S, WHITE, (int(x), int(y)), int(sp * 0.13), 2)
+        pygame.draw.circle(S, WHITE, (int(x), int(y)), int(sp * 0.13), px(2))
         if pair.boost > 1:
-            pygame.draw.circle(S, GOLD, (int(x), int(y)), int(sp * 0.19), 2)
+            pygame.draw.circle(S, GOLD, (int(x), int(y)), int(sp * 0.19), px(2))
+
+    # crashes already locked in by committed routes (unless a station gets
+    # routed away in time): a smaller blinking X
+    if int(t * 4) % 2 == 0:
+        for n in b.predicted_crashes():
+            cx, cy = xy(n)
+            draw_x(S, cx, cy, sp * 0.14, RED, px(3))
 
     # cursors: a wobbling rounded square on the chosen station (and a smaller
     # one on the route's head), a spinning marker on the target, and a
@@ -562,7 +638,7 @@ def draw_board(S, v: View, t: float):
         size = sp * 0.88 * (1 + 0.08 * math.sin(t * 6 + phase))
         box = pygame.Rect(0, 0, int(size), int(size))
         box.center = (int(sx), int(sy))
-        pygame.draw.rect(S, pcol, box, 4, int(size * 0.28))
+        pygame.draw.rect(S, pcol, box, px(4), int(size * 0.28))
         if len(b.cursors) > 1:
             text(S, "P1" if player == "p1" else "P2", 8, pcol, sx, sy - sp * 0.56)
         if len(cur.path) > 1:
@@ -570,7 +646,7 @@ def draw_board(S, v: View, t: float):
             size = sp * 0.5 * (1 + 0.1 * math.sin(t * 8 + phase))
             box = pygame.Rect(0, 0, int(size), int(size))
             box.center = (int(hx), int(hy))
-            pygame.draw.rect(S, pcol, box, 3, int(size * 0.28))
+            pygame.draw.rect(S, pcol, box, px(3), int(size * 0.28))
         tx, ty = xy(pair.other(cur.path[0]))
         if int(t * 3) % 2 == 0:
             r = sp * 0.42
@@ -578,43 +654,41 @@ def draw_board(S, v: View, t: float):
                 a0 = k * math.pi / 2 + t * 2
                 arc_rect = pygame.Rect(0, 0, 2 * r, 2 * r)
                 arc_rect.center = (int(tx), int(ty))
-                pygame.draw.arc(S, pcol, arc_rect, a0, a0 + 0.7, 2)
+                pygame.draw.arc(S, pcol, arc_rect, a0, a0 + 0.7, px(2))
         crash = b.predict_collision(player)
         if crash is not None and int(t * 5) % 2 == 0:
             cx, cy = xy(crash)
-            k = sp * 0.2
-            pygame.draw.line(S, RED, (cx - k, cy - k), (cx + k, cy + k), 5)
-            pygame.draw.line(S, RED, (cx - k, cy + k), (cx + k, cy - k), 5)
-            pygame.draw.circle(S, RED, (int(cx), int(cy)), int(sp * 0.34), 3)
+            draw_x(S, cx, cy, sp * 0.2, RED, px(5))
+            pygame.draw.circle(S, RED, (int(cx), int(cy)), int(sp * 0.34), px(3))
 
     # effects
     for p in v.particles:
         k = p[4] / p[5]
-        pygame.draw.circle(S, mix(BG, p[6], k), (int(p[0] + ox), int(p[1] + oy)), max(1, int(3 * k)))
+        pygame.draw.circle(S, mix(BG, p[6], k), (int(p[0] + ox), int(p[1] + oy)), max(1, int(3 * U * k)))
     for rg in v.rings:
         k = 1 - rg[4] / rg[5]
         rad = rg[2] + (rg[3] - rg[2]) * k
-        pygame.draw.circle(S, mix(rg[6], SUBSTRATE, k), (int(rg[0] + ox), int(rg[1] + oy)), max(1, int(rad)), 2)
+        pygame.draw.circle(S, mix(rg[6], SUBSTRATE, k), (int(rg[0] + ox), int(rg[1] + oy)), max(1, int(rad)), px(2))
     for p in v.popups:
         text(S, p[2], p[4], p[3], p[0] + ox, p[1] + oy, alpha=min(1.0, p[5] / p[6] * 2))
 
 
 def draw_lives(S, x, y, lives, total, align="left"):
-    step = 34
+    step = 34 * U
     x0 = x if align == "left" else x - (total - 1) * step
     for i in range(total):
         col = CYAN if i < lives else (40, 46, 66)
-        draw_xmon(S, x0 + i * step, y, 56, col)
+        draw_xmon(S, x0 + i * step, y, 56 * U, col)
 
 
 def draw_board_hud(S, v: View, title: str):
     b = v.board
     rect = v.substrate_rect()
-    y = rect.top - 30
-    text(S, title, 12, GREY, rect.left, y - 22, "left")
-    text(S, f"{b.score:06d}", 20, WHITE, rect.left, y + 4, "left")
-    draw_lives(S, rect.right - 8, y + 4, b.lives, config.LIVES, "right")
-    text(S, f"GATES {b.gates}", 8, GREY, rect.right, y - 22, "right")
+    y = rect.top - 30 * U
+    text(S, title, 12, GREY, rect.left, y - 22 * U, "left")
+    text(S, f"{b.score:06d}", 20, WHITE, rect.left, y + 4 * U, "left")
+    draw_lives(S, rect.right - 8 * U, y + 4 * U, b.lives, config.LIVES, "right")
+    text(S, f"GATES {b.gates}", 8, GREY, rect.right, y - 22 * U, "right")
 
 
 # =====================================================================
@@ -674,7 +748,7 @@ class Game:
     def _make_demo(self):
         lat = Lattice(self.lattice_kind, config.GRID_ROWS, config.GRID_COLS)
         board = Board(lat, random.randrange(1 << 30), (), lives=10 ** 9)
-        self.demo = View(board, 900, 400, 74)
+        self.demo = View(board, 900 * U, 400 * U, 400 * U, 400 * U)
         self.demo_timer = 0.0
 
     def start_game(self):
@@ -682,11 +756,11 @@ class Game:
         lat = Lattice(self.lattice_kind, config.GRID_ROWS, config.GRID_COLS)
         if self.mode == "versus":
             lat2 = Lattice(self.lattice_kind, config.GRID_ROWS, config.GRID_COLS)
-            self.views = [View(Board(lat, seed, ("p1",)), W * 0.25, 400, 100, "P1"),
-                          View(Board(lat2, seed, ("p2",)), W * 0.75, 400, 100, "P2")]
+            self.views = [View(Board(lat, seed, ("p1",)), W * 0.25, 400 * U, 580 * U, 530 * U, "P1"),
+                          View(Board(lat2, seed, ("p2",)), W * 0.75, 400 * U, 580 * U, 530 * U, "P2")]
         else:
             players = ("p1", "p2") if self.mode == "coop" else ("p1",)
-            self.views = [View(Board(lat, seed, players), W / 2, 395, 112,
+            self.views = [View(Board(lat, seed, players), W / 2, 395 * U, 640 * U, 590 * U,
                                "CO-OP" if self.mode == "coop" else "")]
         self.player_view = {p: v for v in self.views for p in v.board.players}
         self.new_best = False
@@ -709,7 +783,7 @@ class Game:
             if self.menu_row == 0:
                 self.mode = MODES[(MODES.index(self.mode) + step) % len(MODES)]
             else:
-                kinds = config.LATTICES
+                kinds = LAYOUTS
                 self.lattice_kind = kinds[(kinds.index(self.lattice_kind) + step) % len(kinds)]
                 self._make_demo()
             play("menu_move")
@@ -795,31 +869,31 @@ class Game:
     def draw_title(self, S):
         t = self.t
         draw_board(S, self.demo, t)
-        glow(S, W / 2, 84, 260, CYAN, 0.25)
-        text(S, "SUPERCONDUCTOR", 44, WHITE, W / 2, 84)
-        text(S, "Route the two-qubit gates before they decohere", 10, GREY, W / 2, 132)
+        glow(S, W / 2, 84 * U, 260 * U, CYAN, 0.25)
+        text(S, "SUPERCONDUCTOR", 44, WHITE, W / 2, 84 * U)
+        text(S, "Route the two-qubit gates before they decohere", 10, GREY, W / 2, 132 * U)
 
-        mx = 340
+        mx = 340 * U
         rows = [("MODE", MODE_LABEL[self.mode], MODE_DESC[self.mode]),
                 ("CHIP", LATTICE_LABEL[self.lattice_kind], LATTICE_DESC[self.lattice_kind])]
         for i, (label, value, desc) in enumerate(rows):
-            y = 260 + i * 110
+            y = (260 + i * 110) * U
             sel = i == self.menu_row
             col = WHITE if sel else DIM
-            text(S, label, 10, GREY if sel else DIM, mx, y - 26)
-            text(S, value, 20, col, mx, y + 4)
+            text(S, label, 10, GREY if sel else DIM, mx, y - 26 * U)
+            text(S, value, 20, col, mx, y + 4 * U)
             if sel and int(t * 3) % 2 == 0:
-                text(S, "<", 20, GOLD, mx - 160, y + 4)
-                text(S, ">", 20, GOLD, mx + 160, y + 4)
-            text(S, desc, 8, GREY if sel else DIM, mx, y + 34)
+                text(S, "<", 20, GOLD, mx - 160 * U, y + 4 * U)
+                text(S, ">", 20, GOLD, mx + 160 * U, y + 4 * U)
+            text(S, desc, 8, GREY if sel else DIM, mx, y + 34 * U)
 
         if self.mode != "versus":
             best = self.hiscores.get(self._hiscore_key(), 0)
-            text(S, f"BEST {best:06d}", 10, GOLD, mx, 500)
+            text(S, f"BEST {best:06d}", 10, GOLD, mx, 500 * U)
         if int(t * 2) % 2 == 0:
-            text(S, "PRESS A OR START", 14, WHITE, W / 2, 640)
+            text(S, "PRESS A OR START", 14, WHITE, W / 2, 640 * U)
         text(S, "STICK: DRAW ROUTE   A/R: NEXT PAIR   L: PREVIOUS   B: OTHER END   X: UNDO",
-             8, DIM, W / 2, 690)
+             8, DIM, W / 2, 690 * U)
 
     def draw_play(self, S):
         t = self.t
@@ -829,80 +903,74 @@ class Game:
             draw_board_hud(S, v, title)
             if v.board.over and len(self.views) > 1:
                 rect = v.substrate_rect()
-                veil = pygame.Surface(rect.size, pygame.SRCALPHA)
-                veil.fill((6, 8, 18, 170))
-                S.blit(veil, rect)
-                text(S, "DECOHERED", 20, RED, rect.centerx, rect.centery - 14)
-                text(S, "waiting for the other chip", 8, GREY, rect.centerx, rect.centery + 18)
+                veil(S, rect, 170)
+                text(S, "DECOHERED", 20, RED, rect.centerx, rect.centery - 14 * U)
+                text(S, "waiting for the other chip", 8, GREY, rect.centerx, rect.centery + 18 * U)
         if len(self.views) > 1:
-            pygame.draw.line(S, SUBSTRATE_EDGE, (W / 2, 40), (W / 2, H - 40), 1)
+            pygame.draw.line(S, SUBSTRATE_EDGE, (W / 2, 40 * U), (W / 2, H - 40 * U), px(1))
         text(S, "STICK: ROUTE   A/R: NEXT   L: PREV   B: OTHER END   X: UNDO   START: PAUSE",
-             8, DIM, W / 2, H - 14)
+             8, DIM, W / 2, H - 14 * U)
 
     def draw_paused(self, S):
         self.draw_play(S)
-        veil = pygame.Surface((W, H), pygame.SRCALPHA)
-        veil.fill((6, 8, 18, 170))
-        S.blit(veil, (0, 0))
-        text(S, "PAUSED", 32, WHITE, W / 2, H / 2 - 30)
-        text(S, "START / A / B: RESUME     SELECT: MENU", 10, GREY, W / 2, H / 2 + 20)
+        veil(S, (0, 0, W, H), 170)
+        text(S, "PAUSED", 32, WHITE, W / 2, H / 2 - 30 * U)
+        text(S, "START / A / B: RESUME     SELECT: MENU", 10, GREY, W / 2, H / 2 + 20 * U)
 
     def draw_over(self, S):
         self.draw_play(S)
-        veil = pygame.Surface((W, H), pygame.SRCALPHA)
-        veil.fill((6, 8, 18, 200))
-        S.blit(veil, (0, 0))
+        veil(S, (0, 0, W, H), 200)
         if self.mode == "versus":
             s1, s2 = (v.board.score for v in self.views)
             if s1 == s2:
                 head, col = "DRAW", WHITE
             else:
                 head, col = ("P1 WINS", WHITE) if s1 > s2 else ("P2 WINS", GOLD)
-            text(S, head, 40, col, W / 2, 250)
-            text(S, f"P1  {s1:06d}", 16, WHITE, W / 2, 340)
-            text(S, f"P2  {s2:06d}", 16, GOLD, W / 2, 378)
+            text(S, head, 40, col, W / 2, 250 * U)
+            text(S, f"P1  {s1:06d}", 16, WHITE, W / 2, 340 * U)
+            text(S, f"P2  {s2:06d}", 16, GOLD, W / 2, 378 * U)
         else:
             b = self.views[0].board
-            text(S, "CHIP DECOHERED", 36, RED, W / 2, 230)
-            text(S, f"SCORE {b.score:06d}", 18, WHITE, W / 2, 310)
+            text(S, "CHIP DECOHERED", 36, RED, W / 2, 230 * U)
+            text(S, f"SCORE {b.score:06d}", 18, WHITE, W / 2, 310 * U)
             mins, secs = divmod(int(b.time), 60)
-            text(S, f"GATES {b.gates}    TIME {mins}:{secs:02d}", 10, GREY, W / 2, 350)
+            text(S, f"GATES {b.gates}    TIME {mins}:{secs:02d}", 10, GREY, W / 2, 350 * U)
             if self.new_best:
-                text(S, "NEW BEST!", 16, GOLD, W / 2, 400)
+                text(S, "NEW BEST!", 16, GOLD, W / 2, 400 * U)
             else:
-                text(S, f"BEST {self.hiscores.get(self._hiscore_key(), 0):06d}", 10, GOLD, W / 2, 400)
+                text(S, f"BEST {self.hiscores.get(self._hiscore_key(), 0):06d}", 10, GOLD, W / 2, 400 * U)
         if self.state_t > 1.5 and int(self.state_t * 2.5) % 2:
-            text(S, "PRESS A OR B", 12, WHITE, W / 2, 500)
+            text(S, "PRESS A OR B", 12, WHITE, W / 2, 500 * U)
 
     def draw_input_test(self, S):
         inp = self.inp
-        text(S, "INPUT TEST", 20, WHITE, W / 2, 40)
-        text(S, "Press buttons / move sticks. ESC or hold SELECT 2s to leave.", 8, GREY, W / 2, 70)
-        y = 110
+        text(S, "INPUT TEST", 20, WHITE, W / 2, 40 * U)
+        text(S, "Press buttons / move sticks. ESC or hold SELECT 2s to leave.", 8, GREY, W / 2, 70 * U)
+        y = 110 * U
         if not inp.joys:
-            text(S, "No joysticks detected.", 10, RED, 40, y, "left")
-            y += 30
+            text(S, "No joysticks detected.", 10, RED, 40 * U, y, "left")
+            y += 30 * U
         for i, j in inp.joys.items():
             who = [p for p in ("p1", "p2") if config.INPUT_CONFIG[p]["joystick_index"] == i]
             text(S, "JOY %d: %s %s" % (i, j.get_name()[:40], ("-> " + who[0].upper()) if who else ""),
-                 10, CYAN, 40, y, "left")
-            y += 22
+                 10, CYAN, 40 * U, y, "left")
+            y += 22 * U
             axes = "  ".join("a%d:%+.2f" % (k, j.get_axis(k)) for k in range(j.get_numaxes()))
-            text(S, "axes " + axes, 8, WHITE, 60, y, "left")
-            y += 18
+            text(S, "axes " + axes, 8, WHITE, 60 * U, y, "left")
+            y += 18 * U
             hats = "  ".join("h%d:%s" % (k, j.get_hat(k)) for k in range(j.get_numhats()))
-            text(S, "hats " + (hats or "-"), 8, WHITE, 60, y, "left")
-            y += 18
+            text(S, "hats " + (hats or "-"), 8, WHITE, 60 * U, y, "left")
+            y += 18 * U
             btn = " ".join(str(k) for k in range(j.get_numbuttons()) if j.get_button(k))
-            text(S, "buttons down: " + (btn or "-"), 8, WHITE, 60, y, "left")
-            y += 30
-        text(S, "last keys: " + (", ".join(inp.last_keys) or "-"), 10, GOLD, 40, y + 10, "left")
+            text(S, "buttons down: " + (btn or "-"), 8, WHITE, 60 * U, y, "left")
+            y += 30 * U
+        text(S, "last keys: " + (", ".join(inp.last_keys) or "-"), 10, GOLD, 40 * U, y + 10 * U, "left")
         if not keyboard_enabled():
-            text(S, "(keyboard ignored: --no-keyboard)", 8, GREY, 40, y + 30, "left")
+            text(S, "(keyboard ignored: --no-keyboard)", 8, GREY, 40 * U, y + 30 * U, "left")
         for i, p in enumerate(("p1", "p2")):
             held = sorted(inp.prev_buttons[p]) + ([inp.dir[p]] if inp.dir[p] else [])
-            text(S, "%s actions: %s" % (p.upper(), ", ".join(held) or "-"), 10, WHITE, 40, y + 60 + i * 24, "left")
-        text(S, "Mapping lives in superconductor/config.py (INPUT_CONFIG)", 8, DIM, W / 2, H - 30)
+            text(S, "%s actions: %s" % (p.upper(), ", ".join(held) or "-"), 10, WHITE, 40 * U, y + (60 + i * 24) * U, "left")
+        text(S, "Mapping lives in superconductor/config.py (INPUT_CONFIG)", 8, DIM, W / 2, H - 30 * U)
 
     # ------------------------------------------------------------ loop
     def run(self, input_test=False):
@@ -953,9 +1021,9 @@ class Game:
                     self.to_menu()
 
             if config.SHOW_SCANLINES:
-                S.blit(scanlines(), (0, 0))
+                draw_scanlines(S)
             if self.show_fps:
-                text(S, "%d FPS" % self.clock.get_fps(), 8, GOLD, 8, H - 8, "left", "bottom")
+                text(S, "%d FPS" % self.clock.get_fps(), 8, GOLD, 8 * U, H - 8 * U, "left", "bottom")
             present(S, self.window)
             pygame.display.flip()
             self.inp.end_frame()
