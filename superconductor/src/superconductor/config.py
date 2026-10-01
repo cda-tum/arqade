@@ -7,17 +7,22 @@ and so are Start = 9 / Select = 8 (not the other way round).
 
 from pathlib import Path
 
-# --- Internal render resolution (16:9, so VERSUS fits two chips side by side) ---
-INTERNAL_WIDTH = 1280
-INTERNAL_HEIGHT = 720
+# --- Internal render resolution ---
+# Native 1920x1080, the cabinet panel itself (see ../AGENTS.md: the internal
+# height must divide 1080). game.py lays things out for a 1280x720 design and
+# multiplies by INTERNAL_HEIGHT / 720, so any 16:9 size that divides 1080
+# works here -- 960x540 is the fallback if the Pi can't keep up at 1080p.
+INTERNAL_WIDTH = 1920
+INTERNAL_HEIGHT = 1080
 
 # --- Chip ---
-GRID_ROWS = 5
+# The chip layouts themselves live in lattice.py (LAYOUTS).
+GRID_ROWS = 5  # size of the square and brick layouts
 GRID_COLS = 5
-LATTICES = ("square", "brick")  # brick = hex connectivity on a square layout
 
 # --- Gameplay tuning ---
 LIVES = 3                    # decohered pairs before game over (shared in CO-OP)
+HURT_SECONDS = 1.4           # how long the red "life lost" flash lasts
 QUBIT_SPEED = 0.8            # edges per second a travelling qubit covers
 MAX_ACTIVE_PAIRS = 6         # pairs on the chip at once (waiting + travelling)
 MIN_PAIR_DISTANCE = 2        # spawned endpoints are at least this many hops apart
@@ -26,9 +31,10 @@ INITIAL_PAIRS = 2            # pairs already waiting when the game starts
 # over RAMP_SECONDS of (board) play time.
 SPAWN_INTERVAL_START = 5.0
 SPAWN_INTERVAL_MIN = 2.2
+COOP_SPAWN_RATE = 1.25             # CO-OP: pairs come 25% more often throughout
 COHERENCE_START = 30.0
 COHERENCE_MIN = 16.0
-RAMP_SECONDS = 240.0
+RAMP_SECONDS = 150.0
 # If nothing is waiting, the next pair is pulled forward to arrive this soon.
 IDLE_SPAWN_DELAY = 1.0
 # Scoring: a gate is worth BASE * DETOUR_FIDELITY ** (extra hops over the

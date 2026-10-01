@@ -9,7 +9,7 @@ from superconductor.rules import Board, Spawn
 
 def scripted(*spawns):
     """Replace the random schedule with a fixed list of (t, a, b) spawns."""
-    def schedule(lattice, seed):
+    def schedule(lattice, seed, rate=1.0):
         for t, a, b in spawns:
             yield Spawn(t, a, b, 20.0)
         yield Spawn(float("inf"), (0, 0), (4, 4), 20.0)  # never arrives
@@ -20,7 +20,7 @@ def scripted(*spawns):
 def board_with(monkeypatch):
     def make(*spawns, players=("p1",), kind="square"):
         monkeypatch.setattr(rules, "spawn_schedule", scripted(*spawns))
-        b = Board(Lattice(kind, 5, 5), 0, players, specials=False)
+        b = Board(Lattice(kind), 0, players, specials=False)
         b.update(0.01)
         return b
     return make
@@ -77,10 +77,42 @@ def test_routes_may_cross_at_a_qubit_but_not_share_couplers(board_with):
     assert b.cursors["p1"].path == [(1, 1), (0, 1)]
 
 
-def test_routes_cannot_enter_other_stations(board_with):
+def test_routes_may_run_through_other_stations(board_with):
     b = board_with((0, (0, 0), (0, 3)), (0, (0, 1), (4, 1)))
     b.move("p1", "right")
-    assert b.cursors["p1"].path == [(0, 0)]
+    assert b.cursors["p1"].path == [(0, 0), (0, 1)]
+    assert b.predict_collision("p1") == (0, 1)  # that qubit is still sitting there
+
+
+def test_running_into_a_waiting_station_crashes_both_pairs(board_with):
+    b = board_with((0, (0, 0), (0, 3)), (0, (0, 1), (4, 1)))
+    walk(b, "p1", "right", "right", "right")
+    assert b.station_threats() == {(0, 1)}
+    b.update(1.0 / config.QUBIT_SPEED)
+    crash = [e for e in b.events if e.kind == "crash"]
+    assert crash and crash[0].node == (0, 1)
+    assert b.pairs == {} and b.lives == config.LIVES - config.CRASH_LIFE_COST
+
+
+def test_running_through_a_station_is_safe_once_its_qubit_left(board_with):
+    b = board_with((0, (0, 0), (0, 3)), (0, (0, 1), (4, 1)))
+    walk(b, "p1", "right", "right", "right")  # through (0,1), the other pair's start
+    assert b.station_threats() == {(0, 1)}
+    walk(b, "p1", "down", "down", "down", "down")  # route that pair away from (0,1) right now
+    assert b.station_threats() == set()
+    b.update(10.0)
+    assert b.gates == 2 and b.lives == config.LIVES
+
+
+def test_running_through_a_routes_destination_crashes(board_with):
+    # pair 1 is routed *towards* (0,1): its partner qubit sits there until the gate fires
+    b = board_with((0, (0, 0), (0, 3)), (0, (4, 1), (0, 1)))
+    walk(b, "p1", "right", "right", "right")
+    walk(b, "p1", "up", "up", "up", "up")
+    assert b.station_threats() == set()  # both routes committed: nothing left to avert
+    for _ in range(200):  # frame-sized steps, as in the game
+        b.update(0.05)
+    assert [e.node for e in b.events if e.kind == "crash"] == [(0, 1)]
 
 
 def test_qubit_travels_and_releases_couplers_behind_it(board_with):
@@ -91,7 +123,8 @@ def test_qubit_travels_and_releases_couplers_behind_it(board_with):
     assert edge((0, 0), (0, 1)) not in b.edge_owner
     assert (0, 0) not in b.endpoint_owner
     assert edge((0, 1), (0, 2)) in b.edge_owner
-    assert pair.qubit_position()[1] == pytest.approx(1.0, abs=0.05)
+    n0, n1, f, jump = pair.segment()
+    assert (n0, n1, jump) == ((0, 1), (0, 2), False) and f == pytest.approx(0.0, abs=0.05)
 
 
 def test_arrival_executes_the_gate_and_scores(board_with):
@@ -123,7 +156,7 @@ def test_waiting_pair_decoheres_and_costs_a_life(board_with):
 
 
 def test_game_over_after_last_life(monkeypatch):
-    b = Board(Lattice("square", 5, 5), 7, ("p1",))
+    b = Board(Lattice("square"), 7, ("p1",))
     for _ in range(4000):
         b.update(0.1)
         if b.over:
@@ -196,7 +229,7 @@ def test_free_route_finds_shortest_unreserved_path(board_with):
 
 
 def test_same_seed_gives_same_pairs():
-    lat = Lattice("square", 5, 5)
+    lat = Lattice("square")
     s1 = list(itertools.islice(rules.spawn_schedule(lat, 42), 20))
     s2 = list(itertools.islice(rules.spawn_schedule(lat, 42), 20))
     assert s1 == s2
@@ -204,13 +237,13 @@ def test_same_seed_gives_same_pairs():
 
 
 def test_game_starts_with_several_pairs():
-    b = Board(Lattice("square", 5, 5), 3, ("p1",), specials=False)
+    b = Board(Lattice("square"), 3, ("p1",), specials=False)
     b.update(0.6)
     assert len(b.pairs) == config.INITIAL_PAIRS
 
 
 def test_difficulty_ramps_up():
-    lat = Lattice("square", 5, 5)
+    lat = Lattice("square")
     s = list(itertools.islice(rules.spawn_schedule(lat, 1), 200))
     assert s[0].coherence == pytest.approx(config.COHERENCE_START, abs=0.1)
     assert s[-1].coherence == pytest.approx(config.COHERENCE_MIN)
@@ -335,7 +368,7 @@ def test_stations_never_spawn_on_specials(board_with):
 
 
 def test_specials_appear_by_themselves():
-    b = Board(Lattice("square", 5, 5), 5, ("p1",))
+    b = Board(Lattice("square"), 5, ("p1",))
     kinds = set()
     for _ in range(int(150 / 0.1)):
         b.update(0.1)
@@ -343,3 +376,26 @@ def test_specials_appear_by_themselves():
         b.events.clear()
         b.lives = config.LIVES  # keep it alive, nobody is playing
     assert kinds == set(rules.SPECIAL_KINDS)
+
+
+# ---------------------------------------------------------------- co-op
+
+
+def test_new_pair_goes_to_whoever_did_not_route_last(board_with):
+    b = board_with((0, (0, 0), (0, 2)), (0, (4, 0), (4, 2)), (1, (2, 0), (2, 2)),
+                   players=("p1", "p2"))
+    walk(b, "p2", "right", "right")  # P2 routes; nothing free for P2 to take
+    assert b.cursors["p2"].pair_id is None
+    walk(b, "p1", "right", "right")  # now P1 routed last
+    b.update(1.5)  # third pair arrives
+    assert b.cursors["p2"].path == [(2, 0)]
+    assert b.cursors["p1"].pair_id is None
+
+
+def test_coop_pairs_come_more_often():
+    lat = Lattice("square")
+    solo = list(itertools.islice(rules.spawn_schedule(lat, 4), 30))
+    coop = list(itertools.islice(rules.spawn_schedule(lat, 4, config.COOP_SPAWN_RATE), 30))
+    assert [(s.a, s.b) for s in solo] == [(s.a, s.b) for s in coop]  # same pairs
+    assert coop[-1].t < solo[-1].t
+    assert coop[2].t - coop[1].t == pytest.approx((solo[2].t - solo[1].t) / config.COOP_SPAWN_RATE)

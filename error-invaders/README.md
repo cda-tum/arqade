@@ -4,8 +4,8 @@ Retro meets quantum error correction: a 1–2 player Space Invaders variant for 
 IconicArcade Raspberry Pi 4 cabinet (Batocera, `pygame` system). A pygame port of the
 browser version, packaged the same way as Quantum Pong and Quantum Towers.
 
-**Status:** full game (1 or 2 players, EASY/HARD mode, power-ups, lattice surgery,
-high scores), in-game input-test mode, and a Batocera deploy script. Fire/swap use the
+**Status:** full game (1 or 2 players, EASY/HARD/BOSS RUSH mode, boss fights,
+power-ups, lattice surgery, high scores), in-game input-test mode, and a Batocera deploy script. Fire/swap use the
 button numbers confirmed on the cabinet. Start/Select (8/9) are still unconfirmed.
 
 ## Gameplay
@@ -18,6 +18,26 @@ make the third). P1 flies the 3-color *color code* triangle, and P2 the faster-f
 transversal gate (spread shot), magic state (bomb), noise bias (errors correlate into
 chains you can pop in one hit) and, in 2-player mode, lattice surgery (both players
 merge into one ship: P1 steers, P2 aims).
+
+### Bosses
+
+Every third wave is a boss fight instead of a formation. **BOSS RUSH** (the third mode
+in the menu, with EASY color rules) skips the formations and runs the bosses back to
+back, so they are quick to try out. They come in this order, and after the fifth one
+the cycle repeats, each boss tougher than before:
+
+| Boss | Idea | How to beat it |
+|---|---|---|
+| LOGICAL ERROR | An error chain that crawls down like Centipede. Some segments fire. | Shoot segments in their color, which splits the chain. If a head reaches the threshold, you lose a life. |
+| WAVE PACKET | Spread out (wide), it can't be hit and drops bullets from all along its width. | Wait for "MEASURED!". Collapsed, it can be hit in its color, but it darts around (sharp in x, wild in p). A bomb collapses it right away. |
+| SYNDROME | A check lattice. The errors are hidden, only the checks around them light up. | Shoot the qubit (dot) between two lit checks, in their color. A single lit check on the left or right edge means the boundary qubit. A faint hint appears after a while. |
+| CLIFFORD CORE | Immune to every Pauli shot (its shield blinks). Fires neutral bullet-hell patterns, plus now and then a colored curtain. | A colored shot that meets a ship of the same color is absorbed. Five absorbed shots charge a magic-state bomb (pips above the ship), and only that hurts the core. |
+| BELL PAIR | Two entangled halves that fire mirrored shots and spawn mirrored minion pairs. | A hit half heals unless the other one is hit within the window (0.5 s with two players, 1.2 s alone). |
+
+Most bosses also spawn minions: single errors that waver down and shoot, and burst
+into a spread when they reach the threshold. During boss fights there is no Cosmic
+Ray. Instead minions occasionally drop capsules, and every boss drops two when it is
+beaten. The code lives in `src/error_invaders/bosses.py`.
 
 ## Setup (dev machine)
 
@@ -70,7 +90,7 @@ axis mappings live there.
 - For a keyboard-emulating encoder with MAME defaults, set `KEY_PRESET = "mame"` in
   `config.py`. P1 is then arrows + LCtrl/LAlt, and P2 is R/F/D/G + A/S.
 
-High scores (one per mode) are saved to `~/.error_invaders_hiscores.json`. On Batocera
+High scores (one per mode, BOSS RUSH included) are saved to `~/.error_invaders_hiscores.json`. On Batocera
 that is `/userdata/system/`, so a redeploy doesn't reset them.
 
 ## Deploy to the cabinet
@@ -94,8 +114,10 @@ uv run pytest
 ```
 
 The tests cover the pure input-decision functions, the config (every key name exists
-and fire/swap/start/select don't collide), the Pauli table used in HARD mode, and
-`display.py`'s scaling math. The game loop and rendering (`game.py`) are integration
+and fire/swap/start/select don't collide), the Pauli table used in HARD mode,
+`display.py`'s scaling math, and the bosses' pure logic: which wave gets which boss,
+the shared color rules, that every Syndrome error is uniquely decodable, and that
+splitting the Centipede chain leaves every segment where it was. The game loop and rendering (`game.py`) are integration
 glue. They are verified by running the game.
 
 ## Tuning

@@ -16,10 +16,16 @@ The model:
   are reserved (no other route may use them) and released one by one as soon
   as the qubit has passed them.
 - **Qubits are shared, couplers are not.** Routes may cross each other at a
-  qubit. Each qubit has a finite extent (NODE_RADIUS, in coupler lengths): if
-  two travelling qubits are inside the same one at the same time, they crash.
-  `predict_collision` tells the drawing code where a half-drawn route would
-  crash if committed right now.
+  qubit, and may even run through other stations. Each qubit has a finite
+  extent (NODE_RADIUS, in coupler lengths): two qubits inside the same one at
+  the same time crash, both gates are lost and it costs a life. A station
+  counts as occupied while its qubit is still sitting there: both ends of a
+  waiting pair, the start of a route until its qubit has left, and the end of
+  a route until the gate has fired. So running through a station is only
+  safe if that pair gets routed away in time -- the player is free to plan
+  for that. Live collisions and the lookahead (`predict_collision`,
+  `station_threats`) use the same occupancy windows, so a warning on screen
+  means exactly what will happen unless the player acts.
 - Arrival executes the gate: points for a short route (fidelity) and for the
   coherence that was left.
 
@@ -67,7 +73,8 @@ def ramp(start: float, end: float, t: float) -> float:
     return start + (end - start) * frac
 
 
-def spawn_schedule(lattice: Lattice, seed: int) -> Iterator[Spawn]:
+def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0) -> Iterator[Spawn]:
+    """Endless pairs; `rate` > 1 makes them come that much more often."""
     rng = random.Random(seed)
     t = 0.5
     count = 0
@@ -78,7 +85,7 @@ def spawn_schedule(lattice: Lattice, seed: int) -> Iterator[Spawn]:
         yield Spawn(t, a, b, ramp(config.COHERENCE_START, config.COHERENCE_MIN, t))
         count += 1
         if count >= config.INITIAL_PAIRS:  # the first few all arrive at once
-            t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t)
+            t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t) / rate
 
 
 @dataclass
@@ -103,16 +110,13 @@ class Pair:
     def other(self, end: Node) -> Node:
         return self.b if end == self.a else self.a
 
-    def qubit_position(self) -> tuple[float, float]:
-        """(row, col) of the travelling qubit, interpolated between nodes."""
+    def segment(self) -> tuple[Node, Node, float, bool]:
+        """Where the travelling qubit is: (from, to, fraction, is_bell_jump)."""
         assert self.route is not None
         last = len(self.route) - 1
         i = min(int(self.progress), last - 1)
         f = min(1.0, self.progress - i)
-        (r0, c0), (r1, c1) = self.route[i], self.route[i + 1]
-        if i in self.teleports:
-            return (r0, c0) if f < 0.5 else (r1, c1)
-        return r0 + (r1 - r0) * f, c0 + (c1 - c0) * f
+        return self.route[i], self.route[i + 1], f, i in self.teleports
 
 
 @dataclass
@@ -124,12 +128,9 @@ class Special:
     nodes: tuple[Node, ...] = ()  # speed: 1 node, bell: 2 nodes
     claimed_by: int | None = None  # bell: pair whose committed route uses it
 
-    def anchor(self) -> tuple[float, float]:
-        """Where to show a label for it: the coupler's middle or its first qubit."""
-        if self.edge is not None:
-            (r0, c0), (r1, c1) = tuple(self.edge)
-            return (r0 + r1) / 2, (c0 + c1) / 2
-        return self.nodes[0]
+    def anchor(self) -> tuple[Node, ...]:
+        """Where to show a label for it: the coupler's two ends, or its first qubit."""
+        return tuple(self.edge) if self.edge is not None else self.nodes[:1]
 
 
 @dataclass
@@ -170,7 +171,10 @@ class Board:
         self.edge_owner: dict[Edge, int] = {}  # couplers on committed routes, exclusive
         self.specials: list[Special] = []
         self.queue: list[Spawn] = []
-        self._schedule = spawn_schedule(lattice, seed)
+        # Two routers on one chip get pairs more often (CO-OP).
+        rate = config.COOP_SPAWN_RATE if len(players) > 1 else 1.0
+        self._schedule = spawn_schedule(lattice, seed, rate)
+        self.last_router: str | None = None  # who committed the latest route
         self._next = next(self._schedule)
         self._next_id = 0
         self._special_rng = random.Random(seed * 7919 + 1)
@@ -242,10 +246,10 @@ class Board:
         return busy
 
     def _can_enter(self, pair: Pair, frm: Node, to: Node, target: Node) -> bool:
-        """May `pair`'s route step over the coupler frm -> to?"""
-        owner = self.endpoint_owner.get(to)
-        if owner is not None and not (owner == pair.id and to == target):
-            return False
+        """May `pair`'s route step over the coupler frm -> to?
+
+        Other stations are deliberately allowed (see the module docstring).
+        """
         e = edge(frm, to)
         if e in self.edge_owner:
             return False
@@ -267,7 +271,8 @@ class Board:
     def free_route(self, pair: Pair, start: Node) -> list[Node] | None:
         """Shortest route from `start` to its partner over usable couplers.
 
-        Used by the title screen's demo bot; it keeps clear of Bell qubits.
+        Used by the title screen's demo bot; it keeps clear of Bell qubits and
+        other stations.
         """
         target = pair.other(start)
         came_from: dict[Node, Node | None] = {start: None}
@@ -281,6 +286,7 @@ class Board:
                 return path[::-1]
             for m in self.lattice.neighbors(n):
                 if (m not in came_from and self.bell_partner(m) is None
+                        and (m == target or m not in self.endpoint_owner)
                         and self._can_enter(pair, n, m, target)):
                     came_from[m] = n
                     queue.append(m)
@@ -301,15 +307,16 @@ class Board:
             return min(config.MAX_BOOST, boost * config.SPEED_BOOST)
         return boost
 
-    def node_windows(self, route: list[Node], teleports: set[int], progress: float,
-                     boost: float, open_end: bool = False) -> dict[Node, tuple[float, float]]:
-        """When (seconds from now) a qubit on `route` is inside each qubit it still visits.
+    def route_windows(self, route: list[Node], teleports: set[int], progress: float,
+                      boost: float, open_end: bool = False) -> dict[Node, tuple[float, float]]:
+        """When (seconds from now) a qubit on `route` occupies each qubit it still visits.
 
-        Endpoints are left out: they are stations, which no other route can
-        enter anyway. With `open_end` (a half-drawn route) the last node is
-        not an endpoint yet, so it counts, assuming the qubit carries on at
-        normal speed from there.
+        The start counts as occupied from forever until the qubit has left
+        it, the end from forever until the gate fires on arrival (the partner
+        qubit sits there all along). With `open_end` (a half-drawn route) the
+        last node is just passed through, assuming normal speed from there.
         """
+        inf = float("inf")
         last = len(route) - 1
         i0 = int(progress)
         if i0 >= last:
@@ -325,28 +332,69 @@ class Board:
             durs[k] = (self._link_time(route, teleports, k, b) if k < last
                        else 1.0 / (config.QUBIT_SPEED * b))
         r = config.NODE_RADIUS
-        stop = last + 1 if open_end else last
-        return {route[k]: (times[k] - r * durs.get(k - 1, 0.0), times[k] + r * durs[k])
-                for k in range(max(i0, 1), stop)}
+        out = {}
+        for k in range(i0, last + 1):
+            if k == 0:
+                out[route[k]] = (-inf, times[0] + r * durs[0])
+            elif k == last and not open_end:
+                out[route[k]] = (-inf, times[k])
+            else:
+                before = durs.get(k - 1, durs[k])
+                out[route[k]] = (times[k] - r * before, times[k] + r * durs[k])
+        return out
+
+    def windows(self, pair: Pair) -> dict[Node, tuple[float, float]]:
+        """Occupancy windows of a committed or waiting pair."""
+        if pair.waiting:
+            inf = float("inf")
+            return {pair.a: (-inf, inf), pair.b: (-inf, inf)}
+        return self.route_windows(pair.route, pair.teleports, pair.progress, pair.boost)
+
+    @staticmethod
+    def _first_overlap(mine: dict, theirs: dict) -> tuple[float, Node] | None:
+        best = None
+        for n, (a0, a1) in mine.items():
+            if n in theirs:
+                b0, b1 = theirs[n]
+                start, end = max(a0, b0), min(a1, b1)
+                if start < end and end > 0:
+                    start = max(start, 0.0)
+                    if best is None or start < best[0]:
+                        best = (start, n)
+        return best
 
     def predict_collision(self, player: str) -> Node | None:
-        """Where the half-drawn route would crash into a travelling qubit if committed now."""
+        """Where the half-drawn route would crash if committed right now."""
         cur = self.cursors[player]
         if len(cur.path) < 2:
             return None
+        pair = self.pairs[cur.pair_id]
         teleports = {i for i in range(len(cur.path) - 1)
                      if not self.lattice.has_edge(cur.path[i], cur.path[i + 1])}
-        mine = self.node_windows(cur.path, teleports, 0.0, 1.0, open_end=True)
-        best: tuple[float, Node] | None = None
-        for pair in self.travelling_pairs():
-            theirs = self.node_windows(pair.route, pair.teleports, pair.progress, pair.boost)
-            for n, (a0, a1) in mine.items():
-                if n in theirs:
-                    b0, b1 = theirs[n]
-                    start, end = max(a0, b0), min(a1, b1)
-                    if start < end and end > 0 and (best is None or start < best[0]):
-                        best = (start, n)
-        return best[1] if best else None
+        mine = self.route_windows(cur.path, teleports, 0.0, 1.0, open_end=True)
+        inf = float("inf")
+        mine[pair.other(cur.path[0])] = (-inf, inf)  # the partner keeps waiting
+        hits = [h for other in self.pairs.values() if other.id != pair.id
+                if (h := self._first_overlap(mine, self.windows(other)))]
+        return min(hits)[1] if hits else None
+
+    def station_threats(self) -> set[Node]:
+        """Stations a committed route will crash into unless that pair leaves in time.
+
+        Only waiting stations count: those are the crashes a player can still
+        avert, by routing that pair away from the threatened end. Crashes
+        between two committed routes are not reported -- nothing can change
+        them any more.
+        """
+        out = set()
+        travelling = self.travelling_pairs()
+        for q in self.waiting_pairs():
+            mine = self.windows(q)
+            for p in travelling:
+                hit = self._first_overlap(self.windows(p), mine)
+                if hit:
+                    out.add(hit[1])
+        return out
 
     # ------------------------------------------------------------------ actions
     def select(self, player: str, step: int) -> None:
@@ -531,6 +579,7 @@ class Board:
         pair = self.pairs[cur.pair_id]
         route = cur.path
         cur.clear()
+        self.last_router = player
         self._commit_route(pair, route, player)
 
     def _commit_route(self, pair: Pair, route: list[Node], player: str | None) -> None:
@@ -618,29 +667,20 @@ class Board:
         self.lives -= 1
         self.events.append(Event("decohere", pair))
 
-    def _near_nodes(self, pair: Pair) -> list[Node]:
-        """Qubits whose extent the travelling qubit is inside right now."""
-        last = len(pair.route) - 1
-        i = min(int(pair.progress), last - 1)
-        f = pair.progress - i
-        out = []
-        if f < config.NODE_RADIUS:
-            out.append(pair.route[i])
-        if f > 1 - config.NODE_RADIUS:
-            out.append(pair.route[i + 1])
-        return out
-
     def _check_collisions(self) -> None:
+        if not self.travelling_pairs():
+            return
         inside: dict[Node, list[Pair]] = {}
-        for pair in self.travelling_pairs():
-            for n in self._near_nodes(pair):
-                inside.setdefault(n, []).append(pair)
+        for pair in self.pairs.values():
+            for n, (t0, t1) in self.windows(pair).items():
+                if t0 <= 0 < t1:
+                    inside.setdefault(n, []).append(pair)
         for n, pairs in inside.items():
             pairs = [p for p in pairs if p.id in self.pairs]
             if len(pairs) < 2:
                 continue
             for p in pairs:
-                self._release(p, [p.a, p.b], self._route_edges(p))
+                self._release(p, [p.a, p.b], self._route_edges(p) if not p.waiting else [])
                 for s in self.specials:
                     if s.claimed_by == p.id:
                         s.claimed_by = None
@@ -670,9 +710,15 @@ class Board:
                     break
 
     def _autoselect(self) -> None:
-        """A cursor without a pair grabs the oldest free one."""
-        for player, cur in self.cursors.items():
-            if cur.pair_id is None:
-                stations = self.stations(player)
-                if stations:
-                    self._set_station(player, *stations[0])
+        """A cursor without a pair grabs the oldest free one.
+
+        If several cursors are idle, the player who did *not* route last
+        picks first. Otherwise, with fewer free pairs than players, every
+        new pair would go to P1 and P2 would just sit there.
+        """
+        idle = [p for p, cur in self.cursors.items() if cur.pair_id is None]
+        idle.sort(key=lambda p: p == self.last_router)
+        for player in idle:
+            stations = self.stations(player)
+            if stations:
+                self._set_station(player, *stations[0])

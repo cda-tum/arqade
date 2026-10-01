@@ -4,14 +4,14 @@ Route two-qubit gates across a superconducting chip before they decohere. A 1–
 pygame game for the IconicArcade Raspberry Pi 4 cabinet (Batocera, `pygame` system),
 packaged the same way as the other games in this repo.
 
-**Status:** playable prototype. It has 1 player, co-op and versus modes, square and brick
-chips, crossing routes with collisions, four chip specials, a coherence timer, scoring,
+**Status:** playable prototype. It has 1 player, co-op and versus modes, four chip
+layouts, crossing routes with collisions, four chip specials, a coherence timer, scoring,
 high scores, an input-test mode and a Batocera deploy script. There is no circuit mode
 yet.
 
 ## Gameplay
 
-Pairs of qubits light up on a 5×5 chip in the same color: each pair is a two-qubit gate
+Pairs of qubits light up on the chip in the same color: each pair is a two-qubit gate
 waiting to happen. Draw a route between them, one coupler at a time. When the route
 reaches the partner, a qubit travels along it (a few seconds), and the gate fires on
 arrival.
@@ -19,13 +19,23 @@ arrival.
 - **Couplers are exclusive, qubits are shared.** The couplers on a committed route are
   reserved, so no other route can use them. Each coupler is released as soon as the
   travelling qubit has passed it, so routes open up again from behind. Routes *may*
-  cross at a qubit, but every qubit has a finite size: if two travelling qubits are
-  inside the same one at the same time, they crash, both gates are lost, and you lose a
-  life. While you draw, a blinking red X marks where your route would crash if it went
-  off right now.
+  cross at a qubit, and may even run through other stations. Every qubit has a finite
+  size, though: two qubits inside the same one at the same time crash, both gates are
+  lost, and you lose a life.
+- **Stations are obstacles, not walls.** A station is occupied while its qubit is still
+  there: both ends of a waiting pair, a route's start until its qubit has left, and a
+  route's end until the gate fires. Running through a station is safe only if you route
+  that pair away from it in time, so planning ahead pays off. The game doesn't stop you.
+- **Lookahead.** While you draw, a big blinking red X marks where your route would crash
+  if it went off right now. A small one on a station means a committed route is heading
+  into it, so route that pair away from there in time. Both use exactly the rules the
+  crash itself uses. A crash between two committed routes gets no warning: nothing can
+  change it any more.
+- **Losing a life** flashes the whole chip red, the lost life icon swells and blinks, and
+  "LIFE LOST" appears above the chip.
 - **Coherence timer.** The ring around a waiting pair is its coherence. At zero the pair
-  decoheres and costs one of 3 lives. The game starts with two pairs waiting. After that,
-  pairs arrive faster and decohere sooner as the game goes on.
+  decoheres and costs one of 3 lives. The game starts with two pairs waiting. Over the
+  first 2.5 minutes, pairs arrive faster and decohere sooner.
 - **Score** = 100 × fidelity + up to 50 for coherence left. Each hop beyond the shortest
   possible route multiplies the fidelity by 0.9.
 - You never roam the chip freely: your cursor always starts on an endpoint ("station") of
@@ -46,15 +56,24 @@ that is drawn or in progress, and never share a qubit with a station:
 They unlock over time: miscalibrations from the start, speed qubits after 25 s, defects
 after 40 s and Bell pairs after 70 s. The values are in `config.py`.
 
-**Chips:** *Square* couples every grid neighbour (4 couplers per qubit, as on Google's
-chips). *Brick* keeps every other vertical coupler, staggered like a brick wall, which is
-hexagonal connectivity (3 per qubit, the graph behind IBM's heavy-hex) without any
-diagonal lines.
+**Chips:**
+
+| Chip | Layout |
+|---|---|
+| Square | 5×5, every grid neighbour coupled (4 per qubit, as on Google's chips) |
+| Brick | 5×5, every other vertical coupler, staggered like a brick wall. That is hexagonal connectivity (3 per qubit, the graph behind IBM's heavy-hex), without diagonal lines |
+| Bottleneck | two 4-wide, 3-high halves, joined only through the middle two columns |
+| Distributed | four 3×3 modules in a 2×2 grid. Neighbouring modules share a single link between the middle qubits of their facing sides |
+
+The links between blocks and modules are drawn as hollow lines. Every coupler on every
+chip joins grid neighbours, so the stick always works in four directions.
 
 **Modes:**
 - **1 Player:** one chip.
-- **Co-op:** both players route on the same chip, with shared score and lives. A pair one
-  player has selected can't be taken by the other. If one player commits a route through
+- **Co-op:** both players route on the same chip, with shared score and lives. Pairs come
+  25% more often than solo (`COOP_SPAWN_RATE`). A pair one player has selected can't be
+  taken by the other. When a new pair appears and both players are free, it goes to
+  whoever did *not* route last, so it doesn't always land on P1. If one player commits a route through
   the other's half-drawn route, the half-drawn one is cut back.
 - **Versus:** two chips side by side, fed the identical sequence of pairs (same seed).
   Each player has their own lives. Once both chips have decohered, the higher score wins.
@@ -72,8 +91,12 @@ uv run python -m superconductor.main --input-test   # live joystick/keyboard sta
 uv run pytest
 ```
 
-The game renders at 1280×720 (16:9, so versus fits two chips). **F3** toggles the FPS
-overlay, and **F1** on the title screen opens the input test.
+The game renders natively at 1920×1080, the cabinet panel's own resolution, so SDL never
+rescales it (see `../AGENTS.md`). Layout values in `game.py` are written for a 1280×720
+design and multiplied by `U = height / 720`. If the Pi can't keep up, set
+`INTERNAL_WIDTH/HEIGHT` in `config.py` to 960×540: that height also divides 1080. On a dev
+PC a frame takes about 1.6 ms. **F3** toggles the FPS overlay, and **F1** on the title
+screen opens the input test.
 
 ### Controls
 
@@ -104,7 +127,7 @@ High scores (per mode and chip, not for versus) are saved to
 
 | File | What |
 |---|---|
-| `lattice.py` | The chip graph: square and brick couplers, neighbours, distances |
+| `lattice.py` | The chip layouts: couplers, drawing positions, neighbours, distances |
 | `rules.py` | All game rules (spawning, drawing, committing, travel, collisions, specials, scoring), pure Python and unit tested |
 | `input.py` | Pad and keyboard to actions, with stick auto-repeat |
 | `game.py` | Menus, drawing, sound and the main loop |
