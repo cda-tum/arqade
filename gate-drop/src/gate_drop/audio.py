@@ -187,6 +187,7 @@ def build_sfx() -> dict[str, list[int]]:
                      tone(120, 0.18, 0.25, "square", decay=12, slide=0.6)),
         "topout": concat(*(tone(f, 0.12, 0.3, "square", decay=4) for f in (330, 262, 196, 131))),
         "beep": tone(660, 0.08, 0.25, "square"),
+        "blip": tone(880, 0.04, 0.22, "square"),
         "go": _arp([c("C5"), c("G5"), c("C6")], 0.06, 0.3),
         "round": _arp([c("C5"), c("E5"), c("G5"), c("C6")], 0.08, 0.3),
         "match": _arp([c("C5"), c("E5"), c("G5"), c("C6"), c("G5"), c("C6")], 0.1, 0.3, "triangle"),
@@ -196,7 +197,8 @@ def build_sfx() -> dict[str, list[int]]:
     return sfx
 
 
-_CUE_SOUNDS = {"beep": "beep", "go": "go", "round_won": "round", "draw": "round", "match_won": "match"}
+_CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "round_won": "round", "draw": "round",
+               "match_won": "match", "level_clear": "match", "game_over": "topout"}
 _BOARD_SOUNDS = {"move", "rotate", "land", "attack", "noise", "topout"}
 
 

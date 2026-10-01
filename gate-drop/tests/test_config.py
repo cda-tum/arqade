@@ -32,7 +32,7 @@ def test_the_left_player_is_blue_and_the_right_one_red():
 
 
 def test_all_key_names_exist_in_pygame():
-    names = [config.INPUT_CONFIG["system"]["keyboard_quit"], *config.KEYS_CONFIRM, *config.KEYS_BACK]
+    names = [config.INPUT_CONFIG["system"]["keyboard_quit"]]
     for mapping in config.KEYMAP.values():
         for keys in mapping.values():
             names += keys

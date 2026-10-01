@@ -8,8 +8,9 @@ import random
 from gate_drop import config
 
 
-def errors_for_round(n: int) -> int:
-    return min(config.ERRORS_MAX, config.ERRORS_FIRST + config.ERRORS_STEP * (n - 1))
+def errors_for_level(level: int) -> int:
+    """Level n has 2n + 2 errors: 4 on level 1, up to 22 on level 10."""
+    return 2 * max(config.LEVEL_MIN, min(config.LEVEL_MAX, level)) + 2
 
 
 def error_layout(rng: random.Random, count: int) -> list:

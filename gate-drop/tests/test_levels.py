@@ -3,13 +3,14 @@ import random
 from gate_drop import config, levels
 
 
-def test_the_error_count_grows_each_round_to_a_cap():
-    assert [levels.errors_for_round(n) for n in (1, 2, 3, 5, 9)] == [4, 6, 8, 12, 12]
+def test_level_n_has_2n_plus_2_errors():
+    assert [levels.errors_for_level(n) for n in (1, 2, 5, 10)] == [4, 6, 12, 22]
+    assert levels.errors_for_level(99) == levels.errors_for_level(config.LEVEL_MAX)
 
 
 def test_layouts_fit_the_rules():
     for seed in range(50):
-        count = 4 + seed % 9
+        count = levels.errors_for_level(1 + seed % 10)
         layout = levels.error_layout(random.Random(seed), count)
         assert len(layout) == count and len({pos for pos, _ in layout}) == count
         for (x, y), kind in layout:

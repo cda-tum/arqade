@@ -76,7 +76,13 @@ class Sprites:
         key = ("gate", kind, joint)
         if key not in self._cache:
             s = _capsule(config.GATE_COLORS[kind], joint)
-            self._letter(s, kind, (S // 2 + 1, S // 2))
+            if kind == "Td":  # T-dagger: the font has no dagger, so draw one
+                self._letter(s, "T", (S // 2 - 1, S // 2))
+                for x, y, w, h in ((12, 2, 1, 7), (11, 4, 3, 1)):
+                    s.fill(INK, (x + 1, y + 1, w, h))
+                    s.fill(WHITE, (x, y, w, h))
+            else:
+                self._letter(s, kind, (S // 2 + 1, S // 2))
             self._cache[key] = s
         return self._cache[key]
 

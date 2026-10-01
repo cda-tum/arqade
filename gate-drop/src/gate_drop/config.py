@@ -8,6 +8,8 @@ pill; in menus A (or Start) confirms and B goes back.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 # --- Display -------------------------------------------------------------------
 INTERNAL_WIDTH = 480
 INTERNAL_HEIGHT = 270  # exactly x4 onto the cabinet's 1920x1080 panel
@@ -19,33 +21,43 @@ COLS = 6  # qubit wires
 ROWS = 14
 CELL = 16
 BOARD_ORIGIN = {"p1": (40, 34), "p2": (344, 34)}  # top-left of each well, in px
+SOLO_ORIGIN = (192, 34)  # the single-player board, centred
 
-GATE_KINDS = ("H", "X", "Y", "Z")
-PAULIS = ("X", "Y", "Z")
+GATE_KINDS = ("H", "X", "Y", "Z", "T", "Td")  # "Td" is T-dagger
+GATE_WEIGHTS = {"H": 2, "X": 2, "Y": 2, "Z": 2, "T": 1, "Td": 1}  # T and T-dagger are rarer
+# A gate cancels with its inverse. X, Y, Z and H are their own; T and T-dagger
+# undo each other, while T T = S is not the identity, so two Ts don't cancel.
+INVERSE = {"H": "H", "X": "X", "Y": "Y", "Z": "Z", "T": "Td", "Td": "T"}
+PAULIS = ("X", "Y", "Z")  # the kinds an error can be
+NOISE_KIND = "T"  # what attacks drop on the opponent: it only clears with a T-dagger
 CNOT_SHARE = 0.15  # share of pills that are a CNOT
 SPAWN_X = 2  # pills spawn lying flat over wires 2 and 3
 
-FALL_START = 0.8  # seconds per row
+SPEEDS = ("LOW", "MED", "HI")
+SPEED_FALL = {"LOW": (0.9, 0.3), "MED": (0.65, 0.22), "HI": (0.42, 0.15)}  # (start, floor), s per row
 FALL_SPEEDUP = 0.9  # times this...
 FALL_SPEEDUP_EVERY = 30.0  # ...every this many seconds of a round
-FALL_MIN = 0.25
 SOFT_DROP_INTERVAL = 0.05
 SETTLE_STEP = 0.06  # seconds per row while things settle
 CLEAR_TIME = 0.35  # how long matched gates flash before they vanish
 
-MAX_ATTACK = 4  # noise gates a chain can send, before the big-pass bonus
-BIG_PASS = 3  # matches in one pass that earn one extra noise gate
+MAX_ATTACK = 4  # an attack sends at most this many T gates
+MIN_ATTACK = 2  # and at least this many: a 2-step chain sends 2, a 3-step chain 3
+BIG_PASS = 3  # this many matches in one pass attack too (one more if part of a chain)
 DANGER_ROWS = 4  # a stack this close to the top makes the frame blink
 
-# --- Errors and rounds -------------------------------------------------------------
+# --- Errors, levels and rounds -------------------------------------------------------
 ERROR_ROWS = 8  # errors sit in the bottom 8 rows
-ERRORS_FIRST = 4
-ERRORS_STEP = 2
-ERRORS_MAX = 12
+LEVEL_MIN, LEVEL_MAX = 1, 10  # level n has 2n + 2 errors
+DEFAULT_LEVEL = 1
+DEFAULT_SPEED = "MED"
 ROUNDS_TO_WIN = 2
 COUNTDOWN = 3.0
 ROUND_RESULT_TIME = 2.5
 MATCH_RESULT_LOCK = 1.0  # seconds before the result screen takes input
+LEVEL_CLEAR_TIME = 2.5  # single player
+GAME_OVER_TIME = 2.5
+HISCORES_TIME = 8.0
 IDLE_TIMEOUT = 60.0
 BACK_HOLD_TO_QUIT = 2.0  # hold Select this long on the title to quit
 
@@ -55,7 +67,10 @@ COLOR_WELL = (18, 22, 46)
 COLOR_WIRE = (44, 54, 96)
 COLOR_TEXT = (240, 240, 255)
 COLOR_FPS = (255, 211, 107)
-GATE_COLORS = {"H": (250, 196, 40), "X": (232, 64, 72), "Y": (170, 82, 220), "Z": (56, 124, 236)}
+GATE_COLORS = {
+    "H": (250, 196, 40), "X": (232, 64, 72), "Y": (170, 82, 220), "Z": (56, 124, 236),
+    "T": (52, 190, 108), "Td": (240, 132, 40),
+}
 CNOT_COLOR = (170, 182, 204)
 PLAYER_COLORS = {"p1": (64, 136, 248), "p2": (236, 64, 72)}  # left blue, right red
 BACKGROUNDS = (  # two-tone tile patterns, one per round
@@ -83,11 +98,20 @@ REPEAT_INTERVAL = 0.06
 # Keyboard: a dev fallback only. The cabinet loader passes --no-keyboard, so
 # the keystrokes Batocera's evmapy fakes for P1's pad never reach the game.
 KEYMAP = {
-    "p1": {"left": ["K_a"], "right": ["K_d"], "down": ["K_s"], "cw": ["K_q"], "ccw": ["K_e"]},
-    "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "down": ["K_DOWN"], "cw": ["K_PERIOD"], "ccw": ["K_COMMA"]},
+    "p1": {"left": ["K_a"], "right": ["K_d"], "up": ["K_w"], "down": ["K_s"], "cw": ["K_q"], "ccw": ["K_e"],
+           "confirm": ["K_1", "K_RETURN"], "back": ["K_BACKSPACE"]},
+    "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"],
+           "cw": ["K_PERIOD"], "ccw": ["K_COMMA"], "confirm": ["K_2", "K_KP_ENTER"], "back": ["K_DELETE"]},
 }
-KEYS_CONFIRM = ["K_RETURN", "K_1", "K_2"]
-KEYS_BACK = ["K_BACKSPACE"]
+
+# --- Single-player scoring ----------------------------------------------------------
+SPEED_SCORE = {"LOW": 1, "MED": 2, "HI": 3}
+ERROR_POINTS = 100  # x speed x 2^(chain step - 1)
+CHAIN_MULT_CAP = 8
+LEVEL_CLEAR_BONUS = 500  # x level x speed
+HISCORE_SLOTS = 10
+# Outside the package folder, so a redeploy doesn't wipe it.
+SCORE_FILE = Path.home() / ".gate_drop_scores.json"
 
 # --- Sound -------------------------------------------------------------------------
 MASTER_VOLUME = 0.8

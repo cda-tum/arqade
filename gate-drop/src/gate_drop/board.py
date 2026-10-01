@@ -130,8 +130,21 @@ def random_piece(rng: random.Random, pill: int) -> Piece:
     if rng.random() < config.CNOT_SHARE:
         halves = (Cnot(pill, "c"), Cnot(pill, "t"))
     else:
-        halves = (Gate(rng.choice(config.GATE_KINDS), pill=pill), Gate(rng.choice(config.GATE_KINDS), pill=pill))
+        kinds = list(config.GATE_WEIGHTS)
+        weights = [config.GATE_WEIGHTS[k] for k in kinds]
+        a, b = rng.choices(kinds, weights, k=2)
+        halves = (Gate(a, pill=pill), Gate(b, pill=pill))
     return Piece(halves, config.SPAWN_X, 0)
+
+
+def attack_size(chain: int, big_pass: bool) -> int:
+    """How many T gates a resolve sequence sends: a chain of 2 or more steps,
+    or one pass with BIG_PASS matches, sends at least MIN_ATTACK, a longer
+    chain one per step, and a big pass inside a chain one more."""
+    if chain < 2 and not big_pass:
+        return 0
+    sent = max(config.MIN_ATTACK, chain) + (1 if big_pass and chain >= 2 else 0)
+    return min(config.MAX_ATTACK, sent)
 
 
 # --- cancellation ----------------------------------------------------------------------
@@ -158,7 +171,8 @@ def _cnot_pair(grid: Grid, x: int, lower: tuple, upper: tuple) -> Match | None:
 
 def find_matches(grid: Grid) -> list[Match]:
     """Every match on the board, scanning each wire from the bottom: at each
-    position a sandwich first, then a pair. Matches never overlap."""
+    position a sandwich first, then a pair (a gate next to its inverse).
+    Matches never overlap."""
     matches: list[Match] = []
     taken: set[Pos] = set()
     for x in range(grid.cols):
@@ -180,7 +194,7 @@ def find_matches(grid: Grid) -> list[Match]:
             if i + 1 < len(seq):
                 y1, c1 = seq[i + 1]
                 if (x, y1) not in taken:
-                    if isinstance(c0, Gate) and isinstance(c1, Gate) and c0.kind == c1.kind:
+                    if isinstance(c0, Gate) and isinstance(c1, Gate) and c1.kind == config.INVERSE[c0.kind]:
                         matches.append(Match("pair", ((x, y0), (x, y1))))
                         taken |= {(x, y0), (x, y1)}
                         i += 2
@@ -270,7 +284,7 @@ class Board:
         self.phase = "spawn"  # spawn, fall, settle, flash or over
         self.timer = 0.0
         self.fall_timer = 0.0
-        self.fall_interval = config.FALL_START
+        self.fall_interval = config.SPEED_FALL[config.DEFAULT_SPEED][0]
         self.chain = 0
         self.big_pass = False
         self.pending: list[Match] = []
@@ -390,7 +404,7 @@ class Board:
             events.append(Event("flash", tuple(c for m in matches for c in m.cells), self.chain))
             return
         if self.chain:
-            sent = min(config.MAX_ATTACK, self.chain - 1) + (1 if self.big_pass else 0)
+            sent = attack_size(self.chain, self.big_pass)
             events.append(Event("chain", value=self.chain))
             if sent:
                 self.outgoing += sent

@@ -41,4 +41,5 @@ def test_with_no_pads_and_no_keys_the_frame_is_idle():
     inp.update(1 / 60)
     fi = inp.frame_input()
     assert all(p.move == 0 and not p.cw and not p.soft for p in fi.players.values())
+    assert all(d == (0, 0) for d in fi.nav.values())
     assert not fi.confirm and not fi.back and not fi.activity

@@ -2,16 +2,17 @@ import random
 
 from gate_drop import config
 from gate_drop.board import (
-    Board, Cnot, Gate, Grid, Piece, PlayerInput, apply_matches, find_matches, settle_step,
+    Board, Cnot, Gate, Grid, Piece, PlayerInput, apply_matches, attack_size, find_matches,
+    random_piece, settle_step,
 )
 
 B = config.ROWS - 1  # the bottom row
 
 
 def grid_from(*rows):
-    """The bottom rows of a board, listed top to bottom: '.' empty, H X Y Z
-    gates, x y z errors, c and t a CNOT's control and target (each paired with
-    the t or c right next to it)."""
+    """The bottom rows of a board, listed top to bottom: '.' empty, H X Y Z T
+    gates, D a T-dagger, x y z errors, c and t a CNOT's control and target
+    (each paired with the t or c right next to it)."""
     g = Grid()
     top = config.ROWS - len(rows)
     pill = 100
@@ -19,8 +20,10 @@ def grid_from(*rows):
         y, x = top + dy, 0
         while x < len(row):
             ch = row[x]
-            if ch in "HXYZ":
+            if ch in "HXYZT":
                 g.set((x, y), Gate(ch))
+            elif ch == "D":
+                g.set((x, y), Gate("Td"))
             elif ch in "xyz":
                 g.set((x, y), Gate(ch.upper(), error=True))
             elif ch in "ct":
@@ -38,7 +41,7 @@ def column(g, x):
     for y in range(config.ROWS - 1, -1, -1):
         c = g.get((x, y))
         if isinstance(c, Gate):
-            out.append(c.kind.lower() if c.error else c.kind)
+            out.append("D" if c.kind == "Td" else c.kind.lower() if c.error else c.kind)
         elif isinstance(c, Cnot):
             out.append(c.role)
     return "".join(out)
@@ -69,6 +72,36 @@ def test_two_identical_gates_on_a_wire_cancel():
         assert [m.kind for m in find_matches(g)] == ["pair"]
         resolve(g)
         assert column(g, 0) == ""
+
+
+def test_t_cancels_with_t_dagger_but_not_with_itself():
+    assert [m.kind for m in find_matches(grid_from("T.....", "D....."))] == ["pair"]
+    assert [m.kind for m in find_matches(grid_from("D.....", "T....."))] == ["pair"]
+    assert find_matches(grid_from("T.....", "T.....")) == []  # T T = S, not the identity
+    assert find_matches(grid_from("D.....", "D.....")) == []
+
+
+def test_t_and_t_dagger_are_rarer_than_the_other_gates():
+    rng = random.Random(0)
+    counts = {}
+    for i in range(3000):
+        piece = random_piece(rng, i)
+        if not piece.is_cnot:
+            for half in piece.halves:
+                counts[half.kind] = counts.get(half.kind, 0) + 1
+    assert set(counts) == set(config.GATE_KINDS)
+    assert counts["T"] < 0.7 * counts["H"] and counts["Td"] < 0.7 * counts["X"]
+
+
+def test_attack_sizes():
+    # A 2-step chain (or one pass with 3+ matches) sends 2 T gates, a 3-step
+    # chain 3; a big pass inside a chain adds one; never more than 4.
+    assert attack_size(1, False) == 0
+    assert attack_size(1, True) == 2
+    assert attack_size(2, False) == 2
+    assert attack_size(2, True) == 3
+    assert attack_size(3, False) == 3
+    assert attack_size(6, True) == config.MAX_ATTACK
 
 
 def test_different_gates_or_different_wires_do_not_cancel():
@@ -248,7 +281,7 @@ def test_a_cnot_only_swaps_its_sides():
 
 def test_gravity_and_soft_drop():
     b = make_board()
-    run(b, config.FALL_START + 0.01)
+    run(b, b.fall_interval + 0.01)
     assert b.piece.y == 1
     run(b, 0.2, PlayerInput(soft=True))
     assert b.piece.y >= 4
@@ -271,13 +304,13 @@ def test_a_pill_that_cancels_clears_after_a_flash():
     assert column(b.grid, 2) == "Z"  # the top half fell into place
 
 
-def test_a_two_step_chain_sends_one_noise_gate():
+def test_a_two_step_chain_sends_two_noise_gates():
     b = make_board(piece=Piece((Gate("Z", pill=9), Gate("X", pill=9)), 0, 0, rot=1))
     b.grid.set((0, B), Gate("Z"))
     b.grid.set((0, B - 1), Gate("X"))
     events = drop(b)  # X lands on X; then the Z on top falls onto the Z
     assert [e.value for e in events if e.kind == "chain"] == [2]
-    assert b.outgoing == 1
+    assert b.outgoing == 2
     assert column(b.grid, 0) == ""
 
 
