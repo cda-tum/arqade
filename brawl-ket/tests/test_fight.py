@@ -87,9 +87,17 @@ def test_jab_hits_a_standing_rival_and_flips_a_light():
     hits = of(events, "hit", "logical")
     assert [(e.kind, e.player, e.error) for e in hits] == [("hit", "p2", qec.X)]
     p2 = fight.fighters["p2"]
-    assert p2.health == 100 - JAB.chip == 97
+    assert p2.health == 100 - JAB.chip
     assert len(p2.code.flipped) == 1
     assert fight.fighters["p1"].health == 100
+
+
+def test_the_jab_reaches_70_px_but_not_80():
+    # the jab box ends 58 px ahead; the rival's hurtbox starts 14 px before its x
+    hit = of(script(new(gap=70.0), 20, p1={0: A}), "hit", "logical")
+    miss = of(script(new(gap=80.0), 20, p1={0: A}), "hit", "logical")
+    assert [e.kind for e in hit] == ["hit"]
+    assert miss == []
 
 
 def test_hit_event_is_where_the_boxes_overlap():
@@ -106,7 +114,6 @@ def test_jab_jab_breaks_trio_with_a_logical_error():
     hits = of(events, "hit", "logical")
     assert [e.kind for e in hits] == ["hit", "logical"]
     assert fight.fighters["p2"].health == 100 - JAB.chip - (LOGICAL_DAMAGE + JAB.bonus)
-    assert fight.fighters["p2"].health == 100 - 3 - 22
     assert fight.fighters["p2"].code.flipped == set()       # a logical error re-encodes
 
 
@@ -116,7 +123,7 @@ def test_a_standing_attack_on_a_croucher_is_logical_at_once():
     assert fight.fighters["p2"].stance == "crouch"
     events = script(fight, 20, p1={0: A})
     assert [(e.kind, e.error) for e in of(events, "hit", "logical")] == [("logical", qec.X)]
-    assert fight.fighters["p2"].health == 100 - LOGICAL_DAMAGE
+    assert fight.fighters["p2"].health == 100 - LOGICAL_DAMAGE - JAB.bonus
 
 
 def test_low_attack_on_a_stander_is_logical_at_once():
@@ -124,7 +131,7 @@ def test_low_attack_on_a_stander_is_logical_at_once():
     fight.fighters["p1"].code.switch()      # p1 crouches and uses crouch.A (a Z error)
     events = script(fight, 20, p1=FighterInput(down=True, a=True))
     assert [(e.kind, e.error) for e in of(events, "hit", "logical")] == [("logical", qec.Z)]
-    assert fight.fighters["p2"].health == 100 - LOGICAL_DAMAGE
+    assert fight.fighters["p2"].health == 100 - LOGICAL_DAMAGE - TRIO.moves["crouch.A"].bonus
 
 
 def test_throw_is_always_logical():
@@ -171,7 +178,7 @@ def test_a_trade_applies_both_hits():
     events = script(fight, 20, p1={0: A}, p2={0: A})
     hits = of(events, "hit", "logical")
     assert sorted((e.kind, e.player) for e in hits) == [("hit", "p1"), ("hit", "p2")]
-    assert fight.fighters["p1"].health == fight.fighters["p2"].health == 97
+    assert fight.fighters["p1"].health == fight.fighters["p2"].health == 100 - JAB.chip
     # both moves count as having connected, and both fighters are stunned
     assert fight.fighters["p1"].action == fight.fighters["p2"].action == "hitstun"
 
@@ -240,7 +247,7 @@ def test_presses_in_hitstop_are_buffered_so_the_chain_cancel_comes_out():
         events += fight.step({"p1": inp, "p2": IDLE})
     hits = of(events, "hit", "logical")
     assert [e.kind for e in hits] == ["hit", "logical"]         # TRIO breaks on the second jab
-    assert fight.fighters["p2"].health == 100 - 3 - 22
+    assert fight.fighters["p2"].health == 100 - JAB.chip - (LOGICAL_DAMAGE + JAB.bonus)
 
 
 def test_a_press_in_hitstop_does_not_age():
@@ -328,6 +335,22 @@ def test_a_shot_cannot_hit_its_own_owner():
     events = script(fight, 3)
     assert of(events, "hit", "logical") == []
     assert p1.health == 100 and len(fight.shots) == 1
+
+
+def photon_run(jump_at, gap=80.0, frames=120):
+    """A PHOTON `gap` px from a standing p1, flying at it; p1 jumps straight up on frame jump_at
+    (None: it stays put). Returns every hit or logical event."""
+    fight = new(gap=300.0)
+    p1 = fight.fighters["p1"]
+    fight.shots.append(Shot("p2", PHOTON, p1.x + gap, 0.0, -PHOTON.projectile.speed, 200))
+    return of(script(fight, frames, p1={jump_at: FighterInput(up=True)} if jump_at is not None else IDLE),
+              "hit", "logical")
+
+
+def test_a_jump_clears_a_photon_80_px_away():
+    assert [e.kind for e in photon_run(None)] == ["hit"]        # standing still it connects
+    assert photon_run(0) == []
+    assert photon_run(0, gap=60.0) == []        # even a late jump: the old 9.5 jump needed 70 px
 
 
 def test_projectiles_are_too_slow_to_tunnel():
@@ -459,7 +482,7 @@ def test_fighters_in_the_air_pass_through_each_other():
 
 def test_ko_ends_the_round():
     fight = new()
-    fight.fighters["p2"].health = 3
+    fight.fighters["p2"].health = JAB.chip
     events = script(fight, 20, p1={0: A})
     assert kinds(events)[-1] == "ko" and kinds(events).count("ko") == 1
     assert fight.over and fight.winner == "p1"
@@ -470,7 +493,7 @@ def test_ko_ends_the_round():
 
 def test_a_double_ko_is_a_draw():
     fight = new()
-    fight.fighters["p1"].health = fight.fighters["p2"].health = 3
+    fight.fighters["p1"].health = fight.fighters["p2"].health = JAB.chip
     events = script(fight, 20, p1={0: A}, p2={0: A})
     assert "ko" in kinds(events)
     assert fight.over and fight.winner is None
@@ -491,7 +514,7 @@ def test_timeout_higher_health_wins_and_equal_is_a_draw():
 
 def test_ko_beats_timeout_on_the_same_frame():
     fight = new()
-    fight.fighters["p2"].health = 3
+    fight.fighters["p2"].health = JAB.chip
     fight.frames_left = JAB_HIT_STEP + 1
     events = script(fight, 20, p1={0: A})
     assert "ko" in kinds(events) and "timeout" not in kinds(events)

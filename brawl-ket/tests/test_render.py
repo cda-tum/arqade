@@ -1,14 +1,27 @@
 """Smoke tests: bot-against-bot fights render without errors."""
 
+from itertools import pairwise
+
 import pygame
 import pytest
 
 from brawl_ket import palette as P
+from brawl_ket import qec
 from brawl_ket.bot import Bot
 from brawl_ket.config import FLOOR_Y, INTERNAL_HEIGHT, INTERNAL_WIDTH
 from brawl_ket.fight import Event, Fight
 from brawl_ket.moves import TRIO
-from brawl_ket.render import TAG_HI, TAG_LO, TAG_W, Renderer
+from brawl_ket.render import (
+    DANGER_BEAT,
+    DIVIDER_GAP,
+    LIGHT_GAP,
+    TAG_HI,
+    TAG_LO,
+    TAG_W,
+    Renderer,
+    light_xs,
+    tag_state,
+)
 
 
 @pytest.fixture
@@ -101,3 +114,60 @@ def test_a_cancel_blends_out_of_the_pose_drawn(surface):
     r._pose("p1", f)
     f.frame = 0
     assert r._pose("p1", f) == lerp(POSES["jab_hit"], POSES["jab_wind"], 1 / EASE_FRAMES)
+
+
+def test_tag_state_is_danger_once_t_lights_are_down():
+    for distance in (3, 5, 7):
+        code = qec.Code(distance, 120)
+        states = []
+        for _ in range(code.t + 1):
+            states.append(tag_state(code))
+            code.hit(qec.X)
+        assert states == ["ok"] * code.t + ["danger"], distance
+        assert tag_state(code) == "ok"     # the last hit was one more than t: a logical error, re-encoded
+
+
+def test_the_majority_line_sits_after_the_first_t_lights():
+    for n in (3, 5):
+        t = (n - 1) // 2
+        xs = light_xs(100.0, n, t)
+        gaps = [b - a for a, b in pairwise(xs)]
+        assert gaps[t - 1] == LIGHT_GAP + DIVIDER_GAP       # the room for the line
+        assert [g for i, g in enumerate(gaps) if i != t - 1] == [LIGHT_GAP] * (n - 2)
+
+
+def colours_in_tag(surface, r, fight, key, frames):
+    """Every colour drawn in a tag's rectangle, over `frames` frames."""
+    seen = set()
+    for _ in range(frames):
+        r.draw_fight(fight, [])
+        tag_y = r.tag_y[key]
+        x = round(fight.fighters[key].x)
+        area = pygame.Rect(x - TAG_W // 2, round(tag_y) - 20, TAG_W, 34).clip(surface.get_rect())
+        seen |= {tuple(surface.get_at((i, j)))[:3] for i in range(area.left, area.right)
+                 for j in range(area.top, area.bottom)}
+    return seen
+
+
+def test_the_danger_state_is_drawn_on_the_tag(surface):
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    p2 = fight.fighters["p2"]
+    safe = colours_in_tag(surface, r, fight, "p2", DANGER_BEAT * 2)
+    assert P.ORANGE not in safe
+    assert tag_state(p2.code) == "ok"
+    p2.code.hit(qec.X)                       # t = 1 light down: the next X is a logical error
+    assert tag_state(p2.code) == "danger"
+    danger = colours_in_tag(surface, r, fight, "p2", DANGER_BEAT * 2)
+    assert P.ORANGE in danger                # the unflipped lights pulse orange
+    assert P.shade(P.ORANGE, 0.6) in danger  # ... between two shades of it
+    assert P.BAD in danger                   # the flipped light, and the blinking "!"
+
+
+def test_a_bot_fight_with_the_danger_state_draws(surface):
+    r = Renderer(surface)
+    danger_seen = False
+    for fight, events in bot_frames(900):
+        r.draw_fight(fight, events)
+        danger_seen |= any(tag_state(f.code) == "danger" for f in fight.fighters.values())
+    assert danger_seen

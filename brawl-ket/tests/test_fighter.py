@@ -83,6 +83,17 @@ def test_jump_arcs_and_lands():
     assert ys[-5:] == [0.0] * 5
 
 
+def test_the_jump_is_high_and_still_short():
+    f = make()
+    f.step(FighterInput(up=True), FAR)
+    ys = [f.y]
+    while not (f.y == 0 and len(ys) > 3):
+        f.step(IDLE, FAR)
+        ys.append(f.y)
+    assert 130 <= max(ys) <= 150        # the apex (jump_vy 12, gravity 0.5): about 144 px
+    assert 44 <= len(ys) <= 52          # the airtime: about 48 frames
+
+
 def test_jump_keeps_horizontal_speed_from_dx():
     f = make()
     run(f, FighterInput(up=True, dx=1))
@@ -313,14 +324,14 @@ def test_take_hit_chips_or_logical():
     f = make()
     h0 = f.health
     assert f.take_hit(JAB, 1) == qec.FLIPPED
-    assert f.health == h0 - JAB.chip == h0 - 3
+    assert f.health == h0 - JAB.chip
     assert len(f.code.flipped) == 1
     assert f.take_hit(JAB, 1) == qec.LOGICAL
-    assert f.health == h0 - 3 - LOGICAL_DAMAGE
+    assert f.health == h0 - JAB.chip - LOGICAL_DAMAGE - JAB.bonus
     assert f.code.flipped == set()
     g = make()
     assert g.take_hit(LOW_JAB, 1) == qec.LOGICAL      # Z on the standing (bit) code
-    assert g.health == g.char.health - LOGICAL_DAMAGE
+    assert g.health == g.char.health - LOGICAL_DAMAGE - LOW_JAB.bonus
 
 
 def test_logical_damage_includes_the_move_bonus_and_health_clamps():
@@ -340,7 +351,7 @@ def test_hit_mid_switch_is_logical():
     assert f.switch_left > 0
     h0 = f.health
     assert f.take_hit(JAB, 1) == qec.LOGICAL       # an X would be correctable otherwise
-    assert f.health == h0 - LOGICAL_DAMAGE
+    assert f.health == h0 - LOGICAL_DAMAGE - JAB.bonus
     assert f.switch_left == 0
     assert f.action == "hitstun"
     assert f.code.basis == qec.PHASE               # the basis had already switched
@@ -557,6 +568,20 @@ def test_air_slots_are_used_while_airborne():
     f = make()
     jump_until(f, lambda f: f.y > 30)
     assert run(f, tap("b")) == [("attack", {"slot": "air.B"})]
+
+
+def test_every_air_attack_is_reachable_from_the_apex_and_ends_on_the_floor():
+    for slot, button in (("air.A", "a"), ("air.B", "b"), ("air.X", "x")):
+        f = make()
+        jump_until(f, lambda f: f.vy <= 0 and f.y > 120)        # at the top of the higher jump
+        assert run(f, tap(button)) == [("attack", {"slot": slot})], slot
+        events = []
+        for _ in range(80):
+            events += run(f)
+            if "land" in names(events):
+                break
+        assert "land" in names(events), slot
+        assert f.y == 0, slot
 
 
 def test_can_cancel_requires_a_hit_the_right_slot_and_chain_room():

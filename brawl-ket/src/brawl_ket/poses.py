@@ -55,9 +55,9 @@ POSES: dict[str, Pose] = {
     "jump": Pose(10, 105, 15, 40, -50, 80, 160, 30, 150),
     "hitstun": Pose(-28, 14, -8, -26, -14, -30, -70, -60, -100),
     "knockdown": Pose(-80, 72, 92, 62, 96, 140, 170, 120, 160),
-    # stand.A jab: a quick straight punch at the chest, weight back
+    # stand.A jab: a quick straight punch at the chest, leaning in (the fist reaches the 44 px jab box)
     "jab_wind": Pose(0, 26, -4, -24, -12, 30, 130, 24, 150),
-    "jab_hit": Pose(-4, 32, 0, -28, -14, 68, 68, 30, 150),
+    "jab_hit": Pose(12, 32, 0, -28, -14, 56, 56, 30, 150),
     # stand.B heavy: a big stepping straight, the back arm thrown back
     "heavy_wind": Pose(-14, 20, -6, -30, -14, -20, 80, 50, 140),
     "heavy_hit": Pose(8, 46, 6, -40, -26, 68, 68, -30, -60),

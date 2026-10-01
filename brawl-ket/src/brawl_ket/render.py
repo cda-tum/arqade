@@ -45,6 +45,8 @@ TORSO_EXTRA = {"lean": 5, "heavy": 8}      # the torso is this much thicker than
 PLATES = {"lean": False, "heavy": True}    # shoulder plates
 
 LIGHT_GAP = 11
+DIVIDER_GAP = 4             # extra room after the first t lights, for the majority line
+DANGER_BEAT = 24            # frames in one pulse of the unflipped lights (and of the "!")
 TAG_ABOVE_HEAD = 34         # the code lights sit this far above the head's centre
 RING_STEPS = 24             # pre-drawn cycle-ring sprites
 BAR_W, BAR_H, BAR_Y = 250, 12, 14
@@ -100,6 +102,18 @@ def outlined(text: str, size: int, color, outline=P.INK, thick: int = 1) -> pyga
             s.blit(ink, (t + dx, t + dy))
     s.blit(core, (t, t))
     return s
+
+
+def tag_state(code: qec.Code) -> str:
+    """"danger" once t lights are down: the next correctable hit breaks the majority vote
+    and is a logical error. Otherwise "ok"."""
+    return "danger" if len(code.flipped) == code.t else "ok"
+
+
+def light_xs(x0: float, n: int, t: int) -> list[int]:
+    """Where each of the code's n lights sits: evenly spaced, with DIVIDER_GAP extra after
+    the first t (the ones the code can repair), where the majority line goes."""
+    return [round(x0 + i * LIGHT_GAP + (DIVIDER_GAP if i >= t else 0)) for i in range(n)]
 
 
 def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
@@ -448,16 +462,23 @@ class Renderer:
         a[0], b[0] = mid - side * TAG_W / 2, mid + side * TAG_W / 2
 
     def _code_tag(self, key: str, f: Fighter, at, ox: int, oy: int) -> None:
-        """The code over the head: the ket, the lights (flipped ones red) and the cycle ring."""
+        """The code over the head: the ket, the lights (flipped ones red), the majority line
+        and the cycle ring.
+
+        Lights flip from the left, so the line after the first t of them marks where one
+        more flipped light beats the majority vote. When t lights are down (tag_state is
+        "danger") the rest pulse orange and a "!" blinks beside the ket."""
         code = f.code
         n = code.distance
-        row = (n - 1) * LIGHT_GAP + 16             # the lights plus the ring
+        row = (n - 1) * LIGHT_GAP + DIVIDER_GAP + 16     # the lights, the majority line and the ring
         cx = at[0] + ox
         cy = round(at[1]) + oy
         x0 = cx - row / 2 + 4
         flash, left = self.flash[key]
         lit = flash is not None and left % 6 >= 2
         base = P.SKY if code.basis == qec.BIT else P.GOLD
+        danger = tag_state(code) == "danger"
+        beat = (self.t // (DANGER_BEAT // 2)) % 2 == 0
         surf = self.surface
         # a plate in the player's colour, with a tick pointing down at its own fighter
         color = PLAYER_COLORS[key]
@@ -469,15 +490,30 @@ class Renderer:
         pygame.draw.rect(surf, P.INK, plate.inflate(2, 2), border_radius=5)
         pygame.draw.rect(surf, color, plate, border_radius=4)
         pygame.draw.rect(surf, P.NIGHT, plate.inflate(-4, -4), border_radius=3)
-        for i in range(n):
-            x = round(x0 + i * LIGHT_GAP)
-            col = flash if lit else (P.BAD if i in code.flipped else base)
+        xs = light_xs(x0, n, code.t)
+        # the majority line: ink, two white columns, ink, in the gap after the t-th light
+        gx = xs[code.t - 1] + 7
+        surf.fill(P.INK, (gx - 1, cy - 6, 4, 12))
+        surf.fill(P.WHITE, (gx, cy - 6, 2, 12))
+        for i, x in enumerate(xs):
+            if lit:
+                col = flash
+            elif i in code.flipped:
+                col = P.BAD
+            elif danger:
+                col = P.ORANGE if beat else P.shade(P.ORANGE, 0.6)
+            else:
+                col = base
             pygame.draw.circle(surf, P.INK, (x, cy), 5)
             pygame.draw.circle(surf, col, (x, cy), 4)
             surf.fill(P.lighten(col, 0.6), (x - 2, cy - 2, 2, 2))
         ring = self.rings[min(RING_STEPS, int(code.progress * RING_STEPS))]
-        blit_center(surf, ring, (x0 + n * LIGHT_GAP + 1, cy))
-        blit_center(surf, outlined(code.label(), 8, P.WHITE), (cx, cy - 12))
+        blit_center(surf, ring, (xs[-1] + 12, cy))
+        label = outlined(code.label(), 8, P.WHITE)
+        blit_center(surf, label, (cx, cy - 12))
+        if danger and beat:
+            bang = outlined("!", 8, P.BAD)
+            blit_center(surf, bang, (cx + label.get_width() / 2 + bang.get_width() / 2 + 1, cy - 12))
 
     # --- the HUD -------------------------------------------------------------------------------
 

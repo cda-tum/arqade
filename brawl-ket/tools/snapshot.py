@@ -7,6 +7,10 @@ Writes:
 - poses_lean.png, poses_heavy.png: every pose in POSE_NAMES, labelled, facing
   right, in P1's colours;
 - moves_lean.png: every TRIO move as a strip of frames, as pose_for blends it;
+- code_tags.png: the code tag close up (x4 on top of the x2 save) in its states: normal, one
+  light flipped (danger, both beats of the pulse), the green flash after a correction, the
+  red flash after a logical error;
+- fight_danger.png: a bot fight at the moment a code is one hit from a logical error;
 - fight_start.png (the fighters walking in), fight_hit.png, fight_logical.png, fight_crouch.png, fight_shot.png,
   fight_knockdown.png: bot-against-bot frames at those moments (fight_boxes.png
   is the hit frame again with the hurt- and hitboxes drawn).
@@ -25,14 +29,14 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import pygame
 
-from brawl_ket import config
+from brawl_ket import config, qec
 from brawl_ket import palette as P
 from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
 from brawl_ket.moves import TRIO
 from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
-from brawl_ket.render import Renderer, draw_puppet, outlined
+from brawl_ket.render import DANGER_BEAT, Renderer, draw_puppet, outlined, tag_state
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 CELL_W, CELL_H, COLS = 180, 230, 6
@@ -86,6 +90,36 @@ def move_sheet() -> pygame.Surface:
     return sheet
 
 
+def tag_sheet() -> pygame.Surface:
+    """The code tag in each of its states, cropped around p1's and p2's heads and magnified."""
+    surface = pygame.Surface((W, H))
+    zoom, crop = 4, pygame.Rect(0, 0, 90, 46)
+    cases = [
+        ("normal", lambda c, r, k: None),
+        ("1 flipped: danger (bright)", lambda c, r, k: (c.hit(qec.X), setattr(r, "t", 0))),
+        ("1 flipped: danger (dim)", lambda c, r, k: (c.hit(qec.X), setattr(r, "t", DANGER_BEAT // 2))),
+        ("corrected: green flash", lambda c, r, k: r.flash.__setitem__(k, (P.GOOD, 21))),
+        ("logical: red flash", lambda c, r, k: r.flash.__setitem__(k, (P.BAD, 21))),
+    ]
+    sheet = pygame.Surface((len(cases) * crop.w * zoom, 2 * (crop.h * zoom + 16)))
+    sheet.fill(P.INK)
+    for col, (label, setup) in enumerate(cases):
+        for row, key in enumerate(("p1", "p2")):
+            fight = Fight({"p1": TRIO, "p2": TRIO})
+            fight.fighters["p1"].x, fight.fighters["p2"].x = 280, 360
+            r = Renderer(surface)
+            r.draw_fight(fight, [])
+            setup(fight.fighters[key].code, r, key)
+            r.draw_fight(fight, [])
+            f = fight.fighters[key]
+            crop.center = (round(f.x), round(r.tag_y[key]) - 6)
+            shot = pygame.transform.scale_by(surface.subsurface(crop.clip(surface.get_rect())), zoom)
+            x, y = col * crop.w * zoom, row * (crop.h * zoom + 16)
+            sheet.blit(shot, (x, y + 16))
+            sheet.blit(outlined(f"{key} {label}", 8, P.WHITE), (x + 4, y + 2))
+    return sheet
+
+
 def find_frames(out_dir: str) -> None:
     """Play bot fights until each wanted moment has been seen, saving the frame."""
     surface = pygame.Surface((W, H))
@@ -94,6 +128,8 @@ def find_frames(out_dir: str) -> None:
         "logical": lambda f, ev, ago: ago.get("logical") == 8,
         "crouch": lambda f, ev, ago: sorted(x.action for x in f.fighters.values()) in (["crouch", "idle"], ["crouch", "walk"])
         and all(ago.get(k, 99) > 80 for k in ("hit", "logical")),
+        "danger": lambda f, ev, ago: any(tag_state(x.code) == "danger" for x in f.fighters.values())
+        and ago.get("hit") == 6,
         "shot": lambda f, ev, ago: bool(f.shots) and abs(f.shots[0].x - f.fighters["p2"].x) > 120,
         "knockdown": lambda f, ev, ago: any(x.action == "knockdown" and x.frame == 14 for x in f.fighters.values()),
     }
@@ -134,6 +170,7 @@ def main(argv: list[str]) -> None:
     for build in SCALE:
         save(pose_sheet(build), out_dir, f"poses_{build}.png")
     save(move_sheet(), out_dir, "moves_lean.png")
+    save(tag_sheet(), out_dir, "code_tags.png")
     find_frames(out_dir)
 
 

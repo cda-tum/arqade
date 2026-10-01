@@ -28,7 +28,7 @@ START_X = {"p1": 220, "p2": 420}
 # --- Round timing and rules ---------------------------------------------------
 ROUND_FRAMES = frames(60.0)
 ROUNDS_TO_WIN = 2
-LOGICAL_DAMAGE = 22      # plus Move.bonus
+LOGICAL_DAMAGE = 12      # plus Move.bonus: a light costs 12, a heavy 26, a special 28
 SWITCH_FRAMES = 8        # game rule: the stance switch window (mid-H)
 HITSTOP = 5
 HITSTOP_LOGICAL = 12

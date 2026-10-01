@@ -3,7 +3,7 @@ import importlib.util
 import pytest
 
 from brawl_ket import config, qec
-from brawl_ket.moves import CHARACTERS, SLOTS
+from brawl_ket.moves import CHARACTERS, SLOTS, Box
 
 
 def all_moves():
@@ -54,3 +54,43 @@ def test_every_kind_is_known():
     kinds = {"normal", "throw", "projectile", "special", "reencode"}
     for _c, _slot, m in all_moves():
         assert m.kind in kinds
+
+
+LIGHTS = ("stand.A", "crouch.A", "air.A")
+HEAVIES = ("stand.B", "crouch.B", "air.B")
+SPECIALS = ("stand.X", "crouch.X", "air.X")
+
+
+def logical_cost(m):
+    """Health a logical error from move m takes (the same sum Fighter.take_hit does)."""
+    return config.LOGICAL_DAMAGE + m.bonus
+
+
+def test_a_heavy_logical_error_costs_at_least_twice_a_light_one():
+    trio = CHARACTERS["TRIO"].moves
+    for light in LIGHTS:
+        for heavy in HEAVIES + SPECIALS + ("throw",):
+            assert logical_cost(trio[heavy]) >= 2 * logical_cost(trio[light]), (light, heavy)
+
+
+def test_the_damage_tiers():
+    trio = CHARACTERS["TRIO"].moves
+    assert config.LOGICAL_DAMAGE == 12
+    for slot in LIGHTS:
+        assert (trio[slot].chip, logical_cost(trio[slot])) == (2, 12), slot
+    for slot in HEAVIES:
+        assert (trio[slot].chip, logical_cost(trio[slot])) == (6, 26), slot
+    for slot in SPECIALS:
+        assert (trio[slot].chip, logical_cost(trio[slot])) == (6, 28), slot
+    assert (trio["throw"].chip, logical_cost(trio["throw"])) == (0, 26)
+
+
+def test_trio_jump_numbers():
+    trio = CHARACTERS["TRIO"]
+    assert (trio.jump_vy, trio.gravity) == (12.0, 0.5)
+
+
+def test_the_jab_boxes_are_long():
+    trio = CHARACTERS["TRIO"].moves
+    assert trio["stand.A"].hitbox == Box(14, 70, 44, 14)
+    assert trio["crouch.A"].hitbox == Box(12, 20, 44, 12)
