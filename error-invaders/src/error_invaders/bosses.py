@@ -357,7 +357,7 @@ class Packet(Boss):
     kind = "packet"
     def __init__(self, tier, two):
         super().__init__(tier, two)
-        self.hp = self.maxhp = 30 + 8 * tier + (6 if two else 0)
+        self.hp = self.maxhp = 15 + 4 * tier + (3 if two else 0)
         self.x, self.y = W / 2, -60
         self.vx = self.vy = 0.0
         self.sigma = WIDE_SIGMA
