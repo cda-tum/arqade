@@ -6,12 +6,63 @@ already sitting on its wires. Gate pills fall onto the wires, and gates that
 cancel each other vanish. **The first player to clear every error on their
 board wins the round.**
 
-- **Players:** exactly 2, versus. A solo mode is out of scope for v1.
+- **Players:** 2, versus, or 1, Dr. Mario style (see Revision 2).
 - **Target:** the Batocera cabinet described in `../../../AGENTS.md` (Pi 4,
   1920x1080, two 6-button pads, Python 3.11, pygame 2.5.2).
 - **Look:** chunky, colourful SNES-era pixel art, all procedural. No neon.
 - **Name:** "Gate Drop" is a working title. The menu name lives only in
   `gamelist.xml`, so renaming it later costs nothing.
+
+## Revision 2: menus and single player
+
+Requested after the first look. Where this disagrees with the sections below,
+this revision wins.
+
+- **Title:** the stick picks **1 PLAYER** or **2 PLAYERS**, and A or Start
+  goes on to the setup screen.
+- **Setup screen:** every player picks a **LEVEL** from 1 to 10 and a
+  **SPEED** of LOW, MED or HI.
+  - The stick moves between the two rows and changes the values. A is
+    ready, B un-readies, and B while not ready goes back to the title.
+  - With two players each sets their own, as a handicap, side by side. The
+    countdown starts once everyone is ready.
+  - The choices are remembered for the next game.
+- **Level n** has `2n + 2` errors, from 4 up to 22, still in the bottom 8
+  rows. Players on the same level get the same layout. In versus the level
+  stays fixed for the whole match, instead of growing every round.
+- **Speed** sets the starting fall interval and its floor: LOW 0.9 s to
+  0.3 s, MED 0.65 s to 0.22 s, HI 0.42 s to 0.15 s. It speeds up 10% every
+  30 s, as before.
+- **Single player, Dr. Mario style:**
+  - **Controls:** one centred board, and either pad plays it.
+  - **Levels:** clearing every error is a level clear. The next level
+    starts with more errors, and after level 10 it repeats level 10 with
+    fresh layouts.
+  - **Scoring:** each error cleared scores `100 x speed (LOW 1, MED 2, HI 3)
+    x 2^(chain step - 1)`, with the chain multiplier capped at 8. A level
+    clear adds `500 x level x speed`.
+  - **Game over:** topping out ends the game. A score that makes the top 10
+    is entered with 3 initials: the stick changes the letter and moves
+    between them, and A confirms. The table is then shown.
+  - **High scores:** they are kept outside the package folder
+    (`~/.gate_drop_scores.json`), so a redeploy doesn't wipe them. Idling on
+    the initials screen saves what has been entered so far.
+
+## Revision 3: rarer T gates, CNOT propagation
+
+- **T and T-dagger** are 1 pill half in 26 each (weights H, X, Y, Z 6 each,
+  T and T-dagger 1 each).
+- **CNOT propagation:** an X directly above a CNOT's control, or a Z directly
+  above its target, with that same Pauli directly under each half of the
+  CNOT, is a match. All three vanish, and the CNOT stays. Gaps are skipped,
+  as everywhere.
+  - It is exact: an X after the control equals an X on both wires before the
+    CNOT (CNOT · X⊗I · CNOT = X⊗X), so the X's cancel pairwise, leaving a
+    bare CNOT.
+  - Only that full pattern counts. An X on a target, a Z on a control, or a
+    pair that doesn't match does nothing, since there is still no general
+    commuting.
+  - Propagations are found before the pair and sandwich scan.
 
 ## 1. Rules
 
@@ -195,8 +246,6 @@ pytest, with the weight on `board.py`, `levels.py` and `match.py`:
 
 ## Out of scope for v1
 
-- Solo mode (beating your own time on a fixed layout). It would be a cheap
-  addition afterwards.
 - Commuting rules: gates sliding through CNOTs, three CNOTs making a SWAP.
 - Any gate beyond H, X, Y, Z and CNOT.
 - A pause menu and high scores.
