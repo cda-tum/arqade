@@ -12,9 +12,9 @@ from brawl_ket.config import (
     STAGE_RIGHT,
     START_X,
 )
-from brawl_ket.fight import Event, Fight, Shot
+from brawl_ket.fight import Event, Fight, Shot, _overlap
 from brawl_ket.fighter import IDLE, FighterInput
-from brawl_ket.moves import TRIO, Box
+from brawl_ket.moves import CHARACTERS, TRIO, Box
 
 A = FighterInput(a=True)
 B = FighterInput(b=True)
@@ -53,6 +53,14 @@ def kinds(events):
 
 def of(events, *wanted):
     return [e for e in events if e.kind in wanted]
+
+
+def snapshot(fight):
+    return (
+        fight.frames_left,
+        [(f.x, f.y, f.frame, f.stun, f.code.timer) for f in fight.fighters.values()],
+        [(s.x, s.life) for s in fight.shots],
+    )
 
 
 def with_move(slot, move):
@@ -166,29 +174,83 @@ def test_a_trade_applies_both_hits():
     assert fight.fighters["p1"].action == fight.fighters["p2"].action == "hitstun"
 
 
+def test_a_downed_fighter_cannot_be_hit():
+    SWEEP = TRIO.moves["crouch.B"]
+    fight = new()
+    p2 = fight.fighters["p2"]
+    p2.take_hit(replace(SWEEP, chip=0, error=qec.X, bonus=0), 1)
+    # a knockdown with a corrected hit: no health lost
+    assert p2.action == "knockdown" and p2.health == 100
+    events = script(fight, 12, p1={0: A})
+    assert of(events, "hit", "logical") == [] and p2.health == 100 and p2.action == "knockdown"
+    # a shot flies over a downed fighter
+    fight.shots.append(Shot("p1", PHOTON, p2.x - 10, 0.0, 4.0, 100))
+    assert of(script(fight, 3), "hit", "logical") == [] and p2.health == 100
+    assert len(fight.shots) == 1
+
+
+def test_the_landing_shockwave_skips_a_downed_rival():
+    fight = Fight({"p1": COLLAPSE, "p2": TRIO})
+    fight.fighters["p2"].x = fight.fighters["p1"].x + 60
+    p2 = fight.fighters["p2"]
+    p2.take_hit(replace(TRIO.moves["crouch.B"], chip=0, error=qec.X, bonus=0), 1)
+    p1 = fight.fighters["p1"]
+    events = []
+    for i in range(300):
+        inp = FighterInput(up=True) if i == 0 else X if p1.y > 20 and p1.action == "jump" else IDLE
+        events += fight.step({"p1": inp, "p2": IDLE})
+        if p1.action == "attack":
+            p1.move_hit = True
+        if of(events, "land"):
+            break
+    events += script(fight, 3)
+    assert of(events, "hit", "logical") == [] and p2.health == 100
+
+
 # --- hitstop ----------------------------------------------------------------------------
 
 def test_hitstop_freezes_everything():
     fight = new()
+    fight.shots.append(Shot("p1", PHOTON, 100.0, 200.0, 4.0, 50))    # high above the fighters
     first = []
     for i in range(30):
         first = fight.step({"p1": A if i == 0 else IDLE, "p2": IDLE})
         if of(first, "hit"):
             break
     assert fight.hitstop == HITSTOP
-    snap = (
-        fight.frames_left,
-        [(f.x, f.y, f.frame, f.stun, f.code.timer) for f in fight.fighters.values()],
-    )
+    snap = snapshot(fight)
+    assert snap[2]      # the shot is still there to be frozen
     for _ in range(HITSTOP):
         assert fight.step({"p1": A, "p2": A}) == []
-        assert snap == (
-            fight.frames_left,
-            [(f.x, f.y, f.frame, f.stun, f.code.timer) for f in fight.fighters.values()],
-        )
+        assert snapshot(fight) == snap
     assert fight.hitstop == 0
     fight.step({"p1": IDLE, "p2": IDLE})
     assert fight.frames_left == snap[0] - 1
+    assert fight.shots[0].x == snap[2][0][0] + 4.0
+
+
+def test_presses_in_hitstop_are_buffered_so_the_chain_cancel_comes_out():
+    fight = new()
+    events = []
+    for i in range(80):
+        broken = bool(of(events, "logical"))
+        inp = A if not broken and (i == 0 or fight.hitstop > 0) else IDLE   # A on every hitstop frame
+        events += fight.step({"p1": inp, "p2": IDLE})
+    hits = of(events, "hit", "logical")
+    assert [e.kind for e in hits] == ["hit", "logical"]         # TRIO breaks on the second jab
+    assert fight.fighters["p2"].health == 100 - 3 - 22
+
+
+def test_a_press_in_hitstop_does_not_age():
+    fight = new()
+    for i in range(30):
+        fight.step({"p1": A if i == 0 else IDLE, "p2": IDLE})
+        if fight.hitstop:
+            break
+    fight.step({"p1": A, "p2": IDLE})
+    buffered = list(fight.fighters["p1"].buffer)
+    fight.step({"p1": IDLE, "p2": IDLE})
+    assert [p.age for p in buffered] == [0] and buffered[0].button == "a"
 
 
 def test_a_logical_error_stops_the_game_for_longer():
@@ -258,11 +320,20 @@ def test_shots_from_different_owners_cancel_each_other():
 
 def test_a_shot_cannot_hit_its_own_owner():
     fight = new(gap=300.0)
-    fight.fighters["p2"].x = 40.0       # p1 faces p2 (to the left) and shoots that way
-    fight.fighters["p1"].x = 340.0
-    events = script(fight, 150, p1={0: X})
-    assert [(e.kind, e.player) for e in of(events, "hit")] == [("hit", "p2")]
-    assert fight.fighters["p1"].health == 100
+    p1 = fight.fighters["p1"]
+    fight.shots.append(Shot("p1", PHOTON, p1.x, 0.0, 4.0, 100))     # inside p1's own hurtbox
+    assert _overlap(fight.shots[0].box, p1.hurtbox) is not None
+    events = script(fight, 3)
+    assert of(events, "hit", "logical") == []
+    assert p1.health == 100 and len(fight.shots) == 1
+
+
+def test_projectiles_are_too_slow_to_tunnel():
+    # collisions are overlap-only after each move (see Fight._move_shots)
+    for char in CHARACTERS.values():
+        for move in char.moves.values():
+            if move.projectile is not None:
+                assert move.projectile.speed * 2 < move.projectile.box.w + 16
 
 
 # --- landing shockwave ----------------------------------------------------------------
@@ -322,6 +393,28 @@ def test_an_ordinary_dive_has_no_shockwave():
         if p1.action == "attack":
             p1.move_hit = True
     assert of(events, "hit", "logical") == []
+
+
+# --- p1 and p2 are treated alike ----------------------------------------------------------
+
+def test_a_throw_against_a_walking_rival_is_the_same_for_p1_and_p2():
+    # 33 px apart at the start of the frame; the rival walks away to 35.2, out of range.
+    # Both fighters read the rival's x from the START of the frame, so both get a throw.
+    outcomes = []
+    for attacker, rival, side in (("p1", "p2", 1), ("p2", "p1", -1)):
+        fight = new(gap=33.0)
+        inputs = {attacker: FighterInput(dx=side, b=True), rival: FighterInput(dx=side)}
+        events = list(fight.step(inputs))
+        assert fight.fighters[attacker].slot == "throw", attacker
+        for _ in range(20):
+            events += fight.step({attacker: IDLE, rival: FighterInput(dx=side)})
+        hits = [(e.kind, e.player, e.error) for e in of(events, "hit", "logical")]
+        outcomes.append((
+            [(k, "rival" if p == rival else "attacker", err) for k, p, err in hits],
+            fight.fighters[rival].health,
+            fight.fighters[attacker].health,
+        ))
+    assert outcomes[0] == outcomes[1]
 
 
 # --- bodies -----------------------------------------------------------------------------

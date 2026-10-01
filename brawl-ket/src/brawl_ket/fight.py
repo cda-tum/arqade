@@ -126,6 +126,9 @@ class Fight:
             return []
         if self.hitstop > 0:
             self.hitstop -= 1
+            # Nothing moves in the freeze, but presses still count (chain cancels).
+            for key, f in self.fighters.items():
+                f.buffer_presses(inputs.get(key, IDLE))
             return []
 
         events: list[Event] = []
@@ -143,9 +146,11 @@ class Fight:
     # --- fighters, shots --------------------------------------------------------------
 
     def _step_fighters(self, inputs: dict[str, FighterInput], events: list[Event]) -> None:
+        # Both fighters see where the rival stood at the START of the frame, so p1 and
+        # p2 are treated alike (p1 stepping first must not change what p2 sees).
+        start_x = {key: f.x for key, f in self.fighters.items()}
         for key, f in self.fighters.items():
-            rival = self.fighters[_other(key)]
-            for kind, data in f.step(inputs.get(key, IDLE), rival.x):
+            for kind, data in f.step(inputs.get(key, IDLE), start_x[_other(key)]):
                 if kind == "projectile":
                     move = data["move"]
                     assert move.projectile is not None
@@ -176,6 +181,9 @@ class Fight:
                 a.x = _clamp(a.x - side * gap)
 
     def _move_shots(self) -> None:
+        # Collisions are overlap-only after each move, with no sweep, so a projectile
+        # faster than about half the combined box widths per frame would tunnel
+        # through its target (tests/test_fight.py checks every projectile's speed).
         for s in self.shots:
             s.x += s.vx
             s.life -= 1
@@ -207,7 +215,10 @@ class Fight:
             self._landing_strike(key, f, rival_key, rival, strikes)
         for s in self.shots:
             rival_key = _other(s.owner)
-            where = _overlap(s.box, self.fighters[rival_key].hurtbox)
+            target = self.fighters[rival_key]
+            if target.action == "knockdown":     # a downed fighter can't be hit; shots fly over
+                continue
+            where = _overlap(s.box, target.hurtbox)
             if where is not None:
                 strikes.append(_Strike(None, rival_key, s.move, s.facing, where, s))
 
@@ -234,6 +245,8 @@ class Fight:
         m = f.move
         if m is None or m.hitbox is None or f.move_hit or f.phase != "active":
             return
+        if rival.action == "knockdown":
+            return
         if m.kind == "throw" and (rival.y != 0 or rival.action in _STUNNED):
             return
         where = _overlap(f.world_box(m.hitbox), rival.hurtbox)
@@ -251,7 +264,7 @@ class Fight:
             return
         move = win.move
         assert move.landing is not None and move.landing_error is not None
-        if not win.hit:
+        if not win.hit and rival.action != "knockdown":
             where = _overlap(f.world_box(move.landing), rival.hurtbox)
             if where is not None:
                 win.hit = True

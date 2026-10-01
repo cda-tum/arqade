@@ -156,6 +156,16 @@ def test_buffered_press_comes_out_when_free():
     assert f.phase == "startup" and f.frame == 0 and f.chain == 1
 
 
+def test_buffer_presses_only_buffers():
+    f = make()
+    f.buffer_presses(FighterInput(a=True, x=True, dx=1, up=True))
+    assert [(p.button, p.age) for p in f.buffer] == [("a", 0), ("x", 0)]
+    assert (f.x, f.y, f.frame, f.action) == (300.0, 0.0, 0, "idle")
+    f.buffer_presses(IDLE)
+    assert [p.age for p in f.buffer] == [0, 0]          # nothing ages
+    assert "attack" in names(run(f))                    # and the press comes out later
+
+
 def test_a_stale_buffered_press_is_dropped():
     f = make()
     start_jab(f)                       # step 1

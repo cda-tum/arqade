@@ -137,9 +137,7 @@ class Fighter:
 
         # Presses are buffered even during hitstun, so one made in the last frames
         # of stun comes out on the first free frame.
-        for btn in ("a", "b", "x"):
-            if getattr(inp, btn):
-                self.buffer.append(Press(btn, 0))
+        self.buffer_presses(inp)
 
         was_stunned = self.action in _STUNNED
         self._advance(events)
@@ -154,6 +152,16 @@ class Fighter:
                 Press(p.button, p.age + 1) for p in self.buffer if p.age + 1 < BUFFER_FRAMES
             ]
         return events
+
+    def buffer_presses(self, inp: FighterInput) -> None:
+        """Buffer this frame's presses without ageing or advancing anything else.
+
+        The fight calls it during hitstop, when step() is not run, so a press made
+        in the freeze (the chain-cancel window) is not lost.
+        """
+        for btn in ("a", "b", "x"):
+            if getattr(inp, btn):
+                self.buffer.append(Press(btn, 0))
 
     def take_hit(self, move: Move, from_facing: int) -> str:
         if self.switch_left > 0:
