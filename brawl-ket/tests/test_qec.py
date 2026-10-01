@@ -90,3 +90,63 @@ def test_progress_runs_through_the_cycle():
     for _ in range(60):
         c.tick()
     assert abs(c.progress - 0.5) < 1e-9
+
+
+def test_tick_returns_false_when_nothing_flipped():
+    c = Code(3, 120)
+    repaired = [c.tick() for _ in range(120)]
+    assert all(r is False for r in repaired)
+
+
+def test_switch_twice_returns_to_bit():
+    c = Code(3, 120)
+    assert c.basis == BIT
+    c.switch()
+    assert c.basis == PHASE
+    c.switch()
+    assert c.basis == BIT
+
+
+def test_progress_wraps_back_to_zero_after_full_cycle():
+    c = Code(3, 120)
+    for _ in range(120):
+        c.tick()
+    assert abs(c.progress - 0.0) < 1e-9
+
+
+def test_z_hit_on_bit_flip_code_with_pending_x_is_logical():
+    c = Code(3, 120)
+    c.hit(X)
+    assert len(c.flipped) == 1
+    assert c.hit(Z) == LOGICAL
+    assert c.flipped == set()
+
+
+def test_unknown_error_type_raises_valueerror():
+    c = Code(3, 120)
+    try:
+        c.hit("unknown")
+        assert False, "should raise ValueError"
+    except ValueError:
+        pass
+
+
+def test_bad_distance_raises_valueerror():
+    try:
+        Code(2, 120)  # even distance
+        assert False, "should raise ValueError"
+    except ValueError:
+        pass
+    try:
+        Code(1, 120)  # too small
+        assert False, "should raise ValueError"
+    except ValueError:
+        pass
+
+
+def test_bad_cycle_frames_raises_valueerror():
+    try:
+        Code(3, 0)
+        assert False, "should raise ValueError"
+    except ValueError:
+        pass

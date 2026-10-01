@@ -1,14 +1,16 @@
-"""The repetition code each fighter carries. Pure and exact.
+"""The repetition code each fighter carries.
 
-A distance-d repetition code corrects t = (d - 1) // 2 errors of one kind:
-the bit-flip code (|0..0>, |1..1>) corrects X errors and cannot see Z; the
-phase-flip code (|+..+>, |-..->) corrects Z and cannot see X. A transversal
-H maps one code onto the other, and X errors onto Z errors. Y = iXZ always
-has a part the code can't see, so it is always a logical error.
+Exact physics: a distance-d repetition code corrects t = (d - 1) // 2 errors
+of one kind: the bit-flip code (|0..0>, |1..1>) corrects X errors and cannot
+see Z; the phase-flip code (|+..+>, |-..->) corrects Z and cannot see X.
+A transversal H maps one code onto the other. Y = iXZ always has a part the
+code can't see, so it is always a logical error.
 
-The code is corrected on a fixed cycle (the majority vote). Errors landing
-within one cycle accumulate; more than t means the vote will fail, so the
-logical error is reported as soon as it is certain.
+Game rules simplify the physics:
+- Errors always hit distinct qubits (the lowest unflipped one).
+- A logical error re-encodes the code (clears all lights).
+- The logical error is reported as soon as more than t errors are pending,
+  rather than at the next majority-vote cycle.
 """
 
 from __future__ import annotations
@@ -21,7 +23,10 @@ _CORRECTS = {BIT: X, PHASE: Z}
 
 class Code:
     def __init__(self, distance: int, cycle_frames: int) -> None:
-        assert distance % 2 == 1 and distance >= 3
+        if distance % 2 == 0 or distance < 3:
+            raise ValueError(f"distance must be odd and >= 3, not {distance}")
+        if cycle_frames < 1:
+            raise ValueError(f"cycle_frames must be >= 1, not {cycle_frames}")
         self.distance = distance
         self.cycle_frames = cycle_frames
         self.basis = BIT
@@ -37,19 +42,24 @@ class Code:
         return self.timer / self.cycle_frames
 
     def corrects(self, error: str) -> bool:
+        if error not in (X, Y, Z):
+            raise ValueError(f"unknown error type: {error}")
         return _CORRECTS[self.basis] == error
 
     def hit(self, error: str) -> str:
+        if error not in (X, Y, Z):
+            raise ValueError(f"unknown error type: {error}")
         if not self.corrects(error):
             return self.logical_error()
-        # the next unflipped qubit: hitting a flipped one again would undo it (XX = I)
+        # GAME RULE: errors always hit distinct qubits (the lowest unflipped one)
         self.flipped.add(min(set(range(self.distance)) - self.flipped))
+        # GAME RULE: report logical error as soon as more than t errors are pending
         if len(self.flipped) > self.t:
             return self.logical_error()
         return FLIPPED
 
     def logical_error(self) -> str:
-        self.flipped.clear()  # the code is re-encoded
+        self.flipped.clear()  # GAME RULE: the code is re-encoded
         return LOGICAL
 
     def tick(self) -> bool:
