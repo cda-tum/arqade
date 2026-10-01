@@ -27,6 +27,9 @@ PLAY_TIME = 5.0  # at level 0...
 PLAY_TIME_FACTOR = 0.9  # ...times this per level...
 PLAY_TIME_MIN = 2.5  # ...down to this
 GAMES_PER_LEVEL = 4
+BOSS_EVERY = 12  # a boss after every this many wins
+BOSS_CARD_TIME = 2.0  # the BOSS! warning before it
+BOSS_LINGER = 1.2  # a boss ends this long after everyone is done, not at the timer
 SPEED_PER_LEVEL = 0.15  # objects move this much faster per level
 
 # --- Lives, scores, the rest of the flow ------------------------------------------

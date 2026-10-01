@@ -24,7 +24,7 @@ import pygame  # noqa: E402
 from planck_time import config  # noqa: E402
 from planck_time import session as S  # noqa: E402
 from planck_time.hiscores import Hiscores  # noqa: E402
-from planck_time.microgames import REGISTRY, PlayerInput, play_time  # noqa: E402
+from planck_time.microgames import BOSSES, REGISTRY, PlayerInput  # noqa: E402
 from planck_time.render import Renderer  # noqa: E402
 from planck_time.session import FrameInput, Session  # noqa: E402
 
@@ -100,6 +100,19 @@ def screens(out_dir: str) -> None:
         sh.until(S.SPEED_UP, both, limit=60)
         sh.run(0.5)
         sh.shot("speed_up")
+        sh.s.toward_boss = config.BOSS_EVERY
+        sh.until(S.BOSS_CARD, both, limit=60)
+        sh.run(1.0)
+        sh.shot("boss_card")
+        sh.until(S.INTRO)
+        sh.run(1.0)
+        sh.shot("boss_intro")
+        sh.until(S.PLAY)
+        sh.run(4.0, both)
+        sh.shot("boss_play")
+        sh.until(S.RESULT, both, limit=30)
+        sh.run(0.4)
+        sh.shot("boss_result")
         if mode == 1:
             sh.until(S.GAME_OVER, {"p1": False, "p2": False}, limit=60)
             sh.run(0.5)
@@ -118,12 +131,12 @@ def screens(out_dir: str) -> None:
 
 
 def microgames(out_dir: str, names: list[str], seed: int = 3, level: int = 1) -> None:
-    for cls in REGISTRY:
+    for cls in REGISTRY + BOSSES:
         if names and cls.__name__ not in names:
             continue
         frames = []
         for when in (0.0, 0.6, None):
-            g = cls(seed, level, play_time(level))
+            g = cls(seed, level, cls.duration_for(level))
             surf = pygame.Surface((config.SCREEN_W, config.SCREEN_H))
             steps = round((when if when is not None else g.duration) / DT)
             for _ in range(steps):

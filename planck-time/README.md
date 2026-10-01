@@ -52,10 +52,18 @@ explains its concept in a one-line caption *afterwards*.
 | 6 | VOTE! | stick + A | Pick the bit that disagrees with the others |
 | 7 | SHORTER! | stick + A | Pick the circuit with fewer gates |
 | 8 | CONNECT! | stick | Walk your qubit along couplers to its partner |
-| 9 | PAIR! | stick + A | Pick one of the two particles moving in sync |
+| 9 | PAIR! | stick + A | Pick one of the two particles swaying in sync |
 | 10 | REFRESH! | mash A | Keep the glow bar above the line |
 | 11 | STEER! | stick | Turn the mirror to keep the beam on the detector |
 | 12 | SORT! | stick | Slide each falling `|0>` / `|1>` into its bin |
+
+**Bosses:** after every 12 wins comes a BOSS! (worth 3 points, a life if
+lost). **TELEPORT!**: hop your qubit across four islands by entangled
+portals, each pair usable once, before the decoherence wave catches you.
+You arrive as a ghost and stay one until the two classical bits run in
+along the cable and apply their X/Z corrections. Noise rains on ghosts, so
+keep moving. On the last hop, only the portal matching the far one's colour
+is entangled.
 
 | Action | Cabinet | P1 keyboard | P2 keyboard |
 |---|---|---|---|
@@ -87,7 +95,7 @@ uv run python tools/snapshot.py /tmp/planck-snaps   # every screen and microgame
 
 | Module | Role |
 |---|---|
-| `microgames/` | One module per microgame, plus `base.py`, the contract. Rules are pure; `draw()` is the only pygame part. |
+| `microgames/` | One module per microgame or boss, plus `base.py`, the contract. Rules are pure; `draw()` is the only pygame part. |
 | `session.py` | Title, the beats, speed levels, lives, scores, versus, pause, idle, the attract demo. Pure, tested. |
 | `palette.py`, `pixel.py` | The 15-bit GBA palette, and pixel-art helpers (outlined text, orbs, cards, the win/fail overlay). |
 | `render.py` | The 640x360 frame: handheld bezels, HUD, fuse, cards, and every screen. |
@@ -96,7 +104,8 @@ uv run python tools/snapshot.py /tmp/planck-snaps   # every screen and microgame
 
 ### Adding a microgame
 
-Drop a module into `microgames/` with one `@register`ed `Microgame` subclass.
+Drop a module into `microgames/` with one `@register`ed `Microgame` subclass
+(or a `@register_boss`ed `Boss` subclass).
 It's discovered automatically, and `tests/test_microgames.py` checks it
 against the contract over 20 seeds at levels 0 and 3:
 

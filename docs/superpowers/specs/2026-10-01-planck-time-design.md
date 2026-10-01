@@ -94,13 +94,53 @@ given.
 | 6 | **VOTE!** | stick + A | A row of copies of a bit, one of them flipped. The stick moves a cursor and A picks. Picking the odd one out wins (it flips back and glows); anything else fails. | 5 copies instead of 3, and they jiggle. | "A majority vote corrects a bit flip" |
 | 7 | **SHORTER!** | stick + A | Two small circuits that do the same thing; one has redundant gates (an X X pair, an H H pair). The stick picks a side and A chooses. The circuit with fewer gates wins. | The gate counts get closer. | "Compilers find shorter circuits" |
 | 8 | **CONNECT!** | stick | A chip grid of qubits joined by couplers. The stick steps your qubit along couplers. Win once it is next to its partner (joined by one coupler). | A bigger grid, a farther partner, some broken couplers. | "Two-qubit gates need neighbours. Compilers move qubits with SWAPs" |
-| 9 | **PAIR!** | stick + A | 6 particles jiggle, and two of them jiggle in perfect sync. The stick jumps a cursor between particles and A picks. Picking one of the pair wins. | 8 particles, wilder jiggling. | "Entangled qubits behave as one" |
+| 9 | **PAIR!** | stick + A | Particles sway in smooth loops with fading trails, and two of them sway in perfect sync; every other one is at a clearly different tempo or a quarter turn out of step. The stick jumps a cursor between particles and A picks. Picking one of the pair wins. (Random jiggling proved impossible to read in playtesting.) | 4, then 6, then 8 particles. | "Entangled qubits behave as one" |
 | 10 | **REFRESH!** | mash A | A qubit's glow bar drains steadily, and every A press tops it up. Keep it above the line until time's up. | Faster drain. | "Error correction has to run again and again" |
 | 11 | **STEER!** | stick | A photon beam from the left hits a mirror the stick rotates. Win by keeping the reflected beam on the detector for 0.4 s. | The detector drifts. | "Mirrors steer photons, which can carry qubits" |
 | 12 | **SORT!** | stick | \|0⟩ and \|1⟩ tokens fall one at a time; the stick slides each into its bin (\|0⟩ left, \|1⟩ right). Win when all of them are sorted; a wrong bin fails. | More tokens, falling faster. | "Every measurement gives 0 or 1" |
 
 A run never repeats a microgame until all 12 have come up, and none comes up
 twice in a row.
+
+### Bosses
+
+After every **12 wins** (in versus: microgames that anyone won) comes a
+**boss**:
+
+- **The warning:** a BOSS! card with hazard stripes and a siren.
+- **The fight:** one long game in phases, built from verbs players already
+  know. It still uses only the stick and A.
+- **Length:** a boss lasts 18 s at level 0, shrinking with the object speed.
+  It ends 1.2 s after every player is done, not at the timer.
+- **Scoring:** a win is worth **3 points**, plus the first-finish bonus. A
+  loss costs a life, like any microgame.
+- **Rotation:** bosses come round in order. v1 has one.
+
+**TELEPORT!**: carry your qubit across four islands to the lab, before the
+decoherence wave behind you catches up.
+
+- **Teleporting:** the islands are cut off from each other. Portals come in
+  entangled pairs (the same colour, joined by a wavy bond), and each pair
+  works once: teleporting **uses up entanglement**. A portal with no bond
+  does nothing.
+- **Arriving:** you arrive as a **ghost**, your state flipped by up to an X
+  and a Z. The two classical bits run to you along a cable at finite speed.
+  When they land, their corrections are applied and you are solid again.
+  Until then you can't teleport on. That is why teleportation can't beat
+  light.
+- **No coin flip:** the bits are random, but they only choose *which*
+  correction is applied, never whether you make it.
+- **The three hops:**
+  1. Calm.
+  2. Noise rains while you wait. Only a ghost can be hurt, and every other
+     drop aims at where you are, so freezing loses. The hitbox is smaller
+     than the sprite.
+  3. Three portals, and only the one matching the far portal's colour is
+     entangled with it.
+- **Losing:** touching the wave, or touching noise while a ghost, fails.
+  The wave reaches the lab just as the time runs out, so the timer and the
+  wave are the same thing.
+- **Caption:** "Teleporting uses up entanglement and needs 2 classical bits".
 
 ## 3. Architecture
 
@@ -161,5 +201,5 @@ created from the same seed.
 ## Out of scope for v1
 
 - More than 12 microgames: new ones drop into `microgames/` and the registry.
-- Boss microgames (longer, every 10 games), as in WarioWare.
+- More bosses (DECOHERENCE DEMON and GROVER'S VAULT were pitched).
 - Co-op with shared lives.

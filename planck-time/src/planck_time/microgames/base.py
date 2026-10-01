@@ -44,6 +44,13 @@ class Microgame:
     VERB = "VERB!"
     INPUT = "stick"
     CAPTION = ""
+    BOSS = False  # bosses are longer, come after every BOSS_EVERY wins, and score more
+    POINTS = 1  # scored for a success
+
+    @classmethod
+    def duration_for(cls, level: int) -> float:
+        """How long this game lasts at a level."""
+        return play_time(level)
 
     def __init__(self, seed: int, level: int, duration: float) -> None:
         self.rng = random.Random(seed)
@@ -95,9 +102,28 @@ class Microgame:
         """Draw onto a 240x160 surface."""
 
 
+class Boss(Microgame):
+    """A boss: one long game with phases. It lasts DURATION seconds at level 0,
+    shrinking with the object speed, so a faster level is a shorter fight."""
+
+    BOSS = True
+    POINTS = 3
+    DURATION = 18.0
+
+    @classmethod
+    def duration_for(cls, level: int) -> float:
+        return cls.DURATION / (1.0 + config.SPEED_PER_LEVEL * level)
+
+
 REGISTRY: list[type[Microgame]] = []
+BOSSES: list[type[Microgame]] = []
 
 
 def register(cls: type[Microgame]) -> type[Microgame]:
     REGISTRY.append(cls)
+    return cls
+
+
+def register_boss(cls: type[Microgame]) -> type[Microgame]:
+    BOSSES.append(cls)
     return cls

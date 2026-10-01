@@ -237,6 +237,9 @@ class Renderer:
         if state == S.SPEED_UP:
             self._speed_up(s, screen)
             return
+        if state == S.BOSS_CARD:
+            self._boss_card(s, screen)
+            return
         if game is None:
             screen.fill(P.NIGHT)
             return
@@ -267,6 +270,12 @@ class Renderer:
             elif lt >= 0.3:
                 y -= 3 * abs(math.sin(s.t * 5 + i * 0.7))
             screen.blit(img, (x0 + i * size + size // 2 - img.get_width() // 2, round(y) - img.get_height() // 2))
+        if game.BOSS:
+            tag = outlined("BOSS", 8, P.WHITE)
+            box = tag.get_rect(center=(SW // 2, 18)).inflate(10, 4)
+            pygame.draw.rect(screen, P.INK, box.inflate(2, 2), border_radius=3)
+            pygame.draw.rect(screen, P.BAD, box, border_radius=3)
+            blit_center(screen, tag, box.center)
         panel = pygame.Rect(0, 0, 112, 66)
         panel.midtop = (SW // 2, 88)
         pygame.draw.rect(screen, P.INK, panel.inflate(4, 4), border_radius=8)
@@ -346,6 +355,20 @@ class Renderer:
         off = int(self.t * 90) % 24
         for x in range(-24 + off, SW, 24):
             screen.blit(outlined(">", 8, P.CREAM, shadow=False), (x, 146))
+
+    def _boss_card(self, s: S.Session, screen) -> None:
+        """WARNING-style: red hazard stripes scrolling, BOSS! shaking in the middle."""
+        flash = int(self.t * 6) % 2
+        screen.fill(P.shade(P.BAD, 0.35) if flash else P.INK)
+        off = int(self.t * 40) % 16
+        for y0 in (14, SH - 26):
+            screen.fill(P.GOLD, (0, y0, SW, 12))
+            for x in range(-16 + off, SW + 16, 16):
+                pygame.draw.polygon(screen, P.INK, ((x, y0), (x + 8, y0), (x + 2, y0 + 12), (x - 6, y0 + 12)))
+        shake = self.rng.randint(-2, 2) if s.t < 1.2 else 0
+        blit_center(screen, outlined("WARNING", 8, P.GOLD if flash else P.WHITE), (SW // 2, 50))
+        blit_center(screen, outlined("BOSS!", 32, P.BAD), (SW // 2 + shake, 82 + shake))
+        blit_center(screen, outlined("WORTH 3 POINTS", 8, P.WHITE), (SW // 2, 112))
 
     def _caption(self, text: str) -> None:
         surf = self.surface

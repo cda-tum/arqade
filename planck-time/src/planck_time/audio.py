@@ -187,12 +187,13 @@ def build_sfx() -> dict[str, list[int]]:
         "fail": concat(tone(c("E4"), 0.1, 0.3, "square", decay=6), tone(c("C4"), 0.2, 0.3, "saw", decay=6, slide=0.7)),
         "speed_up": _arp([c("C5"), c("D5"), c("E5"), c("G5"), c("C6"), c("D6"), c("E6")], 0.045, 0.28, "pulse"),
         "game_over": concat(*(tone(f, 0.14, 0.3, "square", decay=4) for f in (392, 330, 262, 196))),
+        "boss": concat(*(tone(f, 0.12, 0.3, "square", decay=2) for f in (c("A4"), c("D#5")) * 3)),
         "match": _arp([c("C5"), c("E5"), c("G5"), c("C6"), c("G5"), c("C6")], 0.1, 0.3, "triangle"),
     }
 
 
 _CUE_SOUNDS = {"blip": "blip", "pause": "pause", "start": "start", "intro": "intro", "win": "win", "fail": "fail",
-               "speed_up": "speed_up", "game_over": "game_over", "match_won": "match", "draw": "match"}
+               "speed_up": "speed_up", "boss": "boss", "game_over": "game_over", "match_won": "match", "draw": "match"}
 
 
 def sounds_for(events: list) -> list[str]:

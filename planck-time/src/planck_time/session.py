@@ -2,7 +2,8 @@
 returns cues, so it is unit tested like the microgames.
 
   title (bots play an attract demo after 3 s untouched)
-    -> intro -> play -> result -> [speed up every 4 microgames] -> intro ...
+    -> intro -> play -> result -> [speed up every 4 microgames]
+       -> [BOSS! after every 12 wins -> intro -> boss -> result] -> intro ...
        (Start pauses any of these: resume / quit to title)
     single:  out of lives -> game over -> initials (if it's a high score)
              -> high scores -> title
@@ -13,6 +14,10 @@ the same seed, at the same moment. A success scores 1, and if both succeed
 the one who finished first scores 1 more. A failure costs a life. The match
 ends when anyone is out of lives: the last player standing wins; if both go
 out together, the higher score wins, and equal scores are a draw.
+
+After every 12 wins (in versus: microgames anyone won) comes a boss: one
+long game in phases, worth 3 points (plus the first-finish bonus), costing a
+life if lost like any microgame. It ends as soon as everyone is done.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ from dataclasses import dataclass, field
 
 from planck_time import config
 from planck_time.hiscores import Hiscores
-from planck_time.microgames import REGISTRY, Microgame, PlayerInput, play_time
+from planck_time.microgames import BOSSES, REGISTRY, Microgame, PlayerInput, play_time
 
 PLAYERS = ("p1", "p2")
 TITLE = "title"
@@ -30,11 +35,12 @@ INTRO = "intro"
 PLAY = "play"
 RESULT = "result"
 SPEED_UP = "speed_up"
+BOSS_CARD = "boss_card"
 GAME_OVER = "game_over"
 NAME_ENTRY = "name_entry"
 HISCORES = "hiscores"
 MATCH_RESULT = "match_result"
-PAUSABLE = (INTRO, PLAY, RESULT, SPEED_UP)
+PAUSABLE = (INTRO, PLAY, RESULT, SPEED_UP, BOSS_CARD)
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 ATTRACT_LINGER = 1.0  # seconds an attract microgame stays up after its time runs out
@@ -44,7 +50,7 @@ ATTRACT_LINGER = 1.0  # seconds an attract microgame stays up after its time run
 class Cue:
     """A session event for the sound and the renderer."""
 
-    kind: str  # blip, start, pause, intro, win, fail, speed_up, game_over, match_won, draw
+    kind: str  # blip, start, pause, intro, win, fail, speed_up, boss, game_over, match_won, draw
     player: str | None = None
 
 
@@ -136,10 +142,14 @@ class Session:
         rng: random.Random | None = None,
         hiscores: Hiscores | None = None,
         registry: list[type[Microgame]] | None = None,
+        bosses: list[type[Microgame]] | None = None,
     ) -> None:
         self.rng = rng or random.Random()
         self.hiscores = hiscores if hiscores is not None else Hiscores(None)
         self.registry = list(registry if registry is not None else REGISTRY)
+        self.bosses = list(bosses if bosses is not None else BOSSES)
+        self.boss_index = 0  # bosses come round in order
+        self.toward_boss = 0  # wins since the last boss
         self.mode = 1  # 1 or 2 players
         self.state = TITLE
         self.t = 0.0  # seconds in the current state
@@ -173,7 +183,14 @@ class Session:
 
     @property
     def duration(self) -> float:
+        if self.game_cls is not None:
+            return self.game_cls.duration_for(self.level)
         return play_time(self.level)
+
+    @property
+    def boss(self) -> bool:
+        """The current game is a boss."""
+        return self.game_cls is not None and self.game_cls.BOSS
 
     @property
     def score(self) -> int:
@@ -268,7 +285,10 @@ class Session:
                 self._cued.add(p)
                 events.append(Cue("win" if g.result else "fail", p))
         everyone_failed = all(g.result is False for g in self.games.values())
-        if self.t >= self.duration or everyone_failed:
+        # a boss is long: once everyone is done, don't make them wait out the timer
+        boss_done = self.boss and all(
+            g.result is not None and g.since_end >= config.BOSS_LINGER for g in self.games.values())
+        if self.t >= self.duration or everyone_failed or boss_done:
             self._end_play(events)
 
     def _end_play(self, events: list) -> None:
@@ -281,7 +301,7 @@ class Session:
         self.gained = {p: 0 for p in PLAYERS}
         for p, g in self.games.items():
             if g.result:
-                self.gained[p] += 1
+                self.gained[p] += self.game_cls.POINTS
             else:
                 self.lives[p] -= 1
         winners = [p for p, g in self.games.items() if g.result]
@@ -306,13 +326,27 @@ class Session:
             events.append(Cue("game_over"))
         elif out:
             self._end_match(out, events)
+        elif self.boss:
+            self._next_microgame(events)
         else:
             self.played += 1
+            if any(g.result for g in self.games.values()):
+                self.toward_boss += 1
             if self.played % config.GAMES_PER_LEVEL == 0:
                 self._set_state(SPEED_UP)
                 events.append(Cue("speed_up"))
             else:
-                self._next_microgame(events)
+                self._after_cards(events)
+
+    def _after_cards(self, events: list) -> None:
+        """After a result (and any SPEED UP!): the boss if one is due, else the
+        next microgame."""
+        if self.bosses and self.toward_boss >= config.BOSS_EVERY:
+            self.toward_boss = 0
+            self._set_state(BOSS_CARD)
+            events.append(Cue("boss"))
+        else:
+            self._next_microgame(events)
 
     def _end_match(self, out: list, events: list) -> None:
         if len(out) == 1:
@@ -326,7 +360,13 @@ class Session:
 
     def _on_speed_up(self, dt: float, inp: FrameInput, events: list) -> None:
         if self.t >= config.SPEED_UP_TIME:
-            self._next_microgame(events)
+            self._after_cards(events)
+
+    def _on_boss_card(self, dt: float, inp: FrameInput, events: list) -> None:
+        if self.t >= config.BOSS_CARD_TIME:
+            boss = self.bosses[self.boss_index % len(self.bosses)]
+            self.boss_index += 1
+            self._next_microgame(events, boss)
 
     def _on_game_over(self, dt: float, inp: FrameInput, events: list) -> None:
         if self.t >= config.GAME_OVER_TIME:
@@ -386,6 +426,8 @@ class Session:
         self.scores = {p: 0 for p in PLAYERS}
         self.gained = {p: 0 for p in PLAYERS}
         self.played = 0
+        self.toward_boss = 0
+        self.boss_index = 0
         self.seen = set()
         self.deck = Deck(self.registry, self.rng)
         self.winner = None
@@ -394,8 +436,8 @@ class Session:
         events.append(Cue("start"))
         self._next_microgame(events)
 
-    def _next_microgame(self, events: list) -> None:
-        self.game_cls = self.deck.draw()
+    def _next_microgame(self, events: list, cls: type[Microgame] | None = None) -> None:
+        self.game_cls = cls or self.deck.draw()
         self.seed = self.rng.randrange(1 << 30)
         self.games = {p: self.game_cls(self.seed, self.level, self.duration) for p in self.players}
         self.first_time = self.game_cls.__name__ not in self.seen

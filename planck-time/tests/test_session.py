@@ -7,7 +7,7 @@ import pytest
 
 from planck_time import config, session
 from planck_time.hiscores import Hiscores
-from planck_time.microgames import Microgame, PlayerInput, play_time
+from planck_time.microgames import Boss, Microgame, PlayerInput, play_time
 from planck_time.session import FrameInput, Session
 
 DT = 1 / 60
@@ -41,8 +41,19 @@ class Other(WinOnA):
     VERB = "OTHER!"
 
 
-def make(registry=(WinOnA, Other), seed=0, mode=1, hiscores=None):
-    s = Session(random.Random(seed), hiscores, list(registry))
+class BossOnA(Boss):
+    """A boss that is won by pressing A; doing nothing loses on timeout."""
+
+    VERB = "BOSS!"
+    INPUT = "a"
+
+    def step(self, dt, inp):
+        if inp.a:
+            self.win()
+
+
+def make(registry=(WinOnA, Other), seed=0, mode=1, hiscores=None, bosses=(BossOnA,)):
+    s = Session(random.Random(seed), hiscores, list(registry), list(bosses))
     s.mode = mode
     return s
 
@@ -405,3 +416,81 @@ def test_real_registry_plays_through():
         assert s.games["p1"].result is True
         while s.state in (session.RESULT, session.SPEED_UP):
             s.update(DT, frame())
+
+
+# --- bosses -------------------------------------------------------------------------------
+
+
+def win_until_boss(s, p1=PRESS, p2=PlayerInput()):
+    events = []
+    while not (s.state == session.INTRO and s.boss):
+        if s.state == session.PLAY:
+            events += play_one(s, p1, p2)
+        else:
+            events += s.update(DT, frame())
+    return events
+
+
+def test_a_boss_comes_after_every_twelve_wins_with_a_warning():
+    s = make()
+    s.update(DT, confirm())
+    events = win_until_boss(s)
+    assert s.score == config.BOSS_EVERY
+    assert any(e.kind == "boss" for e in events)
+    assert s.game_cls is BossOnA
+    assert s.games["p1"].duration == pytest.approx(BossOnA.duration_for(s.level))
+
+
+def test_losses_dont_count_towards_the_boss():
+    s = make()
+    s.update(DT, confirm())
+    play_one(s)  # a loss
+    for _ in range(config.BOSS_EVERY - 1):
+        play_one(s, PRESS)
+    assert not s.boss and s.state != session.BOSS_CARD
+    while s.state != session.PLAY:
+        s.update(DT, frame())
+    assert not s.boss  # still a microgame: only 11 wins so far
+
+
+def test_a_boss_scores_three_and_ends_once_everyone_is_done():
+    s = make(mode=2)
+    s.update(DT, confirm())
+    win_until_boss(s, PRESS, PRESS)
+    before = dict(s.scores)
+    to_play(s)
+    s.update(DT, frame(PRESS))  # p1 first
+    run(s, 0.2)
+    s.update(DT, frame(p2=PRESS))
+    run(s, config.BOSS_LINGER + 0.1)
+    assert s.state == session.RESULT  # long before the boss's own timer
+    assert s.t < 1.0
+    assert s.scores["p1"] - before["p1"] == BossOnA.POINTS + 1
+    assert s.scores["p2"] - before["p2"] == BossOnA.POINTS
+
+
+def test_after_a_boss_the_microgames_carry_on_and_it_costs_a_life_if_lost():
+    s = make()
+    s.update(DT, confirm())
+    win_until_boss(s)
+    lives = s.lives["p1"]
+    play_one(s)  # lose the boss
+    assert s.lives["p1"] == lives - 1
+    while s.state != session.INTRO:
+        s.update(DT, frame())
+    assert not s.boss
+
+
+def test_the_real_boss_plays_through_inside_a_session():
+    s = Session(random.Random(2), Hiscores(None))
+    s.update(DT, confirm())
+    s.toward_boss = config.BOSS_EVERY - 1
+    while s.state != session.PLAY:
+        s.update(DT, frame())
+    while s.state == session.PLAY:  # the microgame that makes 12
+        s.update(DT, frame(s.games["p1"].bot()))
+    while not (s.state == session.PLAY and s.boss):
+        s.update(DT, frame())
+    while s.state == session.PLAY:
+        s.update(DT, frame(s.games["p1"].bot()))
+    assert s.games["p1"].result is True
