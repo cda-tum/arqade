@@ -437,6 +437,70 @@ def overquqed() -> pygame.Surface:
     return pygame.transform.scale(s, (SIZE, SIZE))
 
 
+# --- Qurves (qurves) ------------------------------------------------------------
+# A cyan light trail that forks into two mirrored, dashed ghost copies, an
+# orange rival trail and an H gate, on the game's dark grid. Colours copied
+# from qurves/src/qurves/config.py.
+
+
+def qurves() -> pygame.Surface:
+    cyan, orange, white = (40, 230, 255), (255, 140, 40), (235, 240, 255)
+    surf = pygame.Surface((SIZE, SIZE))
+    surf.fill((5, 6, 14))
+    for i in range(0, SIZE + 1, 32):
+        pygame.draw.line(surf, (17, 21, 42), (i, 0), (i, SIZE))
+        pygame.draw.line(surf, (17, 21, 42), (0, i), (SIZE, i))
+
+    def dashes(a, b, on=22, off=14):
+        (ax, ay), (bx, by) = a, b
+        length = math.hypot(bx - ax, by - ay)
+        d = 0.0
+        while d < length:
+            e = min(length, d + on)
+            yield ((ax + (bx - ax) * d / length, ay + (by - ay) * d / length),
+                   (ax + (bx - ax) * e / length, ay + (by - ay) * e / length))
+            d = e + off
+
+    def neon(points, color, dashed=False, k=1.0):
+        layer = pygame.Surface((SIZE, SIZE))
+        layer.fill((0, 0, 0))
+        for width, f in ((30, 0.16), (18, 0.38), (8, 1.0)):
+            hue = tuple(round(c + (255 - c) * 0.55) for c in color) if f == 1.0 else color
+            paint = shade(hue, f * k)
+            for a, b in zip(points, points[1:]):
+                for p, q in (dashes(a, b) if dashed else [(a, b)]):
+                    pygame.draw.line(layer, paint, p, q, width)
+                    pygame.draw.circle(layer, paint, p, width // 2)
+                    pygame.draw.circle(layer, paint, q, width // 2)
+        surf.blit(layer, (0, 0), special_flags=pygame.BLEND_MAX)
+
+    def head(pos, color, k=1.0):
+        glow = pygame.Surface((SIZE, SIZE))
+        glow.fill((0, 0, 0))
+        for r in range(34, 0, -1):
+            f = (1 - r / 35) ** 1.1
+            pygame.draw.circle(glow, shade(tuple(round(c + (255 - c) * 0.6 * f) for c in color), f * k), pos, r)
+        pygame.draw.circle(glow, shade(tuple(round(c + (255 - c) * 0.85) for c in color), k), pos, 7)
+        surf.blit(glow, (0, 0), special_flags=pygame.BLEND_ADD)
+
+    fork = (210, 300)
+    neon([(30, 300), fork], cyan)
+    neon([fork, (210, 170), (380, 170), (380, 96)], cyan, dashed=True, k=0.75)
+    neon([fork, (210, 430), (380, 430), (380, 470)], cyan, dashed=True, k=0.75)
+    neon([(512, 250), (300, 250)], orange)
+    head((380, 96), cyan, 0.8)
+    head((380, 470), cyan, 0.8)
+    head((300, 250), orange)
+    # an H gate token
+    box = pygame.Rect(0, 0, 70, 70)
+    box.center = (110, 150)
+    pygame.draw.rect(surf, white, box, 5, border_radius=12)
+    pygame.draw.line(surf, white, (box.left + 20, box.top + 16), (box.left + 20, box.bottom - 17), 7)
+    pygame.draw.line(surf, white, (box.right - 21, box.top + 16), (box.right - 21, box.bottom - 17), 7)
+    pygame.draw.line(surf, white, (box.left + 20, box.centery), (box.right - 21, box.centery), 7)
+    return surf
+
+
 ICONS = {
     "quantum_towers-image.png": qlimbers,
     "quantum_pong-image.png": quantum_pong,
@@ -445,6 +509,7 @@ ICONS = {
     "ion_surfer_sandbox-image.png": ion_surfer_sandbox,
     "superconductor-image.png": superconductor,
     "overquqed-image.png": overquqed,
+    "qurves-image.png": qurves,
 }
 
 
