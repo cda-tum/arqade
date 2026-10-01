@@ -15,6 +15,7 @@ from error_invaders.config import (
     KEY_PRESETS,
     KEYS_BACK,
     KEYS_CONFIRM,
+    KEYS_PAUSE,
 )
 
 ACTIONS = ("left", "right", "up", "down", "fire", "swap")
@@ -74,6 +75,7 @@ def key_codes(names: list[str]) -> list[int]:
 KEYS = {p: {act: key_codes(names) for act, names in KEY_PRESETS[KEY_PRESET][p].items()} for p in PLAYERS}
 CONFIRM_KEYS = key_codes(KEYS_CONFIRM)
 BACK_KEYS = key_codes(KEYS_BACK)
+PAUSE_KEYS = key_codes(KEYS_PAUSE)
 
 
 class Input:
@@ -86,7 +88,7 @@ class Input:
         self.pressed = {p: set() for p in PLAYERS}
         self.ev_keys = set()
         self.last_keys = []
-        self.confirm = self.back = False
+        self.confirm = self.back = self.pause = False
         self.back_held = 0.0
         self.quit_combo = False
         self.refresh_joys()
@@ -112,9 +114,11 @@ class Input:
                 self.confirm = True
             if e.key in BACK_KEYS:
                 self.back = True
+            if e.key in PAUSE_KEYS:
+                self.pause = True
         elif e.type == pygame.JOYBUTTONDOWN:
             if e.button == system["start_button"]:
-                self.confirm = True
+                self.confirm = self.pause = True
             if e.button == system["select_button"]:
                 self.back = True
         elif e.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
@@ -183,7 +187,7 @@ class Input:
 
     def end_frame(self):
         self.ev_keys.clear()
-        self.confirm = self.back = False
+        self.confirm = self.back = self.pause = False
 
     def down(self, p, a): return a in self.held[p]
     def hit(self, p, a): return a in self.pressed[p]

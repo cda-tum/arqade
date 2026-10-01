@@ -27,6 +27,7 @@ from error_invaders.config import (
 from error_invaders import bosses
 from error_invaders.display import make_display, present
 from error_invaders.input import Input, keyboard_enabled
+from error_invaders.pause import ITEMS as PAUSE_ITEMS, PauseMenu
 
 # =====================================================================
 # Constants
@@ -321,11 +322,12 @@ def dashed_rect(S, col, r, dash=10, gap=6, width=3):
 # =====================================================================
 # Game state
 # =====================================================================
-state = "title"          # title | play | over | inputtest
+state = "title"          # title | play | paused | over | inputtest
 mode = "easy"            # easy | hard | rush
 menu = {"step": 0, "two": False}
 title_t = over_t = 0.0
 g = None
+pause_menu = PauseMenu()
 
 class Obj:
     def __init__(self, **kw): self.__dict__.update(kw)
@@ -774,7 +776,7 @@ def draw_hud(S):
     text(S, ("BOSS %d" if g.mode == "rush" else "WAVE %d") % g.wave, 12, WHITE, W - 16, 14, "right", "top")
     text(S, "LIVES", 8, (153, 170, 170), 16, 36, "left", "top")
     for i in range(g.lives): pygame.draw.rect(S, SPECIAL["bias"], (84 + i * 16, 34, 10, 10), 2)
-    text(S, "ESC: MENU", 8, (68, 68, 85), W - 16, 36, "right", "top")
+    text(S, "START: PAUSE", 8, (68, 68, 85), W - 16, 36, "right", "top")
     dashed_line(S, fade(COL["X"], 0.4), (0, DEATH_LINE), (W, DEATH_LINE), 6, 8, 1)
     text(S, "LOGICAL ERROR THRESHOLD", 8, fade(COL["X"], 0.55), W - 10, DEATH_LINE - 4, "right", "bottom")
     bosses.draw_overlay(S)
@@ -959,6 +961,22 @@ def draw_over(S):
     if g.newHi: text(S, "NEW HIGH SCORE!", 16, SPECIAL["bomb"], W/2, 435)
     if over_t > 1.5 and int(over_t * 2.5) % 2: text(S, "PRESS FIRE", 12, WHITE, W/2, 500)
 
+def draw_pause(S):
+    """The pause menu, centred over the frozen game."""
+    shade = pygame.Surface((W, H), pygame.SRCALPHA); shade.fill((0, 0, 0, 178)); S.blit(shade, (0, 0))
+    box = pygame.Rect(0, 0, 420, 210); box.center = (W // 2, H // 2)
+    S.fill(BG, box); pygame.draw.rect(S, COL["Z"], box, 3)
+    glow(S, W/2, box.y + 46, 120, COL["Z"], 0.3)
+    text(S, "PAUSED", 28, COL["Z"], W/2, box.y + 46)
+    blink = int(now() * 3) % 2
+    for i, label in enumerate(PAUSE_ITEMS):
+        y = box.y + 106 + i * 28
+        on = i == pause_menu.index
+        text(S, label, 14, WHITE if on else (68, 68, 68), W/2, y)
+        if on and blink:
+            text(S, ">", 14, WHITE, W/2 - 150, y); text(S, "<", 14, WHITE, W/2 + 150, y)
+    text(S, "UP/DOWN select  ·  FIRE pick  ·  START resume", 8, (119, 119, 119), W/2, box.bottom - 20)
+
 def draw_input_test(S):
     S.fill(BG)
     text(S, "INPUT TEST", 20, WHITE, W/2, 40)
@@ -986,12 +1004,32 @@ def to_menu():
     global state, title_t
     state = "title"; title_t = 0.0; menu["step"] = 0
 
+def step_play(dt):
+    """One frame of play: Start (or P / Esc) pauses, otherwise the game runs."""
+    global state
+    if inp.pause:
+        state = "paused"; pause_menu.open(); play("menu_ok")
+    else:
+        update(dt)
+
+def step_paused():
+    """One frame of the pause menu. update() isn't called, so everything in
+    the game stays where it is. A picks; Start and B both resume."""
+    global state
+    act = pause_menu.step(move=inp.any_hit("down") - inp.any_hit("up"),
+                          pick=inp.any_hit("fire") or (inp.confirm and not inp.pause),
+                          resume=inp.pause or inp.any_hit("swap"))
+    if act == "resume": state = "play"; play("menu_back")
+    elif act == "title": to_menu(); play("menu_back")   # no score recorded
+    elif act == "move": play("menu_move")
+
 def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=False):
     global state, mode, title_t, over_t
     setup(fullscreen, window_size)
     load_hiscores()
     build_sounds()
     if input_test: state = "inputtest"
+    frozen = None   # the game frame shown behind the pause menu
     running = True
     while running:
         dt = min(0.033, clock.tick(FPS) / 1000.0)
@@ -1021,10 +1059,18 @@ def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=F
                 running = False
             if pygame.K_F1 in inp.ev_keys: state = "inputtest"
             draw_title(canvas); screen.blit(canvas, (0, 0))
-        elif state == "play":
-            if inp.back: to_menu()
+        elif state in ("play", "paused"):
+            was = state
+            if state == "play": step_play(dt)
+            else: step_paused()
+            if state == "title":
+                draw_title(canvas); screen.blit(canvas, (0, 0))
+            elif state == "paused":
+                if was == "play" or frozen is None:   # just paused: draw the game once, then keep that frame
+                    draw_game(canvas); draw_hud(canvas); frozen = canvas.copy()
+                screen.blit(frozen, (0, 0))
+                draw_pause(screen)
             else:
-                update(dt)
                 draw_game(canvas)
                 ox = oy = 0
                 if g.shake > 0:
