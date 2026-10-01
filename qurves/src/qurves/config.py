@@ -79,9 +79,11 @@ COLOR_WALL_FILL = (20, 24, 48)
 COLOR_TEXT = (200, 210, 240)
 COLOR_DIM = (110, 120, 160)
 COLOR_FPS = (255, 211, 107)
+# The cabinet's left side is blue and its right side red (see AGENTS.md
+# "Player colours"); the left pad's second player is green, the right's purple.
 PLAYER_COLORS = {
-    "p1": (255, 70, 85),  # red
-    "p2": (60, 145, 255),  # blue
+    "p1": (60, 145, 255),  # blue
+    "p2": (255, 70, 85),  # red
     "p3": (60, 230, 110),  # green
     "p4": (190, 90, 255),  # purple
 }

@@ -438,13 +438,13 @@ def overquqed() -> pygame.Surface:
 
 
 # --- Qurves (qurves) ------------------------------------------------------------
-# A cyan light trail that forks into two mirrored, dashed ghost copies, an
-# orange rival trail and an H gate, on the game's dark grid. Colours copied
-# from qurves/src/qurves/config.py.
+# P1's blue light trail forking into two mirrored, dashed ghost copies, P2's
+# red rival trail and an H gate, on the game's dark grid. Colours copied from
+# qurves/src/qurves/config.py.
 
 
 def qurves() -> pygame.Surface:
-    cyan, orange, white = (40, 230, 255), (255, 140, 40), (235, 240, 255)
+    blue, red, white = (60, 145, 255), (255, 70, 85), (235, 240, 255)
     surf = pygame.Surface((SIZE, SIZE))
     surf.fill((5, 6, 14))
     for i in range(0, SIZE + 1, 32):
@@ -484,13 +484,13 @@ def qurves() -> pygame.Surface:
         surf.blit(glow, (0, 0), special_flags=pygame.BLEND_ADD)
 
     fork = (210, 300)
-    neon([(30, 300), fork], cyan)
-    neon([fork, (210, 170), (380, 170), (380, 96)], cyan, dashed=True, k=0.75)
-    neon([fork, (210, 430), (380, 430), (380, 470)], cyan, dashed=True, k=0.75)
-    neon([(512, 250), (300, 250)], orange)
-    head((380, 96), cyan, 0.8)
-    head((380, 470), cyan, 0.8)
-    head((300, 250), orange)
+    neon([(30, 300), fork], blue)
+    neon([fork, (210, 170), (380, 170), (380, 96)], blue, dashed=True, k=0.75)
+    neon([fork, (210, 430), (380, 430), (380, 470)], blue, dashed=True, k=0.75)
+    neon([(512, 250), (300, 250)], red)
+    head((380, 96), blue, 0.8)
+    head((380, 470), blue, 0.8)
+    head((300, 250), red)
     # an H gate token
     box = pygame.Rect(0, 0, 70, 70)
     box.center = (110, 150)

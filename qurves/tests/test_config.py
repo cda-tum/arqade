@@ -57,3 +57,11 @@ def test_four_players_each_get_one_input_and_none_is_shared():
 
 def test_gate_kinds_all_have_a_weight_and_a_colour():
     assert set(config.GATE_WEIGHTS) == set(config.GATE_COLORS) == {"H", "X", "Z"}
+
+
+def test_the_left_player_is_blue_and_the_right_one_red():
+    # AGENTS.md "Player colours": the cabinet's left side is blue, its right side red.
+    r, g, b = config.PLAYER_COLORS["p1"]
+    assert b > r and b > g
+    r, g, b = config.PLAYER_COLORS["p2"]
+    assert r > g and r > b

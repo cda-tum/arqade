@@ -55,7 +55,8 @@ wherever they disagree, and the code follows this revision.
   - **Starts:** the left pad's players start on the left, heading right, and
     the right pad's on the right.
   - **Winning:** the last bike standing wins the round, first to 3 rounds.
-- **Colours:** p1 red, p2 blue, p3 green, p4 purple. Gate colours: H white,
+- **Colours:** p1 blue, p2 red (the cabinet's left side is blue, its right
+  side red: see AGENTS.md), p3 green, p4 purple. Gate colours: H white,
   X gold, Z cyan.
 
 ## 1. Rules
