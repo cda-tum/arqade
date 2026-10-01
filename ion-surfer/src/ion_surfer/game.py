@@ -644,15 +644,18 @@ class Game:
     SANDBOX_ITEM = 3
     SEED_ITEM = 4
 
+    # Cabinet pause convention: at least RESUME and QUIT TO TITLE. The title
+    # here is the main menu. With --sandbox there is no menu to go back to,
+    # so the last item quits the program instead.
     @property
     def PAUSE_ITEMS(self):
-        return ["RESUME", "RESTART", "QUIT" if self.sandbox_only else "MAIN MENU"]
+        return ["RESUME", "RESTART", "QUIT" if self.sandbox_only else "QUIT TO TITLE"]
     OVER_ITEMS = ["SAME SEED", "NEW SEED", "MAIN MENU"]
 
     def update(self, dt):
         c = self.controls
         if self.state == "play":
-            if c.select:
+            if c.pause_pressed():
                 self.state = "pause"
                 self.menu_sel = 0
                 return
@@ -665,7 +668,8 @@ class Game:
             self.acc += dt
             if self.mode == SANDBOX:
                 # blue: L/R remove/add an ion; red: L cools while held, R
-                # toggles passive cooling; START on either pad: laser kick
+                # toggles passive cooling; SELECT on either pad: laser kick
+                # (Start pauses, as in every other mode)
                 blue, red = c.pads
                 if "add_ion" in blue.pressed:
                     self.sandbox.add_ion()
@@ -674,7 +678,7 @@ class Game:
                 if "passive_cool" in red.pressed:
                     self.sandbox.passive_cooling = not self.sandbox.passive_cooling
                 for pi, p in enumerate(c.pads):
-                    if "start" in p.pressed:
+                    if "select" in p.pressed:
                         self.sandbox.kick(pi)
                 self.sandbox_frame()
                 self.sandbox.measure()
@@ -690,11 +694,13 @@ class Game:
 
         elif self.state == "pause":
             self.acc = 0
-            if c.select or self.back():
+            # Start or B resumes; only A picks an item (so not confirm(),
+            # which would let Start pick one too).
+            if c.pause_pressed() or self.back():
                 self.state = "play"
                 return
-            self.nav(3)
-            if self.confirm():
+            self.nav(len(self.PAUSE_ITEMS))
+            if c.any_pressed("confirm"):
                 if self.menu_sel == 0:
                     self.state = "play"
                 elif self.menu_sel == 1:
@@ -720,7 +726,7 @@ class Game:
         elif self.state == "menu":
             self.t += dt
             if self.seed_edit:
-                if self.confirm() or self.back() or c.select:
+                if self.confirm() or self.back() or c.pause_key:
                     self.seed_edit = False
                     return
                 sl = self.seed_slot
@@ -1017,7 +1023,7 @@ class Game:
         lines = [
             "BLUE (P1): stick = select electrode / voltage",
             "RED (P2): stick = select electrode / voltage",
-            "Co-op: one shared waveform, one ion.   A: confirm   B: back   SELECT: pause",
+            "Co-op: one shared waveform, one ion.   A: confirm   B: back   START: pause",
         ]
         for i, ln in enumerate(lines):
             text(s, ln, self.f_small, TEXT_DIM, (W / 2, 486 + i * 22))
@@ -1029,8 +1035,9 @@ class Game:
         s.blit(self.dim, (0, 0))
         text(s, "PAUSED", self.f_title, GOLD, (W / 2, 190))
         self.draw_items(self.PAUSE_ITEMS, 290)
+        text(s, "A: choose   START or B: resume", self.f_small, TEXT_DIM, (W / 2, 420))
         if self.mode != SANDBOX:
-            text(s, f"SEED {self.current_seed}", self.f_small, TEXT_DIM, (W / 2, 440))
+            text(s, f"SEED {self.current_seed}", self.f_small, TEXT_DIM, (W / 2, 450))
 
     def draw_over(self):
         s = self.screen

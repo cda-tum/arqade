@@ -296,8 +296,8 @@ class Sandbox:
         self.draw_phase_space(surf)
         self.draw_scope(surf)
         self.draw_readout(surf)
-        _text(surf, "STICK electrode / voltage    START laser kick    BLUE  L remove / R add ion    "
-                    "RED  L hold: cool / R passive cooling    SELECT menu",
+        _text(surf, "STICK electrode / voltage    SELECT laser kick    BLUE  L remove / R add ion    "
+                    "RED  L hold: cool / R passive cooling    START pause",
               self.f_tiny, DIM_C, (self.w / 2, PANEL_TOP + PANEL_H + 14))
 
     def _surface_y(self, sy, x):

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pygame
 
-from ion_surfer.config import INPUT_CONFIG, KEYMAP, SELECT_KEYS
+from ion_surfer.config import INPUT_CONFIG, KEYMAP, PAUSE_KEYS
 
 PLAYERS = ("p1", "p2")  # pad 0, pad 1
 
@@ -112,18 +112,23 @@ class Pad:
 class Controls:
     def __init__(self):
         self.pads = [Pad(), Pad()]
-        self.select = False
+        self.pause_key = False  # keyboard-only pause key (Esc) pressed this frame
         self.joys = {}  # instance id -> (joystick, pad index)
         self.keymap = {pi: {act: key_codes(names) for act, names in m.items()} for pi, m in KEYMAP.items()}
-        self.select_keys = key_codes(SELECT_KEYS)
+        self.pause_keys = key_codes(PAUSE_KEYS)
 
     def begin_frame(self):
         for p in self.pads:
             p.pressed.clear()
-        self.select = False
+        self.pause_key = False
 
     def any_pressed(self, act):
         return any(act in p.pressed for p in self.pads)
+
+    def pause_pressed(self):
+        """Start on either pad (or the keyboard's Esc) pauses and resumes.
+        Select never does: it is reserved for the Start + Select quit combo."""
+        return self.any_pressed("start") or self.pause_key
 
     def quit_combo(self):
         a, b = self.pads
@@ -141,8 +146,8 @@ class Controls:
             if not _keyboard_enabled:
                 return
             on = e.type == pygame.KEYDOWN
-            if on and e.key in self.select_keys:
-                self.select = True
+            if on and e.key in self.pause_keys:
+                self.pause_key = True
             for pi, m in self.keymap.items():
                 for act, keys in m.items():
                     if e.key in keys:
@@ -163,8 +168,6 @@ class Controls:
             cfg = INPUT_CONFIG[PLAYERS[self.pads.index(pad)]]
             if e.button == system["select_button"]:
                 pad.set("select", ("jb", e.button), on)
-                if on:
-                    self.select = True
             elif e.button == system["start_button"]:
                 pad.set("start", ("jb", e.button), on)
             else:

@@ -1,10 +1,10 @@
 import pygame
 
-from ion_surfer.config import INPUT_CONFIG, KEYMAP, SELECT_KEYS
+from ion_surfer.config import INPUT_CONFIG, KEYMAP, PAUSE_KEYS
 
 
 def test_all_key_names_exist_in_pygame():
-    names = list(SELECT_KEYS) + [INPUT_CONFIG["system"]["keyboard_quit"]]
+    names = list(PAUSE_KEYS) + [INPUT_CONFIG["system"]["keyboard_quit"]]
     for mapping in KEYMAP.values():
         for keys in mapping.values():
             names += keys
