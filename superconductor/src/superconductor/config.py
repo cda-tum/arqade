@@ -1,9 +1,8 @@
 """Single source of truth for input mapping and tuning constants.
 
 Joystick 0 = P1, joystick 1 = P2, same as the other games in this repo. The
-face-button numbers are the ones confirmed on the cabinet (see ../AGENTS.md);
-Start = 8 / Select = 9 are still placeholders -- check them with
-`--input-test`.
+face-button numbers are the ones confirmed on the cabinet (see ../AGENTS.md),
+and so are Start = 9 / Select = 8 (not the other way round).
 """
 
 from pathlib import Path
@@ -90,8 +89,8 @@ INPUT_CONFIG = {
     "system": {
         # Start confirms / pauses, Select goes back to the menu. Quit combo:
         # Start + Select held together, on either controller.
-        "start_button": 8,
-        "select_button": 9,
+        "start_button": 9,
+        "select_button": 8,
     },
     "axis_deadzone": 0.5,
 }

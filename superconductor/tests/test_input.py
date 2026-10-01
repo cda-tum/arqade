@@ -49,3 +49,19 @@ def test_read_keys_reports_nothing_held_with_keyboard_disabled():
         assert not keyboard_enabled()
     finally:
         set_keyboard_enabled(True)
+
+
+def test_printed_start_confirms_and_printed_select_goes_back():
+    # Start is raw 9 and Select raw 8 on the cabinet (AGENTS.md), not the reverse.
+    import os
+
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    pygame.init()
+    from superconductor.input import Input
+
+    inp = Input()
+    inp.handle(pygame.event.Event(pygame.JOYBUTTONDOWN, button=9, joy=0, instance_id=0))
+    assert inp.confirm and not inp.back
+    inp = Input()
+    inp.handle(pygame.event.Event(pygame.JOYBUTTONDOWN, button=8, joy=0, instance_id=0))
+    assert inp.back and not inp.confirm

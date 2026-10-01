@@ -774,13 +774,17 @@ class Game:
     def update_paused(self, dt):
         if self.inp.back and self.state_t > 0.1:
             self.to_menu()
-        elif (self.inp.pause or self.inp.any_hit("next")) and self.state_t > 0.1:
+        elif (self.inp.pause or self.inp.any_hit("next") or self.inp.any_hit("other")) \
+                and self.state_t > 0.1:
+            # B resumes rather than leaving: it is also the in-game "other end"
+            # button, so a stray press must not throw the round away.
             self.set_state("play")
 
     def update_over(self, dt):
         for v in self.views:
             v.update_fx(dt)
-        if self.inp.back or (self.state_t > 1.5 and (self.inp.any_hit("next") or self.inp.confirm)):
+        leave = self.inp.any_hit("next") or self.inp.any_hit("other") or self.inp.confirm
+        if self.inp.back or (self.state_t > 1.5 and leave):
             self.to_menu()
 
     def to_menu(self):
@@ -841,7 +845,7 @@ class Game:
         veil.fill((6, 8, 18, 170))
         S.blit(veil, (0, 0))
         text(S, "PAUSED", 32, WHITE, W / 2, H / 2 - 30)
-        text(S, "START / A: RESUME     SELECT: MENU", 10, GREY, W / 2, H / 2 + 20)
+        text(S, "START / A / B: RESUME     SELECT: MENU", 10, GREY, W / 2, H / 2 + 20)
 
     def draw_over(self, S):
         self.draw_play(S)
@@ -868,7 +872,7 @@ class Game:
             else:
                 text(S, f"BEST {self.hiscores.get(self._hiscore_key(), 0):06d}", 10, GOLD, W / 2, 400)
         if self.state_t > 1.5 and int(self.state_t * 2.5) % 2:
-            text(S, "PRESS A", 12, WHITE, W / 2, 500)
+            text(S, "PRESS A OR B", 12, WHITE, W / 2, 500)
 
     def draw_input_test(self, S):
         inp = self.inp

@@ -92,8 +92,8 @@ overlay, and **F1** on the title screen opens the input test.
   goes back to the title.
 - **Quit:** hold Start and Select together on either pad, or hold Select (or press Esc) for
   2 s on the title screen.
-- Start = 8 and Select = 9 are placeholders, as in the other games. Check them with
-  `--input-test`.
+- Start is raw 9 and Select raw 8, confirmed on the cabinet. B resumes from the pause menu
+  and leaves the game-over screen, per the cabinet's button convention (`../AGENTS.md`).
 - The keyboard is a dev fallback only. P1's keys avoid `l x r b y a`, which the cabinet's P1
   encoder types too (see `../AGENTS.md`). On the cabinet the loader passes `--no-keyboard`.
 
