@@ -39,6 +39,7 @@ For 2 or 4 players: push the stick left or right on the title screen to pick.
 | Steer, 4 players | left stick: P1, left buttons: P3, right stick: P2, right buttons: P4 | the same keys, one set per player |
 | Confirm (menus) | A or Start | Enter, 1, 2 |
 | Back (result screen) | B | Backspace |
+| Pause (resume or quit to the title) | Start | P |
 | Pick 2 or 4 players | stick left or right on the title | A or D, J or L |
 | Quit | Start + Select, or hold Select 2 s on the title | Esc |
 

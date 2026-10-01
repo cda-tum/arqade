@@ -63,3 +63,14 @@ def test_it_still_renders_with_glow_and_scanlines_off(monkeypatch):
     monkeypatch.setattr(config, "GLOW", False)
     monkeypatch.setattr(config, "SHOW_SCANLINES", False)
     play_through_every_screen()
+
+
+def test_the_pause_menu_renders():
+    pygame.init()
+    surface = pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT))
+    mt = Match(random.Random(0))
+    renderer = Renderer(surface)
+    for inp in [FrameInput(confirm=True, activity=True)] + [FrameInput()] * 200 + [FrameInput(pause=True)]:
+        renderer.draw(mt, mt.update(1 / 60, inp), 1 / 60)
+    assert mt.paused
+    renderer.draw(mt, mt.update(1 / 60, FrameInput(nav=(0, 1))), 1 / 60)

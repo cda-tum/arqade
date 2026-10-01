@@ -88,6 +88,7 @@ class Input:
         self.keymap = {src: {name: _codes(keys) for name, keys in m.items()} for src, m in config.KEYMAP.items()}
         self.confirm_keys = _codes(config.KEYS_CONFIRM)
         self.back_keys = _codes(config.KEYS_BACK)
+        self.pause_keys = _codes(config.KEYS_PAUSE)
         self._order = {pad: [] for pad in PADS}
         self._down: dict[int, set[int]] = {pad: set() for pad in PADS}
         self._keys_down: set[str] = set()
@@ -95,7 +96,7 @@ class Input:
         self.stick: list[Vec | None] = [None, None]
         self.pad: list[Vec | None] = [None, None]
         self.nav: Vec | None = None
-        self.confirm = self.back = False
+        self.confirm = self.back = self.pause = self.pick = False
         self.start_select = {pad: (False, False) for pad in PADS}
         self.select_held_time = 0.0
         self.keyboard_quit = False
@@ -135,7 +136,7 @@ class Input:
         system = config.INPUT_CONFIG["system"]
         self.keyboard_quit = keyboard_quit_held(keys)
         self.activity = self.keyboard_quit
-        self.confirm = self.back = False
+        self.confirm = self.back = self.pause = self.pick = False
         self.nav = None
         for pad in PADS:
             down, stick = self._read_pad(pad)
@@ -153,6 +154,8 @@ class Input:
             self._down[pad] = down
             self.confirm |= bool(pressed & {*system["confirm_buttons"], system["start_button"]})
             self.back |= bool(pressed & set(system["back_buttons"]))
+            self.pause |= system["start_button"] in pressed
+            self.pick |= bool(pressed & set(system["confirm_buttons"]))
             self.start_select[pad] = (system["start_button"] in down, system["select_button"] in down)
 
             if stick is not None and stick != self._stick_prev[pad] and self.nav is None:
@@ -164,10 +167,13 @@ class Input:
 
         keys_now = {"confirm"} if any(keys[k] for k in self.confirm_keys) else set()
         keys_now |= {"back"} if any(keys[k] for k in self.back_keys) else set()
+        keys_now |= {"pause"} if any(keys[k] for k in self.pause_keys) else set()
         new_keys = keys_now - self._keys_down
         self._keys_down = keys_now
         self.confirm |= "confirm" in new_keys
+        self.pick |= "confirm" in new_keys
         self.back |= "back" in new_keys
+        self.pause |= "pause" in new_keys
         self.activity |= bool(keys_now)
 
         if any(select for _start, select in self.start_select.values()):
@@ -177,7 +183,8 @@ class Input:
 
     def frame_input(self) -> FrameInput:
         return FrameInput(stick=tuple(self.stick), pad=tuple(self.pad), nav=self.nav,
-                          confirm=self.confirm, back=self.back, activity=self.activity)
+                          confirm=self.confirm, back=self.back, pause=self.pause, pick=self.pick,
+                          activity=self.activity)
 
     def quit_combo(self) -> bool:
         (s0, sel0), (s1, sel1) = self.start_select[0], self.start_select[1]

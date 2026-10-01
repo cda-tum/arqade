@@ -35,7 +35,7 @@ EFFECTS = {
     "match": (520, 1040, 0.60, 0.0),
 }
 
-_CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "round_won": "round", "draw": "round",
+_CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "pause": "beep", "round_won": "round", "draw": "round",
                "match_won": "match"}
 
 

@@ -31,7 +31,7 @@ def test_the_face_buttons_steer_like_wasd():
 
 
 def test_all_key_names_exist_in_pygame():
-    names = [config.INPUT_CONFIG["system"]["keyboard_quit"], *config.KEYS_CONFIRM, *config.KEYS_BACK]
+    names = [config.INPUT_CONFIG["system"]["keyboard_quit"], *config.KEYS_CONFIRM, *config.KEYS_BACK, *config.KEYS_PAUSE]
     for mapping in config.KEYMAP.values():
         for keys in mapping.values():
             names += keys
