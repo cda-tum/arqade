@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
-`superconductor/`, `qurves/`, `gate-drop/`, more later) built for the same
+`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
 Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. This file
 collects hardware facts and hard-won quirks that apply **across games**, so a
@@ -35,7 +35,7 @@ specifics (gameplay, architecture, tests) belong in each game's own
 The panel is 1920x1080 (confirmed by the user). Games render at a fixed
 internal size and let SDL's `SCALED` fullscreen upscale it, so a size whose
 height divides 1080 scales by a whole number and pixel art stays crisp:
-480x270 (x4) and 480x360 (x3, 4:3, used by Overquqed) do; 960x720 (x1.5) and
+480x270 (x4), 640x360 (x3, used by Planck Time for two GBA-sized screens side by side) and 480x360 (x3, 4:3, used by Overquqed) do; 960x720 (x1.5) and
 640x480 (x2.25) don't, and nearest-neighbour then doubles some pixel rows but
 not others. Overquqed also sets `SDL_RENDER_SCALE_QUALITY=nearest` before
 pygame starts, so the upscale is never blurred.
@@ -341,8 +341,8 @@ Where the games stand (2026-10-01): every game follows it except
 Superconductor, whose pause screen goes to its menu with Select rather than
 through a menu item. That one is deliberately left as it is.
 
-- Gate Drop, Qurves, Quantum Pong, Qlimbers and Pauli Invaders: RESUME and
-  QUIT TO TITLE.
+- Gate Drop, Planck Time, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
+  RESUME and QUIT TO TITLE.
 - Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
   from Start to Select, so that Start can pause there too.
 - A title screen reached from QUIT TO TITLE must wait for the buttons to be

@@ -572,6 +572,63 @@ def gate_drop() -> pygame.Surface:
     return pygame.transform.scale(s, (SIZE, SIZE))
 
 
+# --- Planck Time (planck-time) --------------------------------------------------
+# GBA-style pixel art like the game's: a little handheld, its body split into
+# the players' blue and red, with the logo's racing stopwatch on its screen and
+# a fuse burning down beneath. Drawn at 64x64 and scaled by 8 (nearest).
+# Colours copied from planck-time/src/planck_time/palette.py and config.py.
+
+
+def planck_time() -> pygame.Surface:
+    ink, night, cream, gold, white = (24, 16, 40), (40, 32, 72), (248, 232, 192), (248, 200, 48), (248, 248, 248)
+    blue, red, purple = (64, 136, 248), (240, 64, 72), (80, 48, 144)
+    s = pygame.Surface((64, 64))
+    s.fill((64, 40, 120))
+    for ty in range(0, 64, 8):
+        for tx in range(0, 64, 8):
+            if (tx + ty) // 8 % 2 == 0:
+                s.fill(purple, (tx, ty, 8, 8))
+    # the handheld: left half blue, right half red
+    body = pygame.Rect(3, 14, 58, 38)
+    pygame.draw.rect(s, ink, body, border_radius=10)
+    for rect, color in (((4, 15, 28, 36), blue), ((32, 15, 28, 36), red)):
+        sub = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
+        pygame.draw.rect(sub, color, (0, 0, rect[2] + 10, rect[3]) if color == blue else (-10, 0, rect[2] + 10, rect[3]),
+                         border_radius=9)
+        s.blit(sub, rect[:2])
+        s.fill(shade(color, 0.7), (rect[0] + (6 if color == blue else 0), rect[1] + rect[3] - 4, rect[2] - 6, 3))
+    # screen
+    pygame.draw.rect(s, ink, (14, 18, 36, 28), border_radius=2)
+    s.fill(night, (15, 19, 34, 26))
+    # D-pad and buttons
+    s.fill(ink, (6, 30, 7, 3))
+    s.fill(ink, (8, 28, 3, 7))
+    for x, y in ((55, 29), (52, 33)):
+        pygame.draw.circle(s, ink, (x, y), 2)
+        s.fill(cream, (x - 1, y - 1, 1, 1))
+    # the stopwatch
+    cx, cy = 32, 31
+    s.fill(ink, (30, 21, 5, 3))
+    pygame.draw.circle(s, ink, (cx, cy), 8)
+    pygame.draw.circle(s, cream, (cx, cy), 7)
+    for a in range(0, 360, 90):
+        x = round(cx + math.sin(math.radians(a)) * 5.5)
+        y = round(cy - math.cos(math.radians(a)) * 5.5)
+        s.fill(ink, (x, y, 1, 1))
+    pygame.draw.line(s, red, (cx, cy), (cx + 4, cy - 4), 1)
+    s.fill(ink, (cx, cy, 1, 1))
+    # the fuse, and its spark
+    s.fill(ink, (16, 42, 32, 3))
+    s.fill(gold, (17, 43, 20, 1))
+    for x, y in ((38, 43), (38, 41), (38, 45), (36, 43), (40, 43), (39, 42), (37, 44)):
+        s.fill(white if (x, y) == (38, 43) else gold, (x, y, 1, 1))
+    # speed lines
+    for y, w in ((6, 10), (9, 16), (56, 14), (59, 8)):
+        s.fill(cream, (64 - w - 3, y, w, 1))
+        s.fill(cream, (3, 63 - y, w // 2, 1))
+    return pygame.transform.scale(s, (SIZE, SIZE))
+
+
 ICONS = {
     "quantum_towers-image.png": qlimbers,
     "quantum_pong-image.png": quantum_pong,
@@ -582,6 +639,7 @@ ICONS = {
     "overquqed-image.png": overquqed,
     "qurves-image.png": qurves,
     "gate_drop-image.png": gate_drop,
+    "planck_time-image.png": planck_time,
 }
 
 
