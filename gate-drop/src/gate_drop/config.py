@@ -24,7 +24,7 @@ BOARD_ORIGIN = {"p1": (40, 34), "p2": (344, 34)}  # top-left of each well, in px
 SOLO_ORIGIN = (192, 34)  # the single-player board, centred
 
 GATE_KINDS = ("H", "X", "Y", "Z", "T", "Td")  # "Td" is T-dagger
-GATE_WEIGHTS = {"H": 2, "X": 2, "Y": 2, "Z": 2, "T": 1, "Td": 1}  # T and T-dagger are rarer
+GATE_WEIGHTS = {"H": 6, "X": 6, "Y": 6, "Z": 6, "T": 1, "Td": 1}  # T and T-dagger: 1 half in 26 each
 # A gate cancels with its inverse. X, Y, Z and H are their own; T and T-dagger
 # undo each other, while T T = S is not the identity, so two Ts don't cancel.
 INVERSE = {"H": "H", "X": "X", "Y": "Y", "Z": "Z", "T": "Td", "Td": "T"}

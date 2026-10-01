@@ -48,6 +48,22 @@ this revision wins.
     (`~/.gate_drop_scores.json`), so a redeploy doesn't wipe them. Idling on
     the initials screen saves what has been entered so far.
 
+## Revision 3: rarer T gates, CNOT propagation
+
+- **T and T-dagger** are 1 pill half in 26 each (weights H, X, Y, Z 6 each,
+  T and T-dagger 1 each).
+- **CNOT propagation:** an X directly above a CNOT's control, or a Z directly
+  above its target, with that same Pauli directly under each half of the
+  CNOT, is a match. All three vanish, and the CNOT stays. Gaps are skipped,
+  as everywhere.
+  - It is exact: an X after the control equals an X on both wires before the
+    CNOT (CNOT · X⊗I · CNOT = X⊗X), so the X's cancel pairwise, leaving a
+    bare CNOT.
+  - Only that full pattern counts. An X on a target, a Z on a control, or a
+    pair that doesn't match does nothing, since there is still no general
+    commuting.
+  - Propagations are found before the pair and sandwich scan.
+
 ## 1. Rules
 
 ### The board

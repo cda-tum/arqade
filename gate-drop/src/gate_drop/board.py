@@ -7,7 +7,11 @@ column is one qubit wire, and the gates stacked on it are that qubit's
 circuit. Cancellation only ever happens along a wire. Each wire is read from
 the bottom up, skipping empty cells, because an idle stretch of wire is the
 identity. A CNOT half is an item too, and nothing cancels across it, since
-there is no commuting.
+there is no commuting, with one exception that is exactly how errors spread
+through a CNOT: an X right after the control (above it) equals an X on both
+wires right before the CNOT (below it), and a Z after the target the same.
+So an X on top of a control, with an X right under each half, clears all
+three X's, and the CNOT stays (likewise a Z on top of a target).
 
 Board.update() runs the falling pill and, after it locks, the resolve
 sequence: settle everything unsupported a row at a time, find the matches,
@@ -50,6 +54,7 @@ class Cnot:
 # the top, to the right, to the bottom. A CNOT only uses 0 and 2.
 ROTATIONS = {0: ((0, 0), (1, 0)), 1: ((0, -1), (0, 0)), 2: ((1, 0), (0, 0)), 3: ((0, 0), (0, -1))}
 SANDWICH = {"X": "Z", "Z": "X"}  # H X H = Z and H Z H = X
+PROPAGATES = {"c": "X", "t": "Z"}  # the Pauli that passes through each CNOT half onto both wires
 
 
 @dataclass
@@ -87,7 +92,7 @@ class Event:
 
 @dataclass(frozen=True)
 class Match:
-    kind: str  # "pair", "sandwich" or "cnot"
+    kind: str  # "pair", "sandwich", "cnot" or "propagate"
     removed: tuple[Pos, ...]
     rewrite: tuple[Pos, str] | None = None  # the sandwiched gate and its new kind
 
@@ -169,12 +174,50 @@ def _cnot_pair(grid: Grid, x: int, lower: tuple, upper: tuple) -> Match | None:
     return None
 
 
+def _next_on_wire(grid: Grid, x: int, y: int, step: int) -> Pos | None:
+    """The nearest item on wire x from row y, going up (step -1) or down (step 1), skipping gaps."""
+    y += step
+    while 0 <= y < grid.rows:
+        if grid.cells[y][x] is not None:
+            return (x, y)
+        y += step
+    return None
+
+
+def _is_gate(grid: Grid, pos: Pos | None, kind: str) -> bool:
+    c = grid.get(pos) if pos is not None else None
+    return isinstance(c, Gate) and c.kind == kind
+
+
+def _propagations(grid: Grid) -> list[Match]:
+    """X on top of a control (or Z on top of a target), with that same Pauli
+    right under each half of the CNOT: all three vanish, the CNOT stays."""
+    found = []
+    for y in range(grid.rows):
+        for x in range(grid.cols - 1):
+            left, right = grid.cells[y][x], grid.cells[y][x + 1]
+            if not (isinstance(left, Cnot) and isinstance(right, Cnot) and left.pill == right.pill):
+                continue
+            for half_x, half in ((x, left), (x + 1, right)):
+                kind = PROPAGATES[half.role]
+                above = _next_on_wire(grid, half_x, y, -1)
+                below = (_next_on_wire(grid, x, y, 1), _next_on_wire(grid, x + 1, y, 1))
+                if _is_gate(grid, above, kind) and all(_is_gate(grid, b, kind) for b in below):
+                    found.append(Match("propagate", (above, *below)))
+                    break
+    return found
+
+
 def find_matches(grid: Grid) -> list[Match]:
-    """Every match on the board, scanning each wire from the bottom: at each
-    position a sandwich first, then a pair (a gate next to its inverse).
-    Matches never overlap."""
+    """Every match on the board. CNOT propagations first, then each wire is
+    scanned from the bottom: at each position a sandwich first, then a pair
+    (a gate next to its inverse). Matches never overlap."""
     matches: list[Match] = []
     taken: set[Pos] = set()
+    for m in _propagations(grid):
+        if not set(m.removed) & taken:
+            matches.append(m)
+            taken |= set(m.removed)
     for x in range(grid.cols):
         seq = _wire(grid, x)
         i = 0
@@ -402,6 +445,9 @@ class Board:
             self.phase = "flash"
             self.timer = config.CLEAR_TIME
             events.append(Event("flash", tuple(c for m in matches for c in m.cells), self.chain))
+            for m in matches:
+                if m.kind == "propagate":
+                    events.append(Event("propagate", m.removed))
             return
         if self.chain:
             sent = attack_size(self.chain, self.big_pass)

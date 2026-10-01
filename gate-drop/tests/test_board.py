@@ -90,7 +90,7 @@ def test_t_and_t_dagger_are_rarer_than_the_other_gates():
             for half in piece.halves:
                 counts[half.kind] = counts.get(half.kind, 0) + 1
     assert set(counts) == set(config.GATE_KINDS)
-    assert counts["T"] < 0.7 * counts["H"] and counts["Td"] < 0.7 * counts["X"]
+    assert counts["T"] < 0.3 * counts["H"] and counts["Td"] < 0.3 * counts["X"]
 
 
 def test_attack_sizes():
@@ -102,6 +102,32 @@ def test_attack_sizes():
     assert attack_size(2, True) == 3
     assert attack_size(3, False) == 3
     assert attack_size(6, True) == config.MAX_ATTACK
+
+
+def test_an_x_on_a_control_clears_an_x_under_each_half_of_the_cnot():
+    # CNOT then X on the control = X on both wires, then CNOT (error propagation).
+    g = grid_from("X.....", "ct....", "Xx....")
+    assert [m.kind for m in find_matches(g)] == ["propagate"]
+    _, errors = apply_matches(g, find_matches(g))
+    assert errors == 1
+    resolve(g)
+    assert column(g, 0) == "c" and column(g, 1) == "t"  # the CNOT stays
+
+
+def test_a_z_on_a_target_clears_a_z_under_each_half():
+    g = grid_from(".Z....", "ct....", "Zz....")
+    assert [m.kind for m in find_matches(g)] == ["propagate"]
+
+
+def test_propagation_works_whichever_way_round_and_across_gaps():
+    assert [m.kind for m in find_matches(grid_from(".X....", "tc....", "XX...."))] == ["propagate"]
+    assert [m.kind for m in find_matches(grid_from("X.....", "ct....", ".x....", "X....."))] == ["propagate"]
+
+
+def test_propagation_needs_the_right_gate_on_the_right_half_and_a_full_pair():
+    assert find_matches(grid_from("X.....", "ct....", "XZ....")) == []  # only one side matches
+    assert find_matches(grid_from(".X....", "ct....", "XX....")) == []  # X on the target passes through
+    assert find_matches(grid_from("Z.....", "ct....", "ZZ....")) == []  # Z on the control too
 
 
 def test_different_gates_or_different_wires_do_not_cancel():

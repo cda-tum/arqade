@@ -18,8 +18,8 @@ deploy script. Button numbers follow the ones confirmed on the cabinet.
   and a **speed** (LOW, MED, HI), then presses A. With 2 players this is a
   handicap: each sets their own, and the round starts when both are ready.
 - **Pills:**
-  - A gate pill carries two single-qubit gates (H, X, Y, Z, and the rarer T
-    and T-dagger). Once it lands, the halves are independent gates.
+  - A gate pill carries two single-qubit gates (H, X, Y, Z, and the rare T
+    and T-dagger, 1 half in 26 each). Once it lands, the halves are independent gates.
   - A CNOT pill (steel, control `●`, target `⊕`) always lies across two
     neighbouring wires and stays rigid. If one side lands first, it leaves a
     gap under the other, and an idle wire is just the identity.
@@ -30,6 +30,11 @@ deploy script. Button numbers follow the ones confirmed on the cabinet.
   - Gaps are skipped, nothing cancels across a CNOT half, and two CNOTs
     stacked the same way round cancel.
   - **Sandwiches:** `H X H` becomes `Z`, and `H Z H` becomes `X`.
+  - **CNOT propagation:** an X dropped on a CNOT's control (or a Z on its
+    target), with that same Pauli right under each half, clears all three,
+    and the CNOT stays. It's exact: an X after the control equals an X on
+    both wires before the CNOT (CNOT · X⊗I · CNOT = X⊗X), so the X's cancel
+    pairwise. This is the only way to clear errors on two wires at once.
 - **Versus:**
   - A 2-step chain, or one pass with 3 or more matches, drops **2 T gates**
     on your rival. A 3-step chain drops 3, and the maximum is 4.

@@ -36,6 +36,7 @@ RULES = (
     "STACK GATE PILLS ON THE QUBIT WIRES",
     "INVERSES CANCEL:  XX  YY  ZZ  HH",
     "T CANCELS T-DAGGER.  HXH = Z,  HZH = X",
+    "X ON A CONTROL OR Z ON A TARGET CLEARS A PAIR",
     "CLEAR EVERY PAULI ERROR BUG TO WIN!",
     "VERSUS: CHAINS DROP T GATES ON YOUR RIVAL",
 )
@@ -152,6 +153,8 @@ class Renderer:
                     self.squish[p][c] = 0.1
             elif ev.kind == "noise":
                 self.shake[p] = 0.35
+            elif ev.kind == "propagate":
+                self._popup(p, "CNOT!", config.CNOT_COLOR)
             elif ev.kind == "attack":
                 self._popup(p, f"SEND {ev.value}!", WHITE)
             elif ev.kind == "errors":
@@ -522,21 +525,21 @@ class Renderer:
             s.blit(self.sprites.gate(drop[2], "d"), (round(drop[0]), round(drop[1])))
             s.blit(self.sprites.gate(drop[3], "u"), (round(drop[0]), round(drop[1]) + CELL))
         s.blit(self.logo, (W // 2 - self.logo.get_width() // 2, 34))
-        strip = pygame.Rect(36, 92, W - 72, 16 * len(RULES) + 12)
+        strip = pygame.Rect(36, 84, W - 72, 15 * len(RULES) + 10)
         pygame.draw.rect(s, INK, strip, border_radius=6)
         pygame.draw.rect(s, shade(WHITE, 0.6), strip, 1, border_radius=6)
         for i, line in enumerate(RULES):
             img = self.font8.render(line, False, config.COLOR_TEXT)
-            s.blit(img, (W // 2 - img.get_width() // 2, strip.y + 8 + i * 16))
+            s.blit(img, (W // 2 - img.get_width() // 2, strip.y + 7 + i * 15))
         mode = outlined(self.font16, f"<  {match.mode} PLAYER{'S' if match.mode == 2 else ''}  >", WHITE)
-        backing = pygame.Rect(0, 0, mode.get_width() + 24, 42)
+        backing = pygame.Rect(0, 0, mode.get_width() + 24, 36)
         backing.midtop = (W // 2, 188)
         pygame.draw.rect(s, INK, backing, border_radius=6)
         pygame.draw.rect(s, shade(WHITE, 0.6), backing, 1, border_radius=6)
         s.blit(mode, (W // 2 - mode.get_width() // 2, 194))
         if int(self.t * 2) % 2 == 0:
             press = outlined(self.font8, "PRESS A OR START", config.GATE_COLORS["H"], shadow=False)
-            s.blit(press, (W // 2 - press.get_width() // 2, 222))
+            s.blit(press, (W // 2 - press.get_width() // 2, 230))
         foot = outlined(self.font8, "STICK: MOVE / DROP   A B: ROTATE   START+SELECT: QUIT", WHITE, shadow=False)
         bar = pygame.Rect(0, 242, W, 20)
         s.fill(INK, bar)

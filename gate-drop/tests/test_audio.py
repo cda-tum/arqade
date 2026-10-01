@@ -20,7 +20,7 @@ def test_every_event_sound_exists():
         Cue("beep"), Cue("go"), Cue("round_won", "p1"), Cue("draw"), Cue("match_won", "p1"),
         Cue("blip"), Cue("level_clear"), Cue("game_over"),
         *(BoardEvent("p1", Event(k)) for k in ("move", "rotate", "land", "attack", "noise", "topout")),
-        BoardEvent("p1", Event("errors", value=1)),
+        BoardEvent("p1", Event("errors", value=1)), BoardEvent("p1", Event("propagate")),
         *(BoardEvent("p1", Event("clear", value=n)) for n in range(1, 9)),
     ]
     sfx = audio.build_sfx()

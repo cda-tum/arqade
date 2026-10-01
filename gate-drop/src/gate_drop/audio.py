@@ -183,6 +183,7 @@ def build_sfx() -> dict[str, list[int]]:
         "land": tone(180, 0.06, 0.3, "square", decay=25, slide=0.7),
         "error": concat(_arp([c("E6"), c("G6")], 0.05, 0.25), tone(c("C7"), 0.14, 0.2, "triangle", decay=8)),
         "attack": tone(300, 0.2, 0.3, "saw", slide=3.0),
+        "cnot": concat(tone(110, 0.08, 0.35, "square", decay=25), _arp([c("C6"), c("E6"), c("G6")], 0.04, 0.22)),
         "noise": mix(noise_wave(0.18, 0.3, decay=12, hold=3, seed=4),
                      tone(120, 0.18, 0.25, "square", decay=12, slide=0.6)),
         "topout": concat(*(tone(f, 0.12, 0.3, "square", decay=4) for f in (330, 262, 196, 131))),
@@ -200,6 +201,7 @@ def build_sfx() -> dict[str, list[int]]:
 _CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "round_won": "round", "draw": "round",
                "match_won": "match", "level_clear": "match", "game_over": "topout"}
 _BOARD_SOUNDS = {"move", "rotate", "land", "attack", "noise", "topout"}
+_BOARD_RENAMES = {"propagate": "cnot"}
 
 
 def sounds_for(events: list) -> list[str]:
@@ -212,6 +214,8 @@ def sounds_for(events: list) -> list[str]:
             kind = e.event.kind
             if kind in _BOARD_SOUNDS:
                 names.append(kind)
+            elif kind in _BOARD_RENAMES:
+                names.append(_BOARD_RENAMES[kind])
             elif kind == "clear":
                 names.append(f"clear{min(len(CLEAR_NOTES), max(1, e.event.value))}")
             elif kind == "errors":
