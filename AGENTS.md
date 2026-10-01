@@ -300,7 +300,7 @@ exists** — a game with no "back" simply has nothing to bind:
 Notes and deliberate limits:
 
 - This is about **menus, title screens and game-over screens**. In-game, a
-  button may mean something else entirely — Error Invaders fires with A and
+  button may mean something else entirely — Pauli Invaders fires with A and
   Qlimbers uses A for RESET — and that is fine. The convention is about how
   you get *into* and *out of* a game, which is what a new player struggles
   with.
@@ -398,7 +398,7 @@ It only has `actions_player1`, which is why only P1's pad does this. Besides the
 six button letters (plus `m`/`s`/`n`/`t` for L2/R2/L3/R3), it maps the d-pad
 directions to the **arrow keys**, the left analog stick to **numpad 4/6/8/2**,
 start to **Enter**, select to **Space** and hotkey to **h**. So avoiding the six
-letters isn't enough on its own. Error Invaders used the arrow keys for P2, so
+letters isn't enough on its own. Pauli Invaders used the arrow keys for P2, so
 P1's stick also moved P2.
 
 The fix used by every game's loader: `deploy_batocera.sh` calls

@@ -19,7 +19,7 @@
 	</game>
 	<game>
 		<path>./error_invaders.pygame</path>
-		<name>Error Invaders</name>
+		<name>Pauli Invaders</name>
 		<desc>Retro meets quantum error correction: only the matching color code clears an invader.</desc>
 		<image>./images/error_invaders-image.png</image>
 		<lang>en</lang>

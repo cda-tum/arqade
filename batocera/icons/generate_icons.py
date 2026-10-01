@@ -170,7 +170,7 @@ def quantum_pong() -> pygame.Surface:
     return surf
 
 
-# --- Error Invaders ---------------------------------------------------------
+# --- Pauli Invaders ---------------------------------------------------------
 # Sprite pattern and palette copied from error-invaders/src/error_invaders/game.py
 # (SPR / COL / BG) so this script stays standalone.
 

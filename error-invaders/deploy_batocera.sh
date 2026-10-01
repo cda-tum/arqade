@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy Error Invaders to a Batocera cabinet over SSH/SCP.
+# Deploy Pauli Invaders to a Batocera cabinet over SSH/SCP.
 #
 # Batocera's pygame system just runs `python <file>.pygame` with that file's
 # own directory as cwd (confirmed against the actual batocera-linux source --
@@ -31,7 +31,7 @@ rm -f "$STAGE_DIR/error_invaders/py.typed"
 
 cat > "$STAGE_DIR/${GAME_NAME}.pygame" <<EOF
 #!/usr/bin/env python
-"""Batocera entry point for Error Invaders.
+"""Batocera entry point for Pauli Invaders.
 The real game lives at ${GAMES_DIR}, kept separate from the ROMs folder.
 """
 import sys

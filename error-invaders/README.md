@@ -1,4 +1,4 @@
-# Error Invaders
+# Pauli Invaders
 
 Retro meets quantum error correction: a 1–2 player Space Invaders variant for the
 IconicArcade Raspberry Pi 4 cabinet (Batocera, `pygame` system). A pygame port of the
@@ -7,6 +7,11 @@ browser version, packaged the same way as Quantum Pong and Quantum Towers.
 **Status:** full game (1 or 2 players, EASY/HARD/BOSS RUSH mode, boss fights,
 power-ups, lattice surgery, high scores), in-game input-test mode, and a Batocera deploy script. Fire/swap use the
 button numbers confirmed on the cabinet. Start/Select (8/9) are still unconfirmed.
+
+The game used to be called *Error Invaders*. Only the displayed name changed: the
+folder, the Python package `error_invaders`, the ROM file `error_invaders.pygame`
+and the high-score file still use the old name, so deploys and saved scores keep
+working.
 
 ## Gameplay
 

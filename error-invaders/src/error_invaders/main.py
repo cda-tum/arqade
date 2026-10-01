@@ -19,7 +19,7 @@ from error_invaders.input import set_keyboard_enabled  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Error Invaders")
+    parser = argparse.ArgumentParser(description="Pauli Invaders")
     parser.add_argument(
         "--input-test",
         action="store_true",

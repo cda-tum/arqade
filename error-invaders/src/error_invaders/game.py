@@ -1,5 +1,5 @@
 """
-ERROR INVADERS - Retro meets quantum error correction
+PAULI INVADERS - Retro meets quantum error correction
 Munich Quantum Software Forum arcade edition (pygame 2.5)
 
 Game state, rules, sprites and drawing. CLI / entry point: main.py; input
@@ -64,7 +64,7 @@ def setup(fullscreen, window_size):
     pygame.init()
     pygame.joystick.init()
     screen, window = make_display(fullscreen, window_size)
-    pygame.display.set_caption("Error Invaders")
+    pygame.display.set_caption("Pauli Invaders")
     pygame.mouse.set_visible(not fullscreen)
     clock = pygame.time.Clock()
     canvas = pygame.Surface((W, H)).convert()
@@ -259,13 +259,29 @@ def triangle_sprite(active, size=22):
 def patch_sprite(active, size=36, n=2):
     key = ("patch", active, size, n)
     if key in _ship_cache: return _ship_cache[key]
-    d = size + 8; S = pygame.Surface((d, d), pygame.SRCALPHA)
-    o = 4; cell = size / n
+    cell = size / n; o = int(cell / 2) + 4      # margin for the half-round boundary checks
+    d = size + 2 * o; S = pygame.Surface((d, d), pygame.SRCALPHA)
+    alpha = lambda col: 242 if (col == active or active == "all") else 56
+    # weight-2 boundary stabilizers (rotated surface code): X half-discs on the
+    # top/bottom edges, Z on the left/right, each on the edge whose bulk
+    # plaquette is the other type -- so every other edge segment gets one
+    r = cell / 2
+    for k in range(n):
+        for col, (cx, cy), half, bulk in (
+                ("X", (o + (k + 0.5) * cell, o), "top", (k, 0)),
+                ("X", (o + (k + 0.5) * cell, o + size), "bottom", (k, n - 1)),
+                ("Z", (o, o + (k + 0.5) * cell), "left", (0, k)),
+                ("Z", (o + size, o + (k + 0.5) * cell), "right", (n - 1, k))):
+            if ("Z" if sum(bulk) % 2 else "X") == col: continue
+            flags = {"top": dict(draw_top_left=True, draw_top_right=True),
+                     "bottom": dict(draw_bottom_left=True, draw_bottom_right=True),
+                     "left": dict(draw_top_left=True, draw_bottom_left=True),
+                     "right": dict(draw_top_right=True, draw_bottom_right=True)}[half]
+            pygame.draw.circle(S, COL[col] + (alpha(col),), (int(cx), int(cy)), int(r - 1), **flags)
     for i in range(n):
         for j in range(n):
             col = "Z" if (i + j) % 2 else "X"
-            a = 242 if (col == active or active == "all") else 56
-            S.fill(COL[col] + (a,), (int(o + i * cell + 1), int(o + j * cell + 1), int(cell - 2), int(cell - 2)))
+            S.fill(COL[col] + (alpha(col),), (int(o + i * cell + 1), int(o + j * cell + 1), int(cell - 2), int(cell - 2)))
     pygame.draw.rect(S, WHITE if active == "all" else COL[active], (o, o, size, size), 3)
     for i in range(n + 1):
         for j in range(n + 1):
@@ -868,7 +884,7 @@ def draw_title(S):
     for i, c in enumerate("XYZXZYX"):
         draw_enemy(S, W/2 - 180 + i * 60, 90 + math.sin(t * 2 + i) * 6, c, int(t * 2) % 2)
     glow(S, W/2, 180, 150, COL["X"], 0.25); glow(S, W/2, 240, 170, COL["Z"], 0.25)
-    text(S, "ERROR", 44, COL["X"], W/2, 180)
+    text(S, "PAULI", 44, COL["X"], W/2, 180)
     text(S, "INVADERS", 44, COL["Z"], W/2, 240)
     text(S, "RETRO MEETS QUANTUM ERROR CORRECTION", 10, (153, 170, 170), W/2, 285)
 
