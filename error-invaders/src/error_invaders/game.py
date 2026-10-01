@@ -24,6 +24,7 @@ from error_invaders.config import (
     QUIT_FROM_MENU,
     SHOW_SCANLINES,
 )
+from error_invaders import bosses
 from error_invaders.display import make_display, present
 from error_invaders.input import Input, keyboard_enabled
 
@@ -175,6 +176,10 @@ def build_sounds():
         s["n%d" % f] = synth(f, 0.08, "square", 0.04)
         s["nl%d" % f] = synth(f, 0.12, "sawtooth", 0.04)
     for i in range(5): s["pop%d" % i] = synth(500 + i * 160, 0.08, "square", 0.04)
+    s["absorb"] = synth(660, 0.09, "triangle", 0.05, 500)
+    s["shield"] = synth(1500, 0.03, "square", 0.015)
+    s["boss_hit"] = synth(140, 0.1, "sawtooth", 0.05, -60)
+    s["telegraph"] = synth(300, 0.25, "sine", 0.05, 300)
 
 _sfx_queue = []  # (time, name)
 def play(name, delay=0.0):
@@ -190,7 +195,8 @@ def pump_sfx():
             _sfx_queue.remove(item); play(item[1])
 
 # ---------------- Hiscores ----------------
-hiscores = {"easy": 0, "hard": 0}
+hiscores = {"easy": 0, "hard": 0, "rush": 0}
+MODES = ["easy", "hard", "rush"]   # rush: every wave a boss, EASY color rules
 def load_hiscores():
     try:
         with open(HISCORE_FILE) as f: hiscores.update(json.load(f))
@@ -300,7 +306,7 @@ def dashed_rect(S, col, r, dash=10, gap=6, width=3):
 # Game state
 # =====================================================================
 state = "title"          # title | play | over | inputtest
-mode = "easy"
+mode = "easy"            # easy | hard | rush
 menu = {"step": 0, "two": False}
 title_t = over_t = 0.0
 g = None
@@ -314,7 +320,7 @@ def make_player(pid, typ, x):
     return Obj(id=pid, type=typ, x=x, y=650, homeX=x,
                colors=["X", "Z", "Y"] if tri else ["X", "Z"], ci=0,
                cd=0.0, rate=0.30 if tri else 0.20, maxB=2 if tri else 3, speed=310 if tri else 280,
-               alive=True, out=False, respawn=0.0, inv=2.0, spreadT=0.0, bombT=0.0)
+               alive=True, out=False, respawn=0.0, inv=2.0, spreadT=0.0, bombT=0.0, magic=0, absorbT=0.0)
 
 def new_game(two):
     global g, state
@@ -323,13 +329,19 @@ def new_game(two):
                     else [make_player("p1", "tri", W/2)],
             pb=[], eb=[], caps=[], parts=[], pops=[], ufo=None, ufoT=rand(12, 20),
             lattice=None, merged=None, shake=0.0, chainId=1, waveT=0.0, overDelay=0.0, reason="", newHi=False,
-            F=None, efT=1.5)
+            F=None, efT=1.5, boss=None, minions=[])
     next_wave()
     state = "play"
 
 def next_wave():
     g.wave += 1
     n = g.wave
+    fight = bosses.boss_for_wave(n, g.mode)
+    if fight:
+        g.boss = bosses.make_boss(fight[0], fight[1], g.two)
+        g.F = Obj(en=[], total=1, ox=0, oy=0, dir=1, stepT=0.5, frame=0, note=0)
+        g.eb = []; g.ufo = None
+        return
     y_chance = min(0.06 + 0.08 * (n - 1), 0.45)
     en = []
     for r in range(ROWS):
@@ -386,6 +398,18 @@ def kill_player(p):
 
 # ---------------- Enemy hit logic ----------------
 PAULI = {"XZ": "Y", "ZX": "Y", "XY": "Z", "YX": "Z", "YZ": "X", "ZY": "X"}
+
+def pauli_hit(target, shot, hard):
+    """What a shot of color `shot` does to an error `target`.
+
+    ("kill", None) if it corrects it, ("convert", new color) if the error
+    changes (Y hit by X or Z; in HARD any wrong color multiplies), else
+    ("block", None). Used by the bosses; enemy_hit spells the same rules out.
+    """
+    if shot == "all" or shot == target: return "kill", None
+    if hard: return "convert", PAULI[target + shot]
+    if target == "Y": return "convert", "Z" if shot == "X" else "X"
+    return "block", None
 
 def kill_enemy(e, base):
     e.alive = False
@@ -537,6 +561,7 @@ def update(dt):
             p.x = clamp(p.x + dx * p.speed * dt, 25, W - 25)
             p.y = clamp(p.y + dy * p.speed * 0.75 * dt, ZONE_TOP, ZONE_BOT)
             p.cd -= dt; p.inv = max(0.0, p.inv - dt); p.spreadT = max(0.0, p.spreadT - dt)
+            p.absorbT = max(0.0, p.absorbT - dt)
             if Hh(p.id, "swap"):
                 p.ci = (p.ci + 1) % len(p.colors); play("swap%d" % p.ci)
             if D(p.id, "fire"): fire(p)
@@ -558,7 +583,9 @@ def update(dt):
 
     # --- formation (classic step march, speeds up) ---
     alive = [e for e in F.en if e.alive]
-    if alive:
+    if g.boss:
+        bosses.update(dt)
+    elif alive:
         F.stepT -= dt
         if F.stepT <= 0:
             frac = len(alive) / F.total
@@ -593,7 +620,7 @@ def update(dt):
                 g.eb.append(Obj(x=sx, y=sy, vx=(t.x - sx) / d * sp, vy=(t.y - sy) / d * sp))
             else:
                 g.eb.append(Obj(x=sx, y=sy, vx=0, vy=sp))
-    elif not g.waveT and not g.overDelay:
+    elif not g.waveT and not g.overDelay and not g.minions:
         g.waveT = 2.2; g.eb = []
         bonus = 500 * g.wave; g.score += bonus
         pop(W/2, 300, "SYNDROME CLEAN!", SPECIAL["bias"], 18, 2)
@@ -602,9 +629,11 @@ def update(dt):
     if g.waveT:
         g.waveT -= dt
         if g.waveT <= 0: g.waveT = 0; next_wave()
+    if not g.boss and g.minions: bosses.update_minions(dt, bool(g.overDelay))
 
     # --- cosmic ray ---
-    if not g.ufo:
+    if g.boss: pass       # no cosmic ray in boss fights; bosses drop the capsules
+    elif not g.ufo:
         g.ufoT -= dt
         if g.ufoT <= 0:
             left = random.random() < 0.5
@@ -625,6 +654,8 @@ def update(dt):
             pop(g.ufo.x, g.ufo.y + 20, "COSMIC RAY +150", YELLOW, 10)
             g.caps.append(make_cap(g.ufo.x, g.ufo.y)); g.ufo = None; g.ufoT = rand(14, 24)
             continue
+        if (g.boss or g.minions) and bosses.bullet_hit(b):
+            b.dead = True; continue
         for e in F.en:
             if not e.alive: continue
             if b.kind == "bomb" and math.hypot(b.x - ex(e), b.y - ey(e)) < 34:
@@ -636,12 +667,19 @@ def update(dt):
     # --- enemy projectiles ---
     for b in g.eb:
         b.x += b.vx * dt; b.y += b.vy * dt
-        if b.y > H + 10 or b.x < -10 or b.x > W + 10: b.dead = True; continue
+        if b.y > H + 10 or b.y < -20 or b.x < -10 or b.x > W + 10: b.dead = True; continue
+        col = b.get("col")
         if g.merged:
-            if abs(b.x - g.merged.x) < 30 and abs(b.y - g.merged.y) < 22: b.dead = True; end_merge(True)
+            m = g.merged
+            if col and math.hypot(b.x - m.x, b.y - m.y) < 34: b.dead = True; bosses.absorb(m, b)
+            elif abs(b.x - m.x) < 30 and abs(b.y - m.y) < 22: b.dead = True; end_merge(True)
         else:
             for p in g.players:
-                if p.alive and math.hypot(b.x - p.x, b.y - p.y) < 11: b.dead = True; kill_player(p)
+                if not p.alive: continue
+                d = math.hypot(b.x - p.x, b.y - p.y)
+                # a boss shot of the ship's own color is absorbed (Clifford Core)
+                if col == p.colors[p.ci] and d < 20: b.dead = True; bosses.absorb(p, b); break
+                if d < 11: b.dead = True; kill_player(p); break
     g.eb = [b for b in g.eb if not b.get("dead")]
 
     # --- capsules ---
@@ -689,6 +727,16 @@ def draw_player(S, p):
         pygame.draw.circle(S, WHITE if flash else SPECIAL["bomb"], (int(p.x), int(p.y - 40)), int(r))
         rr = pygame.Rect(0, 0, int(2 * (r + 6)), int(2 * (r + 6))); rr.center = (int(p.x), int(p.y - 40))
         if k > 0.01: pygame.draw.arc(S, SPECIAL["bomb"], rr, math.pi / 2 - 2 * math.pi * k, math.pi / 2, 2)
+    if p.absorbT > 0:
+        glow(S, p.x, p.y, 44, COL[col], p.absorbT * 3)
+        pygame.draw.circle(S, WHITE, (int(p.x), int(p.y)), int(30 - p.absorbT * 40), 2)
+    if p.magic or (g.boss and g.boss.kind == "clifford"):
+        # magic-state charge: pips on an arc above the ship
+        for k in range(bosses.MAGIC_NEEDED):
+            a = math.pi * (1.2 + 0.6 * k / (bosses.MAGIC_NEEDED - 1))
+            q = (int(p.x + math.cos(a) * 34), int(p.y + math.sin(a) * 34))
+            if k < p.magic: pygame.draw.circle(S, SPECIAL["bomb"], q, 4)
+            else: pygame.draw.circle(S, fade(SPECIAL["bomb"], 0.4), q, 4, 1)
     if p.spreadT > 0:
         rr = pygame.Rect(0, 0, 60, 60); rr.center = (int(p.x), int(p.y))
         a0 = math.pi * 0.85
@@ -706,13 +754,14 @@ def draw_merged(S, m):
 def draw_hud(S):
     text(S, "SCORE %06d" % g.score, 12, WHITE, 16, 14, "left", "top")
     hi = max(hiscores.get(g.mode, 0), g.score)
-    text(S, "HI %06d%s" % (hi, " · HARD" if g.mode == "hard" else ""), 12, WHITE, W/2, 14, "center", "top")
-    text(S, "WAVE %d" % g.wave, 12, WHITE, W - 16, 14, "right", "top")
+    text(S, "HI %06d%s" % (hi, {"hard": " · HARD", "rush": " · RUSH"}.get(g.mode, "")), 12, WHITE, W/2, 14, "center", "top")
+    text(S, ("BOSS %d" if g.mode == "rush" else "WAVE %d") % g.wave, 12, WHITE, W - 16, 14, "right", "top")
     text(S, "LIVES", 8, (153, 170, 170), 16, 36, "left", "top")
     for i in range(g.lives): pygame.draw.rect(S, SPECIAL["bias"], (84 + i * 16, 34, 10, 10), 2)
     text(S, "ESC: MENU", 8, (68, 68, 85), W - 16, 36, "right", "top")
     dashed_line(S, fade(COL["X"], 0.4), (0, DEATH_LINE), (W, DEATH_LINE), 6, 8, 1)
     text(S, "LOGICAL ERROR THRESHOLD", 8, fade(COL["X"], 0.55), W - 10, DEATH_LINE - 4, "right", "bottom")
+    bosses.draw_overlay(S)
     for i, p in enumerate(g.players):
         bx = 16 if i == 0 else W - 16 - len(p.colors) * 26 - 40
         text(S, p.id.upper(), 8, WHITE, bx, 708, "left")
@@ -751,6 +800,8 @@ def draw_game(S):
             pygame.draw.rect(S, chain_col, (ex(e) - EW / 2 - 4, ey(e) - EH / 2 - 4, EW + 8, EH + 8), 2)
         draw_enemy(S, ex(e), ey(e), e.col, F.frame, e.flash)
 
+    bosses.draw(S)
+
     # cosmic ray: Gaussian wave packet
     if g.ufo:
         u = g.ufo; d = 1 if u.vx > 0 else -1
@@ -780,11 +831,22 @@ def draw_game(S):
             glow(S, b.x, b.y, 10, col, 0.5)
             S.fill(col, (int(b.x - 2), int(b.y - 8), 4, 16))
 
-    # enemy projectiles (colorless zigzag)
+    # enemy projectiles: colorless zigzags, the bosses' round orbs, and the
+    # Clifford Core's colored shots (absorbed by a ship of the same color)
     zz = int(t / 0.08) % 2
     for b in g.eb:
-        for i in range(4):
-            S.fill((232, 232, 232), (int(b.x - 3 + ((i + zz) % 2) * 3), int(b.y - 8 + i * 4), 3, 4))
+        kind = b.get("kind")
+        if b.get("col"):
+            c = COL[b.col]
+            glow(S, b.x, b.y, 18, c, 0.6)
+            pygame.draw.circle(S, c, (int(b.x), int(b.y)), 8)
+            pygame.draw.circle(S, WHITE, (int(b.x), int(b.y)), 3)
+        elif kind == "orb":
+            pygame.draw.circle(S, (225, 225, 235), (int(b.x), int(b.y)), 5)
+            pygame.draw.circle(S, BG, (int(b.x), int(b.y)), 2)
+        else:
+            for i in range(4):
+                S.fill((232, 232, 232), (int(b.x - 3 + ((i + zz) % 2) * 3), int(b.y - 8 + i * 4), 3, 4))
 
     if g.merged: draw_merged(S, g.merged)
     else:
@@ -815,6 +877,11 @@ def draw_title(S):
         draw_enemy(S, W/2 - 150, 372, "Y", 0)
         text(S, "= X * Z  ->  hit it twice:", 10, (221, 221, 221), W/2 - 120, 366, "left")
         text(S, "red + blue, or purple directly", 10, (221, 221, 221), W/2 - 120, 384, "left")
+    elif mode == "rush":
+        text(S, "BOSS RUSH: every wave is a boss!", 10, YELLOW, W/2, 330)
+        for i, k in enumerate(bosses.ORDER):
+            text(S, bosses.INFO[k][0], 8, (221, 221, 221), W/2, 350 + i * 13)
+        text(S, "easy color rules", 8, (153, 170, 170), W/2, 416)
     else:
         text(S, "HARD: a wrong color multiplies the error!", 10, COL["X"], W/2, 330)
         for a, b, c, y in (("Z", "X", "Y", 362), ("X", "Y", "Z", 400)):
@@ -849,17 +916,19 @@ def draw_title(S):
     if menu["step"] == 0:
         items = [("1 PLAYER", not menu["two"], WHITE), ("2 PLAYERS", menu["two"], WHITE)]
     else:
-        items = [("EASY", mode == "easy", SPECIAL["bias"]), ("HARD", mode == "hard", COL["X"])]
+        items = [("EASY", mode == "easy", SPECIAL["bias"]), ("HARD", mode == "hard", COL["X"]),
+                 ("BOSS RUSH", mode == "rush", YELLOW)]
     blink = int(t * 3) % 2
+    y0 = 650 if len(items) == 2 else 642
     for i, (label, on, col) in enumerate(items):
-        y = 650 + i * 24
+        y = y0 + i * 20
         text(S, label, 14, col if on else (68, 68, 68), W/2, y)
         if on and blink:
             text(S, ">", 14, col, W/2 - 110, y); text(S, "<", 14, col, W/2 + 110, y)
     if menu["step"] == 1:
         text(S, ("2 PLAYERS" if menu["two"] else "1 PLAYER") + " >", 8, (102, 102, 102), W/2 - 190, 662)
     hint = "UP/DOWN select  ·  FIRE confirm" if menu["step"] == 0 else "UP/DOWN select  ·  FIRE start  ·  COLOR back"
-    text(S, hint, 8, (119, 119, 119), W/2, 696)
+    text(S, hint, 8, (119, 119, 119), W/2, 699)
     text(S, "HI %06d (%s)   ·   MUNICH QUANTUM SOFTWARE FORUM" % (hiscores.get(mode, 0), mode.upper()),
          8, (85, 85, 102), W/2, 712)
 
@@ -920,12 +989,12 @@ def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=F
 
         if state == "title":
             title_t += dt
-            moved = any(inp.any_hit(a) for a in ("up", "down"))
+            moved = inp.any_hit("down") - inp.any_hit("up")
             ok = inp.any_hit("fire") or inp.confirm
             back = inp.any_hit("swap") or inp.back
             if moved:
                 if menu["step"] == 0: menu["two"] = not menu["two"]
-                else: mode = "hard" if mode == "easy" else "easy"
+                else: mode = MODES[(MODES.index(mode) + moved) % len(MODES)]
                 play("menu_move")
             if ok:
                 if menu["step"] == 0: menu["step"] = 1; play("menu_ok")
