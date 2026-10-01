@@ -1,14 +1,14 @@
 """Regenerate the per-game icons shown in EmulationStation's game list.
 
-    python3 generate_icons.py            # writes all five PNGs next to this file
+    python3 generate_icons.py            # writes all six PNGs next to this file
 
 Output names match the gamelist.xml <image> convention Batocera/ES expects
 (`<rom-basename>-image.png`), so the results can be copied straight to
 /userdata/roms/pygame/images/ on the cabinet -- see ../gamelist.xml and the
 "Per-game icons" section of ../../AGENTS.md.
 
-Self-contained on purpose: it only needs pygame, not any of the four game
-packages (each lives in its own uv project/venv, so importing all four from
+Self-contained on purpose: it only needs pygame, not any of the game
+packages (each lives in its own uv project/venv, so importing all of them from
 one script isn't possible). The few constants borrowed from a game's own
 source are copied below and marked with where they came from, so a tweak
 there is easy to mirror here.
@@ -326,12 +326,72 @@ def ion_surfer_sandbox() -> pygame.Surface:
     return surf
 
 
+# --- Superconductor ---------------------------------------------------------
+# Colors from superconductor/src/superconductor/game.py (SUBSTRATE, COUPLER,
+# QUBIT_IDLE, PAIR_COLORS). A 4x4 chip of Xmon crosses with two routed pairs.
+
+
+def superconductor() -> pygame.Surface:
+    surf = pygame.Surface((SIZE, SIZE))
+    surf.fill((6, 8, 18))
+    chip = pygame.Rect(36, 36, SIZE - 72, SIZE - 72)
+    pygame.draw.rect(surf, (13, 17, 32), chip, 0, 28)
+    pygame.draw.rect(surf, (40, 52, 84), chip, 5, 28)
+
+    n, sp = 4, 112
+    x0 = SIZE // 2 - sp * (n - 1) // 2
+
+    def xy(r: int, c: int) -> tuple[int, int]:
+        return x0 + c * sp, x0 + r * sp
+
+    for r in range(n):
+        for c in range(n):
+            if c + 1 < n:
+                pygame.draw.line(surf, (48, 62, 96), xy(r, c), xy(r, c + 1), 6)
+            if r + 1 < n:
+                pygame.draw.line(surf, (48, 62, 96), xy(r, c), xy(r + 1, c), 6)
+
+    red, green = (255, 84, 104), (84, 226, 128)
+    routes = {red: [(0, 0), (0, 1), (1, 1), (2, 1), (2, 2), (2, 3)],
+              green: [(3, 0), (3, 1), (3, 2), (3, 3)]}
+    on_route = {}
+    for col, route in routes.items():
+        for a, b in zip(route, route[1:]):
+            pygame.draw.line(surf, shade(col, 0.45), xy(*a), xy(*b), 22)
+            pygame.draw.line(surf, col, xy(*a), xy(*b), 9)
+        for node in route:
+            on_route[node] = (col, node in (route[0], route[-1]))
+
+    def xmon(x: int, y: int, size: int, col: tuple[int, int, int]) -> None:
+        arm, thick = size * 24 // 100, max(6, size * 9 // 100)
+        pygame.draw.rect(surf, col, (x - arm, y - thick // 2, 2 * arm, thick), 0, 3)
+        pygame.draw.rect(surf, col, (x - thick // 2, y - arm, thick, 2 * arm), 0, 3)
+
+    for r in range(n):
+        for c in range(n):
+            x, y = xy(r, c)
+            col, end = on_route.get((r, c), ((86, 104, 146), False))
+            if end:
+                pygame.draw.circle(surf, col, (x, y), 40, 6)
+            xmon(x, y, 150 if end else 120, col if (r, c) in on_route else (86, 104, 146))
+
+    # the travelling qubit, mid-route
+    qx, qy = xy(1, 1)
+    qy += sp // 2
+    for rad, k in ((44, 0.15), (32, 0.3), (22, 0.6)):
+        pygame.draw.circle(surf, shade(red, k), (qx, qy), rad)
+    pygame.draw.circle(surf, (255, 200, 210), (qx, qy), 16)
+    pygame.draw.circle(surf, (255, 255, 255), (qx, qy), 16, 4)
+    return surf
+
+
 ICONS = {
     "quantum_towers-image.png": qlimbers,
     "quantum_pong-image.png": quantum_pong,
     "error_invaders-image.png": error_invaders,
     "ion_surfer-image.png": ion_surfer,
     "ion_surfer_sandbox-image.png": ion_surfer_sandbox,
+    "superconductor-image.png": superconductor,
 }
 
 

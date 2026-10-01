@@ -38,4 +38,11 @@
 		<image>./images/ion_surfer_sandbox-image.png</image>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./superconductor.pygame</path>
+		<name>Superconductor</name>
+		<desc>Route two-qubit gates across a superconducting chip before they decohere. Solo, co-op or versus.</desc>
+		<image>./images/superconductor-image.png</image>
+		<lang>en</lang>
+	</game>
 </gameList>
