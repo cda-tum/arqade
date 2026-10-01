@@ -317,6 +317,26 @@ Notes and deliberate limits:
   to fix that; the bottom-right hints in the theme (`install.py`) must be kept
   in agreement with it.
 
+## Player colours: left is blue, right is red (a taste)
+
+The cabinet itself is coloured: the **left** pad's side (joystick 0, P1) is
+**blue** and the **right** pad's side (joystick 1, P2) is **red**. A game's
+player colours should agree with it, so a player can see at a glance which
+bike, paddle or cursor is theirs without reading a label. This is a design
+preference of the cabinet's owners rather than a hardware fact, but treat it
+like the button convention: new games follow it from the start.
+
+- P1 is blue (or a blue-leaning hue like cyan or teal), and P2 red (or a
+  red-leaning hue like orange or pink). Ion Surfer and Qurves use plain blue
+  and red.
+- When a game has more players than pads, keep each pad's extra player on
+  that pad's side of the screen and in a third and fourth colour. Qurves'
+  4-player mode, for example, has P3 (left buttons) green and P4 (right
+  buttons) purple.
+- Games where the two sides aren't players (Superconductor's white and gold
+  chips, Pong's white paddles) don't need to change, but blue and red is the
+  natural choice there too.
+
 ## Input mapping: raw button numbers are NOT the print/position order
 
 This is the most important quirk, and the one most likely to bite a future
