@@ -17,7 +17,8 @@ from .config import THROW_RANGE
 from .fight import Fight
 from .fighter import FighterInput
 
-STRIKE_RANGE = 50       # px between the fighters' x where a normal can reach
+STRIKE_RANGE = 66       # px between the fighters' x where a ground normal can reach (the jab: about 72)
+AIR_RANGE = 50          # the same for an air attack, whose boxes are shorter
 PRESS_GAP = 4           # frames between two presses, so every press is a fresh edge
 LONG_CROUCH = 40        # a rival crouched this long gets thrown (a throw ignores the code)
 
@@ -89,7 +90,7 @@ class Bot:
         return f"{'crouch' if me.stance == 'crouch' else 'stand'}.{self.chain[0].upper()}"
 
     def _in_air(self, me, toward: int, dist: float) -> FighterInput:
-        if not self.air_pressed and self.gap == 0 and dist <= STRIKE_RANGE:
+        if not self.air_pressed and self.gap == 0 and dist <= AIR_RANGE:
             self.air_pressed = True
             return self._press(self.rng.choice("bbx"), toward)
         return FighterInput(dx=toward)

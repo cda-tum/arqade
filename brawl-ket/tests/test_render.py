@@ -160,7 +160,7 @@ def test_the_danger_state_is_drawn_on_the_tag(surface):
     assert tag_state(p2.code) == "danger"
     danger = colours_in_tag(surface, r, fight, "p2", DANGER_BEAT * 2)
     assert P.ORANGE in danger                # the unflipped lights pulse orange
-    assert P.shade(P.ORANGE, 0.6) in danger  # ... between two shades of it
+    assert P.lighten(P.ORANGE, 0.3) in danger  # ... between two shades of it
     assert P.BAD in danger                   # the flipped light, and the blinking "!"
 
 
@@ -171,3 +171,33 @@ def test_a_bot_fight_with_the_danger_state_draws(surface):
         r.draw_fight(fight, events)
         danger_seen |= any(tag_state(f.code) == "danger" for f in fight.fighters.values())
     assert danger_seen
+
+
+def probe_tag(surface, r, fight, key, beat_on):
+    """Draw one frame with the pulse on (or off) and return its pixels' view of p's tag:
+    (cy, the x columns with a 12 px white run (the majority line), the colours drawn in the
+    band right of the ket label)."""
+    r.t = 0 if beat_on else DANGER_BEAT // 2
+    r.draw_fight(fight, [])
+    r.t -= 1                         # draw_fight counted a frame; keep the beat where it was drawn
+    cy = round(r.tag_y[key])
+    x_lo, x_hi = round(fight.fighters[key].x) - 40, round(fight.fighters[key].x) + 40
+    line = [x for x in range(x_lo, x_hi)
+            if all(tuple(surface.get_at((x, y)))[:3] == P.WHITE for y in range(cy - 6, cy + 6))]
+    bang = {tuple(surface.get_at((x, y)))[:3] for x in range(x_hi - 52, x_hi) for y in range(cy - 18, cy - 6)}
+    return line, bang
+
+
+def test_the_majority_line_and_the_bang_are_drawn(surface):
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    p2 = fight.fighters["p2"]
+    bang_colours = (P.BAD, P.lighten(P.BAD, 0.5))
+    line, bang = probe_tag(surface, r, fight, "p2", True)
+    assert len(line) == 2 and line[1] == line[0] + 1       # the 2 px majority line, in every state
+    assert not set(bang_colours) & bang                    # and no "!" while the code is safe
+    p2.code.hit(qec.X)
+    for beat_on, colour in ((True, bang_colours[0]), (False, bang_colours[1])):
+        line2, bang2 = probe_tag(surface, r, fight, "p2", beat_on)
+        assert line2 == line                                # the line stays put
+        assert colour in bang2, beat_on                     # the "!" is there on both halves of the beat

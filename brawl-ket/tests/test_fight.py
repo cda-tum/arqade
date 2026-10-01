@@ -103,8 +103,9 @@ def test_the_jab_reaches_70_px_but_not_80():
 def test_hit_event_is_where_the_boxes_overlap():
     fight = new()
     (hit,) = of(script(fight, 20, p1={0: A}), "hit")
-    # jab box 14..44 px in front of p1 (x=220), p2's hurtbox starts at 246
-    assert 246 <= hit.x <= 264
+    # the push box moves them to x=218 and 262: the jab box spans 232..276 (14..58 px ahead of
+    # p1) and p2's hurtbox 248..276, so the overlap's centre is at 262
+    assert 248 <= hit.x <= 276
     assert 200 <= hit.y <= 240      # screen px, y down: the jab is 70..84 up from the floor
 
 

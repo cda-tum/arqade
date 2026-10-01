@@ -106,7 +106,9 @@ def outlined(text: str, size: int, color, outline=P.INK, thick: int = 1) -> pyga
 
 def tag_state(code: qec.Code) -> str:
     """"danger" once t lights are down: the next correctable hit breaks the majority vote
-    and is a logical error. Otherwise "ok"."""
+    and is a logical error. "ok" only means that no *correctable* hit breaks the code yet:
+    a hit of the wrong kind for the stance, a hit mid-switch and a throw are logical errors
+    at any count of flipped lights."""
     return "danger" if len(code.flipped) == code.t else "ok"
 
 
@@ -467,7 +469,7 @@ class Renderer:
 
         Lights flip from the left, so the line after the first t of them marks where one
         more flipped light beats the majority vote. When t lights are down (tag_state is
-        "danger") the rest pulse orange and a "!" blinks beside the ket."""
+        "danger") the rest pulse orange and a "!" pulses red beside the ket."""
         code = f.code
         n = code.distance
         row = (n - 1) * LIGHT_GAP + DIVIDER_GAP + 16     # the lights, the majority line and the ring
@@ -501,7 +503,7 @@ class Renderer:
             elif i in code.flipped:
                 col = P.BAD
             elif danger:
-                col = P.ORANGE if beat else P.shade(P.ORANGE, 0.6)
+                col = P.ORANGE if beat else P.lighten(P.ORANGE, 0.3)
             else:
                 col = base
             pygame.draw.circle(surf, P.INK, (x, cy), 5)
@@ -511,8 +513,8 @@ class Renderer:
         blit_center(surf, ring, (xs[-1] + 12, cy))
         label = outlined(code.label(), 8, P.WHITE)
         blit_center(surf, label, (cx, cy - 12))
-        if danger and beat:
-            bang = outlined("!", 8, P.BAD)
+        if danger:      # shown for the whole danger state, its colour pulsing with the lights
+            bang = outlined("!", 8, P.BAD if beat else P.lighten(P.BAD, 0.5))
             blit_center(surf, bang, (cx + label.get_width() / 2 + bang.get_width() / 2 + 1, cy - 12))
 
     # --- the HUD -------------------------------------------------------------------------------
