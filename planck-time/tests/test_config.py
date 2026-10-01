@@ -13,7 +13,7 @@ def test_both_gba_screens_fit_side_by_side():
     (x1, y1), (x2, y2) = config.SCREEN_CENTERS["p1"], config.SCREEN_CENTERS["p2"]
     assert x1 + w // 2 < x2 - w // 2  # room for the bezels between them
     assert x1 - w // 2 >= 0 and x2 + w // 2 <= config.INTERNAL_WIDTH
-    assert y1 + h // 2 <= config.INTERNAL_HEIGHT
+    assert y1 == y2 and y1 + h // 2 <= config.INTERNAL_HEIGHT
 
 
 def test_buttons_follow_the_cabinet_convention():
