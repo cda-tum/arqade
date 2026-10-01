@@ -1,0 +1,333 @@
+"""One fighter's state machine: movement, stance, attacks, input buffer, getting hit.
+
+Pure logic, no pygame. The fight (fight.py) runs two of these: it feeds each one
+a FighterInput per frame, ticks each fighter's qec.Code (so it can emit the
+cycle events), resolves hitboxes and calls take_hit. Everything is counted in
+integer frames at 60 Hz.
+
+Coordinates: x is in screen px; y is the height above the floor (>= 0), and
+vy > 0 means moving up. world_box() turns a Box (relative to the feet) into
+screen px, where y points down.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from . import qec
+from .config import (
+    BUFFER_FRAMES,
+    CHAIN_MAX,
+    FLOOR_Y,
+    LOGICAL_DAMAGE,
+    STAGE_LEFT,
+    STAGE_RIGHT,
+    SWITCH_FRAMES,
+    THROW_RANGE,
+)
+from .moves import Box, Character, Move
+
+KNOCKDOWN_FRAMES = 40
+STUN_DECAY = 0.85          # vx multiplier per frame of hitstun / knockdown
+
+_STUNNED = ("hitstun", "knockdown")
+_GROUND_FREE = ("idle", "walk", "crouch")
+
+
+@dataclass(frozen=True)
+class FighterInput:
+    dx: int = 0             # -1 / 0 / 1 (stick, deadzoned)
+    up: bool = False
+    down: bool = False
+    a: bool = False         # a, b, x: pressed this frame
+    b: bool = False
+    x: bool = False
+
+
+IDLE = FighterInput()
+
+
+class Fighter:
+    def __init__(self, char: Character, x: float, facing: int) -> None:
+        self.char = char
+        self.x = float(x)
+        self.y = 0.0
+        self.vx = 0.0
+        self.vy = 0.0
+        self.facing = facing
+        self.health = char.health
+        self.code = qec.Code(char.distance, char.cycle_frames)
+        self.action = "idle"        # idle walk crouch switch jump attack hitstun knockdown
+        self.frame = 0              # frames into the action (0 on its first frame)
+        self.move: Move | None = None
+        self.slot: str | None = None
+        self.move_hit = False       # the fight sets this when the move connects
+        self.chain = 0              # moves in the current string
+        self.stun = 0
+        self.switch_left = 0
+        self.cooldowns: dict[str, int] = {}
+        self.buffer: list[list] = []   # [button, frames left], oldest first
+
+    # --- derived state ----------------------------------------------------------------
+
+    @property
+    def stance(self) -> str:
+        if self.y > 0:
+            return "air"
+        return "crouch" if self.code.basis == qec.PHASE else "stand"
+
+    @property
+    def phase(self) -> str | None:
+        m = self.move
+        if m is None:
+            return None
+        if self.frame < m.startup:
+            return "startup"
+        if self.frame < m.startup + m.active:
+            return "active"
+        if self.frame < m.startup + m.active + m.recovery:
+            return "recovery"
+        return None
+
+    @property
+    def hurtbox(self) -> tuple[float, float, int, int]:
+        crouching = self.stance == "crouch"
+        return self.world_box(self.char.hurt_crouch if crouching else self.char.hurt_stand)
+
+    def world_box(self, box: Box) -> tuple[float, float, int, int]:
+        """(left, top, w, h) in screen px (y down), mirrored when facing left."""
+        if self.facing >= 0:
+            left = self.x + box.x
+        else:
+            left = self.x - box.x - box.w
+        top = FLOOR_Y - (self.y + box.y + box.h)
+        return (left, top, box.w, box.h)
+
+    def can_cancel(self, slot: str) -> bool:
+        m = self.move
+        return (
+            m is not None
+            and self.move_hit
+            and self.phase in ("active", "recovery")
+            and slot in m.cancels
+            and self.chain < CHAIN_MAX
+        )
+
+    # --- the frame --------------------------------------------------------------------
+
+    def step(self, inp: FighterInput, rival_x: float) -> list[tuple[str, dict]]:
+        """Advance one frame; returns local events.
+
+        The qec code's own cycle is NOT ticked here: the fight ticks each code so
+        it can report the repairs.
+        """
+        events: list[tuple[str, dict]] = []
+        for slot in self.cooldowns:
+            if self.cooldowns[slot] > 0:
+                self.cooldowns[slot] -= 1
+        self.frame += 1
+
+        if self.action not in _STUNNED:
+            for btn in ("a", "b", "x"):
+                if getattr(inp, btn):
+                    self.buffer.append([btn, BUFFER_FRAMES])
+
+        self._advance(events)
+        self._act(inp, rival_x, events)
+        self._physics(events)
+
+        for entry in self.buffer:
+            entry[1] -= 1
+        self.buffer = [e for e in self.buffer if e[1] > 0]
+        return events
+
+    def take_hit(self, move: Move, from_facing: int) -> str:
+        if self.switch_left > 0:
+            # GAME RULE: mid-switch the code is unprotected (see SWITCH_FRAMES)
+            result = self.code.logical_error()
+            self.switch_left = 0
+        else:
+            result = self.code.hit(move.error)
+        damage = move.chip if result == qec.FLIPPED else LOGICAL_DAMAGE + move.bonus
+        self.health = max(0, self.health - damage)
+
+        self.move = None
+        self.slot = None
+        self.move_hit = False
+        self.buffer = []
+        self.vx = move.knockback * from_facing
+        self.frame = 0
+        if move.knockdown:
+            self.action = "knockdown"
+            self.stun = KNOCKDOWN_FRAMES
+        else:
+            self.action = "hitstun"
+            self.stun = move.hitstun
+        return result
+
+    # --- internals --------------------------------------------------------------------
+
+    def _set_action(self, action: str) -> None:
+        if action != self.action:
+            self.action = action
+            self.frame = 0
+
+    def _neutral(self) -> None:
+        """Go to whatever the fighter does when nothing is happening."""
+        if self.y > 0:
+            self._set_action("jump")
+        elif self.code.basis == qec.PHASE:
+            self._set_action("crouch")
+        else:
+            self._set_action("idle")
+
+    def _diving(self) -> bool:
+        m = self.move
+        return (
+            self.action == "attack" and m is not None and m.dive is not None
+            and self.phase == "active"
+        )
+
+    def _advance(self, events: list) -> None:
+        """Move the current action along: stun, switch window, move frames."""
+        if self.action in _STUNNED:
+            self.stun -= 1
+            self.vx *= STUN_DECAY
+            if self.stun <= 0:
+                self.stun = 0
+                if self.y == 0:
+                    self.vx = 0.0
+                self._neutral()
+        elif self.action == "switch":
+            self.switch_left -= 1
+            if self.switch_left <= 0:
+                self.switch_left = 0
+                self._neutral()
+        elif self.action == "attack":
+            m = self.move
+            assert m is not None
+            if self.frame >= m.startup + m.active + m.recovery:
+                self._end_move()
+            else:
+                self._move_effects(m, events)
+
+    def _end_move(self) -> None:
+        self.move = None
+        self.slot = None
+        self.move_hit = False
+        if self.y == 0:
+            self.vx = 0.0
+        self._neutral()
+
+    def _move_effects(self, m: Move, events: list) -> None:
+        if self.phase == "active":
+            if self.frame == m.startup:
+                if m.kind == "projectile":
+                    events.append(("projectile", {"move": m}))
+                elif m.kind == "reencode":
+                    events.append(("reencode", {"repaired": self.code.reencode()}))
+            if m.dive is not None:
+                self.vx = m.dive[0] * self.facing
+                self.vy = -m.dive[1]
+            elif m.lunge:
+                self.vx = m.lunge * self.facing
+        elif self.y == 0:
+            self.vx = 0.0
+        elif m.dive is not None and self.frame == m.startup + m.active:
+            self.vx = 0.0           # the dive ran out before the floor
+
+    def _slot_for(self, btn: str, dx: int, rival_x: float) -> str:
+        if self.y > 0:
+            return f"air.{btn.upper()}"
+        if btn == "b" and dx == self.facing and abs(rival_x - self.x) <= THROW_RANGE:
+            return "throw"
+        prefix = "crouch" if self.stance == "crouch" else "stand"
+        return f"{prefix}.{btn.upper()}"
+
+    def _act(self, inp: FighterInput, rival_x: float, events: list) -> None:
+        on_ground_free = self.action in _GROUND_FREE
+        if on_ground_free and rival_x != self.x:
+            self.facing = 1 if rival_x > self.x else -1
+
+        free = on_ground_free or self.action == "jump"
+        if free or self.action == "attack":
+            self._try_buffer(inp.dx, rival_x, free, events)
+
+        if self.action not in _GROUND_FREE:
+            return
+        basis = self.code.basis
+        if inp.up:
+            self.vy = self.char.jump_vy
+            self.vx = inp.dx * self.char.walk
+            self._set_action("jump")
+        elif (inp.down and basis == qec.BIT) or (not inp.down and basis == qec.PHASE):
+            self._start_switch(events)
+        elif basis == qec.PHASE:
+            self.vx = 0.0           # crouching doesn't walk
+            self._set_action("crouch")
+        else:
+            self.vx = inp.dx * self.char.walk
+            self._set_action("walk" if inp.dx else "idle")
+
+    def _start_switch(self, events: list) -> None:
+        # GAME RULE: the stance switch takes SWITCH_FRAMES during which a hit is a
+        # logical error. Physically a transversal H is instantaneous.
+        self.code.switch()
+        self.switch_left = SWITCH_FRAMES
+        self.vx = 0.0
+        self._set_action("switch")
+        events.append(("switch", {}))
+
+    def _try_buffer(self, dx: int, rival_x: float, free: bool, events: list) -> None:
+        for entry in reversed(self.buffer):
+            slot = self._slot_for(entry[0], dx, rival_x)
+            move = self.char.moves.get(slot)
+            if move is None or self.cooldowns.get(slot, 0) > 0:
+                continue
+            cancel = not free
+            if cancel and not self.can_cancel(slot):
+                continue
+            self.buffer.remove(entry)
+            self._start_move(slot, move, cancel, events)
+            return
+
+    def _start_move(self, slot: str, move: Move, cancel: bool, events: list) -> None:
+        self.move = move
+        self.slot = slot
+        self.move_hit = False
+        self.chain = self.chain + 1 if cancel else 1
+        if move.cooldown > 0:
+            self.cooldowns[slot] = move.cooldown
+        if self.y == 0:
+            self.vx = 0.0
+        self.action = "attack"
+        self.frame = 0
+        events.append(("attack", {"slot": slot}))
+
+    def _physics(self, events: list) -> None:
+        landed = False
+        if self.y > 0 or self.vy > 0:
+            if not self._diving():
+                self.vy -= self.char.gravity
+            self.y += self.vy
+            if self.y <= 0:
+                self.y = 0.0
+                self.vy = 0.0
+                landed = True
+        self.x = min(max(self.x + self.vx, STAGE_LEFT), STAGE_RIGHT)
+        if landed:
+            self._land(events)
+
+    def _land(self, events: list) -> None:
+        events.append(("land", {}))
+        m = self.move
+        if self.action == "attack" and m is not None:
+            self.vx = 0.0
+            if m.dive is not None:
+                # a dive that reaches the floor skips to its recovery
+                self.frame = max(self.frame, m.startup + m.active)
+            else:
+                self._end_move()    # any other air move is land-cancelled
+        elif self.action == "jump":
+            self.vx = 0.0
+            self._neutral()
