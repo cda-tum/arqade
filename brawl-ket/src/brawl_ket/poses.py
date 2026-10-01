@@ -20,7 +20,8 @@ from . import qec
 from .config import SWITCH_FRAMES
 from .fighter import Fighter
 
-EASE_FRAMES = 3         # frames to blend into each keyframe
+EASE_FRAMES = 3         # at most this many frames to blend into a keyframe
+_STUNNED = ("hitstun", "knockdown")
 WALK_STRIDE = 8         # px of x travel from walk1 to walk2
 BREATH_FRAMES = 72      # one idle breath
 GET_UP_FRAMES = 12      # the end of a knockdown blends into the stance
@@ -40,7 +41,7 @@ class Pose:
     fore_f: float
     arm_b: float
     fore_b: float
-    drop: float = 0.0   # px the planted puppet is lifted off its feet (air poses); 0 = grounded
+    drop: float = 0.0   # px the whole puppet is lifted after its lowest foot is planted; 0 = feet on the floor
 
 
 _FIELDS = tuple(f.name for f in fields(Pose))
@@ -148,25 +149,46 @@ def _stance_pose(f: Fighter) -> Pose:
     return POSES["crouch" if f.code.basis == qec.PHASE else "idle"]
 
 
-def _move_pose(f: Fighter) -> Pose:
+def _ease(frame: int, length: int) -> float:
+    """How far into a phase's keyframe on this frame (0-based) of a phase `length` long:
+    1 on the phase's last eased frame, so every phase ends exactly on its keyframe."""
+    return (frame + 1) / min(EASE_FRAMES, length)
+
+
+def _move_pose(f: Fighter, start: Pose | None) -> Pose:
+    """Startup eases in from the pose the fighter was in when the move began (the rest
+    pose if unknown); the active phase IS its keyframe from its first frame, because
+    that frame is the impact, held through hitstop; recovery eases out of the strike
+    and, at the very end, back towards the rest pose."""
     m = f.move
     assert m is not None
-    starts = (0, m.startup, m.startup + m.active)
-    end = m.startup + m.active + m.recovery
-    i = 2 if f.frame >= starts[2] else 1 if f.frame >= starts[1] else 0
     rest = POSES[_rest(f.slot, f)]
-    before = POSES[m.poses[i - 1]] if i else rest
-    pose = lerp(before, POSES[m.poses[i]], (f.frame - starts[i] + 1) / EASE_FRAMES)
-    left = end - f.frame            # recovery hands back to the rest pose at the end
-    if i == 2 and left <= EASE_FRAMES:
+    active, end = m.startup, m.startup + m.active
+    if f.frame < active:
+        return lerp(start or rest, POSES[m.poses[0]], _ease(f.frame, m.startup))
+    if f.frame < end:
+        return POSES[m.poses[1]]
+    pose = lerp(POSES[m.poses[1]], POSES[m.poses[2]], _ease(f.frame - end, m.recovery))
+    left = end + m.recovery - f.frame
+    if left <= EASE_FRAMES:
         pose = lerp(pose, rest, 1 - left / (EASE_FRAMES + 1))
     return pose
 
 
-def pose_for(f: Fighter) -> Pose:
+def pose_for(f: Fighter, start: Pose | None = None) -> Pose:
+    """The pose to draw this frame. `start` is the pose the fighter was drawn in when
+    its current action (or move) began, if known: the first frames blend out of it, so
+    cancels and landings don't pop. A hit shows at once, without a blend."""
+    if f.action == "attack" and f.move is not None:
+        return _move_pose(f, start)
+    pose = _action_pose(f)
+    if start is not None and f.action not in _STUNNED and f.frame < EASE_FRAMES:
+        pose = lerp(start, pose, (f.frame + 1) / (EASE_FRAMES + 1))
+    return pose
+
+
+def _action_pose(f: Fighter) -> Pose:
     a = f.action
-    if a == "attack" and f.move is not None:
-        return _move_pose(f)
     if a == "walk":
         k = (f.x / WALK_STRIDE) % 2
         return lerp(POSES["walk1"], POSES["walk2"], _smooth(k if k <= 1 else 2 - k))
@@ -183,11 +205,10 @@ def pose_for(f: Fighter) -> Pose:
         return POSES["hitstun"]
     if a == "knockdown":
         down = lerp(POSES["hitstun"], POSES["knockdown"], (f.frame + 1) / FALL_FRAMES)
-        if f.stun <= GET_UP_FRAMES:
-            return lerp(POSES["crouch"], down, _smooth(f.stun / GET_UP_FRAMES))
+        if f.stun <= GET_UP_FRAMES:      # get up into the stance the code is in
+            return lerp(_stance_pose(f), down, _smooth(f.stun / GET_UP_FRAMES))
         return down
     # idle and crouch breathe: a small dip towards the crouch
     base = _stance_pose(f) if a == "crouch" else POSES["idle"]
     k = 0.5 - 0.5 * math.cos(2 * math.pi * f.frame / BREATH_FRAMES)
     return lerp(base, POSES["crouch"] if a != "crouch" else POSES["low_wind"], 0.05 * k)
-

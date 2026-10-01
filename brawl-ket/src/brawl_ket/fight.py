@@ -16,6 +16,7 @@ from dataclasses import dataclass, replace
 
 from . import qec
 from .config import (
+    BODY_WIDTH,
     FLOOR_Y,
     HITSTOP,
     HITSTOP_LOGICAL,
@@ -27,7 +28,6 @@ from .config import (
 from .fighter import IDLE, Fighter, FighterInput
 from .moves import Box, Character, Move
 
-BODY_WIDTH = 28             # fighters can't stand closer than this (push-box), px
 SHOT_SPAWN_OFFSET = 24      # a shot appears this far in front of its owner, px
 LANDING_FRAMES = 4          # how long a landing shockwave stays live
 

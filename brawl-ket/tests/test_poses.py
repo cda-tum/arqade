@@ -7,7 +7,16 @@ from brawl_ket.config import FLOOR_Y, SWITCH_FRAMES
 from brawl_ket.fight import SHOT_SPAWN_OFFSET
 from brawl_ket.fighter import Fighter
 from brawl_ket.moves import CHARACTERS, TRIO, Move
-from brawl_ket.poses import POSE_NAMES, POSES, SCALE, Pose, joints, lerp, pose_for
+from brawl_ket.poses import (
+    EASE_FRAMES,
+    POSE_NAMES,
+    POSES,
+    SCALE,
+    Pose,
+    joints,
+    lerp,
+    pose_for,
+)
 
 BUILDS = tuple(SCALE)
 FEET = (320.0, float(FLOOR_Y))
@@ -113,21 +122,72 @@ def test_pose_for_every_action(action):
 
 
 def test_pose_for_every_move_and_frame():
+    for slot, move in all_moves():
+        f = fighter("attack", move=move, slot=slot)
+        for frame in range(move.startup + move.active + move.recovery):
+            f.frame = frame
+            assert isinstance(pose_for(f), Pose), (slot, frame)
+
+
+def all_moves():
     for char in CHARACTERS.values():
-        for slot, move in char.moves.items():
-            f = fighter("attack", move=move, slot=slot)
-            for frame in range(move.startup + move.active + move.recovery):
-                f.frame = frame
-                assert isinstance(pose_for(f), Pose), (slot, frame)
+        yield from char.moves.items()
 
 
-def test_a_move_reaches_its_keyframes():
+def test_the_active_phase_snaps_to_its_keyframe():
+    # the impact frame is held through hitstop, so it must be the full strike
+    for slot, move in all_moves():
+        f = fighter("attack", move=move, slot=slot)
+        for frame in range(move.startup, move.startup + move.active):
+            f.frame = frame
+            assert pose_for(f) == POSES[move.poses[1]], (slot, frame)
+
+
+def test_startup_and_recovery_end_on_their_keyframes():
+    for slot, move in all_moves():
+        f = fighter("attack", move=move, slot=slot)
+        f.frame = move.startup - 1
+        assert pose_for(f) == POSES[move.poses[0]], slot
+
+
+def test_startup_eases_in_from_the_pose_reached():
     move = TRIO.moves["stand.B"]
-    f = fighter("attack", move=move, slot="stand.B")
-    f.frame = move.startup + 3      # three frames into the active phase: fully eased in
-    assert pose_for(f) == POSES[move.poses[1]]
-    f.frame = move.startup          # the first active frame is still blending
-    assert pose_for(f) != POSES[move.poses[1]]
+    f = fighter("attack", move=move, slot="stand.B", frame=0)
+    start = POSES["jab_hit"]        # cancelled out of a jab's strike
+    n = min(EASE_FRAMES, move.startup)
+    assert pose_for(f, start) == lerp(start, POSES[move.poses[0]], 1 / n)
+    assert pose_for(f) == lerp(POSES["idle"], POSES[move.poses[0]], 1 / n)
+
+
+def test_recovery_eases_out_of_the_strike():
+    for slot, move in all_moves():
+        f = fighter("attack", move=move, slot=slot, frame=move.startup + move.active)
+        n = min(EASE_FRAMES, move.recovery)
+        assert pose_for(f) == lerp(POSES[move.poses[1]], POSES[move.poses[2]], 1 / n), slot
+
+
+def test_other_actions_ease_in_from_the_pose_reached():
+    start = POSES["air_kick"]       # landing out of an air move
+    f = fighter("idle", frame=0)
+    first = pose_for(f, start)
+    assert first != pose_for(f) and first != start
+    f.frame = EASE_FRAMES
+    assert pose_for(f, start) == pose_for(f)
+
+
+def test_a_hit_shows_at_once():
+    f = fighter("hitstun", stun=16, frame=0)
+    assert pose_for(f, POSES["jab_hit"]) == POSES["hitstun"]
+
+
+def test_knockdown_gets_up_into_the_stance():
+    for basis, name in ((qec.BIT, "idle"), (qec.PHASE, "crouch")):
+        f = fighter("knockdown", stun=1, frame=39)
+        if f.code.basis != basis:
+            f.code.switch()
+        near = pose_for(f)
+        target = POSES[name]
+        assert abs(near.lean - target.lean) < 3 and abs(near.thigh_b - target.thigh_b) < 6, basis
 
 
 def test_walking_alternates_with_distance():
@@ -159,7 +219,7 @@ def test_knockdown_lies_low():
 
 # --- the art matches the frame data ---------------------------------------------------------
 
-# which joint lands each move's hit (the active pose)
+# which joint lands each move's hit; every move with a hitbox must be listed
 STRIKER = {
     "jab": "hand_f", "heavy": "hand_f", "low jab": "hand_f", "sweep": "foot_f",
     "air jab": "hand_f", "jump-in": "foot_f", "throw": "hand_f",
@@ -180,10 +240,15 @@ def screen_box(move: Move):
     return (FEET[0] + b.x, FEET[1] - (b.y + b.h), b.w, b.h)
 
 
-@pytest.mark.parametrize("slot", [s for s, m in TRIO.moves.items() if m.name in STRIKER])
-def test_the_striking_limb_reaches_the_hitbox(slot):
-    move = TRIO.moves[slot]
-    j = joints(POSES[move.poses[1]], TRIO.build, FEET, 1)
+@pytest.mark.parametrize(("char", "slot"), [
+    (c.name, s) for c in CHARACTERS.values() for s, m in c.moves.items() if m.hitbox is not None
+])
+def test_the_striking_limb_reaches_the_hitbox_on_impact(char, slot):
+    c = CHARACTERS[char]
+    move = c.moves[slot]
+    f = Fighter(c, FEET[0], 1)
+    f.action, f.move, f.slot, f.frame = "attack", move, slot, move.startup   # the first active frame
+    j = joints(pose_for(f), c.build, FEET, 1)
     point = j[STRIKER[move.name]]
     assert distance_to_box(point, screen_box(move)) <= REACH, (move.name, point)
 

@@ -31,11 +31,11 @@ from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
 from brawl_ket.moves import TRIO
-from brawl_ket.poses import POSE_NAMES, POSES, SCALE, pose_for
+from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
 from brawl_ket.render import Renderer, draw_puppet, outlined
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
-CELL_W, CELL_H, COLS = 150, 230, 6
+CELL_W, CELL_H, COLS = 180, 230, 6
 CELL_FLOOR = 200
 ACCENTS = {"lean": P.CREAM, "heavy": P.GOLD}
 
@@ -58,7 +58,8 @@ def pose_sheet(build: str) -> pygame.Surface:
     for i, name in enumerate(POSE_NAMES):
         x, y = (i % COLS) * CELL_W, (i // COLS) * CELL_H
         cell_floor(sheet, x, y)
-        feet = (x + CELL_W / 2 - 10, y + CELL_FLOOR)
+        xs = [jx for jx, _ in joints(POSES[name], build, (0.0, 0.0), 1).values()]
+        feet = (x + CELL_W / 2 - (min(xs) + max(xs)) / 2, y + CELL_FLOOR)   # centred in the cell
         draw_puppet(sheet, POSES[name], build, feet, 1, config.PLAYER_COLORS["p1"], ACCENTS[build])
         sheet.blit(outlined(name, 8, P.WHITE), (x + 6, y + 6))
     return sheet
@@ -79,7 +80,7 @@ def move_sheet() -> pygame.Surface:
             x = k * 130
             sheet.fill(P.NIGHT, (x + 1, y + 1, 128, 168))
             sheet.fill(P.SLATE, (x + 1, y + 150, 128, 2))
-            draw_puppet(sheet, pose_for(f), "lean", (x + 50, y + 150), 1, config.PLAYER_COLORS["p1"], P.CREAM)
+            draw_puppet(sheet, pose_for(f), "lean", (x + 62, y + 150), 1, config.PLAYER_COLORS["p1"], P.CREAM)
             sheet.blit(outlined(f"{f.phase[0].upper()}{f.frame}", 8, P.MIST), (x + 4, y + 156))
         sheet.blit(outlined(f"{slot} {move.name}", 8, P.WHITE), (6, y + 6))
     return sheet

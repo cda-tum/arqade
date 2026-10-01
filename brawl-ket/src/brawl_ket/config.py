@@ -34,7 +34,8 @@ HITSTOP = 5
 HITSTOP_LOGICAL = 12
 BUFFER_FRAMES = 6
 CHAIN_MAX = 3
-THROW_RANGE = 34         # px between the fighters' x
+THROW_RANGE = 50         # px between the fighters' x
+BODY_WIDTH = 44          # fighters can't stand closer than this (the push box), px
 
 
 # --- Screen transitions and input timing -------------------------------------

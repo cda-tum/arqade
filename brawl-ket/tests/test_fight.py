@@ -4,6 +4,7 @@ from types import MappingProxyType
 
 from brawl_ket import qec
 from brawl_ket.config import (
+    BODY_WIDTH,
     HITSTOP,
     HITSTOP_LOGICAL,
     LOGICAL_DAMAGE,
@@ -11,6 +12,7 @@ from brawl_ket.config import (
     STAGE_LEFT,
     STAGE_RIGHT,
     START_X,
+    THROW_RANGE,
 )
 from brawl_ket.fight import Event, Fight, Shot, _overlap
 from brawl_ket.fighter import IDLE, FighterInput
@@ -127,7 +129,7 @@ def test_low_attack_on_a_stander_is_logical_at_once():
 
 def test_throw_is_always_logical():
     for crouching in (False, True):
-        fight = new(gap=30.0)
+        fight = new(gap=float(BODY_WIDTH))
         if crouching:
             fight.fighters["p2"].code.switch()
         events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)})
@@ -148,7 +150,7 @@ def test_the_cycle_repairs_between_spaced_hits():
 
 
 def test_a_throw_whiffs_on_an_airborne_rival():
-    fight = new(gap=30.0)
+    fight = new(gap=float(BODY_WIDTH))
     p2 = fight.fighters["p2"]
     p2.y = 20.0                 # in the air, but still level with the throw box
     events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)})
@@ -156,7 +158,7 @@ def test_a_throw_whiffs_on_an_airborne_rival():
 
 
 def test_a_throw_whiffs_on_a_stunned_rival():
-    fight = new(gap=30.0)
+    fight = new(gap=float(BODY_WIDTH))
     p2 = fight.fighters["p2"]
     p2.take_hit(replace(JAB, knockback=0.0, hitstun=30, chip=0), 1)
     assert p2.action == "hitstun"
@@ -398,11 +400,11 @@ def test_an_ordinary_dive_has_no_shockwave():
 # --- p1 and p2 are treated alike ----------------------------------------------------------
 
 def test_a_throw_against_a_walking_rival_is_the_same_for_p1_and_p2():
-    # 33 px apart at the start of the frame; the rival walks away to 35.2, out of range.
+    # Just in range at the start of the frame; the rival walks away, out of range.
     # Both fighters read the rival's x from the START of the frame, so both get a throw.
     outcomes = []
     for attacker, rival, side in (("p1", "p2", 1), ("p2", "p1", -1)):
-        fight = new(gap=33.0)
+        fight = new(gap=THROW_RANGE - 1.0)
         inputs = {attacker: FighterInput(dx=side, b=True), rival: FighterInput(dx=side)}
         events = list(fight.step(inputs))
         assert fight.fighters[attacker].slot == "throw", attacker
@@ -419,13 +421,13 @@ def test_a_throw_against_a_walking_rival_is_the_same_for_p1_and_p2():
 
 # --- bodies -----------------------------------------------------------------------------
 
-def test_walking_into_each_other_never_overlaps_closer_than_28():
+def test_walking_into_each_other_never_overlaps_closer_than_the_body_width():
     fight = new(gap=200.0)
     closest = 1e9
     for _ in range(200):
         fight.step({"p1": FighterInput(dx=1), "p2": FighterInput(dx=-1)})
         closest = min(closest, abs(fight.fighters["p2"].x - fight.fighters["p1"].x))
-    assert closest >= 28 - 1e-9
+    assert closest >= BODY_WIDTH - 1e-9
 
 
 def test_the_push_is_shared_and_a_wall_makes_the_other_take_it_all():
@@ -433,17 +435,17 @@ def test_the_push_is_shared_and_a_wall_makes_the_other_take_it_all():
     p1, p2 = fight.fighters["p1"], fight.fighters["p2"]
     mid = (p1.x + p2.x) / 2
     fight.step({"p1": IDLE, "p2": IDLE})
-    assert (p1.x, p2.x) == (mid - 14, mid + 14)
+    assert (p1.x, p2.x) == (mid - BODY_WIDTH / 2, mid + BODY_WIDTH / 2)
 
     fight = new()
     p1, p2 = fight.fighters["p1"], fight.fighters["p2"]
     p2.x = STAGE_RIGHT
     p1.x = STAGE_RIGHT - 5
     fight.step({"p1": IDLE, "p2": IDLE})
-    assert p2.x == STAGE_RIGHT and p1.x == STAGE_RIGHT - 28
+    assert p2.x == STAGE_RIGHT and p1.x == STAGE_RIGHT - BODY_WIDTH
     p1.x, p2.x = STAGE_LEFT, STAGE_LEFT + 4
     fight.step({"p1": IDLE, "p2": IDLE})
-    assert p1.x == STAGE_LEFT and p2.x == STAGE_LEFT + 28
+    assert p1.x == STAGE_LEFT and p2.x == STAGE_LEFT + BODY_WIDTH
 
 
 def test_fighters_in_the_air_pass_through_each_other():
@@ -539,3 +541,18 @@ def test_same_inputs_same_fight():
         results.append((events, state, fight.frames_left, fight.over, fight.winner))
     assert results[0] == results[1]
     assert any(e.kind in ("hit", "logical") for e in results[0][0])      # the run did fight
+
+
+def test_a_jab_connects_at_the_closest_spacing():
+    # Walked all the way in, the push box holds the fighters BODY_WIDTH apart: a jab
+    # (either side, standing or crouching rival) must still reach.
+    for crouching in (False, True):
+        for attacker, rival in (("p1", "p2"), ("p2", "p1")):
+            fight = new(gap=200.0)
+            for _ in range(120):
+                fight.step({"p1": FighterInput(dx=1), "p2": FighterInput(dx=-1)})
+            assert abs(fight.fighters["p2"].x - fight.fighters["p1"].x) == BODY_WIDTH
+            if crouching:
+                fight.fighters[rival].code.switch()
+            events = script(fight, 20, **{attacker: {0: A}})
+            assert [e.player for e in of(events, "hit", "logical")] == [rival], (attacker, crouching)

@@ -91,7 +91,7 @@ TRIO = Character(
     jump_vy=9.5,
     gravity=0.5,
     hurt_stand=Box(-14, 0, 28, 120),
-    hurt_crouch=Box(-16, 0, 32, 72),
+    hurt_crouch=Box(-16, 0, 32, 100),
     moves=MappingProxyType({
         "stand.A": Move(
             "jab", 4, 3, 8, Box(14, 70, 30, 14), qec.X,
@@ -126,7 +126,7 @@ TRIO = Character(
             poses=("jump", "air_kick", "jump"),
         ),
         "throw": Move(
-            "throw", 5, 2, 20, Box(0, 40, 34, 60), qec.Y,
+            "throw", 5, 2, 20, Box(0, 40, 40, 60), qec.Y,
             chip=0, bonus=6, hitstun=30, knockback=5.0, knockdown=True,
             kind="throw",
             poses=("throw_reach", "throw_hold", "idle"),

@@ -9,6 +9,7 @@ from brawl_ket.config import (
     LOGICAL_DAMAGE,
     STAGE_LEFT,
     SWITCH_FRAMES,
+    THROW_RANGE,
 )
 from brawl_ket.fighter import IDLE, Fighter, FighterInput
 from brawl_ket.moves import TRIO, Box
@@ -268,7 +269,7 @@ def test_standing_buttons_use_stand_slots():
 
 def test_b_up_close_towards_the_rival_is_a_throw():
     f = make(300, 1)
-    ev = run(f, FighterInput(dx=1, b=True), rival_x=320)
+    ev = run(f, FighterInput(dx=1, b=True), rival_x=300 + THROW_RANGE)
     assert ev == [("attack", {"slot": "throw"})]
     assert f.move is TRIO.moves["throw"]
 
@@ -288,7 +289,7 @@ def test_b_close_but_not_pushing_towards_is_the_standing_heavy():
 
 def test_throw_works_facing_left():
     f = make(300, -1)
-    ev = run(f, FighterInput(dx=-1, b=True), rival_x=280)
+    ev = run(f, FighterInput(dx=-1, b=True), rival_x=300 - THROW_RANGE)
     assert ev == [("attack", {"slot": "throw"})]
 
 

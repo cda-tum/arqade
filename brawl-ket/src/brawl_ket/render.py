@@ -24,6 +24,7 @@ from . import palette as P
 from . import qec
 from .config import (
     FLOOR_Y,
+    FPS,
     INTERNAL_HEIGHT,
     INTERNAL_WIDTH,
     PLAYER_COLORS,
@@ -32,7 +33,7 @@ from .config import (
 from .fight import Fight
 from .fighter import Fighter
 from .fonts import load_font
-from .poses import HEAD_R, LIMB_W, joints, pose_for
+from .poses import HEAD_R, LIMB_W, Pose, joints, pose_for
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 MARGIN = 8                  # the stage is this much bigger on every side, for the shake
@@ -59,7 +60,8 @@ HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
 TAG_FOLLOW = 0.3            # the code lights ease towards the head by this much per frame
-TAG_W, TAG_H = 64, 26       # the space one code tag (ket, lights, ring) needs
+TAG_W = 66                  # the width one code tag (ket, plate of lights and ring) needs
+TAG_LO, TAG_HI = TAG_W / 2 + 4, W - TAG_W / 2 - 4   # where a tag's centre may go
 BANNER_Y = 80
 BANNER_TEXT = "LOGICAL ERROR!"
 
@@ -257,6 +259,9 @@ class Renderer:
         self.trail_wait = {p: 0 for p in PLAYERS}
         self.last_health = {p: 0.0 for p in PLAYERS}
         self.tag_y: dict[str, float | None] = {p: None for p in PLAYERS}
+        self.pose_seen: dict[str, tuple] = {p: (None, 0) for p in PLAYERS}
+        self.pose_start: dict[str, Pose | None] = {p: None for p in PLAYERS}
+        self.pose_last: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.flash = {p: (None, 0) for p in PLAYERS}    # (colour, frames left) on the lights
         self.effects.clear()
         self.shake = 0
@@ -379,8 +384,20 @@ class Renderer:
         if f.action in ("hitstun", "knockdown") and f.frame < HIT_FLASH_FRAMES:
             body, accent = P.lighten(body, 0.6), P.WHITE
         feet = (f.x + ox, FLOOR_Y - f.y + oy)
-        j = draw_puppet(self.surface, pose_for(f), f.char.build, feet, f.facing, body, accent)
+        j = draw_puppet(self.surface, self._pose(key, f), f.char.build, feet, f.facing, body, accent)
         return j["head"][0] - ox, j["head"][1] - oy
+
+    def _pose(self, key: str, f: Fighter) -> Pose:
+        """pose_for, told which pose the fighter was drawn in when its action began,
+        so a cancel, a landing or a recovery into the stance blends instead of popping."""
+        now = (f.action, f.slot, id(f.move))
+        seen, frame = self.pose_seen[key]
+        if now != seen or f.frame < frame:
+            self.pose_start[key] = self.pose_last[key]
+        self.pose_seen[key] = (now, f.frame)
+        pose = pose_for(f, self.pose_start[key])
+        self.pose_last[key] = pose
+        return pose
 
     def _shot(self, s, ox: int, oy: int) -> None:
         left, top, w, h = s.box
@@ -412,34 +429,46 @@ class Renderer:
         y = self.tag_y[key]
         y = target if y is None else y + (target - y) * TAG_FOLLOW
         self.tag_y[key] = y
-        return [head[0], y]
+        return [min(max(head[0], TAG_LO), TAG_HI), y, head[0]]     # x, y, the head's x
 
     @staticmethod
     def _separate(tags: dict[str, list[float]], fight: Fight) -> None:
-        """Two tags never overlap: close together, each moves out to its fighter's side."""
+        """Two tags never sit closer than TAG_W across, however far apart vertically: each
+        moves out to its own fighter's side, and both stay on screen (at a wall too)."""
         a, b = tags["p1"], tags["p2"]
-        if abs(a[1] - b[1]) >= TAG_H or abs(a[0] - b[0]) >= TAG_W:
+        if abs(a[0] - b[0]) >= TAG_W:
             return
         f1, f2 = fight.fighters["p1"], fight.fighters["p2"]
         if f2.x != f1.x:
             side = 1 if f2.x > f1.x else -1     # p2 stands on this side of p1
         else:
             side = 1 if b[0] >= a[0] else -1
-        mid, half = (a[0] + b[0]) / 2, TAG_W / 2
-        a[0], b[0] = mid - side * half, mid + side * half
+        mid = (a[0] + b[0]) / 2
+        mid = min(max(mid, TAG_LO + TAG_W / 2), TAG_HI - TAG_W / 2)
+        a[0], b[0] = mid - side * TAG_W / 2, mid + side * TAG_W / 2
 
     def _code_tag(self, key: str, f: Fighter, at, ox: int, oy: int) -> None:
         """The code over the head: the ket, the lights (flipped ones red) and the cycle ring."""
         code = f.code
         n = code.distance
         row = (n - 1) * LIGHT_GAP + 16             # the lights plus the ring
-        cx = min(max(at[0], row / 2 + 6), W - row / 2 - 6) + ox
+        cx = at[0] + ox
         cy = round(at[1]) + oy
         x0 = cx - row / 2 + 4
         flash, left = self.flash[key]
         lit = flash is not None and left % 6 >= 2
         base = P.SKY if code.basis == qec.BIT else P.GOLD
         surf = self.surface
+        # a plate in the player's colour, with a tick pointing down at its own fighter
+        color = PLAYER_COLORS[key]
+        plate = pygame.Rect(0, 0, row + 8, 14)
+        plate.center = (round(cx), cy)
+        tick = min(max(round(at[2] + ox), plate.left + 4), plate.right - 4)
+        pygame.draw.polygon(surf, P.INK, ((tick - 5, plate.bottom), (tick + 5, plate.bottom), (tick, plate.bottom + 6)))
+        pygame.draw.polygon(surf, color, ((tick - 3, plate.bottom), (tick + 3, plate.bottom), (tick, plate.bottom + 3)))
+        pygame.draw.rect(surf, P.INK, plate.inflate(2, 2), border_radius=5)
+        pygame.draw.rect(surf, color, plate, border_radius=4)
+        pygame.draw.rect(surf, P.NIGHT, plate.inflate(-4, -4), border_radius=3)
         for i in range(n):
             x = round(x0 + i * LIGHT_GAP)
             col = flash if lit else (P.BAD if i in code.flipped else base)
@@ -490,7 +519,7 @@ class Renderer:
         box.midtop = (cx, 6)
         pygame.draw.rect(surf, P.INK, box, border_radius=5)
         pygame.draw.rect(surf, P.NIGHT, box.inflate(-4, -4), border_radius=4)
-        secs = max(0, math.ceil(fight.frames_left / 60))
+        secs = max(0, math.ceil(fight.frames_left / FPS))
         blit_center(surf, outlined(f"{secs:02d}", 16, P.GOLD if secs > 10 else P.BAD), (cx + 1, box.centery + 1))
         won = wins or {}
         for key, side in (("p1", -1), ("p2", 1)):
