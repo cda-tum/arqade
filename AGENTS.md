@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`, `quantum-towers/`,
 `error-invaders/`, `ion-surfer/`, `overquqed/`, `superconductor/`, `qurves/`,
-more later) built for the same physical target: a Batocera-based arcade
+`gate-drop/`, more later) built for the same physical target: a Batocera-based arcade
 cabinet ("IconicArcade"), a Raspberry Pi 4 with a 21" 1920x1080 screen and
 two 6-button joystick pads. This file collects hardware facts and hard-won
 quirks that apply **across games**, so a future session doesn't have to

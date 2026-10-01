@@ -52,4 +52,11 @@
 		<image>./images/qurves-image.png</image>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./gate_drop.pygame</path>
+		<name>Gate Drop</name>
+		<desc>Quantum circuit puzzle versus: drop gate pills onto the qubit wires, cancel equal gates, and clear every Pauli error before your rival does.</desc>
+		<image>./images/gate_drop-image.png</image>
+		<lang>en</lang>
+	</game>
 </gameList>
