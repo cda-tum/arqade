@@ -86,7 +86,7 @@ given.
 
 | # | Verb | Input | Rules | Harder with level | Caption |
 |---|---|---|---|---|---|
-| 1 | **ALIGN!** | stick | A Bloch sphere (a circle, its equator ellipse and an arrow). The stick turns the arrow: x moves φ, y moves θ. Win by holding the arrow within 15° of the glowing target dot for 0.3 s. | The target starts farther away. | "You prepared a qubit state" |
+| 1 | **ALIGN!** | stick | A Bloch sphere (a circle, its equator ellipse and an arrow). The arrow swings round the circle facing the player and turns towards wherever the stick points. Win by holding it within 15° of the glowing target for 0.3 s. | The target starts farther away. | "You prepared a qubit state" |
 | 2 | **CANCEL!** | A | A wire with a fixed gate in a slot at its centre. Gates scroll along it (X, Y, Z, H). Press A while the slot gate's twin is over the slot: both vanish and you win. A press at any other time fails. | Faster scrolling, more look-alikes. | "A gate followed by its inverse cancels out. Compilers do this!" |
 | 3 | **FIX!** | stick + A | A qubit orb carries an error bug, X, Y or Z, in its gate colour. Three gate cards sit below it. The stick picks a card and A applies it. The matching card wins; any other fails. | The cards shuffle once mid-game. | "Undo an error by applying the same Pauli" |
 | 4 | **MEASURE!** | A | An orb's needle swings between \|0⟩ (down) and \|1⟩ (up). Press A while it's in the top zone. A press elsewhere fails. | Faster swing, smaller zone. | "Measuring collapses a qubit to 0 or 1" |
