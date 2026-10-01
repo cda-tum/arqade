@@ -6,6 +6,13 @@ def test_defaults_are_a_windowed_dev_run():
     assert not args.fullscreen and not args.no_keyboard and not args.input_test
 
 
+def test_boss_every_defaults_to_the_config():
+    from planck_time import config
+
+    assert parse_args([]).boss_every == config.BOSS_EVERY
+    assert parse_args(["--boss-every", "1"]).boss_every == 1
+
+
 def test_the_cabinet_loader_flags_parse():
     args = parse_args(["--fullscreen", "--no-keyboard"])
     assert args.fullscreen and args.no_keyboard

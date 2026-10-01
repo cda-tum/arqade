@@ -30,6 +30,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--fps", action="store_true", help="Show the FPS overlay")
     parser.add_argument("--window-size", default="1280x720",
                         help="Windowed size as WxH (ignored with --fullscreen)")
+    parser.add_argument("--boss-every", type=int, default=config.BOSS_EVERY,
+                        help="A boss after this many wins (dev: 1 to try the boss at once)")
     parser.add_argument("--no-keyboard", action="store_true",
                         help="Ignore the keyboard, joysticks only (used on the Batocera cabinet)")
     return parser.parse_args(argv)
@@ -38,6 +40,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     set_keyboard_enabled(not args.no_keyboard)
+    config.BOSS_EVERY = max(1, args.boss_every)
     if args.input_test:
         from planck_time.input_test import run_input_test
 
