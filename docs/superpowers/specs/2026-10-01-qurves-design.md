@@ -16,19 +16,19 @@ round when *every* copy of you has crashed.
 
 | Action | Cabinet | P1 keyboard (dev) | P2 keyboard (dev) |
 |---|---|---|---|
-| Steer | stick (absolute: push up = head up) | I J K L | numpad 8 4 5 6 |
-| Split | A (raw 1) | U | numpad 0 |
-| Start / confirm | Start (raw 9), or A | Enter | numpad Enter |
-| Back | B (raw 2) | O | numpad . |
+| Steer | stick (absolute: push up = head up) | W A S D | I J K L |
+| Split | A (raw 1) | Q | U |
+| Start / confirm | Start (raw 9), or A | 1 | 2 |
+| Back | B (raw 2) | E | O |
 | Quit | Start + Select (raw 9 + 8) on one pad | Esc | Esc |
 
 - Direction comes from the stick's dominant axis past a 0.25 deadzone. Axis 1
   is vertical (negative = up, confirmed on the cabinet). Axis 0 is assumed
   horizontal and must be confirmed with `--input-test`. The hat is read only
   as a fallback.
-- P1's keyboard keys avoid `l x r b y a` and the arrow keys, which the
-  cabinet's P1 encoder also types (AGENTS.md). On the cabinet the loader
-  passes `--no-keyboard`, so this only matters for dev runs.
+- The keyboard is a dev fallback only. On the cabinet the loader passes
+  `--no-keyboard`, so the keystrokes the P1 encoder also types (AGENTS.md)
+  never reach the game, and the dev keys need not avoid them.
 - Reversing straight into your own heading is ignored.
 - Steering input is sampled per tick: the most recent non-neutral direction
   since the last tick wins, so a quick tap between ticks is not lost.
@@ -111,8 +111,11 @@ branch's ghost trail becomes solid.
 
 ### Tick order
 
-Each tick runs these steps in order. Steps 2 and 3 are computed for every bike
-before any of them is applied, so all bikes effectively move at once.
+The simulation has two entry points. `tick()` runs once per grid step, and
+`advance(dt)` runs once per frame for everything that happens in real time:
+meter drain, decoherence and pickup respawns. Each tick runs these steps in
+order. Steps 2 and 3 are computed for every bike before any of them is
+applied, so all bikes effectively move at once.
 
 1. Apply steering, including the mirroring for split players.
 2. Compute each bike's target cell.
@@ -123,10 +126,10 @@ before any of them is applied, so all bikes effectively move at once.
 6. Write each surviving bike's new cell: solid for a single bike, ghost for a
    copy.
 7. Collect pickups.
-8. Drain the meters, and apply decoherence when a meter reaches 0.
-9. Check whether the round is over: a win, or a draw.
+8. Check whether the round is over: a win, or a draw.
 
-Meter drain is real time, so step 8 takes `dt`. Everything else is per tick.
+`advance(dt)` then drains the meters of split players, applies decoherence
+when a meter reaches 0, and respawns pickups whose timer has run out.
 
 ## 2. Architecture
 
