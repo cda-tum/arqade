@@ -1,6 +1,6 @@
 """Fixed internal-resolution rendering, scaled onto the real display.
 
-Fullscreen (the cabinet) uses pygame's SCALED mode, so SDL does the x4
+Fullscreen (the cabinet) uses pygame's SCALED mode, so SDL does the x3
 upscale on the GPU (nearest-neighbour, set in main.py). Windowed dev mode
 scales and blits manually, because pygame 2.5.2's SCALED mode has no way to
 pick the window size. Same approach as the sibling games.

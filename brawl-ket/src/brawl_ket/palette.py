@@ -1,7 +1,7 @@
 """The Game Boy Advance-style palette. The GBA's screen was 15-bit (5 bits
-per channel), so every channel here is a multiple of 8. Microgames, cards
-and screens all pick their colours from this one list, which is what keeps
-twelve different microgames looking like one game."""
+per channel), so every channel here is a multiple of 8. Fighters, stage and
+HUD all pick their colours from this one list, which is what keeps the entire
+game looking unified."""
 
 from __future__ import annotations
 
