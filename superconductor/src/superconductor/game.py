@@ -178,6 +178,22 @@ def draw_scanlines(S):
     S.blit(_scanlines, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
 
 
+_tints: dict = {}
+
+
+def tint(S, rect, col, alpha):
+    """Wash a rect in a colour (one cached surface per size, alpha set per call)."""
+    rect = pygame.Rect(rect)
+    key = (rect.size, col)
+    surf = _tints.get(key)
+    if surf is None:
+        surf = pygame.Surface(rect.size).convert()
+        surf.fill(col)
+        _tints[key] = surf
+    surf.set_alpha(clamp(alpha, 0, 255))
+    S.blit(surf, rect)
+
+
 _veils: dict = {}
 
 
@@ -325,6 +341,7 @@ class View:
     popups: list = field(default_factory=list)  # [x, y, text, col, size, life, max_life]
     shake: float = 0.0
     flash: float = 0.0
+    hurt: float = 0.0  # 1 -> 0 after a life is lost
 
     PAD = 0.62  # substrate margin around the outer qubits, in spacings
 
@@ -423,6 +440,7 @@ class View:
                 self.popup(e.node, "COLLISION", RED, 14, 1.8)
                 self.shake = 0.5
                 self.flash = 0.3
+                self.hurt = 1.0
                 play("crash")
             elif e.kind in ("special_on", "special_off"):
                 table = SPECIAL_ON_TEXT if e.kind == "special_on" else SPECIAL_OFF_TEXT
@@ -440,6 +458,7 @@ class View:
                 self.popup(mid, "DECOHERED", RED, 12, 1.6)
                 self.shake = 0.35
                 self.flash = 0.25
+                self.hurt = 1.0
                 play("decohere")
         self.board.events.clear()
 
@@ -460,6 +479,7 @@ class View:
         self.popups = [p for p in self.popups if p[5] > 0]
         self.shake = max(0.0, self.shake - dt)
         self.flash = max(0.0, self.flash - dt)
+        self.hurt = max(0.0, self.hurt - dt / config.HURT_SECONDS)
 
 
 # =====================================================================
@@ -618,10 +638,10 @@ def draw_board(S, v: View, t: float):
         if pair.boost > 1:
             pygame.draw.circle(S, GOLD, (int(x), int(y)), int(sp * 0.19), px(2))
 
-    # crashes already locked in by committed routes (unless a station gets
-    # routed away in time): a smaller blinking X
+    # stations a committed route is about to run into: route that pair away
+    # from there in time, or it crashes. A blinking X on the station.
     if int(t * 4) % 2 == 0:
-        for n in b.predicted_crashes():
+        for n in b.station_threats():
             cx, cy = xy(n)
             draw_x(S, cx, cy, sp * 0.14, RED, px(3))
 
@@ -661,6 +681,12 @@ def draw_board(S, v: View, t: float):
             draw_x(S, cx, cy, sp * 0.2, RED, px(5))
             pygame.draw.circle(S, RED, (int(cx), int(cy)), int(sp * 0.34), px(3))
 
+    # a life was just lost: the whole chip flashes red, fading out
+    if v.hurt > 0:
+        blink = 0.6 + 0.4 * math.sin(t * 28)
+        tint(S, rect, RED, int(130 * v.hurt * blink))
+        pygame.draw.rect(S, RED, rect.inflate(px(10), px(10)), px(6), px(22))
+
     # effects
     for p in v.particles:
         k = p[4] / p[5]
@@ -673,21 +699,30 @@ def draw_board(S, v: View, t: float):
         text(S, p[2], p[4], p[3], p[0] + ox, p[1] + oy, alpha=min(1.0, p[5] / p[6] * 2))
 
 
-def draw_lives(S, x, y, lives, total, align="left"):
+def draw_lives(S, x, y, lives, total, align="left", hurt=0.0, t=0.0):
+    """Life icons; the one just lost (index `lives`) swells and blinks red while `hurt`."""
     step = 34 * U
     x0 = x if align == "left" else x - (total - 1) * step
     for i in range(total):
-        col = CYAN if i < lives else (40, 46, 66)
-        draw_xmon(S, x0 + i * step, y, 56 * U, col)
+        if i < lives:
+            draw_xmon(S, x0 + i * step, y, 56 * U, CYAN)
+        elif i == lives and hurt > 0:
+            on = int(t * 10) % 2 == 0
+            glow(S, x0 + i * step, y, 60 * U * hurt, RED, 0.8 * hurt)
+            draw_xmon(S, x0 + i * step, y, 56 * U * (1 + 0.9 * hurt), RED if on else WHITE)
+        else:
+            draw_xmon(S, x0 + i * step, y, 56 * U, (40, 46, 66))
 
 
-def draw_board_hud(S, v: View, title: str):
+def draw_board_hud(S, v: View, title: str, t: float = 0.0):
     b = v.board
     rect = v.substrate_rect()
     y = rect.top - 30 * U
     text(S, title, 12, GREY, rect.left, y - 22 * U, "left")
     text(S, f"{b.score:06d}", 20, WHITE, rect.left, y + 4 * U, "left")
-    draw_lives(S, rect.right - 8 * U, y + 4 * U, b.lives, config.LIVES, "right")
+    draw_lives(S, rect.right - 8 * U, y + 4 * U, b.lives, config.LIVES, "right", v.hurt, t)
+    if v.hurt > 0:
+        text(S, "LIFE LOST", 14, RED, rect.centerx, y + 4 * U, alpha=min(1.0, v.hurt * 2))
     text(S, f"GATES {b.gates}", 8, GREY, rect.right, y - 22 * U, "right")
 
 
@@ -900,7 +935,7 @@ class Game:
         for v in self.views:
             draw_board(S, v, t)
             title = v.label or "SCORE"
-            draw_board_hud(S, v, title)
+            draw_board_hud(S, v, title, t)
             if v.board.over and len(self.views) > 1:
                 rect = v.substrate_rect()
                 veil(S, rect, 170)

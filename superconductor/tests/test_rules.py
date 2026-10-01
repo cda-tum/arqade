@@ -9,7 +9,7 @@ from superconductor.rules import Board, Spawn
 
 def scripted(*spawns):
     """Replace the random schedule with a fixed list of (t, a, b) spawns."""
-    def schedule(lattice, seed):
+    def schedule(lattice, seed, rate=1.0):
         for t, a, b in spawns:
             yield Spawn(t, a, b, 20.0)
         yield Spawn(float("inf"), (0, 0), (4, 4), 20.0)  # never arrives
@@ -87,7 +87,7 @@ def test_routes_may_run_through_other_stations(board_with):
 def test_running_into_a_waiting_station_crashes_both_pairs(board_with):
     b = board_with((0, (0, 0), (0, 3)), (0, (0, 1), (4, 1)))
     walk(b, "p1", "right", "right", "right")
-    assert (0, 1) in b.predicted_crashes()
+    assert b.station_threats() == {(0, 1)}
     b.update(1.0 / config.QUBIT_SPEED)
     crash = [e for e in b.events if e.kind == "crash"]
     assert crash and crash[0].node == (0, 1)
@@ -97,8 +97,9 @@ def test_running_into_a_waiting_station_crashes_both_pairs(board_with):
 def test_running_through_a_station_is_safe_once_its_qubit_left(board_with):
     b = board_with((0, (0, 0), (0, 3)), (0, (0, 1), (4, 1)))
     walk(b, "p1", "right", "right", "right")  # through (0,1), the other pair's start
+    assert b.station_threats() == {(0, 1)}
     walk(b, "p1", "down", "down", "down", "down")  # route that pair away from (0,1) right now
-    assert b.predicted_crashes() == set()
+    assert b.station_threats() == set()
     b.update(10.0)
     assert b.gates == 2 and b.lives == config.LIVES
 
@@ -108,7 +109,10 @@ def test_running_through_a_routes_destination_crashes(board_with):
     b = board_with((0, (0, 0), (0, 3)), (0, (4, 1), (0, 1)))
     walk(b, "p1", "right", "right", "right")
     walk(b, "p1", "up", "up", "up", "up")
-    assert (0, 1) in b.predicted_crashes()
+    assert b.station_threats() == set()  # both routes committed: nothing left to avert
+    for _ in range(200):  # frame-sized steps, as in the game
+        b.update(0.05)
+    assert [e.node for e in b.events if e.kind == "crash"] == [(0, 1)]
 
 
 def test_qubit_travels_and_releases_couplers_behind_it(board_with):
@@ -372,3 +376,26 @@ def test_specials_appear_by_themselves():
         b.events.clear()
         b.lives = config.LIVES  # keep it alive, nobody is playing
     assert kinds == set(rules.SPECIAL_KINDS)
+
+
+# ---------------------------------------------------------------- co-op
+
+
+def test_new_pair_goes_to_whoever_did_not_route_last(board_with):
+    b = board_with((0, (0, 0), (0, 2)), (0, (4, 0), (4, 2)), (1, (2, 0), (2, 2)),
+                   players=("p1", "p2"))
+    walk(b, "p2", "right", "right")  # P2 routes; nothing free for P2 to take
+    assert b.cursors["p2"].pair_id is None
+    walk(b, "p1", "right", "right")  # now P1 routed last
+    b.update(1.5)  # third pair arrives
+    assert b.cursors["p2"].path == [(2, 0)]
+    assert b.cursors["p1"].pair_id is None
+
+
+def test_coop_pairs_come_more_often():
+    lat = Lattice("square")
+    solo = list(itertools.islice(rules.spawn_schedule(lat, 4), 30))
+    coop = list(itertools.islice(rules.spawn_schedule(lat, 4, config.COOP_SPAWN_RATE), 30))
+    assert [(s.a, s.b) for s in solo] == [(s.a, s.b) for s in coop]  # same pairs
+    assert coop[-1].t < solo[-1].t
+    assert coop[2].t - coop[1].t == pytest.approx((solo[2].t - solo[1].t) / config.COOP_SPAWN_RATE)

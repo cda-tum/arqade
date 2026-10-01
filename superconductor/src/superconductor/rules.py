@@ -24,8 +24,8 @@ The model:
   a route until the gate has fired. So running through a station is only
   safe if that pair gets routed away in time -- the player is free to plan
   for that. Live collisions and the lookahead (`predict_collision`,
-  `predicted_crashes`) use the same occupancy windows, so a warning on screen
-  means exactly what will happen if nothing changes.
+  `station_threats`) use the same occupancy windows, so a warning on screen
+  means exactly what will happen unless the player acts.
 - Arrival executes the gate: points for a short route (fidelity) and for the
   coherence that was left.
 
@@ -73,7 +73,8 @@ def ramp(start: float, end: float, t: float) -> float:
     return start + (end - start) * frac
 
 
-def spawn_schedule(lattice: Lattice, seed: int) -> Iterator[Spawn]:
+def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0) -> Iterator[Spawn]:
+    """Endless pairs; `rate` > 1 makes them come that much more often."""
     rng = random.Random(seed)
     t = 0.5
     count = 0
@@ -84,7 +85,7 @@ def spawn_schedule(lattice: Lattice, seed: int) -> Iterator[Spawn]:
         yield Spawn(t, a, b, ramp(config.COHERENCE_START, config.COHERENCE_MIN, t))
         count += 1
         if count >= config.INITIAL_PAIRS:  # the first few all arrive at once
-            t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t)
+            t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t) / rate
 
 
 @dataclass
@@ -170,7 +171,10 @@ class Board:
         self.edge_owner: dict[Edge, int] = {}  # couplers on committed routes, exclusive
         self.specials: list[Special] = []
         self.queue: list[Spawn] = []
-        self._schedule = spawn_schedule(lattice, seed)
+        # Two routers on one chip get pairs more often (CO-OP).
+        rate = config.COOP_SPAWN_RATE if len(players) > 1 else 1.0
+        self._schedule = spawn_schedule(lattice, seed, rate)
+        self.last_router: str | None = None  # who committed the latest route
         self._next = next(self._schedule)
         self._next_id = 0
         self._special_rng = random.Random(seed * 7919 + 1)
@@ -374,16 +378,20 @@ class Board:
                 if (h := self._first_overlap(mine, self.windows(other)))]
         return min(hits)[1] if hits else None
 
-    def predicted_crashes(self) -> set[Node]:
-        """Qubits where committed routes will crash if nothing changes."""
-        pairs = list(self.pairs.values())
-        wins = {p.id: self.windows(p) for p in pairs}
+    def station_threats(self) -> set[Node]:
+        """Stations a committed route will crash into unless that pair leaves in time.
+
+        Only waiting stations count: those are the crashes a player can still
+        avert, by routing that pair away from the threatened end. Crashes
+        between two committed routes are not reported -- nothing can change
+        them any more.
+        """
         out = set()
-        for i, p in enumerate(pairs):
-            for q in pairs[i + 1:]:
-                if p.waiting and q.waiting:
-                    continue  # two stations never share a qubit
-                hit = self._first_overlap(wins[p.id], wins[q.id])
+        travelling = self.travelling_pairs()
+        for q in self.waiting_pairs():
+            mine = self.windows(q)
+            for p in travelling:
+                hit = self._first_overlap(self.windows(p), mine)
                 if hit:
                     out.add(hit[1])
         return out
@@ -571,6 +579,7 @@ class Board:
         pair = self.pairs[cur.pair_id]
         route = cur.path
         cur.clear()
+        self.last_router = player
         self._commit_route(pair, route, player)
 
     def _commit_route(self, pair: Pair, route: list[Node], player: str | None) -> None:
@@ -701,9 +710,15 @@ class Board:
                     break
 
     def _autoselect(self) -> None:
-        """A cursor without a pair grabs the oldest free one."""
-        for player, cur in self.cursors.items():
-            if cur.pair_id is None:
-                stations = self.stations(player)
-                if stations:
-                    self._set_station(player, *stations[0])
+        """A cursor without a pair grabs the oldest free one.
+
+        If several cursors are idle, the player who did *not* route last
+        picks first. Otherwise, with fewer free pairs than players, every
+        new pair would go to P1 and P2 would just sit there.
+        """
+        idle = [p for p, cur in self.cursors.items() if cur.pair_id is None]
+        idle.sort(key=lambda p: p == self.last_router)
+        for player in idle:
+            stations = self.stations(player)
+            if stations:
+                self._set_station(player, *stations[0])

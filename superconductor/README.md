@@ -27,8 +27,12 @@ arrival.
   route's end until the gate fires. Running through a station is safe only if you route
   that pair away from it in time, so planning ahead pays off. The game doesn't stop you.
 - **Lookahead.** While you draw, a big blinking red X marks where your route would crash
-  if it went off right now. A small one marks crashes that committed routes are already
-  heading for. Both use exactly the rules the crash itself uses.
+  if it went off right now. A small one on a station means a committed route is heading
+  into it, so route that pair away from there in time. Both use exactly the rules the
+  crash itself uses. A crash between two committed routes gets no warning: nothing can
+  change it any more.
+- **Losing a life** flashes the whole chip red, the lost life icon swells and blinks, and
+  "LIFE LOST" appears above the chip.
 - **Coherence timer.** The ring around a waiting pair is its coherence. At zero the pair
   decoheres and costs one of 3 lives. The game starts with two pairs waiting. Over the
   first 2.5 minutes, pairs arrive faster and decohere sooner.
@@ -66,8 +70,10 @@ chip joins grid neighbours, so the stick always works in four directions.
 
 **Modes:**
 - **1 Player:** one chip.
-- **Co-op:** both players route on the same chip, with shared score and lives. A pair one
-  player has selected can't be taken by the other. If one player commits a route through
+- **Co-op:** both players route on the same chip, with shared score and lives. Pairs come
+  25% more often than solo (`COOP_SPAWN_RATE`). A pair one player has selected can't be
+  taken by the other. When a new pair appears and both players are free, it goes to
+  whoever did *not* route last, so it doesn't always land on P1. If one player commits a route through
   the other's half-drawn route, the half-drawn one is cut back.
 - **Versus:** two chips side by side, fed the identical sequence of pairs (same seed).
   Each player has their own lives. Once both chips have decohered, the higher score wins.

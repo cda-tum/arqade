@@ -22,6 +22,7 @@ GRID_COLS = 5
 
 # --- Gameplay tuning ---
 LIVES = 3                    # decohered pairs before game over (shared in CO-OP)
+HURT_SECONDS = 1.4           # how long the red "life lost" flash lasts
 QUBIT_SPEED = 0.8            # edges per second a travelling qubit covers
 MAX_ACTIVE_PAIRS = 6         # pairs on the chip at once (waiting + travelling)
 MIN_PAIR_DISTANCE = 2        # spawned endpoints are at least this many hops apart
@@ -30,6 +31,7 @@ INITIAL_PAIRS = 2            # pairs already waiting when the game starts
 # over RAMP_SECONDS of (board) play time.
 SPAWN_INTERVAL_START = 5.0
 SPAWN_INTERVAL_MIN = 2.2
+COOP_SPAWN_RATE = 1.25             # CO-OP: pairs come 25% more often throughout
 COHERENCE_START = 30.0
 COHERENCE_MIN = 16.0
 RAMP_SECONDS = 150.0
