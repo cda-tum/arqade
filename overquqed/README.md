@@ -100,13 +100,13 @@ with F1 on the title screen. Leave with Esc, or hold Select for 2 s.
 | Use station (tap or hold) | B (raw 2) | B | P |
 | Swap chef (1-player) | Y (raw 3) | Y | U |
 | Start / pause | Start | Enter | 2 |
-| Back | Select | Space | Backspace |
+| Back (menus) | B, or Select | B, or Space | P, or Backspace |
 
 - **Using stations.** Tap B on the Flipper and the Stirrer. Hold B on the
   Blender, the Waffle Iron and the Sink; a ring shows progress, and letting go
   pauses it.
-- **Menus.** A also confirms, so the game stays usable even if the Start index
-  turns out wrong.
+- **Menus.** A or Start confirms, B goes back: the cabinet's shared button
+  convention (see `../AGENTS.md`). Select also goes back.
 - **Quitting.** Start + Select on one pad quits from anywhere. Holding Select
   for 2 s on the title screen also quits. Esc quits when the keyboard is
   enabled.
@@ -142,8 +142,6 @@ The first time you deploy:
 
 Still to verify on the hardware:
 
-- the **Start = 8 / Select = 9** button indices (placeholders in every game so
-  far), using `--input-test`
 - frame rate with `--fps`
 - sound level
 

@@ -188,7 +188,7 @@ class JoinScene(Scene):
         center(surf, text("A / START again: LET'S COOK", 8, P.WHITE), 282)
         left = max(0, self.AUTO_GO - self.t)
         center(surf, text(f"starting in {int(left) + 1}", 8, P.TEXT_DIM), 300)
-        center(surf, text("SELECT: BACK", 8, (90, 80, 110)), 340)
+        center(surf, text("B: BACK", 8, (90, 80, 110)), 340)
 
 
 class LevelSelectScene(Scene):
@@ -303,7 +303,7 @@ class LevelSelectScene(Scene):
                     line = f"{r + 1}. ---   ---"
                     col = (90, 80, 110)
                 surf.blit(text(line, 8, col), (x + 8 + (r // 3) * 124, yy + 13 + (r % 3) * 11))
-        center(surf, text("A/START: COOK   SELECT: BACK", 8, P.TEXT_DIM), 350)
+        center(surf, text("A/START: COOK   B: BACK", 8, P.TEXT_DIM), 350)
 
 
 def _wrap_px(s: str, chars: int) -> list[str]:

@@ -216,11 +216,14 @@ class Input:
         return dx, dy
 
     def confirm(self) -> bool:
-        """Start, or A (a fallback while the Start index is unconfirmed)."""
+        """A or Start, per the cabinet's button convention (AGENTS.md)."""
         return self.any_pressed("start") or self.any_pressed("pick")
 
     def back(self) -> bool:
-        return self.any_pressed("select")
+        """B (the "use" button), per the cabinet's button convention; Select
+        still works too. Only called from menus, never mid-round, where B
+        works the station in front of you."""
+        return self.any_pressed("use") or self.any_pressed("select")
 
     def quit_combo(self) -> bool:
         a, b = self.held["p1"], self.held["p2"]

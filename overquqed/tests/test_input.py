@@ -59,3 +59,15 @@ def test_no_keyboard_reads_nothing():
         assert not keys[pygame.K_RETURN]
     finally:
         inp_mod.set_keyboard_enabled(True)
+
+
+def test_b_goes_back_and_a_confirms_per_the_cabinet_convention():
+    # AGENTS.md "Button convention": A confirms, B goes back, Start starts.
+    pygame.init()
+    inp = inp_mod.Input()
+    inp.pressed = {"p1": set(), "p2": {"use"}}  # printed B on either pad
+    assert inp.back() and not inp.confirm()
+    inp.pressed = {"p1": {"pick"}, "p2": set()}  # printed A
+    assert inp.confirm() and not inp.back()
+    inp.pressed = {"p1": {"start"}, "p2": set()}
+    assert inp.confirm()
