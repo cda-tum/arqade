@@ -1,4 +1,4 @@
-"""Title/attract and winner screens.
+"""Title/attract and winner screens, and the pause menu overlay.
 
 The rendering functions here are pygame-drawing glue (not unit tested, same
 convention as main.py) except `blink_visible`, which is plain, pure timing
@@ -97,4 +97,46 @@ def draw_winner_screen(
     surface.blit(
         floor_surf,
         floor_surf.get_rect(center=(config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT // 2 + 20)),
+    )
+
+
+PAUSE_HINT = "A: PICK   START/B: RESUME"
+
+
+def draw_pause_menu(
+    surface: pygame.Surface,
+    title_font: pygame.font.Font,
+    item_font: pygame.font.Font,
+    hint_font: pygame.font.Font,
+    items: tuple[str, ...],
+    selected: int,
+    show_cursor: bool,
+) -> None:
+    """A centred panel over the frozen game, which stays visible (dimmed)
+    behind it so nobody wonders where their climb went."""
+    veil = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+    veil.fill((*config.COLOR_BACKGROUND, 160))
+    surface.blit(veil, (0, 0))
+
+    centerx = config.INTERNAL_WIDTH // 2
+    box = pygame.Rect(0, 0, 240, 64 + 18 * len(items))
+    box.center = (centerx, config.INTERNAL_HEIGHT // 2)
+    pygame.draw.rect(surface, config.COLOR_BACKGROUND, box, border_radius=6)
+    pygame.draw.rect(surface, config.COLOR_TOWER, box, 2, border_radius=6)
+
+    visuals.blit_outlined_text_centered(
+        surface, title_font, "PAUSED", config.COLOR_TARGET, centerx, box.y + 12
+    )
+    for i, item in enumerate(items):
+        y = box.y + 38 + i * 18
+        active = i == selected
+        rect = visuals.blit_outlined_text_centered(
+            surface, item_font, item, config.COLOR_HINT if active else config.COLOR_TEXT, centerx, y
+        )
+        if active and show_cursor:
+            visuals.blit_outlined_text(
+                surface, item_font, ">", config.COLOR_HINT, (rect.x - 16, y)
+            )
+    visuals.blit_outlined_text_centered(
+        surface, hint_font, PAUSE_HINT, config.COLOR_TOWER, centerx, box.bottom - 16
     )

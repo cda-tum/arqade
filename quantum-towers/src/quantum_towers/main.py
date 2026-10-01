@@ -2,8 +2,10 @@
 
 Two players climbing side by side, each with their own tower, target chain,
 and charges; reaching CHARGES_TO_ATTACK fires an automatic knockback attack
-on the opponent. Not unit tested (no headless assertions on rendered output
-make sense); verify by running it and by the --input-test smoke path.
+on the opponent. Start pauses (pause.py holds the menu's logic). Mostly not
+unit tested (no headless assertions on rendered output make sense); verify
+by running it and by the --input-test smoke path. tests/test_pause.py does
+drive run_game with scripted input, to check that pausing really freezes it.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from quantum_towers.input import (
     should_quit,
 )
 from quantum_towers.notation import render_state
+from quantum_towers.pause import PAUSE_ITEMS, PauseButtons, PauseMenu
 from quantum_towers.player import PlayerState, apply_action, confirm_climb, knockback, new_player
 from quantum_towers.quantum import ACTIONS, states_equal
 from quantum_towers.targets import generate_target_sequence
@@ -89,6 +92,21 @@ def _wants_start(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> bool:
     )
 
 
+def _pause_buttons(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> PauseButtons:
+    """The pause menu's buttons, from both pads and the dev keyboard."""
+    system = config.INPUT_CONFIG["system"]
+    return PauseButtons(
+        start=p1_raw.start_held or p2_raw.start_held
+        or bool(keys[getattr(pygame, system["keyboard_pause"])]),
+        confirm=p1_raw.confirm_held or p2_raw.confirm_held
+        or bool(keys[getattr(pygame, system["keyboard_menu_confirm"])]),
+        back=p1_raw.back_held or p2_raw.back_held
+        or bool(keys[getattr(pygame, system["keyboard_menu_back"])]),
+        up=p1_raw.up_held or p2_raw.up_held,
+        down=p1_raw.down_held or p2_raw.down_held,
+    )
+
+
 def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> str:
     """Attract/title screen. Returns 'start' or 'quit'."""
     internal = surface
@@ -98,6 +116,10 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
     prompt_font = fonts.load_font(12)
     grid_gate_font = fonts.load_font(8)
     t = 0.0
+    # A button still held from the screen before (A picking QUIT TO TITLE,
+    # Start skipping the winner screen) must be let go first, or this screen
+    # would start a new match on its very first frame.
+    armed = False
 
     while True:
         dt = clock.tick(config.FPS) / 1000.0
@@ -112,8 +134,10 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
 
         if _wants_quit(p1_raw, p2_raw, keys):
             return "quit"
-        if _wants_start(p1_raw, p2_raw, keys):
+        wants_start = _wants_start(p1_raw, p2_raw, keys)
+        if armed and wants_start:
             return "start"
+        armed = armed or not wants_start
 
         screens.draw_title_screen(
             internal, title_font, legend_font, prompt_font, grid_gate_font,
@@ -244,7 +268,7 @@ def run_game(
     surface: pygame.Surface, window: pygame.Surface | None, sounds: sound.Sounds, show_fps: bool
 ) -> tuple[str, dict[str, PlayerState]]:
     """Play one match. Returns (result, players); result is 'p1'/'p2'
-    (reached the top), 'quit', or 'idle'."""
+    (reached the top), 'quit', 'idle', or 'title' (picked in the pause menu)."""
     internal = surface
     clock = pygame.time.Clock()
     font = fonts.load_font(10)
@@ -256,6 +280,9 @@ def run_game(
     block_fonts = [fonts.load_font(11), fonts.load_font(9), fonts.load_font(7)]
     grid_gate_font = fonts.load_font(8)
     perfect_font = fonts.load_font(9)
+    pause_title_font = fonts.load_font(16)
+    pause_item_font = fonts.load_font(10)
+    pause_hint_font = fonts.load_font(7)
     background = visuals.make_background(config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)
     button_grid_data = screens.button_grid()
 
@@ -287,6 +314,13 @@ def run_game(
     visual_floor = {pk: float(players[pk].floor) for pk in ("p1", "p2")}
     climb_anim: dict[str, tuple[float, float, float] | None] = {"p1": None, "p2": None}
 
+    # While paused, game_time stands still -- every timer in here (stuns,
+    # flashes, the climb animation) is measured against it, so they all
+    # freeze with it. `frozen_frame` is the last frame drawn before pausing,
+    # shown dimmed behind the menu.
+    pause_menu = PauseMenu()
+    frozen_frame: pygame.Surface | None = None
+
     left_half = pygame.Rect(0, 0, config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT)
     right_half = pygame.Rect(
         config.INTERNAL_WIDTH // 2, 0, config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT
@@ -294,7 +328,6 @@ def run_game(
 
     while True:
         dt = clock.tick(config.FPS) / 1000.0
-        game_time += dt
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -309,12 +342,42 @@ def run_game(
         if _wants_quit(p1_raw, p2_raw, keys):
             return "quit", players
 
-        any_input = any(raws[pk].button_held[a] for pk in ("p1", "p2") for a in ACTIONS) or any(
-            raws[pk].up_held for pk in ("p1", "p2")
+        # The idle timeout keeps counting while paused: a game abandoned in
+        # the pause menu still goes back to the title by itself.
+        pause_buttons = _pause_buttons(p1_raw, p2_raw, keys)
+        any_input = (
+            any(raws[pk].button_held[a] for pk in ("p1", "p2") for a in ACTIONS)
+            or pause_buttons.any_held()
         )
         idle_seconds = 0.0 if any_input else idle_seconds + dt
         if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
             return "idle", players
+
+        pause_state = pause_menu.update(pause_buttons)
+        if pause_state == "title":
+            return "title", players
+        if pause_state == "paused":
+            # Keep the edge trackers current, so a button pressed in the menu
+            # -- A and B are the RESET and H gates -- doesn't fire as a gate
+            # on the first frame back.
+            for player_key in ("p1", "p2"):
+                for name in ACTIONS:
+                    prev_held[player_key][name] = raws[player_key].button_held[name]
+                prev_up_held[player_key] = raws[player_key].up_held
+            if frozen_frame is None:
+                frozen_frame = internal.copy()
+            internal.blit(frozen_frame, (0, 0))
+            if pause_menu.paused:
+                screens.draw_pause_menu(
+                    internal, pause_title_font, pause_item_font, pause_hint_font, PAUSE_ITEMS,
+                    pause_menu.selected,
+                    screens.blink_visible(pygame.time.get_ticks() / 1000.0, config.TITLE_BLINK_PERIOD),
+                )
+            present(internal, window)
+            pygame.display.flip()
+            continue
+        frozen_frame = None
+        game_time += dt
 
         for player_key in ("p1", "p2"):
             raw = raws[player_key]
@@ -509,7 +572,7 @@ def main(argv: list[str] | None = None) -> None:
                 floors = {"p1": players["p1"].floor, "p2": players["p2"].floor}
                 if run_winner_screen(surface, window, result, floors) == "quit":
                     break
-            # result == "idle" falls straight back to the title screen
+            # result == "idle" or "title" falls straight back to the title screen
 
     pygame.quit()
     sys.exit(0)
