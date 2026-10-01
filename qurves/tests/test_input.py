@@ -1,7 +1,7 @@
 import pygame
 
 from qurves import input as qinput
-from qurves.input import Input, hat_direction, should_quit, stick_direction
+from qurves.input import Input, hat_direction, latest_direction, should_quit, stick_direction
 
 
 def test_the_stick_reads_its_dominant_axis_past_the_deadzone():
@@ -16,6 +16,17 @@ def test_the_hat_reads_positive_y_as_up():
     assert hat_direction((0, 1)) == (0, -1)
     assert hat_direction((-1, 0)) == (-1, 0)
     assert hat_direction((0, 0)) is None
+
+
+def test_holding_two_direction_buttons_steers_by_the_newer_one():
+    order, d = latest_direction([], {"up"})
+    assert d == (0, -1)
+    order, d = latest_direction(order, {"up", "left"})
+    assert d == (-1, 0)
+    order, d = latest_direction(order, {"up"})  # left let go: back to up
+    assert d == (0, -1)
+    order, d = latest_direction(order, set())
+    assert d is None and order == []
 
 
 def test_quitting_needs_start_and_select_on_the_same_pad():
@@ -39,17 +50,5 @@ def test_with_no_pads_and_no_keys_the_frame_is_idle():
     inp = Input()
     inp.update(1 / 60)
     fi = inp.frame_input()
-    assert fi.direction == {"p1": None, "p2": None}
+    assert fi.stick == (None, None) and fi.pad == (None, None) and fi.nav is None
     assert not fi.confirm and not fi.back and not fi.activity
-
-
-def test_a_confirms_and_splits_b_goes_back_start_confirms():
-    pygame.init()
-    inp = Input()
-    inp.pressed = {"p1": {"split"}, "p2": set()}
-    fi = inp.frame_input()
-    assert fi.confirm and fi.split == {"p1": True, "p2": False} and not fi.back
-    inp.pressed = {"p1": set(), "p2": {"back"}}
-    assert inp.frame_input().back and not inp.frame_input().confirm
-    inp.pressed = {"p1": set(), "p2": {"start"}}
-    assert inp.frame_input().confirm

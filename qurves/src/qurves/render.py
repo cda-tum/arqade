@@ -79,17 +79,24 @@ def make_glow(color, radius: int, k: float = 1.0) -> pygame.Surface:
     return surf
 
 
-def make_token(font: pygame.font.Font, k: float) -> pygame.Surface:
-    """An H gate pickup at brightness k, on black, for BLEND_ADD."""
-    surf = pygame.Surface((25, 25))
+def make_token(font: pygame.font.Font, kind: str, k: float) -> pygame.Surface:
+    """A gate at brightness k, on black, for BLEND_ADD. It covers the gate's
+    whole 5x5-cell pickup area, so what you see is what you can catch."""
+    color = config.GATE_COLORS[kind]
+    reach = (2 * config.GATE_REACH + 1) * CELL  # 30 px
+    size = reach + 8
+    surf = pygame.Surface((size, size))
     surf.fill((0, 0, 0))
-    centre = 12
+    centre = size // 2
     if config.GLOW:
-        for r in range(12, 6, -1):
-            pygame.draw.circle(surf, scale(config.COLOR_PICKUP, 0.5 * k * (1 - r / 13) ** 1.2), (centre, centre), r)
-    pygame.draw.rect(surf, (10, 12, 26), (centre - 6, centre - 6, 13, 13), border_radius=3)
-    pygame.draw.rect(surf, scale(config.COLOR_PICKUP, k), (centre - 6, centre - 6, 13, 13), 1, border_radius=3)
-    letter = font.render("H", False, scale(WHITE, k), (0, 0, 0))
+        for r in range(centre, reach // 2 - 2, -1):
+            f = (1 - (r - reach / 2 + 2) / (centre - reach / 2 + 3)) ** 1.2
+            pygame.draw.circle(surf, scale(color, 0.55 * k * f), (centre, centre), r)
+    box = pygame.Rect(0, 0, reach - 6, reach - 6)
+    box.center = (centre, centre)
+    pygame.draw.rect(surf, scale(color, 0.18 * k), box, border_radius=5)
+    pygame.draw.rect(surf, scale(lighten(color, 0.3), k), box, 2, border_radius=5)
+    letter = font.render(kind, False, scale(lighten(color, 0.6), k), (0, 0, 0))
     surf.blit(letter, letter.get_rect(center=(centre + 1, centre + 1)), special_flags=pygame.BLEND_MAX)
     return surf
 
@@ -110,12 +117,14 @@ def glow_text(font: pygame.font.Font, text: str, color) -> pygame.Surface:
 
 
 def make_logo(font: pygame.font.Font) -> pygame.Surface:
-    """QURVES, shading letter by letter from P1's cyan to P2's orange."""
+    """QURVES, shading letter by letter through the four player colours."""
     word = "QURVES"
-    a, b = config.PLAYER_COLORS["p1"], config.PLAYER_COLORS["p2"]
+    stops = list(config.PLAYER_COLORS.values())
     pieces = []
     for i, ch in enumerate(word):
-        k = i / (len(word) - 1)
+        t = i / (len(word) - 1) * (len(stops) - 1)
+        lo = min(int(t), len(stops) - 2)
+        a, b, k = stops[lo], stops[lo + 1], t - lo
         pieces.append(glow_text(font, ch, tuple(round(a[j] + (b[j] - a[j]) * k) for j in range(3))))
     overlap = 8  # each piece's halo padding, both sides
     surf = pygame.Surface((sum(p.get_width() for p in pieces) - overlap * (len(pieces) - 1),
@@ -162,14 +171,14 @@ def make_scanlines() -> pygame.Surface:
 
 
 class TitleTrails:
-    """Two light trails chasing round the logo in opposite directions."""
+    """Light trails chasing round the logo, one per player."""
 
     RECT = pygame.Rect(220, 70, 520, 140)
     LENGTH = 70
 
     def __init__(self) -> None:
         self.s = 0.0
-        self.tails: dict[str, list] = {"p1": [], "p2": []}
+        self.tails: dict[str, list] = {}
 
     def _point(self, u: float) -> tuple[float, float]:
         r = self.RECT
@@ -184,10 +193,16 @@ class TitleTrails:
             return (r.right - d, r.bottom)
         return (r.left, r.bottom - (d - r.width))
 
-    def update(self, dt: float) -> None:
+    def update(self, dt: float, players: tuple[str, ...]) -> None:
+        """One trail per player, spread evenly round the box, alternating direction."""
         self.s = (self.s + dt * 0.12) % 1.0
-        for player, u in (("p1", self.s), ("p2", 0.5 - self.s)):
-            tail = self.tails[player]
+        for player in list(self.tails):
+            if player not in players:
+                del self.tails[player]
+        for i, player in enumerate(players):
+            offset = i / len(players)
+            u = offset + self.s if i % 2 == 0 else offset - self.s
+            tail = self.tails.setdefault(player, [])
             tail.append(self._point(u))
             del tail[:-self.LENGTH]
 
@@ -206,10 +221,10 @@ class TitleTrails:
 
 class Renderer:
     RULES = (
-        "SPLIT INTO TWO MIRRORED COPIES WITH A",
+        "DRIVE OVER H TO SPLIT INTO MIRRORED COPIES",
         "YOU ONLY LOSE WHEN EVERY COPY CRASHES",
         "DRIVE THROUGH A GHOST TRAIL TO MEASURE IT",
-        "GRAB H GATES TO CHARGE YOUR |ψ> METER",
+        "X: JUMP ACROSS AND SHIELD     Z: SHIELD",
     )
 
     def __init__(self, surface: pygame.Surface) -> None:
@@ -222,7 +237,9 @@ class Renderer:
         self.ghost_stamps = {p: make_stamps(c, ghost=True) for p, c in colors.items()}
         self.heads = {(p, False): make_glow(c, 15) for p, c in colors.items()}
         self.heads.update({(p, True): make_glow(c, 12, 0.75) for p, c in colors.items()})
-        self.tokens = [make_token(self.font8, 0.45 + 0.55 * i / 7) for i in range(8)]
+        self.tokens = {kind: [make_token(self.font16, kind, 0.55 + 0.45 * i / 7) for i in range(8)]
+                       for kind in config.GATE_COLORS}
+        self.shield_head = make_glow(WHITE, 15)
         self.logo = make_logo(load_font(72))
         self.board = self.background.copy()
         self.ghost = {p: pygame.Surface((W, H), pygame.SRCALPHA) for p in colors}
@@ -244,7 +261,7 @@ class Renderer:
         self._apply(events)
         self.fx.update(dt)
         if match.state == TITLE:
-            self._draw_title(dt)
+            self._draw_title(match, dt)
         else:
             self._draw_arena(match)
             self._draw_hud(match)
@@ -263,7 +280,7 @@ class Renderer:
     def _apply(self, events: list) -> None:
         for e in events:
             if isinstance(e, rules.Moved):
-                if e.branch is None:
+                if e.node is None:
                     self._stamp(self.board, self.solid_stamps[e.player], e.frm, e.to, pygame.BLEND_MAX)
                 elif (e.to[0] + e.to[1]) % 2 == 0:  # every other cell: a dashed ghost trail
                     area = self._stamp(self.ghost[e.player], self.ghost_stamps[e.player], e.frm, e.to,
@@ -275,13 +292,17 @@ class Renderer:
             if isinstance(e, rules.Split):
                 self.fx.ring(cell_px(e.pos), color)
             elif isinstance(e, rules.Collapse):
-                self.ghost[e.player].fill((0, 0, 0, 0))
-                self.ghost_bounds[e.player] = None
-                path = e.solidified
-                for a, b in zip(path, path[1:]):
-                    self._stamp(self.board, self.solid_stamps[e.player], a, b, pygame.BLEND_MAX)
+                for path in e.solidified:
+                    for a, b in zip(path, path[1:]):
+                        self._stamp(self.board, self.solid_stamps[e.player], a, b, pygame.BLEND_MAX)
+                self._rebuild_ghost(e.player)
                 self.fx.dissolve([cell_px(c) for c in e.dissolved], color)
-                self.fx.ring(cell_px(e.at), lighten(color, 0.5))
+                for pos in e.at:
+                    self.fx.ring(cell_px(pos), lighten(color, 0.5))
+            elif isinstance(e, rules.Teleported):
+                self.fx.ring(cell_px(e.frm), config.GATE_COLORS["X"])
+                self.fx.ring(cell_px(e.to), config.GATE_COLORS["X"], life=0.6)
+                self.fx.burst(cell_px(e.to), config.GATE_COLORS["X"], count=24, speed=120)
             elif isinstance(e, rules.Measured):
                 self.fx.ring(cell_px(e.pos), WHITE, life=0.6)
                 self.fx.burst(cell_px(e.pos), WHITE, count=16, speed=90)
@@ -289,7 +310,23 @@ class Renderer:
                 self.fx.burst(cell_px(e.pos), lighten(color, 0.3))
                 self.fx.kick(5)
             elif isinstance(e, rules.PickedUp):
-                self.fx.burst(cell_px(e.pos), config.COLOR_PICKUP, count=14, speed=80, life=0.35)
+                self.fx.burst(cell_px(e.pos), config.GATE_COLORS[e.kind], count=20, speed=100, life=0.4)
+
+    def _rebuild_ghost(self, player: str) -> None:
+        """Redraw a player's ghost layer from the copies still in play, after
+        some of them were eliminated (their trails are gone from the state)."""
+        layer = self.ghost[player]
+        layer.fill((0, 0, 0, 0))
+        self.ghost_bounds[player] = None
+        pl = self.round.players.get(player) if self.round else None
+        if pl is None:
+            return
+        for node in pl.nodes.values():
+            for a, b in zip(node.cells, node.cells[1:]):
+                if (b[0] + b[1]) % 2 == 0:
+                    area = self._stamp(layer, self.ghost_stamps[player], a, b, pygame.BLEND_RGBA_MAX)
+                    bounds = self.ghost_bounds[player]
+                    self.ghost_bounds[player] = area if bounds is None else bounds.union(area)
 
     @staticmethod
     def _stamp(target: pygame.Surface, stamps: dict, a, b, flags: int) -> pygame.Rect:
@@ -316,10 +353,11 @@ class Renderer:
                 layer = self.ghost[p]
                 layer.set_alpha(round(205 + 50 * math.sin(self.t * 23 + i * 2.1)))
                 s.blit(layer, (bounds.x + ox, bounds.y + oy), bounds)
-        token = self.tokens[int((0.5 + 0.5 * math.sin(self.t * 6)) * 7.999)]
-        half = token.get_width() // 2
-        for c in rs.pickups:
-            x, y = cell_px(c)
+        level = int((0.5 + 0.5 * math.sin(self.t * 6)) * 7.999)
+        for gate in rs.gates:
+            token = self.tokens[gate.kind][level]
+            half = token.get_width() // 2
+            x, y = cell_px(gate.pos)
             s.blit(token, (x - half + ox, y - half + oy), special_flags=pygame.BLEND_ADD)
         frac = match.tick_fraction if match.state == ROUND else 1.0
         for p, pl in rs.players.items():
@@ -327,42 +365,45 @@ class Renderer:
                 continue
             for bike in pl.bikes:
                 (px, py), (qx, qy) = cell_px(bike.prev or bike.pos), cell_px(bike.pos)
-                sprite = self.heads[(p, bike.branch is not None)]
+                sprite = self.heads[(p, bike.node is not None)]
+                if bike.shield > 0 and int(self.t * 14) % 2 == 0:
+                    sprite = self.shield_head
                 r = sprite.get_width() // 2
                 x, y = round(px + (qx - px) * frac), round(py + (qy - py) * frac)
                 s.blit(sprite, (x - r + ox, y - r + oy), special_flags=pygame.BLEND_ADD)
         self.fx.draw(s)
 
     def _draw_hud(self, match: Match) -> None:
+        """One block per player: name, superposition bar, round pips. The left
+        pad's players sit on the left, the right pad's on the right."""
         s = self.surface
         s.fill(config.COLOR_HUD, (0, 0, W, HUD))
         pygame.draw.line(s, scale(config.COLOR_WALL, 0.6), (0, HUD - 1), (W - 1, HUD - 1))
         rs = self.round
-        bar_w, bar_h, y = 220, 10, 13
-        for p, color in config.PLAYER_COLORS.items():
+        order = [p for p in ("p1", "p3", "p4", "p2") if p in match.players]
+        block_w = W // len(order)
+        for i, p in enumerate(order):
+            color = config.PLAYER_COLORS[p]
             pl = rs.players[p] if rs else None
+            x0 = i * block_w
+            label = self._plain(p.upper(), self.font16, color if pl is None or pl.alive else scale(color, 0.35))
+            s.blit(label, (x0 + 10, 10))
+            pips_w = config.ROUNDS_TO_WIN * 14
+            bar = pygame.Rect(x0 + 52, 13, block_w - 52 - pips_w - 24, 10)
+            s.fill((14, 18, 34), bar)
             meter = pl.meter if pl else 0.0
-            left = p == "p1"
-            label = self._plain(p.upper(), self.font16, color)
-            s.blit(label, (12, 10) if left else (W - 12 - label.get_width(), 10))
-            bar_x = 52 if left else W - 52 - bar_w
-            rect = pygame.Rect(bar_x, y, bar_w, bar_h)
-            s.fill((14, 18, 34), rect)
-            fill_w = round(bar_w * meter / config.METER_MAX)
-            fill = scale(color, 0.65 + 0.35 * math.sin(self.t * 20)) if pl and pl.is_split else color
+            fill_w = round(bar.width * meter / config.SUPERPOSITION_MAX)
             if fill_w:
-                s.fill(fill, (bar_x if left else bar_x + bar_w - fill_w, y, fill_w, bar_h))
-            mid = bar_x + bar_w // 2
-            pygame.draw.line(s, (90, 96, 130), (mid, y - 2), (mid, y + bar_h + 1))
-            ready = pl is not None and not pl.is_split and meter >= config.SPLIT_MIN_METER
-            border = lighten(color, 0.5) if ready and int(self.t * 4) % 2 == 0 else scale(color, 0.5)
-            pygame.draw.rect(s, border, rect.inflate(4, 4), 1)
-            ket = self._plain("|ψ>", self.font8, scale(color, 0.85))
-            s.blit(ket, (bar_x + bar_w + 10, y + 1) if left else (bar_x - 10 - ket.get_width(), y + 1))
-            for i in range(config.ROUNDS_TO_WIN):
-                x = W // 2 - 20 - i * 16 if left else W // 2 + 8 + i * 16
-                pip = pygame.Rect(x, 12, 12, 12)
-                if i < match.scores[p]:
+                s.fill(scale(color, 0.7 + 0.3 * math.sin(self.t * 20)), (bar.x, bar.y, fill_w, bar.height))
+            for k in range(1, round(config.SUPERPOSITION_MAX / config.H_TIME)):
+                tx = bar.x + round(bar.width * k * config.H_TIME / config.SUPERPOSITION_MAX)
+                pygame.draw.line(s, (60, 66, 100), (tx, bar.top), (tx, bar.bottom - 1))
+            shielded = pl is not None and any(b.shield > 0 for b in pl.bikes)
+            border = WHITE if shielded and int(self.t * 8) % 2 == 0 else scale(color, 0.5)
+            pygame.draw.rect(s, border, bar.inflate(4, 4), 1)
+            for k in range(config.ROUNDS_TO_WIN):
+                pip = pygame.Rect(bar.right + 12 + k * 14, 12, 10, 12)
+                if k < match.scores.get(p, 0):
                     s.fill(color, pip)
                 else:
                     pygame.draw.rect(s, scale(color, 0.45), pip, 1)
@@ -381,32 +422,41 @@ class Renderer:
             else:
                 self._center(self._glow("DRAW - REPLAY", self.font32, WHITE), H // 2)
         elif state == MATCH_RESULT:
-            winner = match.match_winner or "p1"
+            winner = match.match_winner or match.players[0]
             self._center(self._glow(f"{winner.upper()} WINS", self.font48, config.PLAYER_COLORS[winner]),
                          H // 2 - 40)
-            score = f"{match.scores['p1']} - {match.scores['p2']}"
-            self._center(self._glow(score, self.font32, WHITE), H // 2 + 24)
+            scores = [self._glow(str(match.scores[p]), self.font32, config.PLAYER_COLORS[p]) for p in match.players]
+            gap = 90
+            x = W // 2 - gap * (len(scores) - 1) // 2
+            for img in scores:
+                self.surface.blit(img, (x - img.get_width() // 2, H // 2 + 24 - img.get_height() // 2),
+                                  special_flags=pygame.BLEND_ADD)
+                x += gap
             if match.t >= config.MATCH_RESULT_LOCK:
                 self._center(self._plain("A / START: REMATCH      B: TITLE", self.font16, config.COLOR_TEXT),
                              H // 2 + 88, add=False)
 
     # --- the title ------------------------------------------------------------------------
 
-    def _draw_title(self, dt: float) -> None:
+    def _draw_title(self, match: Match, dt: float) -> None:
         s = self.surface
         s.blit(self.background, (0, 0))
         s.fill(config.COLOR_BACKGROUND, (0, 0, W, HUD))
-        self.title_trails.update(dt)
+        self.title_trails.update(dt, match.players)
         self.title_trails.draw(s)
         self._center(self.logo, 140)
-        y = 262
+        y = 250
         for line in self.RULES:
             self._center(self._plain(line, self.font16, config.COLOR_TEXT), y, add=False)
-            y += 28
+            y += 26
+        self._center(self._glow(f"<  {match.mode} PLAYERS  >", self.font32, WHITE), 384)
         if int(self.t * 2) % 2 == 0:
-            self._center(self._glow("PRESS A OR START", self.font32, config.COLOR_FPS), 420)
-        self._center(self._plain("STICK: STEER    A: SPLIT    START + SELECT: QUIT", self.font8, config.COLOR_DIM),
-                     500, add=False)
+            self._center(self._glow("PRESS A OR START", self.font32, config.COLOR_FPS), 444)
+        if match.mode == 4:
+            self._center(self._plain("EACH PAD: THE STICK IS ONE PLAYER, THE X Y B A BUTTONS ANOTHER",
+                                     self.font8, config.COLOR_TEXT), 490, add=False)
+        self._center(self._plain("STEER: STICK OR X Y B A     MODE: STICK LEFT / RIGHT     QUIT: START + SELECT",
+                                 self.font8, config.COLOR_DIM), 510, add=False)
 
     # --- text -------------------------------------------------------------------------------
 

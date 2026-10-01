@@ -28,11 +28,15 @@ EFFECTS = {
     "collapse": (900, 250, 0.25, 0.1),
     "measure": (1800, 500, 0.10, 0.35),
     "crash": (220, 50, 0.40, 0.8),
+    "teleport": (400, 2200, 0.16, 0.15),
+    "shield": (700, 1400, 0.22, 0.0),
+    "blip": (880, 880, 0.05, 0.0),
     "round": (520, 780, 0.30, 0.0),
     "match": (520, 1040, 0.60, 0.0),
 }
 
-_CUE_SOUNDS = {"beep": "beep", "go": "go", "round_won": "round", "draw": "round", "match_won": "match"}
+_CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "round_won": "round", "draw": "round",
+               "match_won": "match"}
 
 
 def sweep_samples(
@@ -63,12 +67,14 @@ def event_sounds(events: list) -> list[str]:
             names.append("split")
         elif isinstance(e, rules.Crash):
             names.append("crash")
-        elif isinstance(e, rules.Collapse) and e.reason != "crash":  # a crash already sounds
-            names.append("collapse")
+        elif isinstance(e, rules.Collapse) and e.reason in ("measurement", "decoherence"):
+            names.append("collapse")  # a crash already makes its own sound
         elif isinstance(e, rules.Measured):
             names.append("measure")
         elif isinstance(e, rules.PickedUp):
-            names.append("pickup")
+            names.append("shield" if e.kind == "Z" else "pickup")
+        elif isinstance(e, rules.Teleported):
+            names.append("teleport")
         elif isinstance(e, Cue):
             names.append(_CUE_SOUNDS[e.kind])
     return list(dict.fromkeys(names))

@@ -25,7 +25,7 @@ def test_events_map_to_one_sound_each_per_frame():
         rules.Split("p1", (1, 1)),
         rules.Crash("p2", (2, 2), None),
         rules.Crash("p1", (3, 3), 0),
-        rules.Collapse("p1", "crash", (4, 4), (), ()),
+        rules.Collapse("p1", "crash", ((4, 4),), (), ()),
         rules.Moved("p1", None, (1, 1), (2, 1)),
         Cue("go"),
     ]
@@ -35,9 +35,10 @@ def test_events_map_to_one_sound_each_per_frame():
 def test_every_sound_an_event_can_ask_for_exists():
     events = [
         rules.Split("p1", (1, 1)), rules.Crash("p1", (1, 1), None),
-        rules.Collapse("p1", "decoherence", (1, 1), (), ()),
-        rules.Measured("p1", "p2", (1, 1)), rules.PickedUp("p1", (1, 1)),
-        Cue("beep"), Cue("go"), Cue("round_won", "p1"), Cue("draw"), Cue("match_won", "p1"),
+        rules.Collapse("p1", "decoherence", ((1, 1),), (), ()),
+        rules.Measured("p1", "p2", (1, 1)), rules.PickedUp("p1", "H", (1, 1)),
+        rules.PickedUp("p1", "Z", (1, 1)), rules.Teleported("p1", (1, 1), (9, 1)),
+        Cue("beep"), Cue("go"), Cue("blip"), Cue("round_won", "p1"), Cue("draw"), Cue("match_won", "p1"),
     ]
     for name in sound.event_sounds(events):
         assert name in sound.EFFECTS

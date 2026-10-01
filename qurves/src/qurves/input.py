@@ -1,9 +1,13 @@
-"""Pads and the dev keyboard turned into per-player actions, polled once per frame.
+"""Pads and the dev keyboard, polled once per frame into a match.FrameInput.
 
-The pure helpers (stick_direction, hat_direction, should_quit) are unit
-tested; reading real pads is verified on the cabinet with --input-test.
-Actions per player: "split" (printed A, which also confirms menus), "back"
-(printed B), "start" and "select".
+Per pad there are two steering inputs: the stick (with the hat as a
+fallback) and the four face buttons X Y B A laid out like W A S D. Which
+player each one steers is the match's business (config.CONTROLS). In menus,
+printed A (or Start) confirms and printed B goes back.
+
+The pure helpers (stick_direction, hat_direction, latest_direction,
+should_quit) are unit tested; reading real pads is verified on the cabinet
+with --input-test.
 """
 
 from __future__ import annotations
@@ -12,10 +16,10 @@ import pygame
 
 from qurves import config
 from qurves.match import FrameInput
-from qurves.rules import PLAYERS, Vec
+from qurves.rules import Vec
 
 DIRECTIONS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
-ACTIONS = ("split", "back", "start", "select")
+PADS = (0, 1)
 
 # Batocera's evmapy turns P1's pad into keystrokes too (see ../../../AGENTS.md),
 # so the cabinet loader passes --no-keyboard and only the pads are read.
@@ -36,6 +40,10 @@ class _NoKeys:
 
 def read_keys():
     return pygame.key.get_pressed() if _keyboard_enabled else _NoKeys()
+
+
+def _codes(names: list[str]) -> list[int]:
+    return [getattr(pygame, name) for name in names]
 
 
 def keyboard_quit_held(keys) -> bool:
@@ -61,6 +69,14 @@ def hat_direction(hat: tuple[int, int]) -> Vec | None:
     return None
 
 
+def latest_direction(order: list[str], held: set[str]) -> tuple[list[str], Vec | None]:
+    """Track direction buttons in the order they went down, so holding two at
+    once steers by the newer one. Returns (the updated order, the direction)."""
+    order = [name for name in order if name in held]
+    order += [name for name in DIRECTIONS if name in held and name not in order]
+    return order, DIRECTIONS[order[-1]] if order else None
+
+
 def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool) -> bool:
     """Start + Select held together on the same pad."""
     return (p1_start and p1_select) or (p2_start and p2_select)
@@ -69,13 +85,18 @@ def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: b
 class Input:
     def __init__(self) -> None:
         self.joysticks: list = []
-        self.keymap = {
-            p: {act: [getattr(pygame, name) for name in names] for act, names in config.KEYMAP[p].items()}
-            for p in PLAYERS
-        }
-        self.held: dict[str, set[str]] = {p: set() for p in PLAYERS}
-        self.pressed: dict[str, set[str]] = {p: set() for p in PLAYERS}
-        self.direction: dict[str, Vec | None] = {p: None for p in PLAYERS}
+        self.keymap = {src: {name: _codes(keys) for name, keys in m.items()} for src, m in config.KEYMAP.items()}
+        self.confirm_keys = _codes(config.KEYS_CONFIRM)
+        self.back_keys = _codes(config.KEYS_BACK)
+        self._order = {pad: [] for pad in PADS}
+        self._down: dict[int, set[int]] = {pad: set() for pad in PADS}
+        self._keys_down: set[str] = set()
+        self._stick_prev: dict[int, Vec | None] = {pad: None for pad in PADS}
+        self.stick: list[Vec | None] = [None, None]
+        self.pad: list[Vec | None] = [None, None]
+        self.nav: Vec | None = None
+        self.confirm = self.back = False
+        self.start_select = {pad: (False, False) for pad in PADS}
         self.select_held_time = 0.0
         self.keyboard_quit = False
         self.activity = False
@@ -92,8 +113,8 @@ class Input:
         if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
             self.rescan()
 
-    def _pad(self, player: str) -> tuple[set[str], Vec | None]:
-        cfg = config.INPUT_CONFIG[player]
+    def _read_pad(self, pad: int) -> tuple[set[int], Vec | None]:
+        cfg = config.INPUT_CONFIG["pads"][pad]
         if cfg["joystick_index"] >= len(self.joysticks):
             return set(), None
         joy = self.joysticks[cfg["joystick_index"]]
@@ -107,51 +128,57 @@ class Input:
                 direction = hat_direction(joy.get_hat(cfg["hat_index"]))
         except pygame.error:
             return set(), None
-        held = {act for act, buttons in cfg["buttons"].items() if down & set(buttons)}
-        system = config.INPUT_CONFIG["system"]
-        if system["start_button"] in down:
-            held.add("start")
-        if system["select_button"] in down:
-            held.add("select")
-        return held, direction
+        return down, direction
 
     def update(self, dt: float) -> None:
         keys = read_keys()
+        system = config.INPUT_CONFIG["system"]
         self.keyboard_quit = keyboard_quit_held(keys)
-        self.activity = False
-        for p in PLAYERS:
-            held, direction = self._pad(p)
-            keymap = self.keymap[p]
-            for act in ACTIONS:
-                if any(keys[k] for k in keymap.get(act, [])):
-                    held.add(act)
-            if direction is None:
+        self.activity = self.keyboard_quit
+        self.confirm = self.back = False
+        self.nav = None
+        for pad in PADS:
+            down, stick = self._read_pad(pad)
+            if stick is None:
                 for name, vec in DIRECTIONS.items():
-                    if any(keys[k] for k in keymap[name]):
-                        direction = vec
+                    if any(keys[k] for k in self.keymap[("stick", pad)][name]):
+                        stick = vec
                         break
-            self.pressed[p] = held - self.held[p]
-            self.held[p] = held
-            self.direction[p] = direction
-            if held or direction is not None:
+            buttons = config.INPUT_CONFIG["pads"][pad]["buttons"]
+            held = {name for name, raw in buttons.items() if down & set(raw)}
+            held |= {name for name, codes in self.keymap[("pad", pad)].items() if any(keys[k] for k in codes)}
+            self._order[pad], self.pad[pad] = latest_direction(self._order[pad], held)
+
+            pressed = down - self._down[pad]
+            self._down[pad] = down
+            self.confirm |= bool(pressed & {*system["confirm_buttons"], system["start_button"]})
+            self.back |= bool(pressed & set(system["back_buttons"]))
+            self.start_select[pad] = (system["start_button"] in down, system["select_button"] in down)
+
+            if stick is not None and stick != self._stick_prev[pad] and self.nav is None:
+                self.nav = stick
+            self._stick_prev[pad] = stick
+            self.stick[pad] = stick
+            if down or stick is not None or held:
                 self.activity = True
-        if any("select" in self.held[p] for p in PLAYERS):
+
+        keys_now = {"confirm"} if any(keys[k] for k in self.confirm_keys) else set()
+        keys_now |= {"back"} if any(keys[k] for k in self.back_keys) else set()
+        new_keys = keys_now - self._keys_down
+        self._keys_down = keys_now
+        self.confirm |= "confirm" in new_keys
+        self.back |= "back" in new_keys
+        self.activity |= bool(keys_now)
+
+        if any(select for _start, select in self.start_select.values()):
             self.select_held_time += dt
         else:
             self.select_held_time = 0.0
 
     def frame_input(self) -> FrameInput:
-        return FrameInput(
-            direction=dict(self.direction),
-            split={p: "split" in self.pressed[p] for p in PLAYERS},
-            confirm=any(self.pressed[p] & {"split", "start"} for p in PLAYERS),
-            back=any("back" in self.pressed[p] for p in PLAYERS),
-            activity=self.activity,
-        )
+        return FrameInput(stick=tuple(self.stick), pad=tuple(self.pad), nav=self.nav,
+                          confirm=self.confirm, back=self.back, activity=self.activity)
 
     def quit_combo(self) -> bool:
-        a, b = self.held["p1"], self.held["p2"]
-        return should_quit(
-            p1_start="start" in a, p1_select="select" in a,
-            p2_start="start" in b, p2_select="select" in b,
-        )
+        (s0, sel0), (s1, sel1) = self.start_select[0], self.start_select[1]
+        return should_quit(p1_start=s0, p1_select=sel0, p2_start=s1, p2_select=sel1)

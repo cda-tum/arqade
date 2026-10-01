@@ -10,6 +10,54 @@ round when *every* copy of you has crashed.
 - **Look:** neon vector, all procedural (no image assets beyond the bundled
   Press Start 2P font).
 
+## Revision 2: after the first playtest
+
+The first cabinet session went well. This revision changes the rules below
+wherever they disagree, and the code follows this revision.
+
+- **H splits at once.** Driving over an H gate splits that bike right away.
+  There is no split button any more, and no meter to charge. The HUD bar is
+  the superposition timer: each H adds **3 s**, capped at **9 s**. When it
+  runs out, decoherence keeps one random copy.
+- **Gates act on the copy that touches them.**
+  - **H** splits only that copy, so copies multiply one at a time, up to
+    **8**. At the limit an H only extends the bar.
+  - **X** mirrors that copy's horizontal position across the arena
+    (`x -> 159 - x`, the same row and heading) and shields it for **3 s**.
+  - **Z** shields that copy for **2 s**.
+- **Shield:** a shielded copy drives through any trail without crashing and
+  can't be eliminated by measurement. Walls still stop it. It blinks white.
+- **Bigger gates:** a bike within 2 cells of a gate's centre takes it, a
+  5x5-cell area. The token is drawn at that size. There are 3 gates in play
+  (4 with four players), weighted H 2 : X 1 : Z 1.
+- **Nested superposition.** Every split makes two child nodes of the copy
+  that split, and each ghost cell remembers the node that drew it.
+  - **Steering:** each copy carries a steering flip. The second child is
+    mirrored across its parent's heading, so copies steer like the stick
+    reflected horizontally, vertically or both.
+  - **Collisions:** a copy crashes into solid trail and its own history (its
+    node and that node's ancestors). It passes through every other copy of
+    the same player.
+  - **Measurement:** an opponent entering a ghost cell eliminates every copy
+    descending from that cell's node. If that would be every copy, one
+    survives at random.
+  - **After any elimination:** trail shared by all survivors turns solid,
+    and trail that no survivor descends from dissolves. With two copies this
+    is exactly the original rule.
+- **Button steering.** The pad's face buttons X, Y, B and A sit like W, A, S
+  and D (raw 0, 3, 2, 1) and steer up, left, down and right. With two
+  players, either the stick or the buttons steer. In menus A still confirms
+  and B goes back.
+- **Four players.** On the title screen, the stick picks 2 or 4 players.
+  - **Controls:** with four, each pad's stick and its buttons are separate
+    players: p1 is the left stick, p3 the left buttons, p2 the right stick,
+    p4 the right buttons.
+  - **Starts:** the left pad's players start on the left, heading right, and
+    the right pad's on the right.
+  - **Winning:** the last bike standing wins the round, first to 3 rounds.
+- **Colours:** p1 red, p2 blue, p3 green, p4 purple. Gate colours: H white,
+  X gold, Z cyan.
+
 ## 1. Rules
 
 ### Controls

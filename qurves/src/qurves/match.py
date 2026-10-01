@@ -2,15 +2,16 @@
 result. Pure (no pygame): it takes one FrameInput per frame and returns
 events, so it is unit tested like rules.py.
 
-The simulation ticks at the current speed. Steering and split presses are
-kept between ticks: the latest stick direction since the last tick wins,
-so a quick tap between two ticks is not lost.
+On the title, pushing the stick left or right picks 2 or 4 players. Which
+input steers which player is config.CONTROLS. The simulation ticks at the
+current speed; steering is kept between ticks, so the latest direction
+since the last tick wins and a quick tap between two ticks is not lost.
 """
 
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from qurves import config, rules
 
@@ -25,18 +26,15 @@ MATCH_RESULT = "match_result"
 class Cue:
     """A match-level event for the sound and the renderer."""
 
-    kind: str  # "beep", "go", "round_won", "draw" or "match_won"
+    kind: str  # "beep", "go", "blip", "round_won", "draw" or "match_won"
     player: str | None = None
-
-
-def _per_player(value):
-    return lambda: {p: value for p in rules.PLAYERS}
 
 
 @dataclass
 class FrameInput:
-    direction: dict = field(default_factory=_per_player(None))  # held stick direction
-    split: dict = field(default_factory=_per_player(False))  # A pressed this frame
+    stick: tuple = (None, None)  # per pad: the stick (or hat) direction held
+    pad: tuple = (None, None)  # per pad: the four face buttons as a d-pad
+    nav: rules.Vec | None = None  # a stick direction newly pushed this frame (menus)
     confirm: bool = False  # A or Start pressed this frame, either pad
     back: bool = False  # B pressed this frame, either pad
     activity: bool = False  # any input at all (for the idle timeout)
@@ -48,20 +46,34 @@ def speed_at(t: float) -> float:
     return min(config.SPEED_MAX, config.SPEED_START + steps * config.SPEED_STEP)
 
 
+def direction_for(mode: int, player: str, inp: FrameInput) -> rules.Vec | None:
+    """The direction `player` is steering, from whichever of their inputs is in use."""
+    for kind, pad in config.CONTROLS[mode][player]:
+        d = getattr(inp, kind)[pad]
+        if d is not None:
+            return d
+    return None
+
+
 class Match:
     def __init__(self, rng: random.Random | None = None) -> None:
         self.rng = rng or random.Random()
+        self.mode = config.MODES[0]
         self.state = TITLE
         self.t = 0.0  # seconds in the current state
         self.idle = 0.0
-        self.scores = {p: 0 for p in rules.PLAYERS}
+        self.scores = {p: 0 for p in self.players}
         self.round: rules.RoundState | None = None
         self.round_time = 0.0
         self.tick_accum = 0.0
         self.last_winner: str | None = None
         self.match_winner: str | None = None
         self._beeps = 0
-        self._reset_pending()
+        self._pending: dict = {}
+
+    @property
+    def players(self) -> tuple[str, ...]:
+        return config.PLAYERS_BY_MODE[self.mode]
 
     @property
     def tick_fraction(self) -> float:
@@ -76,6 +88,11 @@ class Match:
         self.t += dt
         events: list = []
         if self.state == TITLE:
+            if inp.nav in ((-1, 0), (1, 0)):
+                step = 1 if inp.nav == (1, 0) else -1
+                self.mode = config.MODES[(config.MODES.index(self.mode) + step) % len(config.MODES)]
+                self.scores = {p: 0 for p in self.players}
+                events.append(Cue("blip"))
             if inp.confirm:
                 self._start_match(events)
         elif self.state == COUNTDOWN:
@@ -83,7 +100,7 @@ class Match:
                 self._set_state(ROUND)
                 self.round_time = 0.0
                 self.tick_accum = 0.0
-                self._reset_pending()
+                self._pending = {}
                 events.append(Cue("go"))
             elif int(self.t) >= self._beeps:
                 self._beeps += 1
@@ -118,28 +135,23 @@ class Match:
         self._set_state(TITLE)
 
     def _start_match(self, events: list) -> None:
-        self.scores = {p: 0 for p in rules.PLAYERS}
+        self.scores = {p: 0 for p in self.players}
         self.match_winner = None
         self._start_countdown(events)
 
     def _start_countdown(self, events: list) -> None:
-        self.round = rules.new_round(self.rng)
+        self.round = rules.new_round(self.rng, self.players)
         self.round_time = 0.0
         self.tick_accum = 0.0
         self._set_state(COUNTDOWN)
         self._beeps = 1
         events.append(Cue("beep"))
 
-    def _reset_pending(self) -> None:
-        self._dir = {p: None for p in rules.PLAYERS}
-        self._split = {p: False for p in rules.PLAYERS}
-
     def _update_round(self, dt: float, inp: FrameInput, events: list) -> None:
-        for p in rules.PLAYERS:
-            if inp.direction.get(p) is not None:
-                self._dir[p] = inp.direction[p]
-            if inp.split.get(p):
-                self._split[p] = True
+        for p in self.players:
+            d = direction_for(self.mode, p, inp)
+            if d is not None:
+                self._pending[p] = d
         self.round_time += dt
         self.tick_accum += dt
         rs = self.round
@@ -148,9 +160,8 @@ class Match:
             if self.tick_accum < interval:
                 break
             self.tick_accum -= interval
-            inputs = {p: rules.PlayerInput(self._dir[p], self._split[p]) for p in rules.PLAYERS}
-            self._reset_pending()
-            events += rules.tick(rs, inputs, self.rng)
+            directions, self._pending = self._pending, {}
+            events += rules.tick(rs, directions, self.rng)
         if not rs.over:
             events += rules.advance(rs, dt, self.rng)
         if rs.over:

@@ -1,40 +1,46 @@
 # Qurves
 
-Two-player light cycles in superposition, for the ARQADE cabinet (Batocera,
-`pygame` system). Split your bike into two mirrored copies: you only lose a
-round when every copy has crashed. Design: `../docs/superpowers/specs/2026-10-01-qurves-design.md`.
+Light cycles in superposition for 2 or 4 players, for the ARQADE cabinet
+(Batocera, `pygame` system). Split your bike into mirrored copies: you only
+lose a round when every copy has crashed. Design: `../docs/superpowers/specs/2026-10-01-qurves-design.md`.
 
-**Status:** full game (2-player versus, first to 3 rounds), `--input-test`,
+**Status:** full game (2 or 4 players, first to 3 rounds), `--input-test`,
 and a Batocera deploy script. Button numbers follow the ones confirmed on the
 cabinet. Axis 0 being the horizontal stick axis still needs an `--input-test`
 check.
 
 ## How to play
 
-- Steer with the stick. You can't reverse into yourself.
-- Drive over **H** gates to charge your `|ψ>` meter. Each one adds half.
-- With at least half a meter, press **A** to **split**. Your bike forks into
-  two copies, one each side. One copy follows the stick, and the other
-  follows it mirrored across the line you split on. The meter drains while
-  you're split. A full meter lasts 6 s.
-- Your two copies are separate worlds and pass through each other.
-- A superposition ends in one of three ways:
-  - **Crash:** a copy that hits something is gone, and its trail dissolves.
-    You become the other copy.
-  - **Measurement:** if your opponent drives through one of your ghost trails,
-    you collapse onto the copy whose trail was *not* touched.
-  - **Decoherence:** when the meter runs dry, you become one copy at random.
-- A branch that is eliminated never happened, so its trail dissolves. The
-  surviving branch's trail becomes solid.
-- Speed rises every 10 s. First to 3 rounds wins.
+For 2 or 4 players: push the stick left or right on the title screen to pick.
 
-| Action | Cabinet | P1 keyboard | P2 keyboard |
-|---|---|---|---|
-| Steer | stick | W A S D | I J K L |
-| Split / confirm | A | Q | U |
-| Start | Start | 1 | 2 |
-| Back (result screen) | B | E | O |
-| Quit | Start + Select, or hold Select 2 s on the title | Esc | Esc |
+- **Steer** with the stick, or with the face buttons X, Y, B and A, which sit
+  like W, A, S and D. You can't reverse into yourself.
+- **H gate:** splits the copy that drove over it into two. One copy follows
+  your input; the other follows it mirrored across the line it split on.
+  Every H adds 3 s to your superposition bar (up to 9 s, at most 8 copies).
+- **X gate:** jumps that copy to the mirror-image spot on the other side of
+  the arena, and shields it for 3 s.
+- **Z gate:** shields that copy for 2 s. A shielded copy (blinking white)
+  drives through trails and can't be measured. Walls still stop it.
+- **Your copies** are separate worlds: each passes through the others'
+  trails, but not its own.
+- **A copy is eliminated** in one of three ways:
+  - **Crash:** it hits a wall, solid trail, or its own history.
+  - **Measurement:** an opponent drives through its ghost trail. Every copy
+    that came after that piece of trail never happened.
+  - **Decoherence:** when the bar runs dry, one copy survives at random.
+- **Eliminated copies' trails dissolve**; trail shared by all survivors
+  turns solid. You only lose a round when every copy has crashed.
+- Speed rises every 10 s. Last one standing takes the round; first to 3 wins.
+
+| Action | Cabinet | Keyboard (dev only) |
+|---|---|---|
+| Steer, 2 players | either pad's stick, or its X Y B A buttons | P1 W A S D or T F G H, P2 I J K L or arrows |
+| Steer, 4 players | left stick: P1, left buttons: P3, right stick: P2, right buttons: P4 | the same keys, one set per player |
+| Confirm (menus) | A or Start | Enter, 1, 2 |
+| Back (result screen) | B | Backspace |
+| Pick 2 or 4 players | stick left or right on the title | A or D, J or L |
+| Quit | Start + Select, or hold Select 2 s on the title | Esc |
 
 The keyboard is a dev fallback only. On the cabinet the loader passes
 `--no-keyboard`.
