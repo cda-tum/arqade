@@ -13,6 +13,7 @@ screen px, where y points down.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from . import qec
 from .config import (
@@ -47,6 +48,13 @@ class FighterInput:
 IDLE = FighterInput()
 
 
+class Press(NamedTuple):
+    """A buffered button press: which button, and how many frames old it is."""
+
+    button: str
+    age: int
+
+
 class Fighter:
     def __init__(self, char: Character, x: float, facing: int) -> None:
         self.char = char
@@ -66,7 +74,7 @@ class Fighter:
         self.stun = 0
         self.switch_left = 0
         self.cooldowns: dict[str, int] = {}
-        self.buffer: list[list] = []   # [button, frames left], oldest first
+        self.buffer: list[Press] = []   # oldest first
 
     # --- derived state ----------------------------------------------------------------
 
@@ -127,18 +135,24 @@ class Fighter:
                 self.cooldowns[slot] -= 1
         self.frame += 1
 
-        if self.action not in _STUNNED:
-            for btn in ("a", "b", "x"):
-                if getattr(inp, btn):
-                    self.buffer.append([btn, BUFFER_FRAMES])
+        # Presses are buffered even during hitstun, so one made in the last frames
+        # of stun comes out on the first free frame.
+        for btn in ("a", "b", "x"):
+            if getattr(inp, btn):
+                self.buffer.append(Press(btn, 0))
 
+        was_stunned = self.action in _STUNNED
         self._advance(events)
-        self._act(inp, rival_x, events)
+        if not was_stunned:         # a stunned fighter is inert for exactly `stun` steps
+            self._act(inp, rival_x, events)
         self._physics(events)
 
-        for entry in self.buffer:
-            entry[1] -= 1
-        self.buffer = [e for e in self.buffer if e[1] > 0]
+        # GAME RULE: presses do not age during the stance switch window, which is
+        # longer than BUFFER_FRAMES, so a press made mid-switch comes out when it ends.
+        if self.action != "switch":
+            self.buffer = [
+                Press(p.button, p.age + 1) for p in self.buffer if p.age + 1 < BUFFER_FRAMES
+            ]
         return events
 
     def take_hit(self, move: Move, from_facing: int) -> str:
@@ -249,19 +263,24 @@ class Fighter:
         if on_ground_free and rival_x != self.x:
             self.facing = 1 if rival_x > self.x else -1
 
+        basis = self.code.basis
+        wants_switch = (inp.down and basis == qec.BIT) or (not inp.down and basis == qec.PHASE)
+        if on_ground_free and wants_switch and not inp.up:
+            # Down+A from standing means a LOW attack: the switch goes first and the
+            # press stays buffered, to come out as crouch.A when the switch ends.
+            self._start_switch(events)
+            return
+
         free = on_ground_free or self.action == "jump"
         if free or self.action == "attack":
             self._try_buffer(inp.dx, rival_x, free, events)
 
         if self.action not in _GROUND_FREE:
             return
-        basis = self.code.basis
         if inp.up:
             self.vy = self.char.jump_vy
             self.vx = inp.dx * self.char.walk
             self._set_action("jump")
-        elif (inp.down and basis == qec.BIT) or (not inp.down and basis == qec.PHASE):
-            self._start_switch(events)
         elif basis == qec.PHASE:
             self.vx = 0.0           # crouching doesn't walk
             self._set_action("crouch")
@@ -280,14 +299,13 @@ class Fighter:
 
     def _try_buffer(self, dx: int, rival_x: float, free: bool, events: list) -> None:
         for entry in reversed(self.buffer):
-            slot = self._slot_for(entry[0], dx, rival_x)
+            slot = self._slot_for(entry.button, dx, rival_x)
             move = self.char.moves.get(slot)
             if move is None or self.cooldowns.get(slot, 0) > 0:
                 continue
             cancel = not free
             if cancel and not self.can_cancel(slot):
                 continue
-            self.buffer.remove(entry)
             self._start_move(slot, move, cancel, events)
             return
 
@@ -295,6 +313,7 @@ class Fighter:
         self.move = move
         self.slot = slot
         self.move_hit = False
+        self.buffer = []            # an older press must not fire a cancel nobody made
         self.chain = self.chain + 1 if cancel else 1
         if move.cooldown > 0:
             self.cooldowns[slot] = move.cooldown

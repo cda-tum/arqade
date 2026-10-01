@@ -178,6 +178,8 @@ def test_newest_buffered_press_wins():
     run(f)                             # step 15
     ev = run(f)                        # step 16: both are buffered, B is newer
     assert ev == [("attack", {"slot": "stand.B"})]
+    assert f.buffer == []              # starting a move clears the older press too
+    assert run(f, IDLE, JAB_TOTAL + 20) == []
 
 
 def test_crouching_buttons_use_crouch_slots():
@@ -190,6 +192,62 @@ def test_crouching_buttons_use_crouch_slots():
     # a crouch attack in the phase basis ends back in crouch
     run(f, FighterInput(down=True), LOW_JAB.startup + LOW_JAB.active + LOW_JAB.recovery)
     assert f.action == "crouch" and f.move is None
+
+
+def test_down_plus_a_from_standing_is_a_low_attack_after_the_switch():
+    f = make()
+    ev = run(f, FighterInput(down=True, a=True))
+    assert names(ev) == ["switch"]                   # the switch goes first, A stays buffered
+    assert f.action == "switch" and len(f.buffer) == 1
+    ev = run(f, FighterInput(down=True), SWITCH_FRAMES - 1)
+    assert ev == []
+    ev = run(f, FighterInput(down=True))             # the switch ends, the press comes out
+    assert ev == [("attack", {"slot": "crouch.A"})]
+    assert f.move.error == qec.Z
+
+
+def test_up_plus_a_while_standing_is_a_jump_attack_not_a_switch():
+    f = make()
+    ev = run(f, FighterInput(down=True, up=True))
+    assert "switch" not in names(ev) and f.action == "jump"
+
+
+def test_releasing_down_plus_a_from_crouch_is_a_standing_attack_after_the_switch():
+    f = make()
+    run(f, FighterInput(down=True), SWITCH_FRAMES + 1)
+    assert f.stance == "crouch"
+    ev = run(f, tap("a"))                            # down released this frame
+    assert names(ev) == ["switch"]
+    ev = run(f, IDLE, SWITCH_FRAMES)
+    assert ev == [("attack", {"slot": "stand.A"})]
+
+
+def test_a_press_during_the_switch_is_never_lost():
+    for k in range(SWITCH_FRAMES):
+        f = make()
+        down = FighterInput(down=True)
+        attacks = []
+        for step in range(1, SWITCH_FRAMES + 3):
+            inp = FighterInput(down=True, a=True) if step == 1 + k else down
+            attacks += [(step, e) for e in f.step(inp, FAR) if e[0] == "attack"]
+        # the switch ends on step SWITCH_FRAMES + 1; the press comes out right then, once
+        assert attacks == [(SWITCH_FRAMES + 1, ("attack", {"slot": "crouch.A"}))], k
+        assert f.slot == "crouch.A", k
+
+
+def test_a_press_just_after_the_switch_also_comes_out():
+    f = make()
+    down = FighterInput(down=True)
+    run(f, down, SWITCH_FRAMES)
+    ev = run(f, FighterInput(down=True, a=True))      # the step the switch ends
+    assert ev == [("attack", {"slot": "crouch.A"})]
+
+
+def test_buffered_presses_do_not_age_during_the_switch():
+    f = make()
+    run(f, FighterInput(down=True, a=True))
+    run(f, FighterInput(down=True), SWITCH_FRAMES - 1)
+    assert f.buffer[0].age == 0                      # did not age during the switch
 
 
 def test_standing_buttons_use_stand_slots():
@@ -289,29 +347,57 @@ def test_take_hit_interrupts_a_move_and_stuns():
     assert f.action == "hitstun" and f.stun == JAB.hitstun
     assert f.vx == JAB.knockback * -1
     x0 = f.x
-    run(f, FighterInput(dx=1, up=True, a=True), JAB.hitstun - 1)   # inputs are ignored
-    assert f.action == "hitstun" and f.y == 0
+    run(f, FighterInput(dx=1, up=True), JAB.hitstun - 1)   # direction inputs are ignored
+    assert f.action == "hitstun" and f.y == 0 and f.stun == 1
     assert f.x < x0                                  # knocked back to the left
     assert abs(f.vx) < abs(JAB.knockback)            # decaying
-    ev = run(f, IDLE)
+    ev = run(f, FighterInput(dx=1, up=True))         # the last inert step
     assert f.action == "idle" and f.stun == 0 and names(ev) == []
+    assert f.y == 0 and f.vx == 0
 
 
-def test_hitstun_ignores_presses_rather_than_buffering_them():
+def test_stun_is_inert_for_exactly_its_value_and_acts_on_the_next_step():
     f = make()
     f.take_hit(JAB, 1)
-    run(f, tap("a"))
-    assert f.buffer == []
+    n = JAB.hitstun
+    held = FighterInput(dx=1)
+    run(f, held, n)                                  # N inert steps
+    assert f.action == "idle" and f.vx == 0          # not walking yet
+    run(f, held)                                     # step N+1 acts
+    assert f.action == "walk" and f.vx == TRIO.walk
 
 
-def test_knockdown_lasts_forty_frames():
+def test_knockdown_is_inert_for_forty_steps():
     f = make()
     f.take_hit(SWEEP, 1)
     assert f.action == "knockdown" and f.stun == 40
     run(f, IDLE, 39)
     assert f.action == "knockdown"
-    run(f, IDLE, 1)
+    run(f, FighterInput(dx=1))                       # step 40: inert
+    assert f.action == "idle" and f.vx == 0
+    run(f, FighterInput(dx=1))                       # step 41: walks
+    assert f.action == "walk"
+
+
+def test_a_press_in_the_last_frames_of_stun_comes_out_on_the_first_free_frame():
+    f = make()
+    f.take_hit(JAB, 1)
+    n = JAB.hitstun
+    run(f, IDLE, n - 3)
+    assert run(f, tap("a")) == []                    # step N-2, buffered during stun
+    assert len(f.buffer) == 1
+    assert run(f, IDLE, 2) == []                     # steps N-1, N: still inert
     assert f.action == "idle"
+    assert run(f) == [("attack", {"slot": "stand.A"})]   # step N+1
+
+
+def test_an_early_press_in_stun_expires():
+    f = make()
+    f.take_hit(JAB, 1)
+    run(f, tap("a"))                                 # step 1 of 16
+    ev = run(f, IDLE, JAB.hitstun + 5)
+    assert "attack" not in names(ev)
+    assert f.buffer == []
 
 
 def test_hit_while_crouched_recovers_to_crouch():
@@ -504,3 +590,20 @@ def test_a_move_started_from_neutral_resets_the_chain():
     run(f, IDLE, JAB_TOTAL)
     start_jab(f)
     assert f.chain == 1
+
+
+def test_cancel_with_the_press_held_and_move_hit_set_on_the_first_active_frame():
+    f = make()
+    start_jab(f)                                      # step 1; the player now holds A
+    cancelled_at = None
+    for step in range(2, 1 + JAB.active + JAB.recovery + JAB.startup):
+        ev = f.step(tap("a"), FAR)
+        if ("attack", {"slot": "stand.A"}) in ev:
+            cancelled_at = step
+            break
+        if f.phase == "active" and not f.move_hit:
+            f.move_hit = True                         # what the fight does when it connects
+    assert cancelled_at == JAB.startup + 2            # the step after the first active frame
+    assert f.chain == 2 and f.frame == 0 and not f.move_hit
+    assert f.phase == "startup"
+    assert f.buffer == []
