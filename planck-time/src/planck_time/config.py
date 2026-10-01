@@ -62,8 +62,9 @@ REPEAT_INTERVAL = 0.11
 # Keyboard: a dev fallback only. The cabinet loader passes --no-keyboard, so
 # the keystrokes Batocera's evmapy fakes for P1's pad never reach the game.
 KEYMAP = {
-    "p1": {"left": ["K_a"], "right": ["K_d"], "up": ["K_w"], "down": ["K_s"], "a": ["K_q"],
-           "back": ["K_e"], "start": ["K_1"]},
+    # ESDF, not WASD: P1's dev keys must avoid the pad's own letters l, x, r, b, y, a.
+    "p1": {"left": ["K_s"], "right": ["K_f"], "up": ["K_e"], "down": ["K_d"], "a": ["K_q"],
+           "back": ["K_w"], "start": ["K_1"]},
     "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"], "a": ["K_PERIOD"],
            "back": ["K_COMMA"], "start": ["K_2"]},
 }

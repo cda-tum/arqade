@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import random
+from functools import lru_cache
 
 import pygame
 
@@ -24,8 +25,10 @@ def font(size: int) -> pygame.font.Font:
     return _FONTS[size]
 
 
+@lru_cache(maxsize=1024)
 def outlined(text: str, size: int, color, outline=P.INK, shadow: bool = True) -> pygame.Surface:
-    """Text with a one-pixel outline (and a drop shadow), readable on any backdrop."""
+    """Text with a one-pixel outline (and a drop shadow), readable on any backdrop.
+    Cached, since the same labels are drawn every frame: blit the result, never draw on it."""
     f = font(size)
     core = f.render(text, False, color)
     ink = f.render(text, False, outline)
