@@ -32,6 +32,13 @@
 		<lang>en</lang>
 	</game>
 	<game>
+		<path>./superconductor.pygame</path>
+		<name>Superconductor</name>
+		<desc>Route two-qubit gates across a superconducting chip before they decohere. Solo, co-op or versus.</desc>
+		<image>./images/superconductor-image.png</image>
+		<lang>en</lang>
+	</game>
+	<game>
 		<path>./overquqed.pygame</path>
 		<name>Overquqed</name>
 		<desc>Co-op quantum kitchen: prepare |0&gt;, |+&gt;, Bell pairs and cat states with gate appliances, and serve them before they decohere.</desc>
