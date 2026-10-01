@@ -5,6 +5,8 @@ twelve different microgames looking like one game."""
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 INK = (24, 16, 40)  # outlines and the darkest shadows
 NIGHT = (40, 32, 72)
 SLATE = (72, 72, 112)
@@ -36,10 +38,12 @@ BACKDROPS = (
 )
 
 
+@lru_cache(maxsize=4096)
 def shade(color, k: float) -> tuple[int, int, int]:
     """Darker (k < 1) or brighter, snapped back onto the 15-bit grid."""
     return tuple(max(0, min(248, round(c * k / 8) * 8)) for c in color)
 
 
+@lru_cache(maxsize=4096)
 def lighten(color, k: float) -> tuple[int, int, int]:
     return tuple(max(0, min(248, round((c + (248 - c) * k) / 8) * 8)) for c in color)

@@ -45,25 +45,47 @@ def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
     surf.blit(img, img.get_rect(center=(round(center[0]), round(center[1]))))
 
 
+_DITHERS: dict = {}
+
+
 def dither(surf: pygame.Surface, rect, c1, c2) -> None:
-    """A two-colour checkerboard: the GBA way to shade with few colours."""
+    """A two-colour checkerboard: the GBA way to shade with few colours.
+    Each size and colour pair is drawn once, then blitted."""
     rect = pygame.Rect(rect)
-    surf.fill(c1, rect)
-    for y in range(rect.top, rect.bottom):
-        for x in range(rect.left + (y & 1), rect.right, 2):
-            surf.set_at((x, y), c2)
+    key = (rect.w, rect.h, rect.y & 1, tuple(c1), tuple(c2))
+    patch = _DITHERS.get(key)
+    if patch is None:
+        patch = pygame.Surface(rect.size)
+        patch.fill(c1)
+        for y in range(rect.h):
+            for x in range((y + rect.y) & 1, rect.w, 2):
+                patch.set_at((x, y), c2)
+        if len(_DITHERS) > 256:
+            _DITHERS.clear()
+        _DITHERS[key] = patch
+    surf.blit(patch, rect)
+
+
+_TILES: dict = {}
 
 
 def backdrop(surf: pygame.Surface, colors, t: float, speed: float = 8.0) -> None:
-    """A slowly scrolling 8x8 checker of two colours, behind every microgame."""
-    a, b = colors
-    surf.fill(a)
-    off = int(t * speed) % 16
+    """A slowly scrolling 8x8 checker of two colours, behind every microgame.
+    Drawn once per colour pair and size, then blitted at the scroll offset."""
     w, h = surf.get_size()
-    for ty in range(-16, h + 16, 8):
-        for tx in range(-16, w + 16, 8):
-            if ((tx + ty) // 8) % 2 == 0:
-                surf.fill(b, (tx + off, ty + off, 8, 8))
+    key = (tuple(colors[0]), tuple(colors[1]), w, h)
+    tiles = _TILES.get(key)
+    if tiles is None:
+        a, b = colors
+        tiles = pygame.Surface((w + 16, h + 16))
+        tiles.fill(a)
+        for ty in range(0, h + 16, 8):
+            for tx in range(0, w + 16, 8):
+                if ((tx + ty) // 8) % 2 == 0:
+                    tiles.fill(b, (tx, ty, 8, 8))
+        _TILES[key] = tiles
+    off = int(t * speed) % 16
+    surf.blit(tiles, (off - 16, off - 16))
 
 
 def orb(surf: pygame.Surface, center, r: int, color, glow: bool = False) -> None:

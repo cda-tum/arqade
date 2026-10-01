@@ -25,6 +25,7 @@ from planck_time.pixel import backdrop, blit_center, orb, outlined
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 SW, SH = config.SCREEN_W, config.SCREEN_H
 BEZEL_W, BEZEL_H = 300, 200
+KEY = (255, 0, 255)  # transparent in the bezels
 PLAYER_NAMES = {"p1": "P1", "p2": "P2"}
 INPUT_LABELS = {"stick": "STICK", "a": "PRESS A", "mash": "MASH A!", "stick+a": "STICK + A"}
 
@@ -51,8 +52,12 @@ def bitmap(rows, colors: dict, scale: int = 1) -> pygame.Surface:
 
 
 def make_bezel(color) -> pygame.Surface:
-    """A GBA-shaped handheld in a player's colour, with a hole for the screen."""
-    b = pygame.Surface((BEZEL_W, BEZEL_H), pygame.SRCALPHA)
+    """A GBA-shaped handheld in a player's colour. Its edges are hard pixels, so
+    the corners are a colour key rather than per-pixel alpha: much cheaper to
+    blit every frame on the Pi."""
+    b = pygame.Surface((BEZEL_W, BEZEL_H))
+    b.fill(KEY)
+    b.set_colorkey(KEY, pygame.RLEACCEL)
     body = b.get_rect()
     pygame.draw.rect(b, P.INK, body, border_radius=44)
     pygame.draw.rect(b, P.shade(color, 0.7), body.inflate(-4, -4), border_radius=42)
