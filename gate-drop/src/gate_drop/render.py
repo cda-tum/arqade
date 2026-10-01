@@ -529,6 +529,10 @@ class Renderer:
             img = self.font8.render(line, False, config.COLOR_TEXT)
             s.blit(img, (W // 2 - img.get_width() // 2, strip.y + 8 + i * 16))
         mode = outlined(self.font16, f"<  {match.mode} PLAYER{'S' if match.mode == 2 else ''}  >", WHITE)
+        backing = pygame.Rect(0, 0, mode.get_width() + 24, 42)
+        backing.midtop = (W // 2, 188)
+        pygame.draw.rect(s, INK, backing, border_radius=6)
+        pygame.draw.rect(s, shade(WHITE, 0.6), backing, 1, border_radius=6)
         s.blit(mode, (W // 2 - mode.get_width() // 2, 194))
         if int(self.t * 2) % 2 == 0:
             press = outlined(self.font8, "PRESS A OR START", config.GATE_COLORS["H"], shadow=False)

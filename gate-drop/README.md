@@ -1,49 +1,59 @@
 # Gate Drop
 
-A two-player versus puzzle in the style of Dr. Mario, for the ARQADE cabinet
-(Batocera, `pygame` system). Each board is a small quantum circuit with Pauli
-errors sitting on its wires. Gate pills fall onto the wires and gates that
-cancel vanish. **The first player to clear every error on their board wins the
-round.** Design: `../docs/superpowers/specs/2026-10-01-gate-drop-design.md`.
+A quantum-circuit puzzle in the style of Dr. Mario, for 1 or 2 players, for
+the ARQADE cabinet (Batocera, `pygame` system). Each board is a small circuit
+with Pauli errors sitting on its wires. Gate pills fall onto the wires, and a
+gate next to its inverse vanishes. **Clear every error on your board.**
+Design: `../docs/superpowers/specs/2026-10-01-gate-drop-design.md`.
 
-**Status:** full game (2-player versus, first to 2 rounds), chiptune sound
-and music, `--input-test`, and a Batocera deploy script. Button numbers follow
-the ones confirmed on the cabinet.
+**Status:** full game, with versus (first to 2 rounds) and Dr. Mario-style
+single player (levels, score, top-10 initials). Each player sets their own
+level and speed. Chiptune sound and music, `--input-test`, and a Batocera
+deploy script. Button numbers follow the ones confirmed on the cabinet.
 
 ## How to play
 
+- **Title:** the stick picks 1 or 2 players.
+- **Setup:** each player picks a **level** (1-10; level n has 2n + 2 errors)
+  and a **speed** (LOW, MED, HI), then presses A. With 2 players this is a
+  handicap: each sets their own, and the round starts when both are ready.
 - **Pills:**
-  - Each pill is two halves. A gate pill carries two single-qubit gates (H,
-    X, Y or Z); once it lands, the halves are independent gates.
-  - A CNOT pill (steel, with the control `●` and the target `⊕`) always lies
-    across two neighbouring wires and stays rigid. If one side lands first,
-    it leaves a gap under the other, and an idle wire is just the identity.
-- **Cancelling:** only along a wire (a column), never across wires.
-  - Two identical gates in a row cancel: `XX`, `YY`, `ZZ`, `HH`. So does a
-    gate in a row with the identical error.
-  - Gaps are skipped, so `X`, gap, `X` cancels too.
-  - Nothing cancels across a CNOT half, and two CNOTs stacked the same way
-    round on the same two wires cancel.
+  - A gate pill carries two single-qubit gates (H, X, Y, Z, and the rarer T
+    and T-dagger). Once it lands, the halves are independent gates.
+  - A CNOT pill (steel, control `●`, target `⊕`) always lies across two
+    neighbouring wires and stays rigid. If one side lands first, it leaves a
+    gap under the other, and an idle wire is just the identity.
+- **Cancelling:** only along a wire (a column).
+  - A gate next to its inverse vanishes: `XX`, `YY`, `ZZ`, `HH`, and T with
+    T-dagger. `T T` doesn't cancel, because it is an S gate, not the
+    identity.
+  - Gaps are skipped, nothing cancels across a CNOT half, and two CNOTs
+    stacked the same way round cancel.
   - **Sandwiches:** `H X H` becomes `Z`, and `H Z H` becomes `X`.
-- **Chains:** after a clear, everything settles and may cancel again. A
-  chain of n steps sends n - 1 random Pauli gates (up to 4) to your rival, and
-  clearing 3 matches at once sends one more. They drop onto your rival's
-  board after their pill lands.
-- **Winning:** clear every error bug first, or make your rival overflow
-  (their next pill can't spawn). First to 2 rounds wins; each round has 2
-  more errors than the last.
+- **Versus:**
+  - A 2-step chain, or one pass with 3 or more matches, drops **2 T gates**
+    on your rival. A 3-step chain drops 3, and the maximum is 4.
+  - T gates only clear with a T-dagger, so they don't just cancel away.
+  - Clear all your errors first, or make your rival overflow, to take the
+    round. First to 2 rounds wins.
+- **Single player:**
+  - Clear the board to go up a level.
+  - Each error scores `100 x speed (1, 2 or 3) x 2^(chain step - 1)`, with
+    the multiplier capped at 8. A level clear adds `500 x level x speed`.
+  - Overflowing ends the game, and a top-10 score gets your initials.
 
 | Action | Cabinet | P1 keyboard | P2 keyboard |
 |---|---|---|---|
-| Move | stick left / right | A / D | arrows |
+| Move / menus | stick | W A S D | arrows |
 | Soft drop | stick down | S | down arrow |
 | Rotate clockwise / anti-clockwise | A / B | Q / E | . / , |
-| Confirm (menus) | A or Start | Enter, 1 | Enter, 2 |
-| Back (result screen) | B | Backspace | Backspace |
+| Confirm, ready (menus) | A or Start | 1, Enter | 2, keypad Enter |
+| Back, un-ready (menus) | B | Backspace | Delete |
 | Quit | Start + Select, or hold Select 2 s on the title | Esc | Esc |
 
-The keyboard is a dev fallback only. On the cabinet the loader passes
-`--no-keyboard`.
+In single player, either pad plays. The keyboard is a dev fallback only; on
+the cabinet the loader passes `--no-keyboard`. High scores are kept in
+`~/.gate_drop_scores.json`, outside the package, so a redeploy keeps them.
 
 ## Setup (dev machine)
 
@@ -63,8 +73,8 @@ uv run python tools/snapshot.py /tmp/gate-drop-snaps   # render a scripted match
 | Module | Role |
 |---|---|
 | `board.py` | One board: pills, rotation, settling, the cancellation scan, chains, noise. Pure, fully tested. |
-| `levels.py` | Seeded error layouts, shared by both boards. Pure, tested. |
-| `match.py` | Title, countdown, rounds, results, the attack exchange. Pure, tested. |
+| `levels.py`, `hiscores.py` | Seeded error layouts (same level, same layout); the top-10 table. Pure, tested. |
+| `match.py` | Title, setup, countdown, rounds, levels, results, initials, the attack exchange. Pure, tested. |
 | `sprites.py`, `render.py` | Procedural SNES-style pixel art at 480x270 (x4 on the cabinet). |
 | `audio.py` | Chiptune effects and music, adapted from Overquqed's `audio.py`. |
 | `input.py`, `config.py` | Pads and dev keyboard; every tuning number, colour and button. |
