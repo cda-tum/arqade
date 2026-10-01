@@ -3,6 +3,12 @@ colour. Three gate cards (X, Y and Z) sit below it. Step the cursor with the
 stick and press A to apply a card: the same Pauli undoes the error (each is
 its own inverse) and wins; any other card fails.
 
+From level 2, half the bugs are a T, an S or a dagger (T-dagger, S-dagger).
+They are not their own inverses: a T is undone by a T-dagger, and the other
+way round. The cards are then the inverse, the error itself as a decoy, and
+a Pauli. Each gate has its own colour, so matching the bug's colour (which
+works for the Paulis) picks the decoy: you have to pick the inverse.
+
 From level 1 the cards shuffle once, early on, like a shell game: each card
 slides to its new place along an arc, so the matching one can be followed
 with the eye. A is ignored while they move. Doing nothing runs out the clock.
@@ -20,6 +26,10 @@ from planck_time.microgames.base import H, W, Microgame, PlayerInput, register
 from planck_time.pixel import backdrop, blit_center, card, orb, outlined, result_overlay
 
 KINDS = ("X", "Y", "Z")
+PHASES = ("T", "Td", "S", "Sd")  # "Td" is T-dagger, "Sd" is S-dagger
+INVERSE = {"X": "X", "Y": "Y", "Z": "Z", "T": "Td", "Td": "T", "S": "Sd", "Sd": "S"}
+INVERSE_FROM = 2  # the level from which bugs can be T/S gates and their daggers
+COLORS = {**P.GATE, "T": P.GOOD_DARK, "Td": P.ORANGE, "S": P.TEAL, "Sd": P.PINK}
 ORB = (W // 2, 48)
 ORB_R = 28
 ORB_COLOR = P.TEAL
@@ -60,7 +70,20 @@ def bug(surf: pygame.Surface, center, color, letter: str, t: float) -> None:
     top = body.inflate(-4, -6).move(-1, -2)
     pygame.draw.ellipse(surf, color, top)
     surf.fill(P.lighten(color, 0.6), (body.x + 5, body.y + 4, 3, 2))
-    blit_center(surf, outlined(letter, 16, P.WHITE, shadow=False), (cx + 1, cy + 3))
+    gate_label(surf, letter, (cx + 1, cy + 3))
+
+
+def gate_label(surf: pygame.Surface, kind: str, center) -> None:
+    """A gate's letter; a dagger is drawn in pixels beside it (the font has none)."""
+    cx, cy = round(center[0]), round(center[1])
+    if not kind.endswith("d"):
+        blit_center(surf, outlined(kind, 16, P.WHITE, shadow=False), (cx, cy))
+        return
+    blit_center(surf, outlined(kind[0], 16, P.WHITE, shadow=False), (cx - 3, cy))
+    for x, y, w, h in ((cx + 6, cy - 8, 2, 10), (cx + 4, cy - 5, 6, 2)):
+        surf.fill(P.INK, (x - 1, y - 1, w + 2, h + 2))
+    for x, y, w, h in ((cx + 6, cy - 8, 2, 10), (cx + 4, cy - 5, 6, 2)):
+        surf.fill(P.WHITE, (x, y, w, h))
 
 
 def pointer(surf: pygame.Surface, x: float, y: float, color) -> None:
@@ -74,19 +97,26 @@ def pointer(surf: pygame.Surface, x: float, y: float, color) -> None:
 class Fix(Microgame):
     VERB = "FIX!"
     INPUT = "stick+a"
-    CAPTION = "Undo an error by applying the same Pauli"
+    CAPTION = "Undo an error with its inverse: Paulis are their own"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:
         super().__init__(seed, level, duration)
-        self.error = self.rng.choice(KINDS)
-        self.order = self.rng.sample(KINDS, 3)  # the card at each slot
+        self.inverse_round = level >= INVERSE_FROM and self.rng.random() < 0.5
+        if self.inverse_round:
+            self.error = self.rng.choice(PHASES)
+            cards = [INVERSE[self.error], self.error, self.rng.choice(KINDS)]
+        else:
+            self.error = self.rng.choice(KINDS)
+            cards = list(KINDS)
+        self.fix = INVERSE[self.error]
+        self.order = self.rng.sample(cards, 3)  # the card at each slot
         self.cursor = 1
         self.picked: int | None = None
         self.moved_at = 0.0
         self.shuffle_at: float | None = None
         if level >= 1:
-            here = self.order.index(self.error)
-            # dest[i] = where the card now at slot i goes; the error's twin always moves
+            here = self.order.index(self.fix)
+            # dest[i] = where the card now at slot i goes; the fixing card always moves
             self.dest = self.rng.choice([p for p in permutations(range(3)) if p[here] != here])
             self.shuffle_at = self.rng.uniform(0.6, 0.9)
             self.shuffle_len = SHUFFLE_TIME / self.speed
@@ -112,7 +142,7 @@ class Fix(Microgame):
             self.moved_at = self.t
         if inp.a and not self.shuffling:
             self.picked = self.cursor
-            if self.order[self.cursor] == self.error:
+            if self.order[self.cursor] == self.fix:
                 self.win()
             else:
                 self.fail()
@@ -120,7 +150,7 @@ class Fix(Microgame):
     def bot(self) -> PlayerInput:
         if self.t < BOT_THINK or self.shuffle_pending:
             return PlayerInput()
-        goal = self.order.index(self.error)
+        goal = self.order.index(self.fix)
         if goal == self.cursor:
             return PlayerInput(a=True, a_held=True)
         if self.t - self.moved_at < BOT_STEP:
@@ -149,10 +179,10 @@ class Fix(Microgame):
             k = self.since_end
             pygame.draw.circle(surf, P.GOOD, ORB, ORB_R + 4 + round(30 * min(1.0, k / 0.3)), 2)
             if k < 0.6:
-                bug(surf, (ORB[0] + 4 + 60 * k, ORB[1] + 4 - 140 * k), P.shade(P.GATE[self.error], 0.7),
+                bug(surf, (ORB[0] + 4 + 60 * k, ORB[1] + 4 - 140 * k), P.shade(COLORS[self.error], 0.7),
                     self.error, self.t)
         else:
-            bug(surf, (ORB[0] + 4, ORB[1] + 4), P.GATE[self.error], self.error, self.t)
+            bug(surf, (ORB[0] + 4, ORB[1] + 4), COLORS[self.error], self.error, self.t)
 
         # the cards; the one under the cursor is ringed, with an arrow over it
         for i, kind in enumerate(self.order):
@@ -164,12 +194,14 @@ class Fix(Microgame):
                 ring = P.GOOD if won else P.BAD
                 pygame.draw.rect(surf, P.INK, r.inflate(10, 10), border_radius=7)
                 pygame.draw.rect(surf, ring, r.inflate(8, 8), border_radius=7)
-            card(surf, r, P.GATE[kind], kind, selected=here and self.picked is None)
+            card(surf, r, COLORS[kind], selected=here and self.picked is None)
+            gate_label(surf, kind, (r.centerx + 1, r.centery))
             if self.picked == i and self.result is False:  # a red X over the wrong card
                 for a, b in (((r.left, r.top), (r.right, r.bottom)), ((r.right, r.top), (r.left, r.bottom))):
                     pygame.draw.line(surf, P.INK, a, b, 6)
                     pygame.draw.line(surf, P.BAD, a, b, 3)
         bob = 0 if self.result is not None else round(2 * math.sin(self.t * 9))
         pointer(surf, slot_x(self.cursor), CARD_Y - CARD // 2 - 6 + bob, P.GOLD)
-        blit_center(surf, outlined("PICK THE MATCHING GATE", 8, P.WHITE), (W // 2, H - 9))
+        hint = "UNDO IT: PICK THE INVERSE" if self.inverse_round else "PICK THE MATCHING GATE"
+        blit_center(surf, outlined(hint, 8, P.WHITE), (W // 2, H - 9))
         result_overlay(surf, self.result, self.since_end, seed=11)

@@ -7,6 +7,13 @@ Picking the longer one fails, and so does never picking. The shorter
 circuit's own wires never hold two identical gates in a row, so it has
 nothing left to remove. At level 0 the longer circuit has two pairs more (or
 one, on a single wire); from level 2 it has just one more, among more gates.
+
+From level 2, half the rounds are a twist: the circuit with the redundant
+pairs is the one that *looks* longer but compiles shorter. The other one
+does the same thing with a gate swapped for an equal sandwich (Z = H X H,
+X = H Z H): longer, and nothing on it is a pair that cancels. Still exact,
+so the "=" between them still holds, and the rule is the same: fewest gates
+once identical neighbours cancel.
 """
 
 from __future__ import annotations
@@ -21,6 +28,8 @@ from planck_time.pixel import backdrop, blit_center, card, outlined, result_over
 
 KINDS = ("X", "Y", "Z", "H")
 PAIRS = ("X", "Z", "H")  # the self-inverse pairs that get inserted
+SANDWICH = {"Z": ("H", "X", "H"), "X": ("H", "Z", "H")}  # H X H = Z and H Z H = X, exactly
+TWIST_FROM = 2  # the level from which the pairs can be the shorter side
 SLOTS = 4  # gates per wire
 CARD = 16
 PITCH = 18  # px from one gate to the next
@@ -55,6 +64,24 @@ def with_pairs(rng, wire: list[str], pairs: int) -> list[tuple[str, bool]]:
     return [g for u in units for g in u]
 
 
+def sandwiched(rng, wire: list[str], count: int) -> list[str] | None:
+    """The wire with `count` of its X/Z gates swapped for the equal H.H
+    sandwich, or None if that would put two identical gates side by side."""
+    spots = [i for i, k in enumerate(wire) if k in SANDWICH]
+    if len(spots) < count:
+        return None
+    out = list(wire)
+    for i in sorted(rng.sample(spots, count), reverse=True):
+        out[i:i + 1] = SANDWICH[out[i]]
+    if any(a == b for a, b in zip(out, out[1:])):
+        return None
+    return out
+
+
+def no_pairs(wire) -> bool:
+    return all(a != b for a, b in zip(wire, wire[1:]))
+
+
 @register
 class Shorter(Microgame):
     VERB = "SHORTER!"
@@ -63,6 +90,22 @@ class Shorter(Microgame):
 
     def __init__(self, seed: int, level: int, duration: float) -> None:
         super().__init__(seed, level, duration)
+        self.twist = level >= TWIST_FROM and self.rng.random() < 0.5
+        if self.twist:
+            pairs_side, other = self._twisted()
+        else:
+            pairs_side, other = self._plain(level)
+        # the right answer is whichever is shorter once identical neighbours cancel
+        self.short = self.rng.randrange(2)
+        answer, decoy = (pairs_side, other) if self.twist else (other, pairs_side)
+        self.circuits = [answer, decoy] if self.short == 0 else [decoy, answer]
+        self.cursor = self.rng.randrange(2)
+        self.moved_at = 0.0
+        self.picked: int | None = None
+        self.backdrop = P.BACKDROPS[self.rng.randrange(len(P.BACKDROPS))]
+
+    def _plain(self, level: int):
+        """(the circuit with pairs, the plain one): the pairs make it longer."""
         wires = 1 if level == 0 and self.rng.random() < 0.5 else 2
         if wires == 1:
             base, pairs = 1, 1
@@ -78,14 +121,23 @@ class Shorter(Microgame):
             if all(b + 2 * p <= SLOTS for b, p in zip(split, extra)):
                 break
         plain = [sequence(self.rng, n) for n in split]
-        short = [[(k, False) for k in w] for w in plain]
-        long = [with_pairs(self.rng, w, p) for w, p in zip(plain, extra)]
-        self.short = self.rng.randrange(2)  # which side is the right answer
-        self.circuits = [short, long] if self.short == 0 else [long, short]
-        self.cursor = self.rng.randrange(2)
-        self.moved_at = 0.0
-        self.picked: int | None = None
-        self.backdrop = P.BACKDROPS[self.rng.randrange(len(P.BACKDROPS))]
+        return [with_pairs(self.rng, w, p) for w, p in zip(plain, extra)], [[(k, False) for k in w] for w in plain]
+
+    def _twisted(self):
+        """(the circuit with pairs, the sandwiched one): the same gates
+        underneath, two pairs on one side and one sandwich on the other, so
+        the pairs side shows more gates (n + 4 > n + 2) but compiles to n."""
+        while True:
+            split = [self.rng.choice((1, 2)) for _ in range(2)]
+            plain = [sequence(self.rng, n) for n in split]
+            extra = [1, 1]
+            sand_wire = self.rng.randrange(2)
+            sand = [sandwiched(self.rng, w, 1 if i == sand_wire else 0) for i, w in enumerate(plain)]
+            fits = all(len(w) + 2 * p <= SLOTS for w, p in zip(plain, extra))
+            if fits and all(w is not None and len(w) <= SLOTS and no_pairs(w) for w in sand):
+                break
+        with_redundant = [with_pairs(self.rng, w, p) for w, p in zip(plain, extra)]
+        return with_redundant, [[(k, False) for k in w] for w in sand]
 
     def step(self, dt: float, inp: PlayerInput) -> None:
         dx = inp.step[0]
