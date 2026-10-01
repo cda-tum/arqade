@@ -269,18 +269,28 @@ class Renderer:
         if danger and int(self.t * 6) % 2 == 0:
             color = lighten(color, 0.75)  # blinks towards white, never the other player's colour
         well = pygame.Rect(ox, oy, WELL_W, WELL_H)
-        pygame.draw.rect(s, INK, well.inflate(16, 16), border_radius=5)
-        pygame.draw.rect(s, shade(color, 0.6), well.inflate(12, 12), border_radius=4)
-        pygame.draw.rect(s, color, well.inflate(10, 10), border_radius=4)
-        pygame.draw.rect(s, lighten(color, 0.5), well.inflate(10, 10), 1, border_radius=4)
+        plate = config.LABEL_PLATE
+
+        def framed(grow: int) -> pygame.Rect:  # the frame runs on below the well, round the label plate
+            r = well.inflate(grow, grow)
+            r.height += plate
+            return r
+
+        pygame.draw.rect(s, INK, framed(16), border_radius=5)
+        pygame.draw.rect(s, shade(color, 0.6), framed(12), border_radius=4)
+        pygame.draw.rect(s, color, framed(10), border_radius=4)
+        pygame.draw.rect(s, lighten(color, 0.5), framed(10), 1, border_radius=4)
         for k in range(4):  # rivets
             rx = well.left - 3 if k % 2 == 0 else well.right + 1
-            ry = well.top - 3 if k < 2 else well.bottom + 1
+            ry = well.top - 3 if k < 2 else well.bottom + plate + 1
             s.fill(lighten(color, 0.6), (rx, ry, 2, 2))
         s.fill(INK, well.inflate(2, 2))
         s.fill(config.COLOR_WELL, well)
-        for x in range(config.COLS):  # the qubit wires
-            s.fill(config.COLOR_WIRE, (ox + x * CELL + CELL // 2 - 1, oy, 2, WELL_H))
+        s.fill(INK, (well.x, well.bottom + 1, WELL_W, plate + 1))
+        for x in range(config.COLS):  # the qubit wires, each starting from its |q_n> label
+            cx = ox + x * CELL + CELL // 2 - 1
+            s.fill(config.COLOR_WIRE, (cx, oy, 2, WELL_H))
+            s.blit(self.sprites.ket(x, lighten(color, 0.7)), (ox + x * CELL, well.bottom + 2))
         if board is None:
             return
         grid = board.grid
@@ -325,7 +335,7 @@ class Renderer:
         board = match.boards.get(player)
         ox, _oy = config.BOARD_ORIGIN[player]
         name = outlined(self.font16, player.upper(), color)
-        s.blit(name, (ox + WELL_W // 2 - name.get_width() // 2, 6))
+        s.blit(name, (ox + WELL_W // 2 - name.get_width() // 2, 4))
         x = PANEL_X[player]
         box = pygame.Rect(x, 30, PANEL_W, 200)
         pygame.draw.rect(s, INK, box, border_radius=5)

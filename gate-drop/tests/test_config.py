@@ -12,7 +12,9 @@ def test_both_boards_fit_on_screen_without_overlapping():
     w, h = config.COLS * config.CELL, config.ROWS * config.CELL
     (x1, y1), (x2, y2) = config.BOARD_ORIGIN["p1"], config.BOARD_ORIGIN["p2"]
     assert x1 + w < x2 and x2 + w <= config.INTERNAL_WIDTH
-    assert y1 + h <= config.INTERNAL_HEIGHT and y2 + h <= config.INTERNAL_HEIGHT
+    # each well, its 8 px frame, and the |q_n> label plate under it fit on screen
+    for _x, y in (*config.BOARD_ORIGIN.values(), config.SOLO_ORIGIN):
+        assert y + h + config.LABEL_PLATE + 8 <= config.INTERNAL_HEIGHT
 
 
 def test_buttons_follow_the_cabinet_convention():

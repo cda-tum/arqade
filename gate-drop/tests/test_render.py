@@ -24,6 +24,8 @@ def test_every_sprite_builds():
     for kind in config.PAULIS:
         for frame in (0, 1):
             assert sp.bug(kind, frame).get_size() == size
+    for wire in range(config.COLS):  # the |q_n> label under each wire fits under its column
+        assert sp.ket(wire, (255, 255, 255)).get_width() == config.CELL
 
 
 def random_play(rng):

@@ -28,6 +28,16 @@ def lighten(color, k: float) -> tuple[int, int, int]:
     return tuple(round(c + (255 - c) * k) for c in color)
 
 
+# Tiny glyphs for the |q_n> wire labels: q (with its descender), a lowered
+# digit for the subscript, and the closing ket bracket.
+_GLYPH_Q = (".###.", "#..#.", "#..#.", ".###.", "...#.", "...##")  # the tail hook stops it reading as a 9
+_GLYPH_DIGITS = (
+    ("###", "#.#", "#.#", "#.#", "###"), (".#.", "##.", ".#.", ".#.", "###"),
+    ("###", "..#", "###", "#..", "###"), ("###", "..#", "###", "..#", "###"),
+    ("#.#", "#.#", "###", "..#", "..#"), ("###", "#..", "###", "..#", "###"),
+)
+_GLYPH_KET = ("#..", ".#.", ".#.", "..#", ".#.", ".#.", "#..")
+
 _SQUARE = {"r": ("tr", "br"), "l": ("tl", "bl"), "u": ("tl", "tr"), "d": ("bl", "br"), None: ()}
 _CORNERS = (("tl", "top_left"), ("tr", "top_right"), ("bl", "bottom_left"), ("br", "bottom_right"))
 
@@ -135,6 +145,21 @@ class Sprites:
             s.fill(INK, (10, 0 + bob, 3, 1))
             img = self.font.render(kind, False, INK)
             s.blit(img, img.get_rect(center=(S // 2 + 1, 10 + bob)))
+            self._cache[key] = s
+        return self._cache[key]
+
+    def ket(self, wire: int, color) -> pygame.Surface:
+        """|q_n>, the label under wire n, drawn in pixels to fit one 16 px column
+        (the font's glyphs are 8 px each, and it has no ket bracket at all)."""
+        key = ("ket", wire, color)
+        if key not in self._cache:
+            s = pygame.Surface((S, 7), pygame.SRCALPHA)
+            parts = ((0, 0, ("#",) * 7), (2, 1, _GLYPH_Q), (8, 2, _GLYPH_DIGITS[wire]), (12, 0, _GLYPH_KET))
+            for left, top, rows in parts:
+                for y, row in enumerate(rows):
+                    for x, bit in enumerate(row):
+                        if bit == "#":
+                            s.fill(color, (left + x, top + y, 1, 1))
             self._cache[key] = s
         return self._cache[key]
 

@@ -20,8 +20,9 @@ SHOW_FPS_DEFAULT = False
 COLS = 6  # qubit wires
 ROWS = 14
 CELL = 16
-BOARD_ORIGIN = {"p1": (40, 34), "p2": (344, 34)}  # top-left of each well, in px
-SOLO_ORIGIN = (192, 34)  # the single-player board, centred
+BOARD_ORIGIN = {"p1": (40, 30), "p2": (344, 30)}  # top-left of each well, in px
+SOLO_ORIGIN = (192, 30)  # the single-player board, centred
+LABEL_PLATE = 8  # extra frame height under each well, for the |q_n> wire labels
 
 GATE_KINDS = ("H", "X", "Y", "Z", "T", "Td")  # "Td" is T-dagger
 GATE_WEIGHTS = {"H": 6, "X": 6, "Y": 6, "Z": 6, "T": 1, "Td": 1}  # T and T-dagger: 1 half in 26 each
