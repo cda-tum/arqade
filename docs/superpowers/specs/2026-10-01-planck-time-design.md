@@ -114,7 +114,7 @@ executable, LF-only `deploy_batocera.sh`.
 | `session.py` | Pure. The order of microgames, the beats and their timing, speed levels, lives, scores, the versus rules, pause, idle. The equivalent of Gate Drop's `match.py`. |
 | `hiscores.py` | Copied from Gate Drop. |
 | `palette.py`, `pixel.py` | The GBA-style palette, and pixel-art helpers: outlines, dithering, 8x8 tile drawing, bouncy text. |
-| `render.py` | The 480x270 frame: two GBA bezels with their 240x160 screens, lives and scores, the intro and result cards, the title, the initials and high-score screens, the pause menu. |
+| `render.py` | The 640x360 frame: two GBA bezels with their 240x160 screens, lives and scores, the intro and result cards, the title, the initials and high-score screens, the pause menu. |
 | `input.py` | Per pad: the analog stick (with deadzone), auto-repeated stick steps for menus and grid moves, A pressed and held, Start / B / Select. |
 | `audio.py` | Chiptune adapted from Gate Drop: jingles for intro, win, fail and level-up, and a music loop whose tempo follows the level. |
 | `config.py`, `display.py`, `fonts.py`, `input_test.py`, `main.py`, `game.py` | The sibling games' patterns. |
@@ -125,9 +125,12 @@ created from the same seed.
 
 ## 4. Look and sound
 
-- **Resolution:** 480x270, integer-scaled x4 to 1080p, with
-  `SDL_RENDER_SCALE_QUALITY=nearest`. The two 240x160 screens sit side by
-  side at y = 70 to 230, with lives and score above and below each.
+- **Resolution:** 640x360, integer-scaled x3 to 1080p, with
+  `SDL_RENDER_SCALE_QUALITY=nearest`. 480x270 was the first idea, but two
+  240x160 screens fill it exactly, which leaves no room for bezels. At
+  640x360 each GBA pixel is a crisp 3x3 block on the cabinet. Each screen sits
+  in a 300 px GBA-shaped bezel (side wings with a little D-pad and A/B
+  buttons), centred at x = 160 and x = 480, with lives and score above.
 - **Palette:** a fixed, bright GBA-like palette of about 32 colours, with
   every channel a multiple of 8, as on the GBA's 15-bit display. Chunky
   dark outlines, 2-colour dithering for shading, 8x8 tile backgrounds.
