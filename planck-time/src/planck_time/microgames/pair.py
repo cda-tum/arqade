@@ -1,21 +1,19 @@
-"""PAIR!: particles jiggle around their spots, and two of them jiggle in
-perfect sync: the same hop, in the same direction, at the same moment. The
-stick jumps a cursor to the nearest particle in the pushed direction, and A
-picks. Picking either of the two wins; any other particle fails, and so does
-never picking.
+"""PAIR!: particles sway around their spots, and two of them sway in
+perfect sync: the same loop, at the same moment. The stick jumps a cursor to
+the nearest particle in the pushed direction, and A picks. Picking either of
+the two wins; any other particle fails, and so does never picking.
 
-Every particle hops to a fresh offset several times a second, never the same
-one twice in a row, so each is always visibly moving. The others hop to
-their own random offsets and at their own distinct rates, so none of them
-keeps in step with the pair for more than a moment. Higher levels have 8
-particles instead of 6, with bigger, faster hops.
+Every particle traces a smooth loop (a little Lissajous figure). The pair
+share one; each of the others either runs at a clearly different tempo or a
+quarter turn or more out of step, so none of them ever looks nearly in sync
+-- moving together is something eyes pick out at once, where comparing
+random hops is not. Levels 0-1 have 4 particles, then 6, and 8 from level 4.
 """
 
 from __future__ import annotations
 
 import math
 from collections import deque
-from itertools import combinations
 
 import pygame
 
@@ -24,12 +22,13 @@ from planck_time.microgames.base import IDLE, H, W, Microgame, PlayerInput, regi
 from planck_time.pixel import backdrop, blit_center, orb, outlined, result_overlay
 
 COLORS = (P.SKY, P.TEAL, P.VIOLET, P.ORANGE)  # one per game, shared by every particle
-HOP = 0.17  # seconds between the pair's hops at level 0
-RATES = (0.62, 0.74, 1.3, 1.48, 1.7, 1.92, 0.84)  # the others' hop intervals, x HOP
-SIMILAR = 0.25  # the most two different jiggles may coincide
-EASE = 0.35  # the part of a hop spent sliding to the new offset
-RADIUS = 7
-DIRS = [(math.cos(a * math.pi / 4), math.sin(a * math.pi / 4)) for a in range(8)]
+OMEGA = 6.0  # radians per second of the pair's loop at level 0 (about 1 s a loop)
+AMP = 12  # px of sway at level 0
+TEMPOS = (1.0, 1.0, 1.0, 0.6, 1.65)  # the decoys' tempo, x the pair's
+PHASES = (0.0, 0.5 * math.pi, math.pi, 1.5 * math.pi)  # out of step by a quarter turn or more
+SHAPES = ((1.0, 2.0), (2.0, 1.0), (1.0, 1.0))  # x and y frequency ratios of a loop
+RADIUS = 8
+TRAIL = (0.05, 0.1, 0.15, 0.2)  # seconds back, for the fading trail behind each particle
 THINK = 0.9  # the bot watches before it moves...
 BOT_STEP = 0.2  # ...moves at a human pace...
 BOT_SETTLE = 0.25  # ...and looks once more before pressing A
@@ -43,66 +42,36 @@ class Pair(Microgame):
 
     def __init__(self, seed: int, level: int, duration: float) -> None:
         super().__init__(seed, level, duration)
-        cols = 3 if level < 2 else 4
-        gap = 192 // cols
+        cols = 2 if level < 2 else 3 if level < 4 else 4
+        gap = 192 // cols if cols > 2 else 80
         self.spots = []  # each particle's resting place, a loose grid
         for r in range(2):
             for c in range(cols):
                 x = W // 2 + (c - (cols - 1) / 2) * gap + self.rng.randint(-4, 4)
-                y = 72 + (r - 0.5) * 52 + self.rng.randint(-4, 4)
+                y = 72 + (r - 0.5) * 56 + self.rng.randint(-4, 4)
                 self.spots.append((round(x), round(y)))
         n = len(self.spots)
         self.pair = self.rng.sample(range(n), 2)
-        # one jiggle per particle; the pair share jiggle 0
-        rates = self.rng.sample(RATES, n - 2)
-        self.jiggle_of = [0] * n
-        others = iter(range(1, n - 1))
-        for i in range(n):
-            if i not in self.pair:
-                self.jiggle_of[i] = next(others)
-        self.amp = 5 + level
-        hop = HOP / self.speed
-        self.jiggles = []  # (interval, phase, offsets)
-        for j in range(n - 1):
-            interval = hop if j == 0 else hop * rates[j - 1]
-            self.jiggles.append(self.jiggle(interval, duration))
-        # no two jiggles may look alike for long: redo any that sits on the same
-        # offset as another for over a quarter of the first 1.5 s (never the pair's)
-        for _ in range(60):
-            traces = [[self.at(j, s / 30) for s in range(45)] for j in range(n - 1)]
-            alike = [k for j, k in combinations(range(n - 1), 2)
-                     if sum(a == b for a, b in zip(traces[j], traces[k])) > len(traces[j]) * SIMILAR]
-            if not alike:
-                break
-            self.jiggles[alike[0]] = self.jiggle(self.jiggles[alike[0]][0], duration)
+        self.amp = min(AMP + level // 2, 14) if level < 4 else 11  # 8 particles sit closer together
+        # a loop is (tempo, phase, shape); the pair share one, and every decoy
+        # gets its own, never the pair's tempo *and* phase
+        shape = self.rng.choice(SHAPES)
+        phase = self.rng.choice(PHASES)
+        pair_loop = (1.0, phase, shape)
+        options = [(t, p, shape) for t in sorted(set(TEMPOS)) for p in PHASES if (t, p) != (1.0, phase)]
+        self.rng.shuffle(options)
+        self.loops = [pair_loop if i in self.pair else options.pop() for i in range(n)]
+        self.omega = OMEGA * self.speed
         self.cursor = self.rng.choice([i for i in range(n) if i not in self.pair])
         self.moved_at = 0.0
         self.picked: int | None = None
         self.color = self.rng.choice(COLORS)
         self.backdrop = P.BACKDROPS[self.rng.randrange(len(P.BACKDROPS))]
 
-    def jiggle(self, interval: float, duration: float) -> tuple:
-        """A hop interval, a phase and enough random offsets for the game,
-        never the same direction twice in a row."""
-        ticks = int((duration + 3) / interval) + 2
-        offsets, last = [], -1
-        for _ in range(ticks):
-            d = self.rng.choice([k for k in range(8) if k != last])
-            last = d
-            offsets.append((round(DIRS[d][0] * self.amp), round(DIRS[d][1] * self.amp)))
-        return interval, self.rng.random(), offsets
-
-    def at(self, j: int, t: float) -> tuple[int, int]:
-        """Jiggle j's offset at time t: a quick slide into each new offset."""
-        interval, phase, offsets = self.jiggles[j]
-        beat = t / interval + phase
-        k = int(beat)
-        (ax, ay), (bx, by) = offsets[(k - 1) % len(offsets)], offsets[k % len(offsets)]
-        e = min(1.0, (beat - k) / EASE)
-        return round(ax + (bx - ax) * e), round(ay + (by - ay) * e)
-
-    def offset(self, i: int) -> tuple[int, int]:
-        return self.at(self.jiggle_of[i], self.t)
+    def offset(self, i: int, t: float | None = None) -> tuple[int, int]:
+        tempo, phase, (fx, fy) = self.loops[i]
+        a = self.omega * tempo * (self.t if t is None else t) + phase
+        return round(self.amp * math.sin(fx * a)), round(self.amp * 0.8 * math.sin(fy * a + math.pi / 2))
 
     def nearest(self, i: int, d: tuple[int, int]) -> int:
         """The closest particle in direction d from particle i (i if none)."""
@@ -170,11 +139,18 @@ class Pair(Microgame):
                 pts.append((round(ax + (bx - ax) * k + nx * wave), round(ay + (by - ay) * k + ny * wave)))
             pygame.draw.lines(surf, P.INK, False, pts, 4)
             pygame.draw.lines(surf, P.GOOD if self.result else P.GOLD, False, pts, 2)
+        if self.result is None:  # fading trails: the pair's two are the same shape
+            for k, back in enumerate(TRAIL):
+                color = P.lighten(self.color, 0.25) if k < 2 else P.shade(self.color, 0.8)
+                for i, (x, y) in enumerate(self.spots):
+                    dx, dy = self.offset(i, self.t - back)
+                    size = 4 - k
+                    surf.fill(color, (x + dx - size // 2, y + dy - size // 2, size, size))
         for i, p in enumerate(where):
             won = self.result and i in self.pair
             orb(surf, p, RADIUS, P.GOOD if won else self.color, glow=bool(won))
-        if self.result is None:  # the cursor: gold corners round the spot, and an arrow
-            x, y = self.spots[self.cursor]
+        if self.result is None:  # the cursor: gold corners round the particle, and an arrow
+            x, y = where[self.cursor]
             pulse = round(math.sin(self.t * 10))
             s = 15 + pulse
             for cx, cy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
