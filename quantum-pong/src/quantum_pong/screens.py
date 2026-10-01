@@ -1,4 +1,4 @@
-"""Title/attract and winner screens.
+"""Title/attract and winner screens, and the pause menu overlay.
 
 The rendering functions here are pygame-drawing glue (not unit tested, same
 convention as main.py) except `blink_visible`, which is plain, pure timing
@@ -10,6 +10,7 @@ from __future__ import annotations
 import pygame
 
 from quantum_pong import config
+from quantum_pong.pause import PAUSE_ITEMS
 
 LEGEND_LINES = [
     "H: split the ball in two",
@@ -68,3 +69,37 @@ def draw_winner_screen(
         score_surf,
         score_surf.get_rect(center=(config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT // 2 + 20)),
     )
+
+
+def draw_pause_menu(
+    surface: pygame.Surface,
+    big_font: pygame.font.Font,
+    item_font: pygame.font.Font,
+    hint_font: pygame.font.Font,
+    selected: int,
+) -> None:
+    """Centred box over the frozen field, which the caller has already drawn."""
+    veil = pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT), pygame.SRCALPHA)
+    veil.fill((*config.COLOR_BACKGROUND, 170))
+    surface.blit(veil, (0, 0))
+
+    box = pygame.Rect(0, 0, 264, 112)
+    box.center = (config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT // 2)
+    pygame.draw.rect(surface, config.COLOR_BACKGROUND, box, border_radius=6)
+    pygame.draw.rect(surface, config.COLOR_TEXT, box, width=2, border_radius=6)
+
+    title = big_font.render("PAUSED", False, config.COLOR_TEXT)
+    surface.blit(title, title.get_rect(center=(box.centerx, box.y + 20)))
+
+    for i, item in enumerate(PAUSE_ITEMS):
+        active = i == selected
+        color = config.COLOR_FPS if active else config.COLOR_TEXT
+        item_surf = item_font.render(item, False, color)
+        rect = item_surf.get_rect(center=(box.centerx, box.y + 48 + i * 18))
+        surface.blit(item_surf, rect)
+        if active:
+            arrow = item_font.render(">", False, color)
+            surface.blit(arrow, arrow.get_rect(midright=(rect.left - 8, rect.centery)))
+
+    hint = hint_font.render("A: PICK   START / B: RESUME", False, config.COLOR_HINT)
+    surface.blit(hint, hint.get_rect(center=(box.centerx, box.bottom - 14)))

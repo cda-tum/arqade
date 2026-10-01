@@ -8,8 +8,8 @@ original design spec and its revision note on the mechanics change.
 
 **Status:** classic 2-player Pong with joystick/keyboard input and an
 input-test mode, multi-ball gate mechanics (H/X/Z/SWAP, capped at 4 balls on
-screen), a title/attract screen with a legend, a winner screen, a 60s idle
-timeout back to the title, simple procedurally-generated beep sounds, and a
+screen), a title/attract screen with a legend, a winner screen, a pause menu
+(Start), a 60s idle timeout back to the title, simple procedurally-generated beep sounds, and a
 Batocera packaging script. Button/axis indices in `INPUT_CONFIG` are still
 placeholders pending an `--input-test` run on the real cabinet.
 
@@ -78,10 +78,23 @@ with what you observe. That's the single place all button/axis mappings live.
 | Action | P1 | P2 |
 |---|---|---|
 | Move | W / S | Up / Down |
+| Pause / resume | P (either player) | P (either player) |
+| Pick a pause menu item | Enter | Enter |
 | Quit | Esc (either player) | Esc (either player) |
 
 On the cabinet, quit is Start+Select held together on either controller.
 Start (or Enter/Space on keyboard) also confirms the title and winner screens.
+
+### Pausing
+
+Start on either pad pauses a match (the cabinet-wide convention, see
+"Pausing" in `../AGENTS.md`). Everything freezes — balls, paddles, gate
+spawns, the flashes — and a menu opens over the field: the stick moves
+between **RESUME** and **QUIT TO TITLE**, A picks, and Start or B resumes.
+QUIT TO TITLE ends the match and goes back to this game's own title screen;
+Start+Select still quits the game at once, paused or not. The 60s idle
+timeout keeps counting while paused (using the menu resets it), so a match
+left paused on an unattended cabinet still drops back to the title.
 
 The cabinet loader runs the game with `--no-keyboard`: Batocera also turns P1's pad into
 keystrokes (arrow keys, numpad, letters, Enter/Space — see `../AGENTS.md`), which would
@@ -96,8 +109,8 @@ uv run pytest
 Covers `gates.py` (spawning/expiry/deterministic H-X-Z-SWAP effects/ball-cap
 enforcement), the paddle-line/catch-or-score logic and classic physics in
 `pong.py`, the pure input-decision functions in `input.py`, the pure
-tone-generation math in `sound.py`, the idle-blink timing in `screens.py`, and
-`display.py`'s scaling math. The pygame game loop itself, screen rendering,
+tone-generation math in `sound.py`, the idle-blink timing in `screens.py`, the
+pause menu's state machine in `pause.py`, and `display.py`'s scaling math. The pygame game loop itself, screen rendering,
 and `input_test.py` are integration glue — verified by running it, not unit
 tested.
 
@@ -122,8 +135,9 @@ frame.
 
 ## Fonts
 
-All in-game text (title, legend, score, winner screen, gate labels) uses the
-bundled pixel font `src/quantum_pong/assets/fonts/PressStart2P-Regular.ttf`
+All in-game text (title, legend, score, winner screen, pause menu, gate
+labels) uses the bundled pixel font
+`src/quantum_pong/assets/fonts/PressStart2P-Regular.ttf`
 ("Press Start 2P" by The Press Start 2P Project Authors, SIL Open Font
 License 1.1 — see `OFL.txt` in that folder) rather than the OS's default
 font, so text renders consistently instead of depending on whatever's
