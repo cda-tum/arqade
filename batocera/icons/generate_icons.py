@@ -1,14 +1,14 @@
 """Regenerate the per-game icons shown in EmulationStation's game list.
 
-    python3 generate_icons.py            # writes all five PNGs next to this file
+    python3 generate_icons.py            # writes all six PNGs next to this file
 
 Output names match the gamelist.xml <image> convention Batocera/ES expects
 (`<rom-basename>-image.png`), so the results can be copied straight to
 /userdata/roms/pygame/images/ on the cabinet -- see ../gamelist.xml and the
 "Per-game icons" section of ../../AGENTS.md.
 
-Self-contained on purpose: it only needs pygame, not any of the four game
-packages (each lives in its own uv project/venv, so importing all four from
+Self-contained on purpose: it only needs pygame, not any of the game
+packages (each lives in its own uv project/venv, so importing all of them from
 one script isn't possible). The few constants borrowed from a game's own
 source are copied below and marked with where they came from, so a tweak
 there is easy to mirror here.
@@ -326,12 +326,65 @@ def ion_surfer_sandbox() -> pygame.Surface:
     return surf
 
 
+# --- Overquqed (overquqed) -------------------------------------------------
+# A Bloch Bowl wearing a chef's toque: glass sphere with the |+> arrow on the
+# equator, on a kitchen-tile floor. Drawn at 64x64 and scaled by 8 (nearest)
+# so it matches the game's chunky pixel art. Colours copied from
+# overquqed/src/overquqed/palette.py.
+
+
+def overquqed() -> pygame.Surface:
+    ink = (28, 22, 40)
+    floor_a, floor_b = (232, 214, 176), (214, 192, 150)
+    teal = (40, 200, 190)
+    green = (96, 214, 110)
+    gold = (255, 206, 72)
+    s = pygame.Surface((64, 64))
+    for ty in range(0, 64, 8):
+        for tx in range(0, 64, 8):
+            s.fill(floor_a if (tx + ty) // 8 % 2 == 0 else floor_b, (tx, ty, 8, 8))
+    # shadow + wooden stand
+    pygame.draw.ellipse(s, shade(floor_b, 0.7), (16, 52, 32, 7))
+    pygame.draw.rect(s, ink, (24, 48, 16, 6))
+    pygame.draw.rect(s, (176, 124, 84), (25, 49, 14, 3))
+    # the glass sphere
+    c, r = (32, 34), 16
+    pygame.draw.circle(s, (214, 238, 255), c, r)
+    lower = pygame.Surface((64, 64), pygame.SRCALPHA)
+    pygame.draw.circle(lower, (188, 210, 228, 255), c, r)
+    s.blit(lower, (0, c[1]), pygame.Rect(0, c[1], 64, r + 1))
+    pygame.draw.ellipse(s, (132, 150, 170), (c[0] - r + 1, c[1] - 6, 2 * r - 1, 13), 1)
+    pygame.draw.circle(s, ink, c, r, 2)
+    # |+> arrow: towards the viewer on the equator (down-left)
+    tip = (c[0] - 8, c[1] + 6)
+    pygame.draw.line(s, ink, (c[0], c[1] + 1), (tip[0], tip[1] + 1), 3)
+    pygame.draw.line(s, green, c, tip, 3)
+    s.fill((200, 250, 200), (tip[0] - 1, tip[1] - 1, 3, 3))
+    for dx, dy in ((-9, -9), (-8, -9), (-9, -8)):
+        s.set_at((c[0] + dx, c[1] + dy), (255, 255, 255))
+    # chef's toque in the player-1 teal, perched on top
+    pygame.draw.rect(s, ink, (20, 12, 24, 7))
+    pygame.draw.rect(s, shade(teal, 0.45), (21, 13, 22, 5))
+    for x0 in (18, 26, 34):
+        pygame.draw.circle(s, ink, (x0 + 6, 9), 7)
+    for x0 in (18, 26, 34):
+        pygame.draw.circle(s, teal, (x0 + 6, 9), 6)
+    pygame.draw.circle(s, (150, 240, 230), (23, 7), 2)
+    pygame.draw.line(s, shade(teal, 0.72), (28, 5), (28, 12))
+    pygame.draw.line(s, shade(teal, 0.72), (36, 5), (36, 12))
+    # a gold entanglement sparkle
+    for x, y in ((50, 20), (52, 18), (54, 20), (52, 22), (52, 20)):
+        s.set_at((x, y), gold)
+    return pygame.transform.scale(s, (SIZE, SIZE))
+
+
 ICONS = {
     "quantum_towers-image.png": qlimbers,
     "quantum_pong-image.png": quantum_pong,
     "error_invaders-image.png": error_invaders,
     "ion_surfer-image.png": ion_surfer,
     "ion_surfer_sandbox-image.png": ion_surfer_sandbox,
+    "overquqed-image.png": overquqed,
 }
 
 
