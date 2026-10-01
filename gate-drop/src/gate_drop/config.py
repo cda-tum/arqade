@@ -99,9 +99,10 @@ REPEAT_INTERVAL = 0.06
 # the keystrokes Batocera's evmapy fakes for P1's pad never reach the game.
 KEYMAP = {
     "p1": {"left": ["K_a"], "right": ["K_d"], "up": ["K_w"], "down": ["K_s"], "cw": ["K_q"], "ccw": ["K_e"],
-           "confirm": ["K_1", "K_RETURN"], "back": ["K_BACKSPACE"]},
+           "confirm": ["K_1", "K_RETURN"], "back": ["K_BACKSPACE"], "pause": ["K_p"]},
     "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"],
-           "cw": ["K_PERIOD"], "ccw": ["K_COMMA"], "confirm": ["K_2", "K_KP_ENTER"], "back": ["K_DELETE"]},
+           "cw": ["K_PERIOD"], "ccw": ["K_COMMA"], "confirm": ["K_2", "K_KP_ENTER"], "back": ["K_DELETE"],
+           "pause": ["K_END"]},
 }
 
 # --- Single-player scoring ----------------------------------------------------------

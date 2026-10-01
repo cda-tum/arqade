@@ -78,6 +78,12 @@ def test_every_versus_screen_renders_without_errors():
     h.play(200)  # the countdown, into the round
     h.mt.boards["p2"].noise_queue += [config.NOISE_KIND] * 3
     h.play(1200)  # twenty seconds of random play on both boards
+    pause = press("p1")
+    pause.pauses["p1"] = True
+    h.frame(pause)
+    assert h.mt.paused
+    h.play(30)  # the pause menu, drawn over the frozen round
+    h.frame(pause)
     h.clear_errors()
     h.play(400)  # a round result, then the next countdown
     h.mt.scores = {"p1": config.ROUNDS_TO_WIN, "p2": 1}

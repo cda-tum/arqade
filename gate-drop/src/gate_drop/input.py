@@ -150,6 +150,7 @@ class Input:
             frame.confirms[p] = bool(pressed & {*system["confirm_buttons"], system["start_button"]}) \
                 or "confirm" in new_keys
             frame.backs[p] = bool(pressed & set(system["back_buttons"])) or "back" in new_keys
+            frame.pauses[p] = system["start_button"] in pressed or "pause" in new_keys
             self.start_select[p] = (system["start_button"] in down, system["select_button"] in down)
             if down or dx or dy or held_keys:
                 frame.activity = True

@@ -54,6 +54,7 @@ deploy script. Button numbers follow the ones confirmed on the cabinet.
 | Rotate clockwise / anti-clockwise | A / B | Q / E | . / , |
 | Confirm, ready (menus) | A or Start | 1, Enter | 2, keypad Enter |
 | Back, un-ready (menus) | B | Backspace | Delete |
+| Pause (resume or quit to the title) | Start | P | End |
 | Quit | Start + Select, or hold Select 2 s on the title | Esc | Esc |
 
 In single player, either pad plays. The keyboard is a dev fallback only; on

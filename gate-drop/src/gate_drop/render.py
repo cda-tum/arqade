@@ -20,7 +20,7 @@ from gate_drop import config
 from gate_drop.board import Cnot, Gate
 from gate_drop.fonts import load_font
 from gate_drop.match import (
-    COUNTDOWN, GAME_OVER, HISCORES, LETTERS, LEVEL_CLEAR, MATCH_RESULT, NAME_ENTRY, PLAYERS, ROUND,
+    COUNTDOWN, GAME_OVER, HISCORES, LETTERS, LEVEL_CLEAR, MATCH_RESULT, NAME_ENTRY, PAUSE_ITEMS, PLAYERS, ROUND,
     ROUND_RESULT, SETUP, TITLE, BoardEvent, Match,
 )
 from gate_drop.sprites import INK, WHITE, Sprites, lighten, shade
@@ -232,6 +232,31 @@ class Renderer:
             stacked[player] += img.get_height() + 2
             self.surface.blit(img, (ox + WELL_W // 2 - img.get_width() // 2, y))
         self._banner(match)
+        if match.paused:
+            self._pause_menu(match)
+
+    def _pause_menu(self, match: Match) -> None:
+        s = self.surface
+        veil = pygame.Surface((W, H), pygame.SRCALPHA)
+        veil.fill((*INK, 170))
+        s.blit(veil, (0, 0))
+        box = pygame.Rect(0, 0, 252, 118)
+        box.center = (W // 2, H // 2)
+        pygame.draw.rect(s, INK, box.inflate(4, 4), border_radius=7)
+        pygame.draw.rect(s, (46, 40, 84), box, border_radius=6)
+        pygame.draw.rect(s, WHITE, box, 2, border_radius=6)
+        head = outlined(self.font16, "PAUSED", config.GATE_COLORS["H"])
+        s.blit(head, (W // 2 - head.get_width() // 2, box.y + 12))
+        for i, item in enumerate(PAUSE_ITEMS):
+            active = i == match.pause_index
+            img = outlined(self.font8, item, config.GATE_COLORS["H"] if active else WHITE, shadow=False)
+            y = box.y + 44 + i * 18
+            s.blit(img, (W // 2 - img.get_width() // 2, y))
+            if active and int(self.t * 3) % 2 == 0:
+                arrow = outlined(self.font8, ">", config.GATE_COLORS["H"], shadow=False)
+                s.blit(arrow, (W // 2 - img.get_width() // 2 - 16, y))
+        hint = outlined(self.font8, "A: PICK   START / B: RESUME", shade(WHITE, 0.8), shadow=False)
+        s.blit(hint, (W // 2 - hint.get_width() // 2, box.bottom - 18))
 
     def _board(self, match: Match, player: str) -> None:
         s = self.surface

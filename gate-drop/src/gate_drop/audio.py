@@ -198,7 +198,7 @@ def build_sfx() -> dict[str, list[int]]:
     return sfx
 
 
-_CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "round_won": "round", "draw": "round",
+_CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "pause": "beep", "round_won": "round", "draw": "round",
                "match_won": "match", "level_clear": "match", "game_over": "topout"}
 _BOARD_SOUNDS = {"move", "rotate", "land", "attack", "noise", "topout"}
 _BOARD_RENAMES = {"propagate": "cnot"}

@@ -1,7 +1,7 @@
 """Match flow. Pure (no pygame): it takes one FrameInput per frame and
 returns events, so it is unit tested like board.py.
 
-  title -> setup -> countdown -> round -> ...
+  title -> setup -> countdown -> round (Start pauses: resume / quit to title) -> ...
     versus:  round result -> countdown ... -> match result -> rematch or title
     single:  level clear -> countdown (next level) ... game over
              -> initials (if it's a high score) -> high scores -> title
@@ -33,13 +33,14 @@ GAME_OVER = "game_over"
 NAME_ENTRY = "name_entry"
 HISCORES = "hiscores"
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 
 
 @dataclass(frozen=True)
 class Cue:
     """A match-level event for the sound and the renderer."""
 
-    kind: str  # beep, go, blip, round_won, draw, match_won, level_clear, game_over
+    kind: str  # beep, go, blip, pause, round_won, draw, match_won, level_clear, game_over
     player: str | None = None
 
 
@@ -59,6 +60,7 @@ class FrameInput:
     nav: dict = field(default_factory=_per_player(lambda: (0, 0)))  # menus: stick presses, auto-repeated
     confirms: dict = field(default_factory=_per_player(bool))  # A or Start pressed this frame
     backs: dict = field(default_factory=_per_player(bool))  # B pressed this frame
+    pauses: dict = field(default_factory=_per_player(bool))  # Start pressed this frame
     activity: bool = False  # any input at all (for the idle timeout)
 
     @property
@@ -68,6 +70,10 @@ class FrameInput:
     @property
     def back(self) -> bool:
         return any(self.backs.values())
+
+    @property
+    def pause(self) -> bool:
+        return any(self.pauses.values())
 
 
 def other(player: str) -> str:
@@ -168,6 +174,8 @@ class Match:
         self.last_bonus = 0
         self.name_entry: NameEntry | None = None
         self.new_rank: int | None = None
+        self.paused = False
+        self.pause_index = 0
         self._beeps = 0
 
     @property
@@ -203,10 +211,36 @@ class Match:
                 self._save_name()
             self._to_title()
             return []
-        self.t += dt
         events: list = []
+        if self.state == ROUND and (self.paused or inp.pause):
+            self._on_pause(inp, events)
+            return events
+        self.t += dt
         getattr(self, f"_on_{self.state}")(dt, inp, events)
         return events
+
+    def _on_pause(self, inp: FrameInput, events: list) -> None:
+        """Start pauses a round (either pad). In the menu the stick moves, A
+        picks, and Start or B resumes. Nothing in the round moves meanwhile."""
+        if not self.paused:
+            self.paused = True
+            self.pause_index = 0
+            events.append(Cue("pause"))
+            return
+        if inp.pause or inp.back:
+            self.paused = False
+            events.append(Cue("blip"))
+            return
+        dy = next((d[1] for d in inp.nav.values() if d[1]), 0)
+        if dy:
+            self.pause_index = (self.pause_index + dy) % len(PAUSE_ITEMS)
+            events.append(Cue("blip"))
+        if any(inp.confirms[p] and not inp.pauses[p] for p in PLAYERS):  # A, not Start
+            events.append(Cue("blip"))
+            if PAUSE_ITEMS[self.pause_index] == "RESUME":
+                self.paused = False
+            else:
+                self._to_title()
 
     def _on_title(self, dt: float, inp: FrameInput, events: list) -> None:
         if any(d != (0, 0) for d in inp.nav.values()):
@@ -347,6 +381,7 @@ class Match:
 
     def _to_title(self) -> None:
         self.boards = {}
+        self.paused = False
         self._set_state(TITLE)
 
     def _save_name(self) -> None:

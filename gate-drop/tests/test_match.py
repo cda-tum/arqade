@@ -273,3 +273,49 @@ def test_danger_when_a_stack_nears_the_top():
     assert not mt.danger
     mt.boards["p1"].grid.set((0, config.DANGER_ROWS - 1), Gate("X", error=True))
     assert mt.danger
+
+
+# --- pausing ---------------------------------------------------------------------------
+
+
+def pause_press(player="p1"):
+    fi = press(confirm=[player])  # Start counts as a confirm in menus...
+    fi.pauses[player] = True  # ...and pauses in game
+    return fi
+
+
+def test_start_pauses_the_round_and_everything_freezes():
+    mt = in_round()
+    events = mt.update(1 / 60, pause_press("p2"))
+    assert mt.paused and Cue("pause") in events
+    y = mt.boards["p1"].piece.y
+    run(mt, 3.0)
+    assert mt.boards["p1"].piece.y == y and mt.state == m.ROUND
+
+
+def test_start_or_b_resumes():
+    mt = in_round()
+    mt.update(1 / 60, pause_press())
+    mt.update(1 / 60, pause_press())
+    assert not mt.paused
+    mt.update(1 / 60, pause_press())
+    mt.update(1 / 60, press(back=["p2"]))
+    assert not mt.paused
+
+
+def test_a_on_resume_resumes_and_quit_to_title_goes_home():
+    mt = in_round()
+    mt.update(1 / 60, pause_press())
+    mt.update(1 / 60, press(confirm=["p1"]))  # A on RESUME
+    assert not mt.paused and mt.state == m.ROUND
+    mt.update(1 / 60, pause_press())
+    mt.update(1 / 60, press(nav={"p2": DOWN}))
+    assert m.PAUSE_ITEMS[mt.pause_index] == "QUIT TO TITLE"
+    mt.update(1 / 60, press(confirm=["p2"]))
+    assert mt.state == m.TITLE and not mt.paused and mt.boards == {}
+
+
+def test_single_player_pauses_too():
+    mt = in_round(mode=1)
+    mt.update(1 / 60, pause_press("p2"))
+    assert mt.paused

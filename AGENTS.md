@@ -297,6 +297,7 @@ exists** — a game with no "back" simply has nothing to bind:
 | Confirm / select a menu item | **A** | 1 |
 | Back / return to the previous screen | **B** | 2 |
 | Start the game from its title or main menu | **Start** | 9 |
+| Pause during play | **Start** | 9 |
 
 Notes and deliberate limits:
 
@@ -317,6 +318,32 @@ Notes and deliberate limits:
   goes back with A. `batocera/kiosk.py --controls` sets ES's `InvertButtons`
   to fix that; the bottom-right hints in the theme (`install.py`) must be kept
   in agreement with it.
+
+### Pausing (all games must follow this)
+
+Every game can be paused, and a paused game is always one step from its own
+title screen. That matters on a public cabinet: someone walks up to a game
+left mid-round, or a round needs to stop without power-cycling anything.
+
+- **Start pauses** during play, from either pad. Everything freezes: timers,
+  falling pieces, the round clock. Select is not a pause button, because it is
+  reserved for the Start + Select quit combo.
+- **The pause menu offers at least RESUME and QUIT TO TITLE.** QUIT TO TITLE
+  goes back to the game's own title or home screen, not out to
+  EmulationStation; quitting to ES stays the Start + Select combo. A game may
+  add items such as RESTART.
+- **In the menu:** the stick moves the selection, A picks an item, and Start
+  or B resumes.
+- **Start + Select still quits at once**, paused or not, and the idle timeout
+  back to the title keeps running while paused.
+
+Where the games stand (2026-10-01):
+- **Follow it:** Gate Drop (RESUME, QUIT TO TITLE) and Overquqed (RESUME,
+  RESTART, QUIT TO MENU).
+- **Close:** Superconductor pauses with Start, but its pause screen goes to
+  the menu with Select rather than through a menu item. Ion Surfer pauses
+  with Select instead of Start.
+- **No pause yet:** Quantum Pong, Qlimbers, Pauli Invaders and Qurves.
 
 ## Player colours: left is blue, right is red (a taste)
 
