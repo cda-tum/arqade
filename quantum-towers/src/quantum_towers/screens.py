@@ -44,7 +44,6 @@ def draw_title_screen(
     legend_font: pygame.font.Font,
     prompt_font: pygame.font.Font,
     grid_gate_font: pygame.font.Font,
-    grid_label_font: pygame.font.Font,
     show_prompt: bool,
     p1_pressed: dict[str, bool] | None = None,
     p2_pressed: dict[str, bool] | None = None,
@@ -63,11 +62,11 @@ def draw_title_screen(
     y += 14
     grid = button_grid()
     visuals.draw_button_grid(
-        surface, (config.INTERNAL_WIDTH // 4, y), grid, grid_gate_font, grid_label_font,
+        surface, (config.INTERNAL_WIDTH // 4, y), grid, grid_gate_font,
         accent_color=config.COLOR_PLAYER_1, pressed=p1_pressed,
     )
     visuals.draw_button_grid(
-        surface, (config.INTERNAL_WIDTH * 3 // 4, y), grid, grid_gate_font, grid_label_font,
+        surface, (config.INTERNAL_WIDTH * 3 // 4, y), grid, grid_gate_font,
         accent_color=config.COLOR_PLAYER_2, pressed=p2_pressed,
     )
 

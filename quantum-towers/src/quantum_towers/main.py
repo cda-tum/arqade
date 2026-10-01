@@ -97,7 +97,6 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
     legend_font = fonts.load_font(9)
     prompt_font = fonts.load_font(12)
     grid_gate_font = fonts.load_font(8)
-    grid_label_font = fonts.load_font(7)
     t = 0.0
 
     while True:
@@ -117,7 +116,7 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
             return "start"
 
         screens.draw_title_screen(
-            internal, title_font, legend_font, prompt_font, grid_gate_font, grid_label_font,
+            internal, title_font, legend_font, prompt_font, grid_gate_font,
             screens.blink_visible(t, config.TITLE_BLINK_PERIOD),
             p1_pressed=p1_raw.button_held, p2_pressed=p2_raw.button_held,
         )
@@ -256,7 +255,6 @@ def run_game(
     # avoid spilling out of the block.
     block_fonts = [fonts.load_font(11), fonts.load_font(9), fonts.load_font(7)]
     grid_gate_font = fonts.load_font(8)
-    grid_label_font = fonts.load_font(7)
     perfect_font = fonts.load_font(9)
     background = visuals.make_background(config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)
     button_grid_data = screens.button_grid()
@@ -429,12 +427,12 @@ def run_game(
         legend_y = config.INTERNAL_HEIGHT - LEGEND_HEIGHT // 2
         visuals.draw_button_grid(
             internal, (config.INTERNAL_WIDTH // 4, legend_y), button_grid_data,
-            grid_gate_font, grid_label_font,
+            grid_gate_font,
             accent_color=config.COLOR_PLAYER_1, pressed=raws["p1"].button_held,
         )
         visuals.draw_button_grid(
             internal, (config.INTERNAL_WIDTH * 3 // 4, legend_y), button_grid_data,
-            grid_gate_font, grid_label_font,
+            grid_gate_font,
             accent_color=config.COLOR_PLAYER_2, pressed=raws["p2"].button_held,
         )
 

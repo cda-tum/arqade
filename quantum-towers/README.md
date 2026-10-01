@@ -60,7 +60,10 @@ the next one revealed, then an unrevealed "?" on top.
 The button legend at the bottom is shown twice — once per player, in that player's color (left =
 P1, right = P2) — since each player has independent button-press state. A held button's box fills
 solid and gets a bright border, so a press gives visible feedback even on a frame where the gate
-itself does nothing to the target.
+itself does nothing to the target. The legend is one rounded square per physical button, laid out
+like the cabinet's 2x3 grid, with no printed button names: the layout alone maps it onto your
+hands, and letters like X and Y would read as gates. RESET doesn't fit a square, so it is drawn as a
+circular reset arrow.
 
 ## Notation
 

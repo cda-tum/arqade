@@ -418,17 +418,17 @@ def draw_button_grid(
     center: tuple[int, int],
     grid: list[list[tuple[str, str | None]]],
     gate_font: pygame.font.Font,
-    label_font: pygame.font.Font,
     accent_color: Color = config.COLOR_TOWER_TRIM,
     pressed: dict[str, bool] | None = None,
 ) -> None:
-    """The cabinet's real 2x3 button grid, drawn as the same shape: each
-    button-shaped box holds the gate it fires, with the physical button's
-    own name just beside it -- so a player matches this to their hands
-    directly instead of reading a line of text. A cell whose gate is None
-    (no action mapped to that button) draws as an empty, dim outline instead
-    of a filled box, so it visibly reads as "nothing here" rather than
-    silently showing a stale or blank label.
+    """The cabinet's real 2x3 button grid, drawn as the same shape: one
+    rounded square per physical button, holding the gate it fires. The
+    layout alone is what maps it onto the player's hands -- the printed
+    button names are deliberately NOT shown, since letters like X and Y
+    would read as gates. A cell whose gate is None (no action mapped to
+    that button) draws as an empty, dim outline instead of a filled box,
+    so it visibly reads as "nothing here". RESET is too wide for a square,
+    so it is drawn as a reset arrow instead of text (see _draw_reset_icon).
 
     `accent_color` tints the box borders (and, per-cell, the pressed fill)
     -- since each player has their own independent press state, this is what
@@ -437,48 +437,57 @@ def draw_button_grid(
     makes a held button's box fill with `accent_color` and pop a bright
     border, so a press gives visible feedback even when the gate itself
     does nothing to the target."""
-    box_label_gap = 3
-    col_gap = 10
-    row_gap = 4
+    gap = 4
 
-    all_gates = [gate for row in grid for _, gate in row if gate is not None]
-    all_labels = [label for row in grid for label, _ in row]
-    box_w = max(gate_font.size(gate)[0] for gate in all_gates) + 8
-    box_h = gate_font.get_height() + 4
-    label_w = max(label_font.size(label)[0] for label in all_labels)
+    letters = [g for row in grid for _, g in row if g is not None and g != "RESET"]
+    side = max([gate_font.get_height()] + [gate_font.size(g)[0] for g in letters]) + 8
 
-    cell_w = box_w + box_label_gap + label_w
     cols = len(grid[0])
     rows = len(grid)
-    total_w = cols * cell_w + (cols - 1) * col_gap
-    total_h = rows * box_h + (rows - 1) * row_gap
+    total_w = cols * side + (cols - 1) * gap
+    total_h = rows * side + (rows - 1) * gap
     origin_x = center[0] - total_w // 2
     origin_y = center[1] - total_h // 2
 
     for row_index, row in enumerate(grid):
-        for col_index, (button_label, gate) in enumerate(row):
+        for col_index, (_button_label, gate) in enumerate(row):
             box_rect = pygame.Rect(
-                origin_x + col_index * (cell_w + col_gap), origin_y + row_index * (box_h + row_gap),
-                box_w, box_h,
+                origin_x + col_index * (side + gap), origin_y + row_index * (side + gap),
+                side, side,
             )
             if gate is None:
-                pygame.draw.rect(surface, accent_color, box_rect, width=1, border_radius=4)
+                pygame.draw.rect(surface, accent_color, box_rect, width=1, border_radius=3)
                 continue
             is_pressed = bool(pressed and pressed.get(gate))
             if is_pressed:
                 fill = accent_color
-                pygame.draw.rect(surface, fill, box_rect, border_radius=4)
-                pygame.draw.rect(surface, config.COLOR_TEXT, box_rect, width=2, border_radius=4)
+                pygame.draw.rect(surface, fill, box_rect, border_radius=3)
+                pygame.draw.rect(surface, config.COLOR_TEXT, box_rect, width=2, border_radius=3)
             else:
                 fill = config.COLOR_TOWER
-                pygame.draw.rect(surface, fill, box_rect, border_radius=4)
-                pygame.draw.rect(surface, accent_color, box_rect, width=2, border_radius=4)
-            gate_surf = gate_font.render(gate, False, _contrasting_text_color(fill))
-            surface.blit(gate_surf, gate_surf.get_rect(center=box_rect.center))
-            blit_outlined_text(
-                surface, label_font, button_label, config.COLOR_TEXT,
-                (box_rect.right + box_label_gap, box_rect.centery - label_font.get_height() // 2),
-            )
+                pygame.draw.rect(surface, fill, box_rect, border_radius=3)
+                pygame.draw.rect(surface, accent_color, box_rect, width=2, border_radius=3)
+            ink = _contrasting_text_color(fill)
+            if gate == "RESET":
+                _draw_reset_icon(surface, box_rect.center, ink)
+            else:
+                gate_surf = gate_font.render(gate, False, ink)
+                surface.blit(gate_surf, gate_surf.get_rect(center=box_rect.center))
+
+
+def _draw_reset_icon(surface: pygame.Surface, center: tuple[int, int], color: Color) -> None:
+    """A circular "start over" arrow standing in for the word RESET, which
+    doesn't fit a square button: a 2px ring open at the top right, with an
+    arrowhead on the open end pointing clockwise."""
+    cx, cy = center
+    for dy in range(-5, 6):
+        for dx in range(-5, 6):
+            r2 = dx * dx + dy * dy
+            in_gap = dx >= 0 and dy < 0 and dx > -dy // 2  # the open wedge, top right
+            if 9 <= r2 <= 25 and not in_gap:
+                surface.set_at((cx + dx, cy + dy), color)
+    # arrowhead at the top end of the ring (12 o'clock), pointing right
+    pygame.draw.polygon(surface, color, [(cx, cy - 7), (cx + 3, cy - 4), (cx, cy - 1)])
 
 
 def draw_charge_bar(
