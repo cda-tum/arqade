@@ -337,13 +337,17 @@ left mid-round, or a round needs to stop without power-cycling anything.
 - **Start + Select still quits at once**, paused or not, and the idle timeout
   back to the title keeps running while paused.
 
-Where the games stand (2026-10-01):
-- **Follow it:** Gate Drop (RESUME, QUIT TO TITLE) and Overquqed (RESUME,
-  RESTART, QUIT TO MENU).
-- **Close:** Superconductor pauses with Start, but its pause screen goes to
-  the menu with Select rather than through a menu item. Ion Surfer pauses
-  with Select instead of Start.
-- **No pause yet:** Quantum Pong, Qlimbers, Pauli Invaders and Qurves.
+Where the games stand (2026-10-01): every game follows it except
+Superconductor, whose pause screen goes to its menu with Select rather than
+through a menu item. That one is deliberately left as it is.
+
+- Gate Drop, Qurves, Quantum Pong, Qlimbers and Pauli Invaders: RESUME and
+  QUIT TO TITLE.
+- Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
+  from Start to Select, so that Start can pause there too.
+- A title screen reached from QUIT TO TITLE must wait for the buttons to be
+  let go, or the A that picked the item starts a new match on its first frame
+  (Quantum Pong and Qlimbers do this).
 
 ## Player colours: left is blue, right is red (a taste)
 
