@@ -41,3 +41,11 @@ def test_the_game_runs_headless_and_quits(monkeypatch):
     monkeypatch.setattr(game.config, "SCORE_FILE", None)
     game.run(fullscreen=False, window_size="640x360", show_fps=True)
     assert frames["n"] >= 30
+
+
+def test_the_default_window_is_a_whole_multiple_of_the_internal_size():
+    from planck_time import config
+
+    w, h = (int(v) for v in parse_args([]).window_size.split("x"))
+    assert w % config.INTERNAL_WIDTH == 0 and h % config.INTERNAL_HEIGHT == 0
+    assert w // config.INTERNAL_WIDTH == h // config.INTERNAL_HEIGHT

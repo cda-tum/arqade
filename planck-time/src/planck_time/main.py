@@ -28,7 +28,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Show live joystick/keyboard state instead of running the game")
     parser.add_argument("--fullscreen", action="store_true", help="Run fullscreen at desktop resolution")
     parser.add_argument("--fps", action="store_true", help="Show the FPS overlay")
-    parser.add_argument("--window-size", default="1440x810",
+    parser.add_argument("--window-size", default="1280x720",
                         help="Windowed size as WxH (ignored with --fullscreen)")
     parser.add_argument("--no-keyboard", action="store_true",
                         help="Ignore the keyboard, joysticks only (used on the Batocera cabinet)")
