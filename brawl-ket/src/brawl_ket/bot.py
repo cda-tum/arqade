@@ -22,7 +22,7 @@ GRAB_RANGE = 66         # a lunging command throw (SYNDROME GRAB) reaches about 
 PRESS_GAP = 4           # frames between two presses, so every press is a fresh edge
 LONG_CROUCH = 40        # a rival crouched this long gets thrown (a throw ignores the code)
 
-_BUSY = ("hitstun", "knockdown", "switch")
+_BUSY = ("hitstun", "knockdown")
 
 
 class Bot:
@@ -48,8 +48,7 @@ class Bot:
         self._watch(rival.stance)
 
         if me.action in _BUSY:
-            if me.action != "switch":       # a switch keeps its buffered press and string
-                self.chain.clear()
+            self.chain.clear()
             return FighterInput(down=self.down)
         toward = 1 if rival.x > me.x else -1
         dist = abs(rival.x - me.x)
@@ -99,9 +98,8 @@ class Bot:
         roll = self.rng.random()
         if self.chain:              # a buffered first press is about to come out
             return FighterInput(down=self.down)
-        rival = fight.fighters[self.rival]
         if self._wants_reencode(me) and self.gap == 0:
-            self.down = True        # the switch to the crouch comes first; the press waits
+            self.down = True
             return self._press("x", 0)
         if dist <= me.throw_range and self.rival_crouched > LONG_CROUCH and roll < 0.1 \
                 and self.gap == 0:
@@ -112,10 +110,8 @@ class Bot:
         if dist <= STRIKE_RANGE:
             if roll < 0.02 and self.gap == 0:
                 if self.rng.random() < 0.2:
-                    self.down = not self.down   # strike from the other code
-                # a string long enough to beat the rival's majority vote (3 hits on a d=5)
-                strings = [c for c in (["a", "b"], ["a", "a", "b"]) if len(c) > rival.code.t]
-                self.chain = self.rng.choice(strings)
+                    self.down = not self.down   # strike at the other height
+                self.chain = ["a", "b"]     # A then B at one height breaks the code
                 return self._press(self.chain.pop(0), 0)
             return FighterInput(down=self.down)
         # Out of range. Crouching can't walk, so stand up and approach.
@@ -128,9 +124,10 @@ class Bot:
         return FighterInput(dx=toward)
 
     def _wants_reencode(self, me) -> bool:
-        """RE-ENCODE (crouch.X) as soon as the code is one hit from breaking, if it is ready."""
+        """RE-ENCODE (crouch.X) once a row is in danger, if it is ready."""
         move = me.char.moves["crouch.X"]
-        return (move.kind == "reencode" and len(me.code.flipped) >= me.code.t
+        danger = me.code.x_danger_rows() or me.code.z_danger_rows()
+        return (move.kind == "reencode" and bool(danger)
                 and me.cooldowns.get("crouch.X", 0) == 0 and self.rng.random() < self.skill)
 
     def _press(self, button: str, dx: int) -> FighterInput:

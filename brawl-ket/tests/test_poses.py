@@ -2,8 +2,7 @@ import math
 
 import pytest
 
-from brawl_ket import qec
-from brawl_ket.config import FLOOR_Y, SWITCH_FRAMES
+from brawl_ket.config import FLOOR_Y
 from brawl_ket.fight import SHOT_SPAWN_OFFSET
 from brawl_ket.fighter import Fighter
 from brawl_ket.moves import CHARACTERS, QUINT, TRIO, Move
@@ -21,7 +20,7 @@ from brawl_ket.poses import (
 
 BUILDS = tuple(SCALE)
 FEET = (320.0, float(FLOOR_Y))
-ACTIONS = ("idle", "walk", "crouch", "switch", "jump", "attack", "hitstun", "knockdown")
+ACTIONS = ("idle", "walk", "crouch", "jump", "attack", "hitstun", "knockdown")
 KEYS = {"hip", "neck", "head", "shoulder_f", "elbow_f", "hand_f", "shoulder_b", "elbow_b",
         "hand_b", "knee_f", "foot_f", "knee_b", "foot_b"}
 
@@ -132,8 +131,6 @@ def test_pose_for_every_action(action):
     f = fighter(action)
     if action == "attack":
         f.move, f.slot = TRIO.moves["stand.A"], "stand.A"
-    if action == "switch":
-        f.switch_left = SWITCH_FRAMES
     if action in ("hitstun", "knockdown"):
         f.stun = 10
     for frame in range(40):
@@ -201,13 +198,11 @@ def test_a_hit_shows_at_once():
 
 
 def test_knockdown_gets_up_into_the_stance():
-    for basis, name in ((qec.BIT, "idle"), (qec.PHASE, "crouch")):
-        f = fighter("knockdown", stun=1, frame=39)
-        if f.code.basis != basis:
-            f.code.switch()
+    for crouching, name in ((False, "idle"), (True, "crouch")):
+        f = fighter("knockdown", stun=1, frame=39, crouching=crouching)
         near = pose_for(f)
         target = POSES[name]
-        assert abs(near.lean - target.lean) < 3 and abs(near.thigh_b - target.thigh_b) < 6, basis
+        assert abs(near.lean - target.lean) < 3 and abs(near.thigh_b - target.thigh_b) < 6, crouching
 
 
 def test_walking_alternates_with_distance():
@@ -219,17 +214,6 @@ def test_walking_alternates_with_distance():
         if p == POSES["walk2"]:
             names.add("walk2")
     assert names == {"walk1", "walk2"}
-
-
-def test_switch_blends_towards_the_new_stance():
-    f = fighter("switch", switch_left=SWITCH_FRAMES)
-    f.code.switch()                 # standing -> crouching: the code is already PHASE
-    assert f.code.basis == qec.PHASE
-    f.frame = 0
-    early = joints(pose_for(f), "lean", FEET, 1)["head"][1]
-    f.frame = SWITCH_FRAMES - 1
-    late = joints(pose_for(f), "lean", FEET, 1)["head"][1]
-    assert late > early             # the head sinks as the crouch comes in
 
 
 def test_knockdown_lies_low():

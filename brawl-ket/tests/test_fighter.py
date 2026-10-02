@@ -1,14 +1,13 @@
 from dataclasses import replace
 from types import MappingProxyType
 
-from brawl_ket import qec
+from brawl_ket import shor
 from brawl_ket.config import (
     BUFFER_FRAMES,
     CHAIN_MAX,
     FLOOR_Y,
     LOGICAL_DAMAGE,
     STAGE_LEFT,
-    SWITCH_FRAMES,
     THROW_RANGE,
 )
 from brawl_ket.fighter import IDLE, Fighter, FighterInput
@@ -104,34 +103,11 @@ def test_jump_keeps_horizontal_speed_from_dx():
     assert f.x > x0
 
 
-def test_holding_down_switches_the_code_after_the_window():
-    f = make()
-    down = FighterInput(down=True)
-    ev = run(f, down)
-    assert names(ev) == ["switch"]
-    assert f.action == "switch" and f.switch_left == SWITCH_FRAMES
-    assert f.code.basis == qec.PHASE            # the basis flips on the first frame
-    run(f, down, SWITCH_FRAMES - 1)
-    assert f.switch_left == 1 and f.action == "switch"
-    run(f, down, 1)
-    assert f.switch_left == 0
-    assert f.code.basis == qec.PHASE and f.stance == "crouch" and f.action == "crouch"
-    # holding on does not toggle again
-    assert names(run(f, down, 20)) == []
-    assert f.code.basis == qec.PHASE
-    # releasing down switches back
-    ev = run(f, IDLE)
-    assert names(ev) == ["switch"]
-    run(f, IDLE, SWITCH_FRAMES)
-    assert f.code.basis == qec.BIT and f.stance == "stand" and f.action == "idle"
-
-
-def test_switch_does_not_start_in_the_air():
+def test_down_in_the_air_does_not_crouch():
     f = make()
     run(f, FighterInput(up=True))
-    ev = run(f, FighterInput(down=True), 5)
-    assert "switch" not in names(ev)
-    assert f.code.basis == qec.BIT
+    run(f, FighterInput(down=True), 5)
+    assert not f.crouching and f.stance == "air"
 
 
 def test_fighter_step_does_not_tick_the_code():
@@ -207,70 +183,28 @@ def test_newest_buffered_press_wins():
 
 def test_crouching_buttons_use_crouch_slots():
     f = make()
-    run(f, FighterInput(down=True), SWITCH_FRAMES + 1)
+    run(f, FighterInput(down=True))
     assert f.stance == "crouch"
     ev = run(f, FighterInput(down=True, a=True))
     assert ev == [("attack", {"slot": "crouch.A"})]
     assert f.slot == "crouch.A" and f.move is LOW_JAB
-    # a crouch attack in the phase basis ends back in crouch
+    # a crouch attack ends back in crouch
     run(f, FighterInput(down=True), LOW_JAB.startup + LOW_JAB.active + LOW_JAB.recovery)
     assert f.action == "crouch" and f.move is None
 
 
-def test_down_plus_a_from_standing_is_a_low_attack_after_the_switch():
+def test_up_and_down_together_is_a_jump_not_a_crouch():
     f = make()
-    ev = run(f, FighterInput(down=True, a=True))
-    assert names(ev) == ["switch"]                   # the switch goes first, A stays buffered
-    assert f.action == "switch" and len(f.buffer) == 1
-    ev = run(f, FighterInput(down=True), SWITCH_FRAMES - 1)
-    assert ev == []
-    ev = run(f, FighterInput(down=True))             # the switch ends, the press comes out
-    assert ev == [("attack", {"slot": "crouch.A"})]
-    assert f.move.error == qec.Z
+    run(f, FighterInput(down=True, up=True))
+    assert f.action == "jump" and not f.crouching
 
 
-def test_up_plus_a_while_standing_is_a_jump_attack_not_a_switch():
+def test_releasing_down_plus_a_from_crouch_is_a_standing_attack_at_once():
     f = make()
-    ev = run(f, FighterInput(down=True, up=True))
-    assert "switch" not in names(ev) and f.action == "jump"
-
-
-def test_releasing_down_plus_a_from_crouch_is_a_standing_attack_after_the_switch():
-    f = make()
-    run(f, FighterInput(down=True), SWITCH_FRAMES + 1)
+    run(f, FighterInput(down=True))
     assert f.stance == "crouch"
     ev = run(f, tap("a"))                            # down released this frame
-    assert names(ev) == ["switch"]
-    ev = run(f, IDLE, SWITCH_FRAMES)
     assert ev == [("attack", {"slot": "stand.A"})]
-
-
-def test_a_press_during_the_switch_is_never_lost():
-    for k in range(SWITCH_FRAMES):
-        f = make()
-        down = FighterInput(down=True)
-        attacks = []
-        for step in range(1, SWITCH_FRAMES + 3):
-            inp = FighterInput(down=True, a=True) if step == 1 + k else down
-            attacks += [(step, e) for e in f.step(inp, FAR) if e[0] == "attack"]
-        # the switch ends on step SWITCH_FRAMES + 1; the press comes out right then, once
-        assert attacks == [(SWITCH_FRAMES + 1, ("attack", {"slot": "crouch.A"}))], k
-        assert f.slot == "crouch.A", k
-
-
-def test_a_press_just_after_the_switch_also_comes_out():
-    f = make()
-    down = FighterInput(down=True)
-    run(f, down, SWITCH_FRAMES)
-    ev = run(f, FighterInput(down=True, a=True))      # the step the switch ends
-    assert ev == [("attack", {"slot": "crouch.A"})]
-
-
-def test_buffered_presses_do_not_age_during_the_switch():
-    f = make()
-    run(f, FighterInput(down=True, a=True))
-    run(f, FighterInput(down=True), SWITCH_FRAMES - 1)
-    assert f.buffer[0].age == 0                      # did not age during the switch
 
 
 def test_standing_buttons_use_stand_slots():
@@ -307,7 +241,7 @@ def test_throw_works_facing_left():
 
 def test_ground_attacks_stand_still_and_lunge_only_when_active():
     f = make()
-    run(f, FighterInput(down=True), SWITCH_FRAMES + 1)   # switch, now in crouch
+    run(f, FighterInput(down=True))         # now in crouch
     run(f, FighterInput(down=True, x=True))
     assert f.move is TRIO.moves["crouch.X"]
     x0 = f.x
@@ -324,39 +258,30 @@ def test_ground_attacks_stand_still_and_lunge_only_when_active():
 def test_take_hit_chips_or_logical():
     f = make()
     h0 = f.health
-    assert f.take_hit(JAB, 1) == qec.FLIPPED
+    assert f.take_hit(JAB, 1) == shor.FLIPPED
     assert f.health == h0 - JAB.chip
-    assert len(f.code.flipped) == 1
-    assert f.take_hit(JAB, 1) == qec.LOGICAL
-    assert f.health == h0 - JAB.chip - LOGICAL_DAMAGE - JAB.bonus
-    assert f.code.flipped == set()
+    assert f.code.x_cells == {(shor.HIGH, shor.A_COL)}
+    assert f.take_hit(JAB, 1) == shor.CANCEL          # XX = I: chip, no refund
+    assert f.health == h0 - 2 * JAB.chip
+    assert f.code.lights == 0
+    assert f.take_hit(JAB, 1) == shor.FLIPPED
+    assert f.take_hit(HEAVY, 1) == shor.LOGICAL       # A then B at one height
+    assert f.health == h0 - 3 * JAB.chip - LOGICAL_DAMAGE - HEAVY.bonus
+    assert f.code.lights == 0
     g = make()
-    assert g.take_hit(LOW_JAB, 1) == qec.LOGICAL      # Z on the standing (bit) code
-    assert g.health == g.char.health - LOGICAL_DAMAGE - LOW_JAB.bonus
+    assert g.take_hit(LOW_JAB, 1) == shor.FLIPPED     # any lone hit is correctable
+    assert g.health == g.char.health - LOW_JAB.chip
 
 
 def test_logical_damage_includes_the_move_bonus_and_health_clamps():
     heavy = TRIO.moves["stand.B"]
     f = make()
-    f.take_hit(heavy, 1)                    # flipped
-    assert f.take_hit(heavy, 1) == qec.LOGICAL
-    assert f.health == 100 - heavy.chip - LOGICAL_DAMAGE - heavy.bonus
+    f.take_hit(JAB, 1)                      # flipped
+    assert f.take_hit(heavy, 1) == shor.LOGICAL
+    assert f.health == 100 - JAB.chip - LOGICAL_DAMAGE - heavy.bonus
     f.health = 5
     f.take_hit(heavy, 1)
     assert f.health == 0
-
-
-def test_hit_mid_switch_is_logical():
-    f = make()
-    run(f, FighterInput(down=True), 3)
-    assert f.switch_left > 0
-    h0 = f.health
-    assert f.take_hit(JAB, 1) == qec.LOGICAL       # an X would be correctable otherwise
-    assert f.health == h0 - LOGICAL_DAMAGE - JAB.bonus
-    assert f.switch_left == 0
-    assert f.action == "hitstun"
-    assert f.code.basis == qec.PHASE               # the basis had already switched
-    assert f.code.flipped == set()
 
 
 def test_take_hit_interrupts_a_move_and_stuns():
@@ -425,7 +350,7 @@ def test_an_early_press_in_stun_expires():
 
 def test_hit_while_crouched_recovers_to_crouch():
     f = make()
-    run(f, FighterInput(down=True), SWITCH_FRAMES + 1)
+    run(f, FighterInput(down=True))
     f.take_hit(SWEEP, 1)
     run(f, FighterInput(down=True), 40)
     assert f.action == "crouch"
@@ -449,12 +374,12 @@ def test_reencode_move_repairs_on_its_first_active_frame():
     )
     char = replace(TRIO, moves=MappingProxyType({**TRIO.moves, "stand.X": reencode}))
     f = Fighter(char, 300, 1)
-    f.code.hit(qec.X)
+    f.code.apply_x(shor.HIGH, shor.A_COL)
     ev = run(f, tap("x"))
     assert ev == [("attack", {"slot": "stand.X"})]
     ev = run(f, IDLE, 2)                           # steps 2, 3: step 3 is the first active frame
     assert ev == [("reencode", {"repaired": True})]
-    assert f.code.flipped == set()
+    assert f.code.lights == 0
     assert run(f, IDLE, 3) == []                   # not again on the later active frame
 
 
@@ -471,7 +396,7 @@ def test_world_box_mirrors_with_facing():
 def test_hurtbox_follows_the_stance():
     f = make()
     assert f.hurtbox == f.world_box(TRIO.hurt_stand)
-    run(f, FighterInput(down=True), SWITCH_FRAMES + 1)
+    run(f, FighterInput(down=True))
     assert f.hurtbox == f.world_box(TRIO.hurt_crouch)
     assert f.hurtbox[1] > make().hurtbox[1]          # lower, so a larger screen y
 
@@ -696,11 +621,9 @@ def test_the_chained_startup_is_forgotten_when_the_move_ends():
 def test_the_sweep_telegraphs_from_neutral_and_chains_fast():
     sweep = TRIO.moves["crouch.B"]
     f = make()
-    f.code.switch()
     run(f, FighterInput(down=True, b=True))
     assert f.slot == "crouch.B" and f.startup == sweep.startup == 24
     g = make()
-    g.code.switch()
     run(g, FighterInput(down=True, a=True))
     run(g, FighterInput(down=True), LOW_JAB.startup)
     assert g.phase == "active"
@@ -726,3 +649,17 @@ def test_only_a_neutral_heavy_telegraphs_and_only_in_its_last_16_startup_frames(
     c.move_hit = True
     run(c, tap("b"))
     assert not any((run(c), c.telegraphing)[1] for _ in range(8))
+
+
+def test_crouching_is_instant_and_has_no_switch():
+    f = Fighter(TRIO, 200, 1)
+    f.step(FighterInput(down=True), 400)
+    assert f.crouching and f.stance == "crouch" and f.action == "crouch"
+    f.step(FighterInput(), 400)
+    assert not f.crouching and f.stance == "stand"
+
+
+def test_down_a_from_standing_is_a_low_jab_at_once():
+    f = Fighter(TRIO, 200, 1)
+    f.step(FighterInput(down=True, a=True), 400)
+    assert f.slot == "crouch.A"

@@ -231,3 +231,22 @@ def test_z_validates_its_column_like_x_and_y():
         with pytest.raises(ValueError):
             code.apply(error, 3, 0)
     assert code.lights == 0
+
+
+def test_a_logical_error_a_reencode_and_a_reset_restart_the_cycle():
+    """A fresh correction round has just run, so the beat starts again from zero."""
+    for restart in (
+        lambda c: (c.apply_x(HIGH, shor.A_COL), c.apply_x(HIGH, shor.B_COL)),   # a logical error
+        lambda c: c.logical_error(),
+        lambda c: c.reencode(),
+        lambda c: c.reset(),
+    ):
+        code = ShorCode(60)
+        for _ in range(25):
+            code.tick()
+        assert code.timer == 25
+        restart(code)
+        assert code.timer == 0 and code.progress == 0.0
+        for _ in range(59):
+            assert not code.tick()
+        assert code.tick() is False and code.timer == 0    # the full beat, from the restart

@@ -1,7 +1,7 @@
 """One fighter's state machine: movement, stance, attacks, input buffer, getting hit.
 
 Pure logic, no pygame. The fight (fight.py) runs two of these: it feeds each one
-a FighterInput per frame, ticks each fighter's qec.Code (so it can emit the
+a FighterInput per frame, ticks each fighter's shor.ShorCode (so it can emit the
 cycle events), resolves hitboxes and calls take_hit. Everything is counted in
 integer frames at 60 Hz.
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from . import qec
+from . import shor
 from .config import (
     BUFFER_FRAMES,
     CHAIN_MAX,
@@ -23,7 +23,6 @@ from .config import (
     LOGICAL_DAMAGE,
     STAGE_LEFT,
     STAGE_RIGHT,
-    SWITCH_FRAMES,
     THROW_RANGE,
 )
 from .moves import Box, Character, Move
@@ -66,8 +65,9 @@ class Fighter:
         self.vy = 0.0
         self.facing = facing
         self.health = char.health
-        self.code = qec.Code(char.distance, char.cycle_frames)
-        self.action = "idle"        # idle walk crouch switch jump attack hitstun knockdown
+        self.code = shor.ShorCode(char.cycle_frames)
+        self.crouching = False
+        self.action = "idle"        # idle walk crouch jump attack hitstun knockdown
         self.frame = 0              # frames into the action (0 on its first frame)
         self.move: Move | None = None
         self.slot: str | None = None
@@ -75,7 +75,6 @@ class Fighter:
         self.move_hit = False       # the fight sets this when the move connects
         self.chain = 0              # moves in the current string
         self.stun = 0
-        self.switch_left = 0
         self.cooldowns: dict[str, int] = {}
         self.buffer: list[Press] = []   # oldest first
         self.throw_range: float = THROW_RANGE   # the fight sets it from the pairing's push box
@@ -86,7 +85,7 @@ class Fighter:
     def stance(self) -> str:
         if self.y > 0:
             return "air"
-        return "crouch" if self.code.basis == qec.PHASE else "stand"
+        return "crouch" if self.crouching else "stand"
 
     @property
     def startup(self) -> int:
@@ -157,7 +156,7 @@ class Fighter:
     def step(self, inp: FighterInput, rival_x: float) -> list[tuple[str, dict]]:
         """Advance one frame; returns local events.
 
-        The qec code's own cycle is NOT ticked here: the fight ticks each code so
+        The Shor code's own cycle is NOT ticked here: the fight ticks each code so
         it can report the repairs.
         """
         events: list[tuple[str, dict]] = []
@@ -176,12 +175,9 @@ class Fighter:
             self._act(inp, rival_x, events)
         self._physics(events)
 
-        # GAME RULE: presses do not age during the stance switch window, which is
-        # longer than BUFFER_FRAMES, so a press made mid-switch comes out when it ends.
-        if self.action != "switch":
-            self.buffer = [
-                Press(p.button, p.age + 1) for p in self.buffer if p.age + 1 < BUFFER_FRAMES
-            ]
+        self.buffer = [
+            Press(p.button, p.age + 1) for p in self.buffer if p.age + 1 < BUFFER_FRAMES
+        ]
         return events
 
     def buffer_presses(self, inp: FighterInput) -> None:
@@ -195,13 +191,8 @@ class Fighter:
                 self.buffer.append(Press(btn, 0))
 
     def take_hit(self, move: Move, from_facing: int) -> str:
-        if self.switch_left > 0:
-            # GAME RULE: mid-switch the code is unprotected (see SWITCH_FRAMES)
-            result = self.code.logical_error()
-            self.switch_left = 0
-        else:
-            result = self.code.hit(move.error)
-        damage = move.chip if result == qec.FLIPPED else LOGICAL_DAMAGE + move.bonus
+        result = self.code.apply(move.error, move.height, move.column)
+        damage = LOGICAL_DAMAGE + move.bonus if result == shor.LOGICAL else move.chip
         self.health = max(0, self.health - damage)
 
         self.move = None
@@ -244,7 +235,7 @@ class Fighter:
         """Go to whatever the fighter does when nothing is happening."""
         if self.y > 0:
             self._set_action("jump")
-        elif self.code.basis == qec.PHASE:
+        elif self.crouching:
             self._set_action("crouch")
         else:
             self._set_action("idle")
@@ -257,7 +248,7 @@ class Fighter:
         )
 
     def _advance(self, events: list) -> None:
-        """Move the current action along: stun, switch window, move frames."""
+        """Move the current action along: stun, move frames."""
         if self.action in _STUNNED:
             self.stun -= 1
             self.vx *= STUN_DECAY
@@ -265,11 +256,6 @@ class Fighter:
                 self.stun = 0
                 if self.y == 0:
                     self.vx = 0.0
-                self._neutral()
-        elif self.action == "switch":
-            self.switch_left -= 1
-            if self.switch_left <= 0:
-                self.switch_left = 0
                 self._neutral()
         elif self.action == "attack":
             m = self.move
@@ -318,13 +304,9 @@ class Fighter:
         if on_ground_free and rival_x != self.x:
             self.facing = 1 if rival_x > self.x else -1
 
-        basis = self.code.basis
-        wants_switch = (inp.down and basis == qec.BIT) or (not inp.down and basis == qec.PHASE)
-        if on_ground_free and wants_switch and not inp.up:
-            # Down+A from standing means a LOW attack: the switch goes first and the
-            # press stays buffered, to come out as crouch.A when the switch ends.
-            self._start_switch(events)
-            return
+        if on_ground_free:
+            # Crouching is instant: it is ducking, not a change of code.
+            self.crouching = inp.down and not inp.up
 
         free = on_ground_free or self.action == "jump"
         if free or self.action == "attack":
@@ -333,24 +315,16 @@ class Fighter:
         if self.action not in _GROUND_FREE:
             return
         if inp.up:
+            self.crouching = False
             self.vy = self.char.jump_vy
             self.vx = inp.dx * self.char.walk
             self._set_action("jump")
-        elif basis == qec.PHASE:
+        elif self.crouching:
             self.vx = 0.0           # crouching doesn't walk
             self._set_action("crouch")
         else:
             self.vx = inp.dx * self.char.walk
             self._set_action("walk" if inp.dx else "idle")
-
-    def _start_switch(self, events: list) -> None:
-        # GAME RULE: the stance switch takes SWITCH_FRAMES during which a hit is a
-        # logical error. Physically a transversal H is instantaneous.
-        self.code.switch()
-        self.switch_left = SWITCH_FRAMES
-        self.vx = 0.0
-        self._set_action("switch")
-        events.append(("switch", {}))
 
     def _try_buffer(self, dx: int, rival_x: float, free: bool, events: list) -> None:
         for entry in reversed(self.buffer):

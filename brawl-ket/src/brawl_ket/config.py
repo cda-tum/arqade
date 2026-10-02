@@ -31,7 +31,6 @@ ROUNDS_TO_WIN = 2
 LOGICAL_DAMAGE = 12      # plus Move.bonus: a light costs 12, a heavy 26, a special 28
 REACTION_FRAMES = 14     # about 230 ms: what a defender is assumed to need to see a move start and
                          # decide (a design reference for the telegraphed heavies' startup, not a rule)
-SWITCH_FRAMES = 8        # game rule: the stance switch window (mid-H)
 HITSTOP = 5
 HITSTOP_LOGICAL = 12
 BUFFER_FRAMES = 6

@@ -22,7 +22,7 @@ import pygame
 
 from . import match as M
 from . import palette as P
-from . import qec
+from . import shor
 from .config import (
     FLOOR_Y,
     FPS,
@@ -49,14 +49,16 @@ PLATES = {"lean": False, "heavy": True}    # armour: the heavy's wedge torso, pl
 # the heavy's wedge torso: half its width (px) at the shoulders, the waist and the belt
 CHEST_HALF, WAIST_HALF, BELT_HALF = 21, 13, 14
 
-LIGHT_GAP = 11
-DIVIDER_GAP = 4             # extra room after the first t lights, for the majority line
-DANGER_BEAT = 24            # frames in one pulse of the unflipped lights (and of the "!")
+DANGER_BEAT = 24            # frames in one pulse of the danger cells and rows
 GLINT_BEAT = 2              # frames per blink phase of the telegraph glint on a heavy's wind-up
 GLINT_MIN, GLINT_MAX = 8, 16    # the star's reach in px: it grows as the strike gets closer
-TAG_ABOVE_HEAD = 34         # the code lights sit this far above the head's centre
+TAG_ABOVE_HEAD = 46         # the grid sits this far above the head's centre
 RING_STEPS = 24             # pre-drawn cycle-ring sprites
 RING_R = 7                  # the ring's radius, px
+CELL, CELL_GAP = 6, 3       # a grid cell and the gap between cells, px
+GRID = 3 * CELL + 2 * CELL_GAP              # 24: the 3x3 grid
+PLATE = GRID + 8                            # the plate around it
+TAG_HALF = PLATE / 2 + 2 + 2 * RING_R + 1   # half a tag's width: the plate, then the ring
 BAR_W, BAR_H, BAR_Y = 250, 12, 14
 
 # effect lengths, in frames
@@ -65,14 +67,14 @@ POPUP_FRAMES = 40
 BANNER_FRAMES = 75
 SHAKE_FRAMES = 20
 SHAKE_PX = 6
-FLASH_FRAMES = 24           # the lights after a correction (green) or a logical error (red)
+FLASH_FRAMES = 24           # the grid after a correction (green) or a logical error (red)
 WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the floor
 WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
 PULSE_FRAMES = 20           # RE-ENCODE: a ring of light growing out of the fighter
 HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
-TAG_FOLLOW = 0.3            # the code lights ease towards the head by this much per frame
+TAG_FOLLOW = 0.3            # the grid eases towards the head by this much per frame
 TAG_EDGE = 4                # a tag keeps this far from the screen's edges
 BANNER_Y = 80
 BANNER_TEXT = "LOGICAL ERROR!"
@@ -118,46 +120,6 @@ def outlined(text: str, size: int, color, outline=P.INK, thick: int = 1) -> pyga
             s.blit(ink, (t + dx, t + dy))
     s.blit(core, (t, t))
     return s
-
-
-def tag_state(code: qec.Code) -> str:
-    """"danger" once t lights are down: the next correctable hit breaks the majority vote
-    and is a logical error. "ok" only means that no *correctable* hit breaks the code yet:
-    a hit of the wrong kind for the stance, a hit mid-switch and a throw are logical errors
-    at any count of flipped lights."""
-    return "danger" if len(code.flipped) == code.t else "ok"
-
-
-def tag_row(n: int) -> int:
-    """The width of a distance-n tag's row: its lights, the majority line and the ring."""
-    return (n - 1) * LIGHT_GAP + DIVIDER_GAP + 16
-
-
-@lru_cache(maxsize=8)
-def tag_half(n: int) -> float:
-    """Half the width a distance-n code tag needs around its centre: the most any part of
-    it reaches out (the plate, the cycle ring, or the ket with the danger "!" beside it).
-    A d=3 tag needs about 66 px, a d=5 one about 82 px. Needs pygame's font module."""
-    row = tag_row(n)
-    plate = row / 2 + 5                         # the plate is row + 8 wide, plus its ink
-    ring = row / 2 + RING_R + 1                 # the ring is centred on the row's right end
-    label = outlined("|" + "0" * n + ">", 8, P.WHITE).get_width()
-    bang = outlined("!", 8, P.BAD)
-    bang_right = label / 2 + 1 + bang.get_width() / 2 + 1 + bang.get_bounding_rect().right \
-        - bang.get_width() / 2
-    return max(plate, ring, label / 2 + 1, bang_right)
-
-
-def tag_bounds(n: int) -> tuple[float, float]:
-    """Where a distance-n tag's centre may go, so the whole tag stays on screen."""
-    half = tag_half(n)
-    return half + TAG_EDGE, W - half - TAG_EDGE
-
-
-def light_xs(x0: float, n: int, t: int) -> list[int]:
-    """Where each of the code's n lights sits: evenly spaced, with DIVIDER_GAP extra after
-    the first t (the ones the code can repair), where the majority line goes."""
-    return [round(x0 + i * LIGHT_GAP + (DIVIDER_GAP if i >= t else 0)) for i in range(n)]
 
 
 def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
@@ -407,8 +369,9 @@ class Renderer:
         self._fight: Fight | None = None
         self._reset()
         # render the effects' text now, so the first hit doesn't stall a frame
-        for e in (qec.X, qec.Y, qec.Z):
+        for e in (shor.X, shor.Y, shor.Z):
             outlined(f"{e}!", 16, P.GATE[e], thick=2)
+        outlined("I", 16, P.WHITE, thick=2)
         outlined(BANNER_TEXT, 32, P.BAD, thick=2)
 
     def _reset(self) -> None:
@@ -462,11 +425,11 @@ class Renderer:
 
     def _start_effects(self, events: list) -> None:
         for e in events:
-            if e.kind in ("hit", "logical"):
-                color = P.GATE.get(e.error or "X", P.WHITE)
+            if e.kind in ("hit", "logical", "cancel"):
+                color = P.WHITE if e.kind == "cancel" else P.GATE.get(e.error or "X", P.WHITE)
+                text = "I" if e.kind == "cancel" else f"{e.error}!"
                 self.effects.append(Effect("spark", e.x, e.y, SPARK_FRAMES, SPARK_FRAMES, color))
-                self.effects.append(Effect("popup", e.x, e.y - 18, POPUP_FRAMES, POPUP_FRAMES, color,
-                                           f"{e.error}!"))
+                self.effects.append(Effect("popup", e.x, e.y - 18, POPUP_FRAMES, POPUP_FRAMES, color, text))
             if e.kind == "logical":
                 self.effects = [fx for fx in self.effects if fx.kind != "banner"]
                 self.effects.append(Effect("banner", W / 2, BANNER_Y, BANNER_FRAMES, BANNER_FRAMES, P.BAD,
@@ -640,11 +603,11 @@ class Renderer:
 
     def _tag_place(self, key: str, f: Fighter, head) -> list[float]:
         """Where a fighter's code tag goes: over the head, easing after it vertically."""
-        target = max(62.0, head[1] - TAG_ABOVE_HEAD)
+        target = max(70.0, head[1] - TAG_ABOVE_HEAD)
         y = self.tag_y[key]
         y = target if y is None else y + (target - y) * TAG_FOLLOW
         self.tag_y[key] = y
-        lo, hi = tag_bounds(f.code.distance)
+        lo, hi = TAG_HALF + TAG_EDGE, W - TAG_HALF - TAG_EDGE
         return [min(max(head[0], lo), hi), y, head[0]]     # x, y, the head's x
 
     @staticmethod
@@ -654,7 +617,7 @@ class Renderer:
         (at a wall too)."""
         a, b = tags["p1"], tags["p2"]
         f1, f2 = fight.fighters["p1"], fight.fighters["p2"]
-        ha, hb = tag_half(f1.code.distance), tag_half(f2.code.distance)
+        ha = hb = TAG_HALF
         need = ha + hb
         if abs(a[0] - b[0]) >= need:
             return
@@ -668,58 +631,51 @@ class Renderer:
         a[0], b[0] = mid - side * need / 2, mid + side * need / 2
 
     def _code_tag(self, key: str, f: Fighter, at, ox: int, oy: int) -> None:
-        """The code over the head: the ket, the lights (flipped ones red), the majority line
-        and the cycle ring.
+        """The code over the head: a 3x3 grid (rows HIGH, MID, LOW; columns A, B, THROW)
+        on a plate in the player's colour, and the cycle ring beside it.
 
-        Lights flip from the left, so the line after the first t of them marks where one
-        more flipped light beats the majority vote. When t lights are down (tag_state is
-        "danger") the rest pulse orange and a "!" pulses red beside the ket."""
+        An X lights its cell in the X gate's red; a row flipped by a Z glows behind in the
+        Z gate's blue (its cells drop their ink outline, so the blue fills the gaps). Danger pulses orange: the other cells of a row holding one X (a
+        different button there breaks the code), or the other rows once one is flipped
+        (a special there breaks it)."""
         code = f.code
-        n = code.distance
-        row = tag_row(n)            # the lights, the majority line and the ring
-        cx = at[0] + ox
-        cy = round(at[1]) + oy
-        x0 = cx - row / 2 + 4
-        flash, left = self.flash[key]
-        lit = flash is not None and left % 6 >= 2
-        base = P.SKY if code.basis == qec.BIT else P.GOLD
-        danger = tag_state(code) == "danger"
-        beat = (self.t // (DANGER_BEAT // 2)) % 2 == 0
         surf = self.surface
-        # a plate in the player's colour, with a tick pointing down at its own fighter
+        cx, cy = round(at[0]) + ox, round(at[1]) + oy
         color = PLAYER_COLORS[key]
-        plate = pygame.Rect(0, 0, row + 8, 14)
-        plate.center = (round(cx), cy)
+        plate = pygame.Rect(0, 0, PLATE, PLATE)
+        plate.center = (cx, cy)
         tick = min(max(round(at[2] + ox), plate.left + 4), plate.right - 4)
         pygame.draw.polygon(surf, P.INK, ((tick - 5, plate.bottom), (tick + 5, plate.bottom), (tick, plate.bottom + 6)))
         pygame.draw.polygon(surf, color, ((tick - 3, plate.bottom), (tick + 3, plate.bottom), (tick, plate.bottom + 3)))
         pygame.draw.rect(surf, P.INK, plate.inflate(2, 2), border_radius=5)
         pygame.draw.rect(surf, color, plate, border_radius=4)
         pygame.draw.rect(surf, P.NIGHT, plate.inflate(-4, -4), border_radius=3)
-        xs = light_xs(x0, n, code.t)
-        # the majority line: ink, two white columns, ink, in the gap after the t-th light
-        gx = xs[code.t - 1] + 7
-        surf.fill(P.INK, (gx - 1, cy - 6, 4, 12))
-        surf.fill(P.WHITE, (gx, cy - 6, 2, 12))
-        for i, x in enumerate(xs):
-            if lit:
-                col = flash
-            elif i in code.flipped:
-                col = P.BAD
-            elif danger:
-                col = P.ORANGE if beat else P.lighten(P.ORANGE, 0.3)
-            else:
-                col = base
-            pygame.draw.circle(surf, P.INK, (x, cy), 5)
-            pygame.draw.circle(surf, col, (x, cy), 4)
-            surf.fill(P.lighten(col, 0.6), (x - 2, cy - 2, 2, 2))
+        flash, left = self.flash[key]
+        lit = flash is not None and left % 6 >= 2
+        beat = (self.t // (DANGER_BEAT // 2)) % 2 == 0
+        x_danger, z_danger = code.x_danger_rows(), code.z_danger_rows()
+        for row in range(3):
+            y = plate.top + 4 + row * (CELL + CELL_GAP)
+            if row in code.z_rows:
+                surf.fill(P.GATE[shor.Z], (plate.left + 2, y - 1, PLATE - 4, CELL + 2))
+            elif row in z_danger and beat:
+                surf.fill(P.shade(P.ORANGE, 0.6), (plate.left + 2, y - 1, PLATE - 4, CELL + 2))
+            for col in range(3):
+                x = plate.left + 4 + col * (CELL + CELL_GAP)
+                if lit:
+                    c = flash
+                elif (row, col) in code.x_cells:
+                    c = P.GATE[shor.X]
+                elif row in x_danger and beat:
+                    c = P.ORANGE
+                else:
+                    c = P.SLATE
+                if row not in code.z_rows:      # a flipped row's blue shows through its gaps
+                    surf.fill(P.INK, (x - 1, y - 1, CELL + 2, CELL + 2))
+                surf.fill(c, (x, y, CELL, CELL))
+                surf.fill(P.lighten(c, 0.5), (x, y, 2, 2))
         ring = self.rings[min(RING_STEPS, int(code.progress * RING_STEPS))]
-        blit_center(surf, ring, (xs[-1] + 12, cy))
-        label = outlined(code.label(), 8, P.WHITE)
-        blit_center(surf, label, (cx, cy - 12))
-        if danger:      # shown for the whole danger state, its colour pulsing with the lights
-            bang = outlined("!", 8, P.BAD if beat else P.lighten(P.BAD, 0.5))
-            blit_center(surf, bang, (cx + label.get_width() / 2 + bang.get_width() / 2 + 1, cy - 12))
+        blit_center(surf, ring, (plate.right + 2 + RING_R, cy))
 
     # --- the HUD -------------------------------------------------------------------------------
 
@@ -861,7 +817,7 @@ class Renderer:
                         ACCENT.get(char.name, P.CREAM))
         self._band(32, 156)
         self._logo(72)
-        blit_center(surf, outlined("|000>  VS  |00000>", 8, P.MIST), (W / 2, 114))
+        blit_center(surf, outlined("SHOR CODE  VS  SHOR CODE", 8, P.MIST), (W / 2, 114))
         self._prompt("PRESS START", 138, P.GOLD)
 
     def _attract_overlay(self) -> None:
@@ -903,9 +859,7 @@ class Renderer:
                 arrow = outlined("<" if d < 0 else ">", 16, P.WHITE, thick=2)
                 blit_center(surf, arrow, (cx + d * (name.get_width() / 2 + 18 + nudge), floor + 20))
         # what it is: its code and its build
-        ket = "|" + "0" * char.distance + ">"
-        t = (char.distance - 1) // 2
-        lines = (f"{ket}  FIXES {t} FLIP{'S' if t > 1 else ''}", TRAITS.get(char.name, ""))
+        lines = ("SHOR CODE  |0>_L", TRAITS.get(char.name, ""))
         for i, line in enumerate(lines):
             blit_center(surf, outlined(line, 8, P.MIST), (cx, floor + 40 + 12 * i))
         # the X moves: the buttons, then the names

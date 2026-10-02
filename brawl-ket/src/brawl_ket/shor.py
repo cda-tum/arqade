@@ -20,7 +20,8 @@ GAME RULES:
 - An uncorrectable state is reported as a logical error at once (the decoder
   would fail at the next tick if nothing else landed before it), and the
   qubit is then re-encoded.
-- Correction runs on a fixed beat of cycle_frames.
+- Correction runs on a fixed beat of cycle_frames. A re-encode (after a logical
+  error, or RE-ENCODE's extra round) restarts the beat.
 """
 
 from __future__ import annotations
@@ -113,8 +114,11 @@ class ShorCode:
     # --- correction -------------------------------------------------------------------
 
     def reset(self) -> None:
+        """A clean code, at the start of its beat: a fresh correction round has just run
+        (a logical error's re-encode, or RE-ENCODE's extra round), so the cycle restarts."""
         self.x_cells.clear()
         self.z_rows.clear()
+        self.timer = 0
 
     def reencode(self) -> bool:
         """An extra correction round, now: clears every (correctable) error."""
@@ -128,7 +132,6 @@ class ShorCode:
         self.timer += 1
         if self.timer < self.cycle_frames:
             return False
-        self.timer = 0
         repaired = self.lights > 0
-        self.reset()
+        self.reset()            # and the timer starts the next beat
         return repaired

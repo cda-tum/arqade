@@ -16,8 +16,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, fields
 
-from . import qec
-from .config import SWITCH_FRAMES
 from .fighter import Fighter
 
 EASE_FRAMES = 3         # at most this many frames to blend into a keyframe
@@ -156,13 +154,13 @@ def _rest(slot: str | None, f: Fighter) -> str:
         return "jump"
     if slot is not None and slot.startswith("crouch"):
         return "crouch"
-    if slot is None and f.code.basis == qec.PHASE:
+    if slot is None and f.crouching:
         return "crouch"
     return "idle"
 
 
 def _stance_pose(f: Fighter) -> Pose:
-    return POSES["crouch" if f.code.basis == qec.PHASE else "idle"]
+    return POSES["crouch" if f.crouching else "idle"]
 
 
 def _ease(frame: int, length: int) -> float:
@@ -209,11 +207,6 @@ def _action_pose(f: Fighter) -> Pose:
     if a == "walk":
         k = (f.x / WALK_STRIDE) % 2
         return lerp(POSES["walk1"], POSES["walk2"], _smooth(k if k <= 1 else 2 - k))
-    if a == "switch":
-        # GAME RULE (visual): the SWITCH_FRAMES window shows the stance change
-        to_crouch = f.code.basis == qec.PHASE
-        k = _smooth(min(1.0, (f.frame + 1) / SWITCH_FRAMES))
-        return lerp(POSES["idle"], POSES["crouch"], k if to_crouch else 1 - k)
     if a == "jump":
         return POSES["jump"]
     if a == "hitstun":
@@ -222,7 +215,7 @@ def _action_pose(f: Fighter) -> Pose:
         return POSES["hitstun"]
     if a == "knockdown":
         down = lerp(POSES["hitstun"], POSES["knockdown"], (f.frame + 1) / FALL_FRAMES)
-        if f.stun <= GET_UP_FRAMES:      # get up into the stance the code is in
+        if f.stun <= GET_UP_FRAMES:      # get up into the stance
             return lerp(_stance_pose(f), down, _smooth(f.stun / GET_UP_FRAMES))
         return down
     # idle and crouch breathe: a small dip towards the crouch

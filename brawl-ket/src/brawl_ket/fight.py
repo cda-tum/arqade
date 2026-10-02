@@ -2,8 +2,8 @@
 
 Pure logic, no pygame, no randomness: the same inputs always give the same
 round. The fight drives two Fighters (fighter.py), spawns and moves the shots,
-resolves hitboxes against hurtboxes under the qec rules (the defender's own
-code decides whether a hit is corrected or a logical error), ticks both codes
+resolves hitboxes against hurtboxes under the Shor code's rules (the defender's
+own code decides whether a hit lights its grid, cancels or is a logical error), ticks both codes
 and reports everything that happened as Events for the renderer and audio.
 
 Everything is counted in integer frames at 60 Hz. Positions are screen px with
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from . import qec
+from . import shor
 from .config import (
     BODY_MARGIN,
     FLOOR_Y,
@@ -39,13 +39,15 @@ Rect = tuple[float, float, float, float]    # (left, top, w, h), y down
 
 @dataclass(frozen=True)
 class Event:
-    # attack, hit, logical, corrected, projectile, switch, ko, timeout, land, reencode,
+    # attack, hit, cancel, logical, corrected, projectile, ko, timeout, land, reencode,
     # shockwave (a landing shockwave opens: error is its error, x/y where it spreads from)
     kind: str
-    player: str | None = None       # who it happened TO (hit/logical: the defender)
-    error: str | None = None        # X / Z / Y for hit and logical
+    player: str | None = None       # who it happened TO (hit/cancel/logical: the defender)
+    error: str | None = None        # X / Z / Y for hit, cancel and logical
     x: float = 0.0                  # where, for sparks (screen px)
     y: float = 0.0
+    row: int | None = None          # hit / cancel / logical: the grid row (and the X's column)
+    col: int | None = None
 
 
 @dataclass
@@ -252,9 +254,10 @@ class Fight:
             defender = self.fighters[st.defender]
             result = defender.take_hit(st.move, st.from_facing)
             self._landings.pop(st.defender, None)   # a hit fighter's shockwave is gone
-            kind = "hit" if result == qec.FLIPPED else "logical"
-            events.append(Event(kind, st.defender, st.move.error, st.where[0], st.where[1]))
-            stop = HITSTOP if result == qec.FLIPPED else HITSTOP_LOGICAL
+            kind = {shor.FLIPPED: "hit", shor.CANCEL: "cancel", shor.LOGICAL: "logical"}[result]
+            events.append(Event(kind, st.defender, st.move.error, st.where[0], st.where[1],
+                                st.move.height, st.move.column))
+            stop = HITSTOP_LOGICAL if result == shor.LOGICAL else HITSTOP
             self.hitstop = max(self.hitstop, stop)
 
     def _move_strike(
@@ -289,7 +292,8 @@ class Fight:
             if where is not None:
                 win.hit = True
                 strikes.append(_Strike(
-                    None, rival_key, replace(move, error=move.landing_error), f.facing, where,
+                    None, rival_key, replace(move, error=move.landing_error, height=move.landing_height), f.facing,
+                    where,
                 ))
         win.left -= 1
         if win.left <= 0:

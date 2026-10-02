@@ -8,16 +8,17 @@ Writes:
   right, in P1's colours;
 - moves_lean.png, moves_heavy.png: every TRIO / QUINT move as a strip of frames, as pose_for
   blends it;
-- code_tags.png, code_tags_quint.png: the d=3 / d=5 code tag close up (x4 on top of the x2
-  save) in its states: normal, t lights flipped (danger, both beats of the pulse), the green
-  flash after a correction, the red flash after a logical error;
+- code_tags.png, code_tags_quint.png: TRIO's / QUINT's grid tag close up (x4 on top of the
+  x2 save) in its states: clean, one X at (HIGH, A) (danger in HIGH, both beats of the
+  pulse), a Z on MID (the other rows in danger, both beats), the green flash after a
+  correction, the red flash after a logical error;
 - fight_danger.png: a bot fight at the moment a code is one hit from a logical error;
 - fight_glint.png, fight_glint_sweep.png: a neutral heavy / sweep late in its 24-frame wind-up,
   with the telegraph glint on the striking hand / foot (and fight_glint_off.png, a blink-off
   frame of the heavy); quint_glint.png, quint_glint_sweep.png: QUINT's, late in its 28 frames;
 - quint_collapse_*.png: QUINT's COLLAPSE next to a standing TRIO: the fall, the landing
   shockwave just after it opens, and spread out;
-- quint_reencode_*.png: a crouching QUINT with two lights flipped wipes them with RE-ENCODE;
+- quint_reencode_*.png: a crouching QUINT with an X and a Z on its grid wipes them with RE-ENCODE;
 - quint_grab.png: the SYNDROME GRAB connecting;
 - vs_*.png: the same bot-fight moments as fight_*.png, TRIO (P1) against QUINT (P2), and
   vs_close.png, the two walked into each other;
@@ -42,14 +43,14 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import pygame
 
-from brawl_ket import config, qec
+from brawl_ket import config, shor
 from brawl_ket import palette as P
 from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
 from brawl_ket.moves import QUINT, TRIO
 from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
-from brawl_ket.render import DANGER_BEAT, Renderer, draw_puppet, outlined, tag_state
+from brawl_ket.render import DANGER_BEAT, Renderer, draw_puppet, outlined
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 CELL_W, CELL_H, COLS = 180, 230, 6
@@ -104,19 +105,17 @@ def move_sheet(char=TRIO) -> pygame.Surface:
     return sheet
 
 
-def _flip_t(code: qec.Code) -> None:
-    for _ in range(code.t):
-        code.hit(qec.X)
-
-
 def tag_sheet(char=TRIO) -> pygame.Surface:
     """The code tag in each of its states, cropped around p1's and p2's heads and magnified."""
     surface = pygame.Surface((W, H))
-    zoom, crop = 4, pygame.Rect(0, 0, 90 if char.distance == 3 else 110, 46)
+    zoom, crop = 4, pygame.Rect(0, 0, 90, 46)
     cases = [
-        ("normal", lambda c, r, k: None),
-        ("t flipped: danger (bright)", lambda c, r, k: (_flip_t(c), setattr(r, "t", 0))),
-        ("t flipped: danger (dim)", lambda c, r, k: (_flip_t(c), setattr(r, "t", DANGER_BEAT // 2))),
+        ("clean", lambda c, r, k: None),
+        ("X at HIGH A (bright)", lambda c, r, k: (c.apply_x(shor.HIGH, shor.A_COL), setattr(r, "t", 0))),
+        ("X at HIGH A (dim)",
+         lambda c, r, k: (c.apply_x(shor.HIGH, shor.A_COL), setattr(r, "t", DANGER_BEAT // 2))),
+        ("Z on MID (bright)", lambda c, r, k: (c.apply_z(shor.MID), setattr(r, "t", 0))),
+        ("Z on MID (dim)", lambda c, r, k: (c.apply_z(shor.MID), setattr(r, "t", DANGER_BEAT // 2))),
         ("corrected: green flash", lambda c, r, k: r.flash.__setitem__(k, (P.GOOD, 21))),
         ("logical: red flash", lambda c, r, k: r.flash.__setitem__(k, (P.BAD, 21))),
     ]
@@ -151,8 +150,6 @@ def glint_frames(out_dir: str, char=TRIO, prefix: str = "fight") -> None:
     ):
         fight = Fight({"p1": char, "p2": TRIO})
         fight.fighters["p1"].x, fight.fighters["p2"].x = 250, 350
-        if crouch:
-            fight.fighters["p1"].code.switch()
         r = Renderer(surface)
         held = FighterInput(down=crouch)
         for i in range(startup - 1):
@@ -185,16 +182,15 @@ def quint_frames(out_dir: str) -> None:
             since += 1
         if since in (1, 8):
             save(surface, out_dir, f"quint_collapse_wave{since}.png")
-    # RE-ENCODE: a crouching QUINT with two lights flipped
+    # RE-ENCODE: a crouching QUINT with an X and a Z on its grid
     fight = Fight({"p1": TRIO, "p2": QUINT})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 240, 380
     quint, r = fight.fighters["p2"], Renderer(surface)
-    quint.code.switch()
     down = FighterInput(down=True)
     for i in range(4):
         r.draw_fight(fight, fight.step({"p2": down}), {"p1": 0, "p2": 0})
-    quint.code.hit(qec.Z)
-    quint.code.hit(qec.Z)
+    quint.code.apply_x(shor.HIGH, shor.A_COL)
+    quint.code.apply_z(shor.LOW)
     r.draw_fight(fight, fight.step({"p2": down}), {"p1": 0, "p2": 0})
     save(surface, out_dir, "quint_reencode_0_before.png")
     since = None
@@ -214,7 +210,7 @@ def quint_frames(out_dir: str) -> None:
     for i in range(40):
         events = fight.step({"p1": FighterInput(x=i == 0)})
         r.draw_fight(fight, events, {"p1": 0, "p2": 0})
-        if any(e.kind == "logical" for e in events):
+        if any(e.kind in ("hit", "logical") for e in events):
             save(surface, out_dir, "quint_grab.png")
             break
 
@@ -241,7 +237,8 @@ def find_frames(out_dir: str, chars=(TRIO, TRIO), prefix: str = "fight") -> None
         "logical": lambda f, ev, ago: ago.get("logical") == 8,
         "crouch": lambda f, ev, ago: sorted(x.action for x in f.fighters.values()) in (["crouch", "idle"], ["crouch", "walk"])
         and all(ago.get(k, 99) > 80 for k in ("hit", "logical")),
-        "danger": lambda f, ev, ago: any(tag_state(x.code) == "danger" for x in f.fighters.values())
+        "danger": lambda f, ev, ago: any(x.code.x_danger_rows() or x.code.z_danger_rows()
+                                         for x in f.fighters.values())
         and ago.get("hit") == 6,
         "shot": lambda f, ev, ago: bool(f.shots) and abs(f.shots[0].x - f.fighters["p2"].x) > 120,
         "knockdown": lambda f, ev, ago: any(x.action == "knockdown" and x.frame == 14 for x in f.fighters.values()),
