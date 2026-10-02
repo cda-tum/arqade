@@ -646,7 +646,7 @@ def test_cancel_with_the_press_held_and_move_hit_set_on_the_first_active_frame()
     assert f.buffer == []
 
 
-def phases_of(f, first_events=()):
+def phases_of(f):
     """The phase on every step of the move that has just started, until it ends."""
     seen = [f.phase]
     while f.action == "attack":

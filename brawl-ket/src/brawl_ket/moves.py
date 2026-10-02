@@ -106,7 +106,7 @@ TRIO = Character(
         "stand.B": Move(
             "heavy", 24, 4, 16, Box(14, 64, 40, 18), qec.X,
             chip=6, bonus=14, hitstun=20, knockback=4.0, chain_startup=8,
-            poses=("heavy_wind", "heavy_hit", "heavy_wind"),
+            poses=("heavy_wind", "heavy_hit", "heavy_recover"),
         ),
         "crouch.A": Move(
             "low jab", 5, 3, 9, Box(12, 20, 44, 12), qec.Z,

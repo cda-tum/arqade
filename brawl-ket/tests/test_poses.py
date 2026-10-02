@@ -273,7 +273,7 @@ def test_a_chained_move_eases_into_its_wind_up_over_its_own_short_startup():
     assert pose_for(f) == POSES[heavy.poses[1]]
 
 
-def test_a_neutral_heavy_holds_its_wind_up_until_frame_20():
+def test_a_neutral_heavy_holds_its_wind_up_until_its_startup_ends():
     heavy = TRIO.moves["stand.B"]
     f = fighter("attack", move=heavy, slot="stand.B")
     for frame in range(EASE_FRAMES, heavy.startup):

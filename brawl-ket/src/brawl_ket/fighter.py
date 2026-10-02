@@ -119,7 +119,7 @@ class Fighter:
             and m.chain_startup is not None
             and not self.chained
             and self.action == "attack"
-            and m.startup - TELEGRAPH_FRAMES <= self.frame < m.startup
+            and self.startup - TELEGRAPH_FRAMES <= self.frame < self.startup
         )
 
     @property

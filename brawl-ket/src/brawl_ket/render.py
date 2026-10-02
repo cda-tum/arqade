@@ -411,7 +411,7 @@ class Renderer:
         """A blinking 4-point white star on the striking hand (the foot, for a sweep), in the
         last frames of a neutral heavy's wind-up: the cue that the strike is coming."""
         cx, cy = _pt(j["foot_f" if f.slot == "crouch.B" else "hand_f"])
-        left = f.move.startup - f.frame                    # frames until impact (16 .. 1)
+        left = f.startup - f.frame                    # frames until impact (16 .. 1)
         r = GLINT_MIN + round((GLINT_MAX - GLINT_MIN) * (1 - left / TELEGRAPH_FRAMES))
         waist = max(2, r // 3)
         star = [(cx, cy - r), (cx + waist, cy - waist), (cx + r, cy), (cx + waist, cy + waist),

@@ -8,6 +8,7 @@ from brawl_ket.config import (
     HITSTOP,
     HITSTOP_LOGICAL,
     LOGICAL_DAMAGE,
+    REACTION_FRAMES,
     ROUND_FRAMES,
     STAGE_LEFT,
     STAGE_RIGHT,
@@ -182,7 +183,7 @@ def test_a_lone_heavy_from_neutral_is_only_a_correctable_hit():
     assert fight.fighters["p2"].health == 100 - TRIO.moves["stand.B"].chip
 
 
-REACTION = 14       # frames (about 230 ms) a defender takes to see a move start and decide
+REACTION = REACTION_FRAMES
 TOO_LATE = 18       # waiting this long leaves no time to finish the 8-frame switch
 
 

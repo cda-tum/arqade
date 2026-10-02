@@ -58,9 +58,16 @@ def test_the_heavies_telegraph_from_neutral_and_stay_fast_in_a_chain():
     for slot, m in trio.items():
         if slot not in ("stand.B", "crouch.B"):
             assert m.chain_startup is None, slot
-    # the telegraph leaves room for a 14-frame (about 230 ms) reaction plus the stance switch
+    # the telegraph leaves room for a human reaction plus the stance switch
     for slot in ("stand.B", "crouch.B"):
-        assert trio[slot].startup - 14 - config.SWITCH_FRAMES >= 2, slot
+        assert trio[slot].startup - config.REACTION_FRAMES - config.SWITCH_FRAMES >= 2, slot
+
+
+def test_no_telegraphed_move_recovers_into_its_wind_up_pose():
+    # the big coil must mean "a heavy is starting", never "a heavy just ended"
+    for _c, slot, m in all_moves():
+        if m.chain_startup is not None:
+            assert m.poses[2] != m.poses[0], slot
 
 
 @pytest.mark.skipif(importlib.util.find_spec("brawl_ket.poses") is None, reason="Task 7")

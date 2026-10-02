@@ -62,6 +62,9 @@ POSES: dict[str, Pose] = {
     # the whole body coiled back, the striking fist cocked far behind the hip, the guard hand up
     "heavy_wind": Pose(-26, 14, -6, -36, -16, -100, -125, 60, 150),
     "heavy_hit": Pose(8, 46, 6, -40, -26, 68, 68, -30, -60),
+    # ...and the modest guard the heavy recovers into, so the big coil only ever means "a heavy
+    # is starting" (the old wind-up pose)
+    "heavy_recover": Pose(-14, 20, -6, -30, -14, -20, 80, 50, 140),
     # crouch.A low jab: a punch at the shins from the crouch
     "low_wind": Pose(24, 95, -4, 30, -86, 20, 120, 30, 155),
     "low_hit": Pose(20, 95, -4, 30, -86, 44, 44, 30, 155),
