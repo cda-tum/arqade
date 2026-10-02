@@ -58,6 +58,7 @@ GRID = 3 * CELL + 2 * CELL_GAP              # 24: the 3x3 grid
 PLATE = GRID + 8                            # the plate around it
 TAG_HALF = PLATE / 2 + 2 + 2 * RING_R + 1   # half a tag's width: the plate, then the ring
 BAR_W, BAR_H, BAR_Y = 250, 12, 14
+Z_CELL = P.shade(P.GATE[shor.Z], 0.6)      # the clear cells of a flipped row, dark on its blue
 
 # effect lengths, in frames
 SPARK_FRAMES = 10
@@ -383,6 +384,11 @@ class Renderer:
         self.pose_start: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.pose_last: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.flash = {p: (None, 0) for p in PLAYERS}    # (colour, frames left) on the lights
+        # the cells a flash lights: None for the whole grid, else the (row, col) cells
+        self.flash_cells: dict[str, frozenset[tuple[int, int]] | None] = {p: None for p in PLAYERS}
+        # each code as last drawn, (x cells, z rows): the state before this frame's events
+        self.seen_code: dict[str, tuple[frozenset, frozenset]] = {p: (frozenset(), frozenset())
+                                                                  for p in PLAYERS}
         # cancelled lights popping white: (row, col, frames left), col -1 for a whole row
         self.pops: dict[str, list[tuple[int, int, int]]] = {p: [] for p in PLAYERS}
         self.effects.clear()
@@ -422,22 +428,33 @@ class Renderer:
         self._hud(fight, wins)
         self._draw_effects(0, 0, world=False)
         self._advance()
+        for p in PLAYERS:
+            code = fight.fighters[p].code
+            self.seen_code[p] = (frozenset(code.x_cells), frozenset(code.z_rows))
 
     # --- effects ----------------------------------------------------------------------------
 
     def _start_effects(self, events: list) -> None:
+        older = [fx for fx in self.effects if fx.kind == "popup"]     # from earlier frames
         for e in events:
             if e.kind in ("hit", "logical", "cancel"):
                 color = P.WHITE if e.kind == "cancel" else P.GATE.get(e.error or "X", P.WHITE)
                 text = "I" if e.kind == "cancel" else f"{e.error}!"
                 self.effects.append(Effect("spark", e.x, e.y, SPARK_FRAMES, SPARK_FRAMES, color))
                 # the newest wins: a jab's X! still rising would sit over the next jab's I
-                self.effects = [fx for fx in self.effects
-                                if fx.kind != "popup" or abs(fx.x - e.x) >= POPUP_ROOM]
+                stale = {id(fx) for fx in older if abs(fx.x - e.x) < POPUP_ROOM}
+                if stale:
+                    self.effects = [fx for fx in self.effects if id(fx) not in stale]
                 self.effects.append(Effect("popup", e.x, e.y - 18, POPUP_FRAMES, POPUP_FRAMES, color, text))
             if e.kind == "cancel" and e.player and e.row is not None:
                 # an X cancels its cell; a Z (or a Y) its row's flip, so the whole row pops
                 self.pops[e.player].append((e.row, e.col if e.error == shor.X else -1, POP_FRAMES))
+            elif (e.kind == "hit" and e.error == shor.Y and e.player and e.row is not None
+                  and (e.row, e.col) in self.seen_code[e.player][0]):
+                # a Y's X half went first and cancelled a lit cell (its Z half then flipped the
+                # row, so the event is a hit): the cell pops like any cancel, its I under the Y!
+                self.pops[e.player].append((e.row, e.col, POP_FRAMES))
+                self.effects.append(Effect("popup", e.x, e.y + 2, POPUP_FRAMES, POPUP_FRAMES, P.WHITE, "I"))
             if e.kind == "logical":
                 self.effects = [fx for fx in self.effects if fx.kind != "banner"]
                 self.effects.append(Effect("banner", W / 2, BANNER_Y, BANNER_FRAMES, BANNER_FRAMES, P.BAD,
@@ -445,8 +462,12 @@ class Renderer:
                 self.shake = SHAKE_FRAMES
                 if e.player:
                     self.flash[e.player] = (P.BAD, FLASH_FRAMES)
+                    self.flash_cells[e.player] = None           # the whole grid
             elif e.kind == "corrected" and e.player:
+                # only the lights the tick cleared: the X cells and every cell of a flipped row
+                x_cells, z_rows = self.seen_code[e.player]
                 self.flash[e.player] = (P.GOOD, FLASH_FRAMES)
+                self.flash_cells[e.player] = x_cells | {(r, c) for r in z_rows for c in range(3)}
             elif e.kind == "shockwave":
                 color = P.GATE.get(e.error or "Z", P.WHITE)
                 self.effects.append(Effect("wave", e.x, e.y, WAVE_FRAMES, WAVE_FRAMES, color))
@@ -454,6 +475,7 @@ class Renderer:
             elif e.kind == "reencode" and e.player and self._fight is not None:
                 f = self._fight.fighters[e.player]
                 self.flash[e.player] = (P.WHITE, FLASH_FRAMES)
+                self.flash_cells[e.player] = None
                 self.effects.append(Effect("pulse", f.x, FLOOR_Y - f.y, PULSE_FRAMES, PULSE_FRAMES, P.SKY))
 
     def _advance(self) -> None:
@@ -629,13 +651,13 @@ class Renderer:
         """The code over the head: a 3x3 grid (rows HIGH, MID, LOW; columns A, B, THROW)
         on a plate in the player's colour, and the cycle ring beside it.
 
-        An X lights its cell in the X gate's red; a row flipped by a Z glows behind in the
-        Z gate's blue (its cells drop their ink outline, so the blue fills the gaps; a Z-danger row's
-        orange backing does the same on the beat). Danger pulses orange: the other cells of a row holding one X (a
-        different button there breaks the code), or the other rows once one is flipped
-        (a special there breaks it). A cancelled light pops white for POP_FRAMES (an X its
-        cell, a Z or a Y its whole row); the whole grid flashes green after a correction
-        and red after a logical error."""
+        An X lights its cell in the X gate's red. A row flipped by a Z is a solid bar of the
+        Z gate's blue, gaps and all, its clear cells a darker blue on it. Danger is a warning,
+        never a state, so it is only an orange outline, on the beat: round the other cells of
+        a row holding one X (a different button there breaks the code), or round each other
+        row once one is flipped (a special there breaks it). A cancelled light pops white for
+        POP_FRAMES (an X its cell, a Z or a whole Y its row). A correction flashes the lights
+        it cleared green; a logical error (and RE-ENCODE, white) flashes the whole grid."""
         code = f.code
         surf = self.surface
         cx, cy = round(at[0]) + ox, round(at[1]) + oy
@@ -649,33 +671,40 @@ class Renderer:
         pygame.draw.rect(surf, color, plate, border_radius=4)
         pygame.draw.rect(surf, P.NIGHT, plate.inflate(-4, -4), border_radius=3)
         flash, left = self.flash[key]
-        lit = flash is not None and left % 6 >= 2
+        flashing = flash is not None and left % 6 >= 2
+        flash_cells = self.flash_cells[key]
         beat = (self.t // (DANGER_BEAT // 2)) % 2 == 0
-        x_danger, z_danger = code.x_danger_rows(), code.z_danger_rows()
+        x_danger = code.x_danger_rows() if beat else ()
+        z_danger = code.z_danger_rows() if beat else ()
         pops = {(r, c) for r, c, _ in self.pops[key]}
         for row in range(3):
             y = plate.top + 4 + row * (CELL + CELL_GAP)
-            backed = row in code.z_rows or (row in z_danger and beat)
-            if row in code.z_rows:
-                surf.fill(P.GATE[shor.Z], (plate.left + 2, y - 1, PLATE - 4, CELL + 2))
-            elif backed:
-                surf.fill(P.shade(P.ORANGE, 0.6), (plate.left + 2, y - 1, PLATE - 4, CELL + 2))
+            flipped = row in code.z_rows
+            if flipped:                         # solid blue right across the row, gaps and all
+                surf.fill(P.GATE[shor.Z], (plate.left + 3, y - 2, PLATE - 6, CELL + 4))
             for col in range(3):
                 x = plate.left + 4 + col * (CELL + CELL_GAP)
-                if lit:
+                lit_x = (row, col) in code.x_cells
+                if flashing and (flash_cells is None or (row, col) in flash_cells):
                     c = flash
-                elif (row, col) in code.x_cells:
+                elif lit_x:
                     c = P.GATE[shor.X]
-                elif row in x_danger and beat:
-                    c = P.ORANGE
+                elif flipped:
+                    c = Z_CELL
                 else:
                     c = P.SLATE
                 if (row, col) in pops or (row, -1) in pops:
                     c = P.WHITE                 # a cancelled light goes out with a white pop
-                if not backed:                  # a backed row's colour shows through its gaps
-                    surf.fill(P.INK, (x - 1, y - 1, CELL + 2, CELL + 2))
+                if row in x_danger and not lit_x:
+                    edge = P.ORANGE             # a different button here breaks the code
+                else:
+                    edge = None if flipped else P.INK   # a flipped row's blue shows round its cells
+                if edge is not None:
+                    surf.fill(edge, (x - 1, y - 1, CELL + 2, CELL + 2))
                 surf.fill(c, (x, y, CELL, CELL))
                 surf.fill(P.lighten(c, 0.5), (x, y, 2, 2))
+            if row in z_danger:                 # a special at this height breaks the code
+                pygame.draw.rect(surf, P.ORANGE, (plate.left + 3, y - 1, PLATE - 6, CELL + 2), 1)
         ring = self.rings[min(RING_STEPS, int(code.progress * RING_STEPS))]
         blit_center(surf, ring, (plate.right + 2 + RING_R, cy))
 

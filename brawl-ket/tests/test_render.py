@@ -192,7 +192,8 @@ def test_the_danger_state_is_drawn_on_the_tag(surface, char):
     p2.code.reset()
     p2.code.apply_z(shor.MID)                # a flipped row: a special at another height breaks it
     danger = colours_in_tag(surface, r, fight, "p2", DANGER_BEAT * 2)
-    assert P.shade(P.ORANGE, 0.6) in danger  # the other rows' backing pulses
+    assert P.ORANGE in danger                # the other rows' outline pulses
+    assert P.shade(P.ORANGE, 0.6) not in danger     # an outline, never a fill
     assert P.GATE[shor.Z] in danger          # the flipped row's backing
 
 
@@ -309,4 +310,140 @@ def test_a_new_popup_replaces_an_older_one_beside_it(surface):
     r.draw_fight(fight, [Event("cancel", "p2", shor.X, 404, 202, shor.HIGH, shor.A_COL),
                          Event("hit", "p1", shor.X, 100, 200, shor.HIGH, shor.A_COL)])
     assert sorted(fx.text for fx in r.effects if fx.kind == "popup") == ["I", "X!"]
-    assert {fx.x for fx in r.effects if fx.kind == "popup"} == {404, 100}
+    assert {fx.x: fx.text for fx in r.effects if fx.kind == "popup"} == {404: "I", 100: "X!"}
+
+
+def test_popups_started_in_the_same_frame_all_survive(surface):
+    # only pop-ups from earlier frames are replaced, never one this frame's events just started
+    from brawl_ket import shor
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [Event("hit", "p2", shor.X, 400, 200, shor.HIGH, shor.A_COL),
+                         Event("hit", "p1", shor.X, 410, 200, shor.HIGH, shor.A_COL)])
+    assert sorted(fx.x for fx in r.effects if fx.kind == "popup") == [400, 410]
+
+
+def cell_px(row, col, cx=160, cy=120):
+    """A pixel inside a cell of a tag drawn at (cx, cy), clear of its highlight."""
+    from brawl_ket.render import CELL, CELL_GAP, PLATE
+    left, top = cx - PLATE // 2, cy - PLATE // 2
+    return (left + 4 + col * (CELL + CELL_GAP) + 3, top + 4 + row * (CELL + CELL_GAP) + 3)
+
+
+def outline_px(row, col, cx=160, cy=120):
+    """A pixel on a cell's 1 px outline (its left edge, halfway down)."""
+    x, y = cell_px(row, col, cx, cy)
+    return (x - 4, y)
+
+
+def tag_colours(surface, r, fight, key, cells):
+    surface.fill((0, 0, 0))
+    r._code_tag(key, fight.fighters[key], (160, 120, 160), 0, 0)
+    return [tuple(surface.get_at(c))[:3] for c in cells]
+
+
+def test_a_z_cancel_pops_its_whole_row_white_then_it_goes_back(surface):
+    from brawl_ket import shor
+    from brawl_ket.render import POP_FRAMES
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [Event("cancel", "p2", shor.Z, 400, 200, shor.MID, None)])
+    row = [cell_px(shor.MID, c) for c in range(3)]
+    assert tag_colours(surface, r, fight, "p2", row) == [P.WHITE] * 3
+    assert tag_colours(surface, r, fight, "p2", [cell_px(shor.HIGH, 0)]) == [P.SLATE]
+    for _ in range(POP_FRAMES):
+        r.draw_fight(fight, [])
+    assert tag_colours(surface, r, fight, "p2", row) == [P.SLATE] * 3
+
+
+def test_a_cancelled_cell_goes_back_to_normal_after_its_pop(surface):
+    from brawl_ket import shor
+    from brawl_ket.render import POP_FRAMES
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [Event("cancel", "p2", shor.X, 400, 200, shor.MID, shor.B_COL)])
+    cell = [cell_px(shor.MID, shor.B_COL)]
+    for _ in range(POP_FRAMES - 2):
+        r.draw_fight(fight, [])
+    assert tag_colours(surface, r, fight, "p2", cell) == [P.WHITE]       # still popping
+    for _ in range(2):
+        r.draw_fight(fight, [])
+    assert tag_colours(surface, r, fight, "p2", cell) == [P.SLATE]
+
+
+def test_a_correction_flashes_only_the_lit_cells_green(surface):
+    from brawl_ket import shor
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    code = fight.fighters["p1"].code
+    code.apply_x(shor.HIGH, shor.A_COL)
+    code.apply_z(shor.LOW)
+    r.draw_fight(fight, [])                     # drawn lit
+    code.reset()                                # the tick clears it, and says so
+    r.draw_fight(fight, [Event("corrected", "p1")])
+    lit = [cell_px(shor.HIGH, shor.A_COL)] + [cell_px(shor.LOW, c) for c in range(3)]
+    clear = [cell_px(shor.HIGH, shor.B_COL), cell_px(shor.MID, shor.A_COL), cell_px(shor.MID, shor.THROW_COL)]
+    assert tag_colours(surface, r, fight, "p1", lit) == [P.GOOD] * 4
+    assert tag_colours(surface, r, fight, "p1", clear) == [P.SLATE] * 3
+
+
+def test_a_logical_error_still_flashes_the_whole_grid_red(surface):
+    from brawl_ket import shor
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [Event("logical", "p1", shor.X, 300, 200, shor.HIGH, shor.B_COL)])
+    every = [cell_px(row, col) for row in range(3) for col in range(3)]
+    assert tag_colours(surface, r, fight, "p1", every) == [P.BAD] * 9
+
+
+def test_a_y_whose_x_half_cancels_pops_that_cell_with_an_i(surface):
+    # X lit at (MID, THROW), then a throw: its X cancels the cell, its Z flips MID (a "hit")
+    from brawl_ket import shor
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    code = fight.fighters["p2"].code
+    code.apply_x(shor.MID, shor.THROW_COL)
+    r.draw_fight(fight, [])
+    assert code.apply_y(shor.MID, shor.THROW_COL) == shor.FLIPPED
+    r.draw_fight(fight, [Event("hit", "p2", shor.Y, 400, 200, shor.MID, shor.THROW_COL)])
+    assert [pop[:2] for pop in r.pops["p2"]] == [(shor.MID, shor.THROW_COL)]
+    assert sorted(fx.text for fx in r.effects if fx.kind == "popup") == ["I", "Y!"]
+    assert tag_colours(surface, r, fight, "p2", [cell_px(shor.MID, shor.THROW_COL)]) == [P.WHITE]
+
+
+def test_a_y_on_a_clear_cell_does_not_pop(surface):
+    from brawl_ket import shor
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [])
+    fight.fighters["p2"].code.apply_y(shor.MID, shor.THROW_COL)
+    r.draw_fight(fight, [Event("hit", "p2", shor.Y, 400, 200, shor.MID, shor.THROW_COL)])
+    assert r.pops["p2"] == []
+    assert [fx.text for fx in r.effects if fx.kind == "popup"] == ["Y!"]
+
+
+def test_a_flipped_row_is_solid_blue_and_danger_is_an_orange_outline(surface):
+    from brawl_ket import shor
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    code = fight.fighters["p1"].code
+    code.apply_z(shor.MID)
+    r.draw_fight(fight, [])
+    r.t = 0                                     # the bright beat of the danger pulse
+    # the flipped row: blue between its cells, its cells blue too
+    gap = (cell_px(shor.MID, 0)[0] + 5, cell_px(shor.MID, 0)[1])
+    [back, inside] = tag_colours(surface, r, fight, "p1", [gap, cell_px(shor.MID, 1)])
+    assert back == P.GATE[shor.Z] and inside[2] > inside[0] and inside != P.SLATE
+    # the other rows are in danger: an orange outline, their cells' insides untouched
+    [edge, inside] = tag_colours(surface, r, fight, "p1", [outline_px(shor.HIGH, 0), cell_px(shor.HIGH, 1)])
+    assert edge == P.ORANGE and inside == P.SLATE
+    r.t = DANGER_BEAT // 2                      # the dim beat: no orange at all
+    [edge] = tag_colours(surface, r, fight, "p1", [outline_px(shor.HIGH, 0)])
+    assert edge == P.INK
+    # one X: the row's other cells get the orange outline, the X cell stays red
+    code.reset()
+    code.apply_x(shor.HIGH, shor.A_COL)
+    r.t = 0
+    [lit, edge, inside] = tag_colours(surface, r, fight, "p1", [cell_px(shor.HIGH, 0), outline_px(shor.HIGH, 1),
+                                                                cell_px(shor.HIGH, 1)])
+    assert lit == P.GATE[shor.X] and edge == P.ORANGE and inside == P.SLATE

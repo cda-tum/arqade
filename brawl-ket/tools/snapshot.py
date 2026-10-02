@@ -11,11 +11,14 @@ Writes:
 - code_tags.png, code_tags_quint.png: TRIO's / QUINT's grid tag close up (x4 on top of the
   x2 save) in its states: clean, one X at (HIGH, A) (danger in HIGH, both beats of the
   pulse), a Z on MID (the other rows in danger, both beats), a Y on (MID, THROW), an X
-  cancelled at (HIGH, A) and a Z cancelled on MID (the white pop), the green flash after a
-  correction, the red flash after a logical error;
+  cancelled at (HIGH, A), a Y whose X half cancels (MID, THROW) and a Z cancelled on MID (the
+  white pop), the green flash after a correction (on the cells it cleared: an X at (HIGH, A) and a Z on LOW), the red
+  flash after a logical error;
 - fight_cancel.png: p1 jabs twice at 50 px: the second jab cancels the first's X, 2 frames on
   (the white pop on the tag, the I pop-up);
 - fight_throw.png: p1 throws p2, 2 frames on (Y: the red THROW cell on a blue MID row);
+- fight_throw_half.png: the same throw onto a lit THROW cell: its X half cancels (the white pop
+  and an I under the Y!), its Z half flips MID;
 - fight_corrected.png: a correction tick wipes p2's lit X cell, 2 frames on (the green flash);
 - fight_danger.png: a bot fight at the moment a code is one hit from a logical error;
 - quint_collapse_*.png: QUINT's COLLAPSE next to a standing TRIO: the fall, the landing
@@ -120,8 +123,14 @@ def tag_sheet(char=TRIO) -> pygame.Surface:
         ("Z on MID (dim)", lambda c, r, k: (c.apply_z(shor.MID), setattr(r, "t", DANGER_BEAT // 2))),
         ("Y at MID THROW", lambda c, r, k: (c.apply_y(shor.MID, shor.THROW_COL), setattr(r, "t", 0))),
         ("X cancel: pop", lambda c, r, k: r.pops.__setitem__(k, [(shor.HIGH, shor.A_COL, 9)])),
+        ("Y, X half cancels",
+         lambda c, r, k: (c.apply_z(shor.MID), r.pops.__setitem__(k, [(shor.MID, shor.THROW_COL, 9)]),
+                          setattr(r, "t", 0))),
         ("Z cancel: pop", lambda c, r, k: r.pops.__setitem__(k, [(shor.MID, -1, 9)])),
-        ("corrected: green flash", lambda c, r, k: r.flash.__setitem__(k, (P.GOOD, 21))),
+        ("corrected: X HIGH A, Z LOW",
+         lambda c, r, k: (r.flash.__setitem__(k, (P.GOOD, 21)),
+                          r.flash_cells.__setitem__(k, frozenset({(shor.HIGH, shor.A_COL)} |
+                                                                 {(shor.LOW, col) for col in range(3)})))),
         ("logical: red flash", lambda c, r, k: r.flash.__setitem__(k, (P.BAD, 21))),
     ]
     sheet = pygame.Surface((len(cases) * crop.w * zoom, 2 * (crop.h * zoom + 16)))
@@ -199,19 +208,26 @@ def quint_frames(out_dir: str) -> None:
 
 
 def scripted_frames(out_dir: str) -> None:
-    """Three moments of the grid, scripted at 50 px: a jab cancelling a jab, a throw (Y),
-    and a correction tick wiping a lit cell. Each is saved 2 frames after its event."""
+    """Moments of the grid, scripted at 50 px: a jab cancelling a jab, a throw (Y), a throw
+    whose X half cancels a lit THROW cell, and a correction tick wiping a lit cell. Each is
+    saved 2 frames after its event."""
     from brawl_ket.fighter import IDLE, FighterInput
 
     surface = pygame.Surface((W, H))
+    def lit_throw_cell(fight: Fight) -> None:
+        fight.fighters["p2"].code.apply_x(shor.MID, shor.THROW_COL)
+
     scripts = (
-        ("fight_cancel", "cancel", lambda i: FighterInput(a=i in (0, 10)), None),
-        ("fight_throw", "hit", lambda i: FighterInput(dx=1, b=i == 0), None),
-        ("fight_corrected", "corrected", lambda i: FighterInput(a=i == 0), "p2"),
+        ("fight_cancel", "cancel", lambda i: FighterInput(a=i in (0, 10)), None, None),
+        ("fight_throw", "hit", lambda i: FighterInput(dx=1, b=i == 0), None, None),
+        ("fight_throw_half", "hit", lambda i: FighterInput(dx=1, b=i == 0), None, lit_throw_cell),
+        ("fight_corrected", "corrected", lambda i: FighterInput(a=i == 0), "p2", None),
     )
-    for name, kind, p1_input, who in scripts:
+    for name, kind, p1_input, who, setup in scripts:
         fight = Fight({"p1": TRIO, "p2": TRIO})
         fight.fighters["p1"].x, fight.fighters["p2"].x = 295, 345
+        if setup is not None:
+            setup(fight)
         r = Renderer(surface)
         since = None
         for i in range(2 * TRIO.cycle_frames + 30):
