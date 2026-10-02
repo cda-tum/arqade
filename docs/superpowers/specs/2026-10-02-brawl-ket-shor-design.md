@@ -127,13 +127,14 @@ a logical error.
   2.5 s cooldown.
 - **PHASE SLIDE** (down + X): Z on LOW. It slides under photons, as now.
 - **DIVE** (air + X): Z on MID. Steep and fast: it reaches the floor in
-  about 12 frames from the top of a jump, bounces back off a hit, and
+  about 14 frames from the top of a jump, bounces back off a hit, and
   recovers quickly on landing.
 
 ### QUINT: slow and broad, 1.5 s cycle, 115 health, longer normals
 
-- **SYNDROME GRAB** (X): a dashing command grab that reaches about 130 px,
-  Z on MID. A throw, so it can't be ducked or jumped. Slow to start, with a
+- **SYNDROME GRAB** (X): a dashing command grab that connects from about
+  130 px away (the gap between the fighters when it starts), Z on MID.
+  A throw, so it can't be ducked or jumped. Slow to start, with a
   long recovery on a whiff.
 - **RE-ENCODE** (down + X): no error. It runs an extra correction round at
   once (real QEC also schedules extra rounds of checks), clearing every
@@ -179,8 +180,8 @@ mid-switch is a logical error" rule go.
 |---|---|
 | PHOTON | startup 14, 2.5 s cooldown (as now) |
 | PHASE SLIDE | as now |
-| DIVE | startup 3, falls at 10 px/frame with a slight forward drift (~12 frames to the floor from the apex), bounces back on a hit, 8 frames of landing recovery |
-| SYNDROME GRAB | startup 16, then a dash of up to 30 frames at ~6 px/frame (reach ~130 px), 30 frames of recovery on a whiff |
+| DIVE | startup 3, falls at 13 px/frame with a slight forward drift (~14 frames to the floor from TRIO's 138 px apex; 10 px/frame could not reach the floor in ~12), bounces back on a hit, 8 frames of landing recovery |
+| SYNDROME GRAB | startup 16, then a dash of 13 active frames at ~6 px/frame: it connects from a starting gap of up to ~130 px (misses beyond ~140), the same measure as the playtest's "~75 px"; 30 frames of recovery on a whiff |
 | RE-ENCODE | startup 6, 4 s cooldown |
 | COLLAPSE | drifts 2 px/frame towards the rival while falling; the shockwave reaches 60 px either side (now 45); 20 frames of landing recovery |
 
@@ -257,8 +258,8 @@ The engine stays; the code underneath changes.
   two heights, corrected. Two specials on two rows are logical; the same one
   twice cancels. A lone throw is corrected; a throw on a MID error is
   logical. A COLLAPSE hitting with slam and shockwave is logical. HIGH whiffs
-  on a crouching rival, LOW on an airborne one. The GRAB reaches ~130 px; the
-  DIVE lands within ~12 frames of the apex.
+  on a crouching rival, LOW on an airborne one. The GRAB connects from a ~130 px
+  starting gap; the DIVE lands within ~14 frames of the apex.
 - **Bots:** fights finish in every pairing, and bots break codes.
 - **Render and match:** smoke tests through the grid states, the card and the
   hint; the snapshot tool covers the new screens.
