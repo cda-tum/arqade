@@ -82,6 +82,7 @@ class Match:
         self.wins = {p: 0 for p in PLAYERS}
         self.round_winner: str | None = None    # of the round just ended (None: a draw)
         self.perfect = False
+        self.ko = False                         # the round just ended on a K.O. (not on time)
         self.winner: str | None = None          # of the match
         self.paused = False
         self.pause_index = 0
@@ -189,11 +190,15 @@ class Match:
             if self.perfect:
                 events.append(Cue("perfect", fight.winner))
         # the fight's own "ko" / "timeout" event is passed on as a cue too
-        events.append(Cue("ko" if any(f.health <= 0 for f in fight.fighters.values()) else "timeout",
-                          fight.winner))
+        self.ko = any(f.health <= 0 for f in fight.fighters.values())
+        events.append(Cue("ko" if self.ko else "timeout", fight.winner))
         self._set_state(ROUND_END)
 
     def _on_round_end(self, inp: FrameInput, events: list) -> None:
+        # the bodies play out: in slow motion for the first moments of a K.O.
+        slow = self.ko and self.t <= config.KO_SLOW_FRAMES
+        if not slow or self.t % config.KO_SLOW_RATE == 0:
+            self.fight.step({p: IDLE for p in PLAYERS})
         if self.t < config.ROUND_END_FRAMES:
             return
         leader = max(self.wins, key=self.wins.get)
@@ -230,6 +235,8 @@ class Match:
             self._attract_over += 1
             if self._attract_over >= config.ROUND_END_FRAMES:
                 self._start_attract()
+            elif self._attract_over % config.KO_SLOW_RATE == 0 or self._attract_over > config.KO_SLOW_FRAMES:
+                fight.step({p: IDLE for p in PLAYERS})      # the bodies play out, as in a match
             return
         fight.step({p: bot.input(fight) for p, bot in self.bots.items()})
 
@@ -260,6 +267,7 @@ class Match:
         self.fight = Fight({p: ROSTER[self.picks[p]] for p in PLAYERS})
         self.round_winner = None
         self.perfect = False
+        self.ko = False
         self._set_state(ROUND_INTRO)
         events.append(Cue("round"))
 

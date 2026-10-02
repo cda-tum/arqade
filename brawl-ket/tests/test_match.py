@@ -332,3 +332,42 @@ def test_the_demo_starts_a_new_fight_when_one_ends() -> None:
     first.fighters["p1"].health = 0
     run(m, config.ROUND_END_FRAMES + 2)
     assert m.attract is not None and m.attract is not first and m.state == TITLE
+
+
+# --- the K.O. slow-down --------------------------------------------------------------------
+
+
+def steps_of(m: Match, frames: int) -> int:
+    """How many times the fight was stepped over `frames` match frames."""
+    count = 0
+    real = m.fight.step
+
+    def counted(inputs):
+        nonlocal count
+        count += 1
+        return real(inputs)
+
+    m.fight.step = counted
+    run(m, frames)
+    m.fight.step = real
+    return count
+
+
+def test_a_ko_plays_out_in_slow_motion_then_at_full_speed() -> None:
+    m = Match(random.Random(1))
+    to_fight(m)
+    m.fight.fighters["p2"].health = 0
+    m.update(idle())
+    assert m.state == ROUND_END and m.ko
+    slow = steps_of(m, config.KO_SLOW_FRAMES)
+    assert slow == config.KO_SLOW_FRAMES // config.KO_SLOW_RATE
+    assert steps_of(m, 30) == 30
+
+
+def test_a_timeout_is_not_slowed_down() -> None:
+    m = Match(random.Random(1))
+    to_fight(m)
+    m.fight.frames_left = 1
+    m.update(idle())
+    assert m.state == ROUND_END and not m.ko
+    assert steps_of(m, 30) == 30

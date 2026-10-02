@@ -30,6 +30,7 @@ from .moves import Box, Character, Move
 
 TELEGRAPH_FRAMES = 16      # the last frames of a neutral heavy's startup show a glint on the striker
 KNOCKDOWN_FRAMES = 40
+KO_STUN = 1 << 30          # a knocked-out fighter's knockdown never runs out
 STUN_DECAY = 0.85          # vx multiplier per frame of hitstun / knockdown
 
 _STUNNED = ("hitstun", "knockdown")
@@ -217,6 +218,20 @@ class Fighter:
             self.action = "hitstun"
             self.stun = move.hitstun
         return result
+
+    def knock_out(self, away: int, push: float) -> None:
+        """Down for good: the round is over. Flies off `away` (+1 / -1) at least `push`
+        px per frame, whatever hit it, and never gets up."""
+        self.move = None
+        self.slot = None
+        self.chained = False
+        self.buffer = []
+        if self.action != "knockdown":
+            self.action = "knockdown"
+            self.frame = 0
+        self.stun = KO_STUN
+        if self.vx * away < push:
+            self.vx = push * away
 
     # --- internals --------------------------------------------------------------------
 

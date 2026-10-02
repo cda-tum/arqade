@@ -110,6 +110,9 @@ def body_width(a: Character, b: Character) -> float:
     return (a.hurt_stand.w + b.hurt_stand.w) / 2 + 2 * BODY_MARGIN
 
 
+KO_PUSH = 4.0       # px per frame: a knocked-out fighter flies off at least this fast
+
+
 def _other(key: str) -> str:
     return "p2" if key == "p1" else "p1"
 
@@ -134,6 +137,7 @@ class Fight:
 
     def step(self, inputs: dict[str, FighterInput]) -> list[Event]:
         if self.over:
+            self._settle()
             return []
         if self.hitstop > 0:
             self.hitstop -= 1
@@ -293,6 +297,18 @@ class Fight:
 
     # --- the end of the round -----------------------------------------------------------
 
+    def _settle(self) -> None:
+        """After the round, the bodies play out (the KO's flight and fall, a move
+        finishing) with nobody's input, while nothing else moves: no hits, no clock,
+        no correction cycles. The match shows this in slow motion after a KO."""
+        if self.hitstop > 0:
+            self.hitstop -= 1
+            return
+        start_x = {key: f.x for key, f in self.fighters.items()}
+        for key, f in self.fighters.items():
+            f.step(IDLE, start_x[_other(key)])
+        self._push_apart()
+
     def _check_end(self, events: list[Event]) -> None:
         h1 = self.fighters["p1"].health
         h2 = self.fighters["p2"].health
@@ -300,6 +316,12 @@ class Fight:
             self.over = True
             events.append(Event("ko"))
             self.winner = None if h1 <= 0 and h2 <= 0 else ("p2" if h1 <= 0 else "p1")
+            self.shots.clear()
+            for key, f in self.fighters.items():
+                if f.health <= 0:
+                    rival = self.fighters[_other(key)]
+                    away = 1 if f.x > rival.x else -1 if f.x < rival.x else -f.facing
+                    f.knock_out(away, KO_PUSH)
         elif self.frames_left <= 0:
             self.over = True
             events.append(Event("timeout"))

@@ -16,7 +16,7 @@ from brawl_ket.config import (
     THROW_RANGE,
     THROW_SLACK,
 )
-from brawl_ket.fight import Event, Fight, Shot, _overlap, body_width
+from brawl_ket.fight import KO_PUSH, Event, Fight, Shot, _overlap, body_width
 from brawl_ket.fighter import IDLE, FighterInput
 from brawl_ket.moves import CHARACTERS, QUINT, TRIO, Box
 
@@ -902,3 +902,51 @@ def test_the_slides_hurtbox_is_below_a_photon_only_while_it_slides():
         lows.append((p1.phase, FLOOR_Y - top < photon_bottom))
     assert all(low for phase, low in lows if phase == "active")
     assert not any(low for phase, low in lows if phase != "active")
+
+
+# --- after the round: the bodies settle -------------------------------------------------
+
+
+def ko_by_jab(fight):
+    """KO p2 with one jab from p1 (p2 on its last point of health)."""
+    fight.fighters["p2"].health = 1
+    events = []
+    for i in range(30):
+        events += fight.step({"p1": A if i == 0 else IDLE, "p2": IDLE})
+        if fight.over:
+            break
+    assert fight.over and fight.winner == "p1"
+    return events
+
+
+def test_a_knocked_out_fighter_goes_down_and_stays_down():
+    fight = new(gap=40.0)
+    ko_by_jab(fight)
+    p2 = fight.fighters["p2"]
+    assert p2.action == "knockdown"
+    script(fight, 600)
+    assert p2.action == "knockdown"
+
+
+def test_after_the_round_the_bodies_move_but_nothing_else_does():
+    fight = new(gap=40.0)
+    ko_by_jab(fight)
+    p2 = fight.fighters["p2"]
+    x, frames_left = p2.x, fight.frames_left
+    health = {k: f.health for k, f in fight.fighters.items()}
+    lights = {k: list(f.code.flipped) for k, f in fight.fighters.items()}
+    events = script(fight, 120, p1=A, p2=A)          # presses after the end do nothing
+    assert events == []
+    assert p2.x > x                                  # the KO's knockback carries it away
+    assert fight.frames_left == frames_left
+    assert {k: f.health for k, f in fight.fighters.items()} == health
+    assert {k: list(f.code.flipped) for k, f in fight.fighters.items()} == lights
+    assert fight.fighters["p1"].action == "idle"     # the winner finishes its move and stands
+
+
+def test_the_ko_push_is_away_from_the_winner_even_off_a_light_hit():
+    fight = new(gap=40.0)
+    ko_by_jab(fight)
+    p2 = fight.fighters["p2"]
+    assert p2.vx * (p2.x - fight.fighters["p1"].x) > 0
+    assert abs(p2.vx) >= KO_PUSH * 0.5
