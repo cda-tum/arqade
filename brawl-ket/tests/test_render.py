@@ -8,7 +8,6 @@ from brawl_ket import shor
 from brawl_ket.bot import Bot
 from brawl_ket.config import FLOOR_Y, INTERNAL_HEIGHT, INTERNAL_WIDTH
 from brawl_ket.fight import Event, Fight
-from brawl_ket.fighter import TELEGRAPH_FRAMES
 from brawl_ket.moves import CHARACTERS, QUINT, TRIO
 from brawl_ket.render import DANGER_BEAT, TAG_EDGE, TAG_HALF, Renderer
 
@@ -205,56 +204,6 @@ def test_a_bot_fight_with_the_danger_state_draws(surface):
         danger_seen |= any(f.code.x_danger_rows() or f.code.z_danger_rows()
                            for f in fight.fighters.values())
     assert danger_seen
-
-
-# --- the telegraph glint on a neutral heavy or sweep -------------------------------------------
-
-
-def striker_pixels(r, f, key, joint):
-    """The colour on the striking joint's centre, on the last frame drawn."""
-    from brawl_ket.poses import joints
-
-    feet = (f.x, FLOOR_Y - f.y)
-    cx, cy = (round(v) for v in joints(r.pose_last[key], f.char.build, feet, f.facing)[joint])
-    return r.surface.get_at((cx, cy))[:3]
-
-
-def glint_run(surface, pressed, joint, prep=lambda fight: None, char=TRIO):
-    """Start a move for p1 and draw every frame of its startup; returns [(telegraphing, centre)]."""
-    from brawl_ket.fighter import IDLE
-
-    r = Renderer(surface)
-    fight = Fight({"p1": char, "p2": TRIO})
-    prep(fight)
-    p1 = fight.fighters["p1"]
-    seen = []
-    for i in range(char.moves["stand.B"].startup + 1):
-        events = fight.step({"p1": pressed if i == 0 else IDLE, "p2": IDLE})
-        r.draw_fight(fight, events)
-        if p1.action == "attack" and p1.phase == "startup":
-            seen.append((p1.telegraphing, striker_pixels(r, p1, "p1", joint)))
-    return seen
-
-
-@pytest.mark.parametrize("char", list(CHARACTERS.values()), ids=lambda c: c.name)
-def test_the_glint_blinks_at_the_striking_hand_only_in_the_last_16_frames(surface, char):
-    from brawl_ket.fighter import FighterInput
-
-    seen = glint_run(surface, FighterInput(b=True), "hand_f", char=char)
-    assert len(seen) == char.moves["stand.B"].startup
-    early = [c for tele, c in seen if not tele]
-    window = [c for tele, c in seen if tele]
-    assert len(window) == TELEGRAPH_FRAMES == 16 and P.WHITE not in early
-    assert P.WHITE in window and any(c != P.WHITE for c in window)     # it blinks
-
-
-@pytest.mark.parametrize("char", list(CHARACTERS.values()), ids=lambda c: c.name)
-def test_the_sweeps_glint_is_at_the_foot(surface, char):
-    from brawl_ket.fighter import FighterInput
-
-    seen = glint_run(surface, FighterInput(down=True, b=True), "foot_f", char=char)
-    window = [c for tele, c in seen if tele]
-    assert len(window) == 16 and P.WHITE in window and any(c != P.WHITE for c in window)
 
 
 def test_quint_is_drawn_broader_than_trio(surface):

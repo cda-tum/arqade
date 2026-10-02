@@ -33,7 +33,7 @@ from .config import (
     ROUNDS_TO_WIN,
 )
 from .fight import Fight
-from .fighter import TELEGRAPH_FRAMES, Fighter
+from .fighter import Fighter
 from .fonts import load_font
 from .moves import Character
 from .poses import HEAD_R, LIMB_W, POSES, Pose, joints, pose_for
@@ -50,8 +50,6 @@ PLATES = {"lean": False, "heavy": True}    # armour: the heavy's wedge torso, pl
 CHEST_HALF, WAIST_HALF, BELT_HALF = 21, 13, 14
 
 DANGER_BEAT = 24            # frames in one pulse of the danger cells and rows
-GLINT_BEAT = 2              # frames per blink phase of the telegraph glint on a heavy's wind-up
-GLINT_MIN, GLINT_MAX = 8, 16    # the star's reach in px: it grows as the strike gets closer
 TAG_ABOVE_HEAD = 46         # the grid sits this far above the head's centre
 RING_STEPS = 24             # pre-drawn cycle-ring sprites
 RING_R = 7                  # the ring's radius, px
@@ -549,21 +547,7 @@ class Renderer:
             body, accent = P.lighten(body, 0.6), P.WHITE
         feet = (f.x + ox, FLOOR_Y - f.y + oy)
         j = draw_puppet(self.surface, self._pose(key, f), f.char.build, feet, f.facing, body, accent)
-        if f.telegraphing and (f.frame // GLINT_BEAT) % 2 == 0:
-            self._glint(f, j)
         return j["head"][0] - ox, j["head"][1] - oy
-
-    def _glint(self, f: Fighter, j: dict) -> None:
-        """A blinking 4-point white star on the striking hand (the foot, for a sweep), in the
-        last frames of a neutral heavy's wind-up: the cue that the strike is coming."""
-        cx, cy = _pt(j["foot_f" if f.slot == "crouch.B" else "hand_f"])
-        left = f.startup - f.frame                    # frames until impact (16 .. 1)
-        r = GLINT_MIN + round((GLINT_MAX - GLINT_MIN) * (1 - left / TELEGRAPH_FRAMES))
-        waist = max(2, r // 3)
-        star = [(cx, cy - r), (cx + waist, cy - waist), (cx + r, cy), (cx + waist, cy + waist),
-                (cx, cy + r), (cx - waist, cy + waist), (cx - r, cy), (cx - waist, cy - waist)]
-        pygame.draw.polygon(self.surface, P.INK, star, 3)
-        pygame.draw.polygon(self.surface, P.WHITE, star)
 
     def _pose(self, key: str, f: Fighter) -> Pose:
         """pose_for, told which pose the fighter was drawn in when its action began,

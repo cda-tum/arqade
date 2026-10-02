@@ -13,9 +13,6 @@ Writes:
   pulse), a Z on MID (the other rows in danger, both beats), the green flash after a
   correction, the red flash after a logical error;
 - fight_danger.png: a bot fight at the moment a code is one hit from a logical error;
-- fight_glint.png, fight_glint_sweep.png: a neutral heavy / sweep late in its 24-frame wind-up,
-  with the telegraph glint on the striking hand / foot (and fight_glint_off.png, a blink-off
-  frame of the heavy); quint_glint.png, quint_glint_sweep.png: QUINT's, late in its 28 frames;
 - quint_collapse_*.png: QUINT's COLLAPSE next to a standing TRIO: the fall, the landing
   shockwave just after it opens, and spread out;
 - quint_reencode_*.png: a crouching QUINT with an X and a Z on its grid wipes them with RE-ENCODE;
@@ -136,28 +133,6 @@ def tag_sheet(char=TRIO) -> pygame.Surface:
             sheet.blit(shot, (x, y + 16))
             sheet.blit(outlined(f"{key} {label}", 8, P.WHITE), (x + 4, y + 2))
     return sheet
-
-
-def glint_frames(out_dir: str, char=TRIO, prefix: str = "fight") -> None:
-    """A scripted heavy and a scripted sweep, frozen in the telegraph window."""
-    from brawl_ket.fighter import IDLE, FighterInput
-
-    surface = pygame.Surface((W, H))
-    startup = char.moves["stand.B"].startup
-    for name, pressed, crouch in (
-        (f"{prefix}_glint", FighterInput(b=True), False),
-        (f"{prefix}_glint_sweep", FighterInput(down=True, b=True), True),
-    ):
-        fight = Fight({"p1": char, "p2": TRIO})
-        fight.fighters["p1"].x, fight.fighters["p2"].x = 250, 350
-        r = Renderer(surface)
-        held = FighterInput(down=crouch)
-        for i in range(startup - 1):
-            r.draw_fight(fight, fight.step({"p1": pressed if i == 0 else held, "p2": IDLE}), {"p1": 0, "p2": 0})
-            if fight.fighters["p1"].frame == startup - 3:
-                save(surface, out_dir, f"{name}.png")
-            if name == "fight_glint" and fight.fighters["p1"].frame == 18:
-                save(surface, out_dir, "fight_glint_off.png")      # the blink's dark phase
 
 
 def quint_frames(out_dir: str) -> None:
@@ -332,8 +307,6 @@ def main(argv: list[str]) -> None:
     save(move_sheet(QUINT), out_dir, "moves_heavy.png")
     save(tag_sheet(TRIO), out_dir, "code_tags.png")
     save(tag_sheet(QUINT), out_dir, "code_tags_quint.png")
-    glint_frames(out_dir)
-    glint_frames(out_dir, QUINT, "quint")
     quint_frames(out_dir)
     close_frame(out_dir)
     find_frames(out_dir)

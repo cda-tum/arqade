@@ -279,7 +279,7 @@ def test_logical_damage_includes_the_move_bonus_and_health_clamps():
     f.take_hit(JAB, 1)                      # flipped
     assert f.take_hit(heavy, 1) == shor.LOGICAL
     assert f.health == 100 - JAB.chip - LOGICAL_DAMAGE - heavy.bonus
-    f.health = 5
+    f.health = 1                            # the next hit is only chip, and still clamps
     f.take_hit(heavy, 1)
     assert f.health == 0
 
@@ -581,17 +581,17 @@ def phases_of(f):
     return seen
 
 
-def test_a_neutral_heavy_telegraphs_for_24_startup_frames():
+def test_a_neutral_heavy_takes_its_own_startup():
     f = make()
     run(f, tap("b"))
     assert f.slot == "stand.B" and f.chain == 1
-    assert f.startup == HEAVY.startup == 24
+    assert f.startup == HEAVY.startup == 10
     assert phases_of(f) == (
-        ["startup"] * 24 + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
+        ["startup"] * HEAVY.startup + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
     )
 
 
-def test_a_heavy_cancelled_from_a_jab_that_hit_takes_8_startup_frames():
+def test_a_heavy_cancelled_from_a_jab_that_hit_comes_out_faster():
     f = make()
     start_jab(f)
     run(f, IDLE, JAB.startup)
@@ -599,9 +599,9 @@ def test_a_heavy_cancelled_from_a_jab_that_hit_takes_8_startup_frames():
     f.move_hit = True
     run(f, tap("b"))
     assert f.slot == "stand.B" and f.chain == 2 and f.frame == 0
-    assert f.startup == HEAVY.chain_startup == 8
+    assert f.startup == HEAVY.chain_startup == 7 < HEAVY.startup
     assert phases_of(f) == (
-        ["startup"] * 8 + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
+        ["startup"] * HEAVY.chain_startup + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
     )
 
 
@@ -611,44 +611,34 @@ def test_the_chained_startup_is_forgotten_when_the_move_ends():
     run(f, IDLE, JAB.startup)
     f.move_hit = True
     run(f, tap("b"))
-    assert f.startup == 8
-    run(f, IDLE, 8 + HEAVY.active + HEAVY.recovery)
+    assert f.startup == HEAVY.chain_startup
+    run(f, IDLE, HEAVY.chain_startup + HEAVY.active + HEAVY.recovery)
     assert f.move is None
     run(f, tap("b"))                    # the next heavy starts from neutral again
-    assert f.startup == 24
+    assert f.startup == HEAVY.startup
 
 
-def test_the_sweep_telegraphs_from_neutral_and_chains_fast():
+def test_the_sweep_is_fast_from_neutral_and_faster_in_a_chain():
     sweep = TRIO.moves["crouch.B"]
     f = make()
     run(f, FighterInput(down=True, b=True))
-    assert f.slot == "crouch.B" and f.startup == sweep.startup == 24
+    assert f.slot == "crouch.B" and f.startup == sweep.startup == 10
     g = make()
     run(g, FighterInput(down=True, a=True))
     run(g, FighterInput(down=True), LOW_JAB.startup)
     assert g.phase == "active"
     g.move_hit = True
     run(g, FighterInput(down=True, b=True))
-    assert g.slot == "crouch.B" and g.startup == sweep.chain_startup == 9
+    assert g.slot == "crouch.B" and g.startup == sweep.chain_startup == 7
 
 
-def test_only_a_neutral_heavy_telegraphs_and_only_in_its_last_16_startup_frames():
-    f = make()
-    run(f, tap("b"))
-    flags = [f.telegraphing]
-    for _ in range(HEAVY.startup + HEAVY.active):
-        run(f)
-        flags.append(f.telegraphing)
-    assert flags == [False] * (HEAVY.startup - 16) + [True] * 16 + [False] * (HEAVY.active + 1)
-    j = make()                          # a jab never does
-    run(j, tap("a"))
-    assert not j.telegraphing
-    c = make()                          # nor does a chained heavy
-    start_jab(c)
-    run(c, IDLE, JAB.startup)
-    c.move_hit = True
-    run(c, tap("b"))
-    assert not any((run(c), c.telegraphing)[1] for _ in range(8))
+def test_a_logical_error_knocks_down():
+    from brawl_ket import shor
+    f = Fighter(TRIO, 200, 1)
+    jab, heavy = TRIO.moves["stand.A"], TRIO.moves["stand.B"]
+    assert f.take_hit(jab, -1) == shor.FLIPPED and f.action == "hitstun"
+    assert f.take_hit(heavy, -1) == shor.LOGICAL and f.action == "knockdown"
+    assert f.health == 100 - 2 - (25 + 5)
 
 
 def test_crouching_is_instant_and_has_no_switch():

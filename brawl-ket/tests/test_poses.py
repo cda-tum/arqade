@@ -266,15 +266,15 @@ def test_photon_leaves_from_the_hand():
     assert distance_to_box(j["hand_f"], spawn) <= REACH
 
 
-# --- the long wind-up of a neutral heavy ------------------------------------------------------
+# --- the wind-up of a heavy: shorter in a chain ---------------------------------------------
 
 
 def test_a_chained_move_eases_into_its_wind_up_over_its_own_short_startup():
     heavy = TRIO.moves["stand.B"]
     f = fighter("attack", move=heavy, slot="stand.B", chained=True)
     f.frame = heavy.chain_startup - 1
-    assert pose_for(f) == POSES[heavy.poses[0]]         # ends on the keyframe after 8 frames
-    f.frame = heavy.chain_startup                       # and 8 is already the impact
+    assert pose_for(f) == POSES[heavy.poses[0]]         # ends on the keyframe
+    f.frame = heavy.chain_startup                       # and the next frame is the impact
     assert pose_for(f) == POSES[heavy.poses[1]]
 
 

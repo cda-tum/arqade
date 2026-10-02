@@ -40,23 +40,18 @@ def test_a_chain_startup_is_never_slower_than_the_neutral_one():
             assert 1 <= m.chain_startup <= m.startup, slot
 
 
-TELEGRAPHED = {"TRIO": {"stand.B": (24, 8), "crouch.B": (24, 9)},
-               "QUINT": {"stand.B": (28, 11), "crouch.B": (28, 12)}}
+STARTUPS = {   # spec section 3: (A, B on its own, B cancelled from a hit A)
+    "TRIO": (4, 10, 7),
+    "QUINT": (6, 13, 9),
+}
 
 
-def test_the_heavies_telegraph_from_neutral_and_stay_fast_in_a_chain():
-    assert set(TELEGRAPHED) == set(CHARACTERS)
-    for name, wanted in TELEGRAPHED.items():
-        moves = CHARACTERS[name].moves
-        for slot, startups in wanted.items():
-            assert (moves[slot].startup, moves[slot].chain_startup) == startups, (name, slot)
-        # every other move starts the same way however it begins
-        for slot, m in moves.items():
-            if slot not in wanted:
-                assert m.chain_startup is None, (name, slot)
-        # the telegraph leaves room for a human reaction
-        for slot in wanted:
-            assert moves[slot].startup - config.REACTION_FRAMES >= 2, (name, slot)
+def test_heavies_are_fast():
+    for c in CHARACTERS.values():
+        a, b, chained = STARTUPS[c.name]
+        for light, heavy in (("stand.A", "stand.B"), ("crouch.A", "crouch.B")):
+            assert c.moves[light].startup == a, (c.name, light)
+            assert (c.moves[heavy].startup, c.moves[heavy].chain_startup) == (b, chained), (c.name, heavy)
 
 
 def test_quint_winds_up_slower_than_trio():
@@ -64,7 +59,7 @@ def test_quint_winds_up_slower_than_trio():
         assert CHARACTERS["QUINT"].moves[slot].startup > CHARACTERS["TRIO"].moves[slot].startup
 
 
-def test_no_telegraphed_move_recovers_into_its_wind_up_pose():
+def test_no_heavy_recovers_into_its_wind_up_pose():
     # the big coil must mean "a heavy is starting", never "a heavy just ended"
     for _c, slot, m in all_moves():
         if m.chain_startup is not None:
@@ -89,55 +84,20 @@ def test_every_kind_is_known():
         assert m.kind in kinds
 
 
-LIGHTS = ("stand.A", "crouch.A", "air.A")
-HEAVIES = ("stand.B", "crouch.B", "air.B")
-SPECIALS = ("stand.X", "crouch.X", "air.X")
-
-
-def logical_cost(m):
-    """Health a logical error from move m takes (the same sum Fighter.take_hit does)."""
-    return config.LOGICAL_DAMAGE + m.bonus
-
-
-def hitting(moves, slots):
-    """The slots among `slots` whose move can hit (RE-ENCODE never does)."""
-    return [s for s in slots if moves[s].kind != "reencode"]
-
-
-def test_a_heavy_logical_error_costs_at_least_twice_a_light_one():
+def test_the_damage():
+    assert config.LOGICAL_DAMAGE == 25
     for c in CHARACTERS.values():
-        moves = c.moves
-        for light in LIGHTS:
-            for heavy in hitting(moves, HEAVIES + SPECIALS + ("throw",)):
-                assert logical_cost(moves[heavy]) >= 2 * logical_cost(moves[light]), (c.name, light, heavy)
+        for slot, m in c.moves.items():
+            if m.kind == "reencode":
+                continue
+            assert m.chip == 2, (c.name, slot)
+            heavy_or_special = slot.endswith(".B") or slot.endswith(".X")
+            assert m.bonus == (5 if heavy_or_special else 0), (c.name, slot)
 
 
-# (light, heavy, special, throw) logical costs. QUINT's are lower: its d=5 code means a TRIO
-# breaks after 2 hits in a cycle, so nearly every QUINT string ends in a logical error.
-DAMAGE_TIERS = {"TRIO": (12, 26, 28, 26), "QUINT": (12, 24, 24, 24)}
-
-
-def test_the_damage_tiers():
-    assert config.LOGICAL_DAMAGE == 12
-    assert set(DAMAGE_TIERS) == set(CHARACTERS)
-    for c in CHARACTERS.values():
-        moves = c.moves
-        light, heavy, special, throw = DAMAGE_TIERS[c.name]
-        for slot in LIGHTS:
-            assert (moves[slot].chip, logical_cost(moves[slot])) == (2, light), (c.name, slot)
-        for slot in HEAVIES:
-            assert (moves[slot].chip, logical_cost(moves[slot])) == (6, heavy), (c.name, slot)
-        for slot in hitting(moves, SPECIALS):
-            # a command throw (SYNDROME GRAB) has no chip
-            chip = 0 if moves[slot].kind == "throw" else 6
-            assert (moves[slot].chip, logical_cost(moves[slot])) == (chip, special), (c.name, slot)
-        assert (moves["throw"].chip, logical_cost(moves["throw"])) == (0, throw), c.name
-
-
-def test_quint_hits_no_harder_than_trio():
-    for slot, move in QUINT.moves.items():
-        if slot in TRIO.moves and move.kind != "reencode" and TRIO.moves[slot].kind != "reencode":
-            assert logical_cost(move) <= logical_cost(TRIO.moves[slot]), slot
+def test_health_and_cycles():
+    assert (TRIO.health, TRIO.cycle_frames) == (100, config.frames(1.0))
+    assert (QUINT.health, QUINT.cycle_frames) == (115, config.frames(1.5))
 
 
 def test_photon_has_a_cooldown():
@@ -187,7 +147,7 @@ def test_a_landing_shockwave_always_has_its_error():
 
 def test_quint_stats():
     q = CHARACTERS["QUINT"]
-    assert (q.build, q.health) == ("heavy", 100)
+    assert (q.build, q.health) == ("heavy", 115)
     assert (q.walk, q.jump_vy, q.gravity) == (1.5, 10.5, 0.55)
     assert q.hurt_stand == Box(-18, 0, 36, 132)
     assert q.hurt_crouch == Box(-20, 0, 40, 104)
@@ -216,9 +176,9 @@ def test_quint_is_the_slower_heavier_fighter():
 QUINT_FRAMES = {
     # slot: (name, startup, active, recovery, hitbox, error, hitstun, knockback)
     "stand.A": ("jab", 6, 3, 10, Box(16, 76, 46, 16), shor.X, 17, 1.0),
-    "stand.B": ("heavy", 28, 5, 20, Box(16, 70, 48, 22), shor.X, 22, 6.0),
-    "crouch.A": ("low jab", 7, 3, 11, Box(14, 22, 46, 14), shor.X, 16, 1.0),
-    "crouch.B": ("sweep", 28, 4, 22, Box(12, 6, 64, 14), shor.X, 24, 2.5),
+    "stand.B": ("heavy", 13, 5, 20, Box(16, 70, 48, 22), shor.X, 22, 6.0),
+    "crouch.A": ("low jab", 6, 3, 11, Box(14, 22, 46, 14), shor.X, 16, 1.0),
+    "crouch.B": ("sweep", 13, 4, 22, Box(12, 6, 64, 14), shor.X, 24, 2.5),
     "air.A": ("air jab", 5, 6, 5, Box(12, 54, 30, 20), shor.X, 15, 1.5),
     "air.B": ("jump-in", 8, 6, 8, Box(10, 30, 40, 28), shor.X, 20, 3.0),
     "throw": ("throw", 6, 2, 24, Box(0, 40, 44, 70), shor.Y, 30, 6.0),

@@ -27,7 +27,6 @@ from .config import (
 )
 from .moves import Box, Character, Move
 
-TELEGRAPH_FRAMES = 16      # the last frames of a neutral heavy's startup show a glint on the striker
 KNOCKDOWN_FRAMES = 40
 KO_STUN = 1 << 30          # a knocked-out fighter's knockdown never runs out
 STUN_DECAY = 0.85          # vx multiplier per frame of hitstun / knockdown
@@ -112,19 +111,6 @@ class Fighter:
         return None
 
     @property
-    def telegraphing(self) -> bool:
-        """In the last TELEGRAPH_FRAMES of the startup of a move that has a long wind-up
-        from neutral (not one cancelled into, which comes out fast)."""
-        m = self.move
-        return (
-            m is not None
-            and m.chain_startup is not None
-            and not self.chained
-            and self.action == "attack"
-            and self.startup - TELEGRAPH_FRAMES <= self.frame < self.startup
-        )
-
-    @property
     def hurtbox(self) -> tuple[float, float, int, int]:
         m = self.move
         if self.action == "attack" and m is not None and m.hurt_active is not None \
@@ -207,7 +193,7 @@ class Fighter:
         self.buffer = []
         self.vx = move.knockback * from_facing
         self.frame = 0
-        if move.knockdown:
+        if move.knockdown or result == shor.LOGICAL:
             self.action = "knockdown"
             self.stun = KNOCKDOWN_FRAMES
         else:
