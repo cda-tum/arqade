@@ -7,7 +7,7 @@ import random
 import pygame
 
 from planck_time import config
-from planck_time.audio import make_audio
+from planck_time.audio import make_audio, music_for
 from planck_time.display import make_display, present
 from planck_time.fonts import load_font
 from planck_time.hiscores import Hiscores
@@ -44,7 +44,7 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
             break
 
         events = session.update(dt, inp.frame_input())
-        audio.music("title" if session.state == TITLE else "game")
+        audio.music(music_for(session))
         audio.tempo(session.level)
         audio.update()
         audio.play_events(events)

@@ -9,6 +9,12 @@ it: an error in the middle lights the two checks either side, one on an end
 qubit lights the one check next to it. The noise itself is a crackle over
 the whole chip, with no position.
 
+The noise has a face: DECOHERENCE, the monster above the chip (its art is in
+decoherence.py). It winds up before every error and spits a bolt that
+splashes over the whole chip, the same wherever the error landed, so the
+checks stay the only clue. It flinches at a fix, grins at a wrong press,
+laughs at a logical error and dissolves when the qubit survives.
+
 The stick steps a cursor along the qubits and A applies an X. On a flipped
 qubit that undoes the error and its checks go dark; on any other qubit it is
 a new error, and the checks change accordingly. Once 3 of the 5 qubits are
@@ -40,17 +46,19 @@ import random
 
 import pygame
 
+from planck_time import decoherence
 from planck_time import palette as P
 from planck_time.microgames.base import IDLE, Boss, H, PlayerInput, W, register_boss
 from planck_time.pixel import backdrop, blit_center, card, outlined, result_overlay
 
 N = 5  # data qubits
 LOSE_AT = 3  # flipped qubits that outvote the rest
-ROW_Y = 80
+ROW_Y = 95
 SPACING = 44
 ORB_R = 9
 CHECK = 14  # a check's square
-DIE = pygame.Rect(10, 50, W - 20, 62)
+DIE = pygame.Rect(10, 68, W - 20, 58)
+MONSTER = (W // 2, 30)  # DECOHERENCE, in the top 60 px
 
 FIRST = 0.8  # seconds before the first error
 PAUSE = (2.0, 1.3, 2.2)  # after the chip is clean, by phase...
@@ -65,6 +73,11 @@ CRACKLE = 0.3  # seconds the noise crackles
 PULSE = 0.35
 ZAP = 0.25
 FLIP_TIME = 0.4  # the logical error turning every qubit over
+WINDUP = 0.5  # the monster winds up this long before an error lands...
+BOLT = CRACKLE  # ...then its bolt crackles over the chip
+FLINCH = 0.4  # it flinches this long at a fix...
+GRIN = 0.6  # ...and grins this long at a wrong press
+WIN_FLASH = 0.2
 
 # The two-error patterns whose lit checks point at their qubits unmistakably.
 # The rest are traps for a reader: {0,1} lights one check that is not next to
@@ -93,6 +106,8 @@ class Syndrome(Boss):
     VERB = "SYNDROME!"
     INPUT = "stick+a"
     CAPTION = "Parity checks find errors without measuring the qubits"
+    BOSS_NAME = "DECOHERENCE"
+    BOSS_TITLE = "THE NOISE"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:
         super().__init__(seed, level, duration)
@@ -104,6 +119,8 @@ class Syndrome(Boss):
         self.landings = [0, 0, 0]  # errors landed on a clean chip, by phase
         self.pulses: list[tuple[int, float]] = []  # qubits fixed, and when
         self.zaps: list[tuple[int, float]] = []  # X presses, and when
+        self.fixed_at = -1.0  # the last right press and the last wrong one,
+        self.wrong_at = -1.0  # for the monster's face only
         self.backdrop = P.BACKDROPS[self.rng.randrange(len(P.BACKDROPS))]
 
     # --- the rules ----------------------------------------------------------------------
@@ -122,11 +139,13 @@ class Syndrome(Boss):
             if q in self.flips:
                 self.flips.discard(q)
                 self.pulses = [p for p in self.pulses if self.t - p[1] < PULSE] + [(q, self.t)]
+                self.fixed_at = self.t
                 if not self.flips:  # clean: the next one after a pause
                     pause = PAUSE[self.phase] * self.rng.uniform(0.85, 1.15) / self.speed
                     self.next_at = min(self.next_at, self.t + pause)
             else:
                 self.flips.add(q)  # a wrong press is a new error
+                self.wrong_at = self.t
         if self.t >= self.next_at and len(self.flips) < LOSE_AT:
             self._land()
         if len(self.flips) >= LOSE_AT:
@@ -182,6 +201,18 @@ class Syndrome(Boss):
 
     # --- drawing ----------------------------------------------------------------------
 
+    @classmethod
+    def portrait(cls, surf: pygame.Surface, center, t: float) -> None:
+        decoherence.portrait(surf, center, t)
+
+    def windup(self) -> float:
+        """0..1 through the monster's wind-up before the next error lands (0 when
+        none is coming before the end). It hangs on the landing time alone."""
+        left = self.next_at - self.t
+        if self.result is not None or self.next_at >= self.duration or left >= WINDUP:
+            return 0.0
+        return max(0.0, min(1.0, 1.0 - left / WINDUP))
+
     def draw(self, surf: pygame.Surface) -> None:
         backdrop(surf, self.backdrop, self.t)
         t = self.t
@@ -230,15 +261,55 @@ class Syndrome(Boss):
                 r.center = (qubit_x(q), ROW_Y - 22 - round(6 * k))
                 card(surf, r, P.GATE["X"])
                 blit_center(surf, outlined("X", 8, P.WHITE, shadow=False), (r.centerx + 1, r.centery))
+        # the attack: nothing in it depends on which qubit was hit
+        attack = t - self.landed_at < BOLT and self.result is not True
         if t - self.landed_at < CRACKLE and self.result is None:
             self._crackle(surf)
+        if attack:
+            decoherence.splash(surf, DIE, t - self.landed_at, t)
+        if not failed:
+            self._monster(surf)
+        if attack:
+            decoherence.bolt(surf, decoherence.mouth(MONSTER), (W // 2, DIE.y), t)
         self._danger(surf, failed)
         if failed:
-            blit_center(surf, outlined("LOGICAL ERROR!", 8, P.BAD), (W // 2, 36))
+            blit_center(surf, outlined("LOGICAL ERROR!", 8, P.BAD), (W // 2, H - 14))
         elif self.result:
-            blit_center(surf, outlined("QUBIT SAVED!", 8, P.GOOD), (W // 2, 36))
-        blit_center(surf, outlined("A BETWEEN THE RED CHECKS", 8, P.WHITE), (W // 2, H - 14))
+            blit_center(surf, outlined("QUBIT SAVED!", 8, P.GOOD), (W // 2, H - 14))
+        else:
+            blit_center(surf, outlined("A BETWEEN THE RED CHECKS", 8, P.WHITE), (W // 2, H - 14))
+        if self.result and self.since_end < WIN_FLASH:
+            flash = _white()
+            flash.set_alpha(round(220 * (1 - self.since_end / WIN_FLASH)))
+            surf.blit(flash, (0, 0))
         result_overlay(surf, self.result, self.since_end, seed=23)
+        if failed:  # laughing in front of the cracks, so its face reads
+            self._monster(surf)
+
+    def _monster(self, surf) -> None:
+        """DECOHERENCE, reacting to the fight. Its face only ever hangs on the
+        time, the cursor and the player's own presses, never on the hidden flips."""
+        t = self.t
+        if self.result is True:
+            decoherence.dissolve(surf, MONSTER, self.since_end)
+            return
+        if self.result is False:
+            decoherence.draw(surf, MONSTER, t, "laugh", self.since_end)
+            return
+        look = (qubit_x(self.cursor), ROW_Y)
+        windup = self.windup()
+        if t - self.fixed_at < FLINCH:
+            decoherence.draw(surf, MONSTER, t, "flinch", (t - self.fixed_at) / FLINCH, look)
+        elif t - self.landed_at < BOLT:
+            decoherence.draw(surf, MONSTER, t, "spit", (t - self.landed_at) / BOLT, look)
+        elif windup > 0:
+            decoherence.draw(surf, MONSTER, t, "windup", windup, look)
+        elif t - self.wrong_at < GRIN:
+            decoherence.draw(surf, MONSTER, t, "grin", (t - self.wrong_at) / GRIN, look)
+        else:
+            decoherence.draw(surf, MONSTER, t, "idle", 0.0, look)
+        if windup > 0:
+            decoherence.charge(surf, MONSTER, windup, t)
 
     def _die(self, surf, failed: bool) -> None:
         """The chip: a dark die with pins top and bottom, flashing red on a logical error."""
@@ -308,15 +379,27 @@ class Syndrome(Boss):
             surf.fill(P.MIST, (DIE.x + 2, y, DIE.w - 4, 1))
 
     def _danger(self, surf, failed: bool) -> None:
-        """Three pips, top right: one lights per flipped qubit, and three is a logical error."""
+        """Three pips, top left: one lights per flipped qubit, and three is a logical error."""
         lit = LOSE_AT if failed else len(self.flips)
         label = outlined("DANGER", 8, P.MIST)
-        x = W - 8 - 3 * 11
-        surf.blit(label, (x - label.get_width() - 4, 8))
+        surf.blit(label, (4, 4))
+        x = 4 + label.get_width() + 2
         for k in range(LOSE_AT):
-            c = (x + 4 + k * 11, 12)
+            c = (x + 4 + k * 11, 9)
             on = k < lit
             pygame.draw.circle(surf, P.INK, c, 5)
             pygame.draw.circle(surf, P.BAD if on else P.SLATE, c, 4)
             if on:
                 surf.fill(P.lighten(P.BAD, 0.6), (c[0] - 2, c[1] - 2, 2, 1))
+
+
+_WHITE: list = []
+
+
+def _white() -> pygame.Surface:
+    """A whole screen of white, for the win's flash (made once)."""
+    if not _WHITE:
+        surf = pygame.Surface((W, H))
+        surf.fill(P.WHITE)
+        _WHITE.append(surf)
+    return _WHITE[0]

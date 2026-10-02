@@ -107,7 +107,11 @@ twice in a row.
 After every **12 wins** (in versus: microgames that anyone won) comes a
 **boss**:
 
-- **The warning:** a BOSS! card with hazard stripes and a siren.
+- **The warning:** a BOSS! card with hazard stripes and a siren, showing the
+  boss's portrait, its `BOSS_NAME` and `BOSS_TITLE` (the session picks the
+  boss as the card goes up). Its intro shows the portrait behind the verb.
+- **The music:** a boss track (A Phrygian, 172 bpm, a saw lead, double kicks)
+  plays from the card through the boss's result.
 - **The fight:** one long game in phases, built from verbs players already
   know. It still uses only the stick and A.
 - **Length:** a boss lasts 18 s at level 0, shrinking with the object speed.
@@ -134,7 +138,7 @@ computing.)
 - **Losing:** 3 flipped qubits outvote the other 2, so the majority reads the
   wrong value: a logical error. The chip flashes red, every qubit turns over
   to `|1>`, and the checks go dark, because that is a codeword again. Three
-  danger pips, top right, are the only place the hidden error count shows.
+  danger pips, top left, are the only place the hidden error count shows.
 - **Winning:** survive to the end (`timeout()` wins). Errors keep coming, so
   doing nothing reaches 3 flips by about 40% of the time.
 - **The three phases** (thirds of the fight; all times shrink with speed):
@@ -152,6 +156,15 @@ computing.)
   press can still make them.
 - **The bot** knows the flipped set; it looks for 0.2 s, then steps once
   every 0.12 s to the nearest flipped qubit and presses A.
+- **The monster, DECOHERENCE, "THE NOISE":** a blob of static (dithered
+  violet and pink, flickering, with a ragged edge) above the chip, its big
+  eyes following the cursor. It throws every error: 0.5 s before one lands it
+  swells, its eyes glow red, its mouth opens and charge gathers, then it
+  spits a bolt that splashes round the whole chip. The bolt, the splash and
+  their timing never depend on the qubit hit (a test compares the frames of
+  attacks on qubits 0 and 4), so the checks stay the only clue. It flinches
+  at a fix (X-eyes, "OW!"), grins at a wrong press, laughs at a logical error
+  and, on a win, dissolves into pixels in a white flash.
 - **Hint:** "A BETWEEN THE RED CHECKS".
 - **Caption:** "Parity checks find errors without measuring the qubits".
 
@@ -214,5 +227,6 @@ created from the same seed.
 ## Out of scope for v1
 
 - More than 12 microgames: new ones drop into `microgames/` and the registry.
-- More bosses (DECOHERENCE DEMON and GROVER'S VAULT were pitched).
+- More bosses (GROVER'S VAULT was pitched; DECOHERENCE became SYNDROME!'s
+  monster).
 - Co-op with shared lives.

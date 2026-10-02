@@ -116,11 +116,21 @@ class Microgame:
 
 class Boss(Microgame):
     """A boss: one long game with phases. It lasts DURATION seconds at level 0,
-    shrinking with the object speed, so a faster level is a shorter fight."""
+    shrinking with the object speed, so a faster level is a shorter fight.
+
+    A boss is a character too: BOSS_NAME and BOSS_TITLE go on the BOSS! card
+    and the intro, next to its portrait()."""
 
     BOSS = True
     POINTS = 3
     DURATION = 18.0
+    BOSS_NAME = ""  # e.g. "DECOHERENCE"...
+    BOSS_TITLE = ""  # ...and "THE NOISE"
+
+    @classmethod
+    def portrait(cls, surf, center, t: float) -> None:
+        """Draw the boss's face centred at `center` on a pygame surface, for the
+        cards (the same art as in the game). `t` is seconds, for its animation."""
 
     @classmethod
     def duration_for(cls, level: int) -> float:

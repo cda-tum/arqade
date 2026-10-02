@@ -149,6 +149,7 @@ class Session:
         self.registry = list(registry if registry is not None else REGISTRY)
         self.bosses = list(bosses if bosses is not None else BOSSES)
         self.boss_index = 0  # bosses come round in order
+        self.next_boss: type[Microgame] | None = None  # the one the BOSS! card announces
         self.toward_boss = 0  # wins since the last boss
         self.mode = 1  # 1 or 2 players
         self.state = TITLE
@@ -344,6 +345,8 @@ class Session:
         next microgame."""
         if self.bosses and self.toward_boss >= config.BOSS_EVERY:
             self.toward_boss = 0
+            self.next_boss = self.bosses[self.boss_index % len(self.bosses)]  # chosen now, for the card
+            self.boss_index += 1
             self._set_state(BOSS_CARD)
             events.append(Cue("boss"))
         else:
@@ -365,9 +368,7 @@ class Session:
 
     def _on_boss_card(self, dt: float, inp: FrameInput, events: list) -> None:
         if self.t >= config.BOSS_CARD_TIME:
-            boss = self.bosses[self.boss_index % len(self.bosses)]
-            self.boss_index += 1
-            self._next_microgame(events, boss)
+            self._next_microgame(events, self.next_boss)
 
     def _on_game_over(self, dt: float, inp: FrameInput, events: list) -> None:
         if self.t >= config.GAME_OVER_TIME:
@@ -429,6 +430,7 @@ class Session:
         self.played = 0
         self.toward_boss = 0
         self.boss_index = 0
+        self.next_boss = None
         self.seen = set()
         self.appearances = {}
         self.deck = Deck(self.registry, self.rng)

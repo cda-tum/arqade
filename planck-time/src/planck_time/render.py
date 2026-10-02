@@ -20,6 +20,7 @@ import pygame
 from planck_time import config
 from planck_time import palette as P
 from planck_time import session as S
+from planck_time.microgames import BOSSES
 from planck_time.pixel import backdrop, blit_center, orb, outlined
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
@@ -27,6 +28,8 @@ SW, SH = config.SCREEN_W, config.SCREEN_H
 BEZEL_W, BEZEL_H = 300, 200
 KEY = (255, 0, 255)  # transparent in the bezels
 PLAYER_NAMES = {"p1": "P1", "p2": "P2"}
+BOSS_FACE = (SW // 2, 30)  # where a boss's portrait goes on its intro: where the game draws it
+CARD_FACE = (62, 62)  # ...and on the BOSS! card
 INPUT_LABELS = {"stick": "STICK", "a": "PRESS A", "mash": "MASH A!", "stick+a": "STICK + A"}
 
 HEART = (
@@ -123,6 +126,9 @@ class Renderer:
         self.shake = {p: 0.0 for p in S.PLAYERS}
         self.led = {p: 0.0 for p in S.PLAYERS}
         self.rng = random.Random(5)
+        scratch = pygame.Surface((SW, SH))
+        for boss in BOSSES:  # build each boss's art now, not on its first frame
+            boss.portrait(scratch, (SW // 2, SH // 2), 0.0)
 
     # --- the frame ------------------------------------------------------------------------
 
@@ -254,16 +260,21 @@ class Renderer:
 
     def _intro(self, s: S.Session, screen: pygame.Surface, game) -> None:
         """The verb drops in letter by letter, squashes and bounces; below it,
-        the one input the microgame uses (animated the first time it comes up)."""
+        the one input the microgame uses (animated the first time it comes up).
+        A boss's portrait looms behind the verb, with its name under it."""
         verb = game.VERB
         size = 24 if len(verb) * 24 <= SW - 16 else 16
         x0 = SW // 2 - len(verb) * size // 2
+        base = 52
+        if game.BOSS:
+            game.portrait(screen, BOSS_FACE, s.t)
+            base = 64
         for i, ch in enumerate(verb):
             lt = s.t - i * 0.05
             if lt < 0:
                 continue
             img = outlined(ch, size, P.GOLD)
-            y = 52 - 36 * max(0.0, 1 - lt / 0.18) ** 2
+            y = base - 36 * max(0.0, 1 - lt / 0.18) ** 2
             if 0.18 <= lt < 0.3:  # squash on landing
                 img = pygame.transform.scale(img, (round(img.get_width() * 1.2), round(img.get_height() * 0.75)))
                 y += 4
@@ -271,11 +282,9 @@ class Renderer:
                 y -= 3 * abs(math.sin(s.t * 5 + i * 0.7))
             screen.blit(img, (x0 + i * size + size // 2 - img.get_width() // 2, round(y) - img.get_height() // 2))
         if game.BOSS:
-            tag = outlined("BOSS", 8, P.WHITE)
-            box = tag.get_rect(center=(SW // 2, 18)).inflate(10, 4)
-            pygame.draw.rect(screen, P.INK, box.inflate(2, 2), border_radius=3)
-            pygame.draw.rect(screen, P.BAD, box, border_radius=3)
-            blit_center(screen, tag, box.center)
+            self._boss_tag(screen, (22, 10))
+            if game.BOSS_NAME:
+                blit_center(screen, outlined(game.BOSS_NAME, 8, P.PINK), (SW // 2, base + 17))
         panel = pygame.Rect(0, 0, 112, 66)
         panel.midtop = (SW // 2, 88)
         pygame.draw.rect(screen, P.INK, panel.inflate(4, 4), border_radius=8)
@@ -356,8 +365,16 @@ class Renderer:
         for x in range(-24 + off, SW, 24):
             screen.blit(outlined(">", 8, P.CREAM, shadow=False), (x, 146))
 
+    def _boss_tag(self, screen, center) -> None:
+        tag = outlined("BOSS", 8, P.WHITE)
+        box = tag.get_rect(center=center).inflate(10, 4)
+        pygame.draw.rect(screen, P.INK, box.inflate(2, 2), border_radius=3)
+        pygame.draw.rect(screen, P.BAD, box, border_radius=3)
+        blit_center(screen, tag, box.center)
+
     def _boss_card(self, s: S.Session, screen) -> None:
-        """WARNING-style: red hazard stripes scrolling, BOSS! shaking in the middle."""
+        """WARNING-style: red hazard stripes scrolling; the boss's portrait on the
+        left over its name and title, like a fighter's; BOSS! shaking on the right."""
         flash = int(self.t * 6) % 2
         screen.fill(P.shade(P.BAD, 0.35) if flash else P.INK)
         off = int(self.t * 40) % 16
@@ -365,10 +382,23 @@ class Renderer:
             screen.fill(P.GOLD, (0, y0, SW, 12))
             for x in range(-16 + off, SW + 16, 16):
                 pygame.draw.polygon(screen, P.INK, ((x, y0), (x + 8, y0), (x + 2, y0 + 12), (x - 6, y0 + 12)))
+        boss = s.next_boss
         shake = self.rng.randint(-2, 2) if s.t < 1.2 else 0
-        blit_center(screen, outlined("WARNING", 8, P.GOLD if flash else P.WHITE), (SW // 2, 50))
-        blit_center(screen, outlined("BOSS!", 32, P.BAD), (SW // 2 + shake, 82 + shake))
-        blit_center(screen, outlined("WORTH 3 POINTS", 8, P.WHITE), (SW // 2, 112))
+        right = SW // 2 if boss is None else 172
+        if boss is not None:
+            boss.portrait(screen, (CARD_FACE[0], CARD_FACE[1]), s.t)
+            if boss.BOSS_NAME:
+                blit_center(screen, outlined(boss.BOSS_NAME, 8, P.PINK), (CARD_FACE[0], 104))
+            if boss.BOSS_TITLE:
+                blit_center(screen, outlined(boss.BOSS_TITLE, 8, P.MIST), (CARD_FACE[0], 117))
+        blit_center(screen, outlined("WARNING", 8, P.GOLD if flash else P.WHITE), (right, 40))
+        blit_center(screen, outlined("BOSS!", 24, P.BAD), (right + shake, 64 + shake))
+        worth = outlined("WORTH 3 POINTS", 8, P.GOLD, shadow=False)
+        badge = worth.get_rect(center=(right, 90)).inflate(8, 6)
+        pygame.draw.rect(screen, P.INK, badge.inflate(2, 2), border_radius=4)
+        pygame.draw.rect(screen, P.NIGHT, badge, border_radius=4)
+        pygame.draw.rect(screen, P.GOLD, badge, 1, border_radius=4)
+        blit_center(screen, worth, badge.center)
 
     def _caption(self, text: str) -> None:
         surf = self.surface

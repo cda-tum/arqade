@@ -494,3 +494,23 @@ def test_the_real_boss_plays_through_inside_a_session():
     while s.state == session.PLAY:
         s.update(DT, frame(s.games["p1"].bot()))
     assert s.games["p1"].result is True
+
+
+class OtherBoss(BossOnA):
+    VERB = "OTHER BOSS!"
+
+
+def test_the_boss_card_knows_its_boss_and_the_bosses_come_in_order():
+    s = make(bosses=(BossOnA, OtherBoss))
+    s.update(DT, confirm())
+    for expected in (BossOnA, OtherBoss, BossOnA):
+        while s.state != session.BOSS_CARD:
+            if s.state == session.PLAY:
+                play_one(s, PRESS)
+            else:
+                s.update(DT, frame())
+        assert s.next_boss is expected  # chosen as the card goes up, for the card to show
+        assert not s.boss  # the last microgame is still the current game
+        while s.state == session.BOSS_CARD:
+            s.update(DT, frame())
+        assert s.game_cls is expected and s.boss

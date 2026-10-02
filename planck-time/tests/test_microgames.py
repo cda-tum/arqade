@@ -104,5 +104,7 @@ def test_the_metadata(cls):
     assert cls.INPUT in INPUTS
     assert 0 < len(cls.CAPTION) <= 64
     missing = _glyph_hash("⟩")  # known missing from Press Start 2P
-    for ch in set(cls.VERB + cls.CAPTION) - {" "}:
+    names = (cls.BOSS_NAME + cls.BOSS_TITLE) if cls.BOSS else ""
+    assert names.isupper() or not names
+    for ch in set(cls.VERB + cls.CAPTION + names) - {" "}:
         assert _glyph_hash(ch) != missing, f"{ch!r} isn't in the font"

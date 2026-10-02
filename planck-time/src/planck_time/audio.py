@@ -14,10 +14,12 @@ import array
 import math
 import random
 import threading
+from dataclasses import dataclass
 
 import pygame
 
 from planck_time import config
+from planck_time import session as S
 from planck_time.session import Cue
 
 SAMPLE_RATE = 22050
@@ -155,18 +157,63 @@ MELODY = [
 ]
 BASS = ["C3 G3 C3 G3", "A2 E3 A2 E3", "F2 C3 F2 C3", "G2 D3 G2 D3"] * 2
 DRUMS = "k.hsk.hs"
+
+# The boss's: darker, faster, more driving. A Phrygian (the flat second, Bb,
+# is the menace), i - bII - i - bIII, then iv - i - bVI - V (an E major, for
+# the pull back round). A saw lead over a pumping eighth-note bass and double
+# kicks.
+BOSS_MELODY = [
+    "A4 A4 E5 A4 F5 E5 A#4 A4", "A4 A4 E5 A4 G5 F5 E5 D5",
+    "A#4 A#4 F5 A#4 G5 F5 D5 A#4", "C5 C5 G5 C5 A#5 A5 G5 E5",
+    "D5 D5 A5 D5 A#5 A5 F5 D5", "A5 E5 A4 E5 A#5 A5 G5 F5",
+    "F4 A4 C5 F5 E5 C5 A4 F4", "E4 G#4 B4 E5 F5 E5 D5 -",
+]
+BOSS_BASS = [f"{r}2 {r}2 {r}3 {r}2 {r}2 {r}2 {r}3 {r}2" for r in ("A", "A#", "A", "C", "D", "A", "F", "E")]
+BOSS_DRUMS = "kkshkksh"
+
+
+@dataclass(frozen=True)
+class Tune:
+    melody: list
+    bass: list
+    bass_beats: float  # each bass note's length
+    bass_wave: str
+    bass_vol: float
+    drums: str
+    drum_vol: float
+
+
+TUNES = {
+    "main": Tune(MELODY, BASS, 1.0, "triangle", 0.30, DRUMS, 0.25),
+    "boss": Tune(BOSS_MELODY, BOSS_BASS, 0.5, "square", 0.15, BOSS_DRUMS, 0.30),
+}
 GAME_BPM = (132, 148, 164, 180)
-TRACKS = {"title": (112, "triangle"), **{f"game{i}": (bpm, "pulse") for i, bpm in enumerate(GAME_BPM)}}
+BOSS_BPM = 172
+TRACKS = {  # name: (bpm, lead wave, tune)
+    "title": (112, "triangle", "main"),
+    **{f"game{i}": (bpm, "pulse", "main") for i, bpm in enumerate(GAME_BPM)},
+    "boss": (BOSS_BPM, "saw", "boss"),
+}
 
 
-def render_track(bpm: float, lead: str) -> array.array:
-    mel = [(n, 0.5) for bar in MELODY for n in bar.split()]
-    bass = [(n, 1.0) for bar in BASS for n in bar.split()]
-    a = voice(mel, bpm, lead, 0.2)
-    b = voice(bass, bpm, "triangle", 0.30, staccato=0.95)
-    d = drums(DRUMS, bpm, len(MELODY), 0.25)
+def render_track(bpm: float, lead: str, tune: Tune = TUNES["main"]) -> array.array:
+    mel = [(n, 0.5) for bar in tune.melody for n in bar.split()]
+    bass = [(n, tune.bass_beats) for bar in tune.bass for n in bar.split()]
+    a = voice(mel, bpm, lead, 0.18 if lead == "saw" else 0.2)
+    b = voice(bass, bpm, tune.bass_wave, tune.bass_vol, staccato=0.95 if tune.bass_beats >= 1 else 0.7)
+    d = drums(tune.drums, bpm, len(tune.melody), tune.drum_vol)
     n = min(len(a), len(b), len(d))
     return array.array("h", (max(-AMP, min(AMP, a[i] + b[i] + d[i])) for i in range(n)))
+
+
+def music_for(s) -> str:
+    """The track a session wants: the title's, the boss's while one is on (its
+    card, intro, fight and result), or the game's."""
+    if s.state == S.TITLE:
+        return "title"
+    if s.state == S.BOSS_CARD or (s.boss and s.state in (S.INTRO, S.PLAY, S.RESULT)):
+        return "boss"
+    return "game"
 
 
 # --- sound effects ------------------------------------------------------------------------
@@ -252,8 +299,8 @@ class Audio:
         return pygame.mixer.Sound(buffer=buf.tobytes())
 
     def _render_all(self) -> None:
-        for name, (bpm, lead) in TRACKS.items():
-            snd = self._sound(render_track(bpm, lead))
+        for name, (bpm, lead, tune) in TRACKS.items():
+            snd = self._sound(render_track(bpm, lead, TUNES[tune]))
             snd.set_volume(config.MUSIC_VOLUME)
             with self._lock:
                 self.tracks[name] = snd

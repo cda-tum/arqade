@@ -68,6 +68,12 @@ new error. Three flipped qubits outvote the other two: a logical error. The
 fight runs in thirds: one error at a time, then faster with some two at once,
 then end qubits and adjacent pairs (whose shared check cancels, so the lit
 checks are two links apart and both qubits in between need an X).
+The noise has a face: DECOHERENCE, a blob of static above the chip that
+winds up and spits every error, though its bolt always splashes the whole
+chip, so only the checks say where it hit. It flinches at a fix, grins at a
+wrong press, laughs at a logical error and dissolves when the qubit
+survives. Its portrait and name are on the BOSS! card, and the boss has its
+own track.
 
 | Action | Cabinet | P1 keyboard | P2 keyboard |
 |---|---|---|---|
@@ -103,6 +109,7 @@ uv run python tools/snapshot.py /tmp/planck-snaps   # every screen and microgame
 | `session.py` | Title, the beats, speed levels, lives, scores, versus, pause, idle, the attract demo. Pure, tested. |
 | `palette.py`, `pixel.py` | The 15-bit GBA palette, and pixel-art helpers (outlined text, orbs, cards, the win/fail overlay). |
 | `render.py` | The 640x360 frame: handheld bezels, HUD, fuse, cards, and every screen. |
+| `decoherence.py` | DECOHERENCE, SYNDROME!'s monster: its pre-rendered static body, face, moods, bolt and dissolve. |
 | `audio.py` | Chiptune effects and music, adapted from Gate Drop's. |
 | `input.py`, `config.py`, `hiscores.py` | Pads and the dev keyboard; every tuning number and button; the top-10 table. |
 

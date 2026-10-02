@@ -69,3 +69,25 @@ def test_pause_menu_renders(surface):
     s.update(DT, FrameInput(activity=True, pauses={"p1": True, "p2": False}))
     assert s.paused
     r.draw(s, [], DT)
+
+
+@pytest.mark.parametrize("mode", (1, 2))
+def test_the_boss_card_intro_and_fight_render(surface, mode):
+    s = Session(random.Random(4), Hiscores(None))
+    s.mode = mode
+    r = Renderer(surface)
+    s.update(DT, FrameInput(activity=True, confirms={"p1": True, "p2": False}))
+    s.toward_boss = config.BOSS_EVERY
+    seen = set()
+    for _ in range(round(40 / DT)):
+        fi = FrameInput(activity=True)
+        if s.state == S.PLAY:
+            fi.players = {p: g.bot() for p, g in s.games.items()} | {
+                p: PlayerInput() for p in S.PLAYERS if p not in s.games}
+        r.draw(s, s.update(DT, fi), DT)
+        if s.state == S.BOSS_CARD:
+            assert s.next_boss is not None and s.next_boss.BOSS_NAME
+        seen.add((s.state, s.boss))
+        if s.boss and s.state == S.RESULT:
+            break
+    assert {(S.BOSS_CARD, False), (S.INTRO, True), (S.PLAY, True), (S.RESULT, True)} <= seen
