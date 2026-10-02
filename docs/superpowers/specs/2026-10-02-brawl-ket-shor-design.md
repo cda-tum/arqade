@@ -139,9 +139,10 @@ a logical error.
   once (real QEC also schedules extra rounds of checks), clearing every
   correctable error. 4 s cooldown.
 - **COLLAPSE** (air + X): a body slam that drifts towards the rival. A direct
-  hit is Z on HIGH; the landing shockwave is Z on LOW. A rival caught by both
-  has two rows flipped: one slam is a logical error. A long landing recovery
-  punishes a whiff.
+  hit is Z on HIGH; the landing shockwave (60 px either side) is Z on LOW.
+  Crouching ducks the slam and jumping clears the shockwave, but a rival
+  caught standing takes both: two rows flipped, so one slam is a logical
+  error. A long landing recovery punishes a whiff.
 
 ### Shared
 
@@ -181,7 +182,7 @@ mid-switch is a logical error" rule go.
 | DIVE | startup 3, falls at 10 px/frame with a slight forward drift (~12 frames to the floor from the apex), bounces back on a hit, 8 frames of landing recovery |
 | SYNDROME GRAB | startup 16, then a dash of up to 30 frames at ~6 px/frame (reach ~130 px), 30 frames of recovery on a whiff |
 | RE-ENCODE | startup 6, 4 s cooldown |
-| COLLAPSE | drifts 2 px/frame towards the rival while falling, shockwave reaches 45 px either side, 20 frames of landing recovery |
+| COLLAPSE | drifts 2 px/frame towards the rival while falling; the shockwave reaches 60 px either side (now 45); 20 frames of landing recovery |
 
 **Bots** read the rival's grid: A then B at the height of a lit row, and
 specials on two different rows. They play the attract demo and the tests,
