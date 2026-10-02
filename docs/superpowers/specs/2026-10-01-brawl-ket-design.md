@@ -1,5 +1,11 @@
 # Brawl-Ket: design
 
+> **Superseded (2026-10-02):** the rules in sections 1-3 (the repetition code,
+> stance as the code basis, the frame data) are replaced by
+> `2026-10-02-brawl-ket-shor-design.md`, after the first cabinet playtest. The
+> flow, look and architecture here still hold where that spec doesn't change
+> them.
+
 A one-on-one fighting game for the ARQADE cabinet, in the style of a small
 Street Fighter: health bars, light and heavy attacks, combos, specials. The
 twist is quantum error correction, and it is exact. Each fighter is a logical
