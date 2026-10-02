@@ -1,4 +1,4 @@
-"""The main loop: input -> fixed 60 Hz match steps -> render once per frame."""
+"""The main loop: input -> fixed 60 Hz match steps -> sound and render once per frame."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from dataclasses import replace
 import pygame
 
 from . import config
+from .audio import make_audio, music_for
 from .display import make_display, present
 from .fonts import load_font
 from .input import PLAYERS, Input
@@ -56,6 +57,7 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
     pygame.mouse.set_visible(False)
 
     inp = Input()
+    audio = make_audio()
     match = Match()
     renderer = Renderer(surface)
     fps_font = load_font(8)
@@ -84,6 +86,9 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
             events += match.update(pending)
             pending = consume(pending)
 
+        audio.music(music_for(match))
+        audio.update()
+        audio.play_events(events)
         renderer.draw(match, events)
         if show_fps:
             label = fps_font.render(f"{clock.get_fps():.0f} FPS", False, config.COLOR_FPS)
