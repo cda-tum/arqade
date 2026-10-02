@@ -13,12 +13,12 @@ from __future__ import annotations
 import random
 from collections import deque
 
-from .config import THROW_RANGE
 from .fight import Fight
 from .fighter import FighterInput
 
 STRIKE_RANGE = 66       # px between the fighters' x where a ground normal can reach (the jab: about 72)
 AIR_RANGE = 50          # the same for an air attack, whose boxes are shorter
+GRAB_RANGE = 66         # a lunging command throw (SYNDROME GRAB) reaches about this far
 PRESS_GAP = 4           # frames between two presses, so every press is a fresh edge
 LONG_CROUCH = 40        # a rival crouched this long gets thrown (a throw ignores the code)
 
@@ -99,24 +99,39 @@ class Bot:
         roll = self.rng.random()
         if self.chain:              # a buffered first press is about to come out
             return FighterInput(down=self.down)
-        if dist <= THROW_RANGE and self.rival_crouched > LONG_CROUCH and roll < 0.1 \
+        rival = fight.fighters[self.rival]
+        if self._wants_reencode(me) and self.gap == 0:
+            self.down = True        # the switch to the crouch comes first; the press waits
+            return self._press("x", 0)
+        if dist <= me.throw_range and self.rival_crouched > LONG_CROUCH and roll < 0.1 \
                 and self.gap == 0:
             return self._press("b", toward)
+        if me.throw_range < dist <= GRAB_RANGE and not self.down and roll < 0.008 \
+                and self.gap == 0 and me.char.moves["stand.X"].kind == "throw":
+            return self._press("x", 0)                          # a SYNDROME GRAB
         if dist <= STRIKE_RANGE:
             if roll < 0.02 and self.gap == 0:
                 if self.rng.random() < 0.2:
                     self.down = not self.down   # strike from the other code
-                self.chain = self.rng.choice((["a", "b"], ["a", "a", "b"]))
+                # a string long enough to beat the rival's majority vote (3 hits on a d=5)
+                strings = [c for c in (["a", "b"], ["a", "a", "b"]) if len(c) > rival.code.t]
+                self.chain = self.rng.choice(strings)
                 return self._press(self.chain.pop(0), 0)
             return FighterInput(down=self.down)
         # Out of range. Crouching can't walk, so stand up and approach.
         self.down = False
         if roll < 0.01:
             return FighterInput(up=True, dx=toward)             # jump in
-        if roll < 0.03 and dist > 90 and self.gap == 0 \
+        if roll < 0.03 and dist > 90 and self.gap == 0 and me.char.moves["stand.X"].kind == "projectile" \
                 and not any(s.owner == self.player for s in fight.shots):
             return self._press("x", 0)                          # a PHOTON from range
         return FighterInput(dx=toward)
+
+    def _wants_reencode(self, me) -> bool:
+        """RE-ENCODE (crouch.X) as soon as the code is one hit from breaking, if it is ready."""
+        move = me.char.moves["crouch.X"]
+        return (move.kind == "reencode" and len(me.code.flipped) >= me.code.t
+                and me.cooldowns.get("crouch.X", 0) == 0 and self.rng.random() < self.skill)
 
     def _press(self, button: str, dx: int) -> FighterInput:
         self.gap = PRESS_GAP

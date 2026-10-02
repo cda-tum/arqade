@@ -6,7 +6,7 @@ from brawl_ket import qec
 from brawl_ket.config import FLOOR_Y, SWITCH_FRAMES
 from brawl_ket.fight import SHOT_SPAWN_OFFSET
 from brawl_ket.fighter import Fighter
-from brawl_ket.moves import CHARACTERS, TRIO, Move
+from brawl_ket.moves import CHARACTERS, QUINT, TRIO, Move
 from brawl_ket.poses import (
     EASE_FRAMES,
     POSE_NAMES,
@@ -63,6 +63,25 @@ def test_facing_left_is_the_mirror_image():
         for key in KEYS:
             assert left[key][0] - FEET[0] == pytest.approx(FEET[0] - right[key][0])
             assert left[key][1] == pytest.approx(right[key][1])
+
+
+def test_every_move_with_a_hitbox_names_its_striker():
+    for _slot, move in all_moves():
+        if move.hitbox is not None:
+            assert move.name in STRIKER, move.name
+
+
+def test_quints_specials_have_their_own_poses():
+    moves = QUINT.moves
+    assert moves["stand.X"].poses[:2] == ("grab_wind", "grab")
+    assert moves["crouch.X"].poses[1] == "brace"
+    assert moves["air.X"].poses[1] == "slam"
+
+
+def test_the_slam_falls_feet_first_under_the_hip():
+    j = joints(POSES["slam"], "heavy", FEET, 1)
+    for foot in ("foot_f", "foot_b"):
+        assert abs(j[foot][0] - j["hip"][0]) <= 20, foot
 
 
 def test_the_hip_stands_over_the_fighters_x():
@@ -224,6 +243,7 @@ STRIKER = {
     "jab": "hand_f", "heavy": "hand_f", "low jab": "hand_f", "sweep": "foot_f",
     "air jab": "hand_f", "jump-in": "foot_f", "throw": "hand_f",
     "PHASE SLIDE": "foot_f", "DIVE": "foot_f",
+    "SYNDROME GRAB": "hand_f", "COLLAPSE": "foot_f",
 }
 REACH = 12      # px: a joint is drawn with a fist/foot about this big around it
 

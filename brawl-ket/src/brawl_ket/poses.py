@@ -86,13 +86,22 @@ POSES: dict[str, Pose] = {
     "slide": Pose(-58, 125, 55, 150, 70, 150, 170, -110, -150, drop=6),
     # air.X DIVE: a steep diving kick, foot first
     "dive": Pose(-30, 30, 30, -10, 70, 120, 160, -60, -30),
+    # QUINT's stand.X SYNDROME GRAB: both arms drawn back low, then a lunging two-handed grab
+    # round the waist (the lunge carries it into the rival)
+    "grab_wind": Pose(-8, 26, -6, -30, -16, -40, 30, -60, 20),
+    "grab": Pose(18, 44, 2, -36, -20, 10, 100, 0, 95),
+    # QUINT's crouch.X RE-ENCODE: braced low, forearms crossed in front, a reset
+    "brace": Pose(10, 95, -4, 30, -86, 70, 150, 60, 170),
+    # QUINT's air.X COLLAPSE: falling feet first, knees braced, arms flung up
+    "slam": Pose(4, 30, -6, -30, 6, 150, 170, -150, -170),
 }
 POSE_NAMES = tuple(POSES)
 
 BASE_BONES = {"torso": 26, "neck": 9, "shoulder": 22, "upper_arm": 13, "forearm": 13, "thigh": 17, "shin": 17}
+BUILD_BONES = {"heavy": {"neck": 6}}        # the heavy's helmet sits down between its shoulders
 SCALE = {"lean": 2.0, "heavy": 2.3}         # the mockup's proportions: about 130 px tall
 HEAD_R = {"lean": 13, "heavy": 15}
-LIMB_W = {"lean": 12, "heavy": 15}
+LIMB_W = {"lean": 12, "heavy": 16}
 
 
 def lerp(a: Pose, b: Pose, k: float) -> Pose:
@@ -107,7 +116,7 @@ def joints(pose: Pose, build: str, feet: tuple[float, float], facing: int) -> di
     """Screen positions of every joint. The hip stands over feet[0]; the lowest foot
     sits exactly on feet[1] (then the whole puppet is lifted by pose.drop)."""
     s = SCALE[build]
-    bone = {k: v * s for k, v in BASE_BONES.items()}
+    bone = {k: v * s for k, v in {**BASE_BONES, **BUILD_BONES.get(build, {})}.items()}
 
     def at(p: tuple[float, float], angle: float, length: float) -> tuple[float, float]:
         a = math.radians(angle)

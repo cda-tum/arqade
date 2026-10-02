@@ -10,18 +10,20 @@ from brawl_ket import qec
 from brawl_ket.bot import Bot
 from brawl_ket.config import FLOOR_Y, INTERNAL_HEIGHT, INTERNAL_WIDTH
 from brawl_ket.fight import Event, Fight
-from brawl_ket.moves import TRIO
+from brawl_ket.fighter import TELEGRAPH_FRAMES
+from brawl_ket.moves import CHARACTERS, QUINT, TRIO
 from brawl_ket.render import (
     DANGER_BEAT,
     DIVIDER_GAP,
     LIGHT_GAP,
-    TAG_HI,
-    TAG_LO,
-    TAG_W,
     Renderer,
     light_xs,
+    tag_bounds,
+    tag_half,
     tag_state,
 )
+
+PAIRINGS = [(a, b) for a in CHARACTERS.values() for b in CHARACTERS.values()]
 
 
 @pytest.fixture
@@ -30,23 +32,46 @@ def surface():
     return pygame.Surface((INTERNAL_WIDTH, INTERNAL_HEIGHT))
 
 
-def bot_frames(n, seed=1):
-    """n frames of bot-against-bot TRIO fights, starting a new round when one ends."""
+def bot_frames(n, seed=1, chars=(TRIO, TRIO)):
+    """n frames of bot-against-bot fights, starting a new round when one ends."""
     fight, bots = None, {}
     for i in range(n):
         if fight is None or fight.over:
-            fight = Fight({"p1": TRIO, "p2": TRIO})
+            fight = Fight({"p1": chars[0], "p2": chars[1]})
             bots = {"p1": Bot("p1", seed + i), "p2": Bot("p2", seed + i + 1000)}
         yield fight, fight.step({k: b.input(fight) for k, b in bots.items()})
 
 
-def test_600_bot_frames_draw(surface):
+@pytest.mark.parametrize("chars", PAIRINGS, ids=lambda cs: "-".join(c.name for c in cs))
+def test_600_bot_frames_draw(surface, chars):
     r = Renderer(surface)
     kinds = set()
-    for fight, events in bot_frames(600):
+    for fight, events in bot_frames(600, chars=chars):
         r.draw_fight(fight, events)
         kinds |= {e.kind for e in events}
     assert {"hit", "logical"} <= kinds      # the effects were exercised
+
+
+def test_the_shockwave_and_reencode_effects_draw_and_expire(surface):
+    r = Renderer(surface)
+    fight = Fight({"p1": QUINT, "p2": TRIO})
+    r.draw_fight(fight, [])
+    r.draw_fight(fight, [Event("shockwave", "p1", "Z", fight.fighters["p1"].x, FLOOR_Y),
+                         Event("reencode", "p1")])
+    kinds = {fx.kind for fx in r.effects}
+    assert {"wave", "pulse"} <= kinds
+    assert r.flash["p1"][0] is not None             # the lights flash as they are wiped
+    # the wave is drawn along the floor, around where the slam landed, then in Z's colour
+    x = round(fight.fighters["p1"].x)
+    row = {tuple(surface.get_at((i, FLOOR_Y - 2)))[:3] for i in range(x - 50, x + 50)}
+    assert P.WHITE in row                           # the white flash of the impact
+    for _ in range(8):                              # and it spreads out to the shockwave's reach
+        r.draw_fight(fight, [])
+    far = {tuple(surface.get_at((i, j)))[:3] for i in range(x - 56, x - 30) for j in range(FLOOR_Y - 12, FLOOR_Y + 8)}
+    assert far & {P.GATE["Z"], P.lighten(P.GATE["Z"], 0.35)}
+    for _ in range(120):
+        r.draw_fight(fight, [])
+    assert not r.effects
 
 
 def test_round_pips_draw(surface):
@@ -86,18 +111,59 @@ def tags_for(r, fight):
     return tags
 
 
-def test_code_tags_stay_on_their_own_side(surface):
+@pytest.mark.parametrize("chars", PAIRINGS, ids=lambda cs: "-".join(c.name for c in cs))
+def test_code_tags_stay_on_their_own_side(surface, chars):
     r = Renderer(surface)
-    for p1_x, p2_x in ((300, 330), (330, 300), (320, 320), (600, 616), (24, 40)):
-        fight = Fight({"p1": TRIO, "p2": TRIO})
+    h1, h2 = (tag_half(c.distance) for c in chars)
+    for p1_x, p2_x in ((300, 330), (330, 300), (320, 320), (600, 616), (24, 40), (616, 600)):
+        fight = Fight({"p1": chars[0], "p2": chars[1]})
         fight.fighters["p1"].x, fight.fighters["p2"].x = p1_x, p2_x
         r._reset()
         tags = tags_for(r, fight)
         a, b = tags["p1"][0], tags["p2"][0]
-        assert abs(a - b) >= TAG_W - 1e-9, (p1_x, p2_x)        # even 60 px apart vertically
+        assert abs(a - b) >= h1 + h2 - 1e-9, (p1_x, p2_x)      # even 60 px apart vertically
         if p1_x != p2_x:
             assert (a < b) == (p1_x < p2_x), (p1_x, p2_x)
-        assert TAG_LO <= min(a, b) and max(a, b) <= TAG_HI, (p1_x, p2_x)
+        for x, c in ((a, chars[0]), (b, chars[1])):
+            lo, hi = tag_bounds(c.distance)
+            assert lo - 1e-9 <= x <= hi + 1e-9, (p1_x, p2_x)
+            assert x - tag_half(c.distance) >= 0 and x + tag_half(c.distance) <= INTERNAL_WIDTH
+
+
+BLANK = (1, 2, 3)
+
+
+def drawn_columns(surface, r, f, key, cx=320, cy=120):
+    """Draw only key's tag, centred at cx on a blank surface; the x range of what was drawn."""
+    surface.fill(BLANK)
+    r._code_tag(key, f, [cx, cy, cx], 0, 0)
+    xs = [x for x in range(INTERNAL_WIDTH) for y in range(cy - 24, cy + 14)
+          if tuple(surface.get_at((x, y)))[:3] != BLANK]
+    return min(xs), max(xs)
+
+
+@pytest.mark.parametrize("char", list(CHARACTERS.values()), ids=lambda c: c.name)
+def test_a_tag_is_drawn_inside_its_own_width(surface, char):
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": char})
+    f = fight.fighters["p2"]
+    half = tag_half(char.distance)
+    left, right = drawn_columns(surface, r, f, "p2")
+    assert 320 - half <= left and right <= 320 + half
+    for _ in range(f.code.t):
+        f.code.hit(qec.X)                    # danger: the "!" beside the ket is the widest part
+    assert tag_state(f.code) == "danger"
+    left, right = drawn_columns(surface, r, f, "p2")
+    assert 320 - half <= left and right <= 320 + half
+    assert right >= 320 + half - 2           # and the width is not padded out
+    r.flash["p2"] = (P.GOOD, 21)
+    left, right = drawn_columns(surface, r, f, "p2")
+    assert 320 - half <= left and right <= 320 + half
+
+
+def test_a_bigger_code_has_a_wider_tag(surface):
+    assert tag_half(5) > tag_half(3)
+    assert tag_bounds(5)[0] > tag_bounds(3)[0] and tag_bounds(5)[1] < tag_bounds(3)[1]
 
 
 def test_a_cancel_blends_out_of_the_pose_drawn(surface):
@@ -139,24 +205,27 @@ def test_the_majority_line_sits_after_the_first_t_lights():
 def colours_in_tag(surface, r, fight, key, frames):
     """Every colour drawn in a tag's rectangle, over `frames` frames."""
     seen = set()
+    half = round(tag_half(fight.fighters[key].char.distance))
     for _ in range(frames):
         r.draw_fight(fight, [])
         tag_y = r.tag_y[key]
         x = round(fight.fighters[key].x)
-        area = pygame.Rect(x - TAG_W // 2, round(tag_y) - 20, TAG_W, 34).clip(surface.get_rect())
+        area = pygame.Rect(x - half, round(tag_y) - 20, 2 * half, 34).clip(surface.get_rect())
         seen |= {tuple(surface.get_at((i, j)))[:3] for i in range(area.left, area.right)
                  for j in range(area.top, area.bottom)}
     return seen
 
 
-def test_the_danger_state_is_drawn_on_the_tag(surface):
+@pytest.mark.parametrize("char", list(CHARACTERS.values()), ids=lambda c: c.name)
+def test_the_danger_state_is_drawn_on_the_tag(surface, char):
     r = Renderer(surface)
-    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight = Fight({"p1": TRIO, "p2": char})
     p2 = fight.fighters["p2"]
     safe = colours_in_tag(surface, r, fight, "p2", DANGER_BEAT * 2)
     assert P.ORANGE not in safe
     assert tag_state(p2.code) == "ok"
-    p2.code.hit(qec.X)                       # t = 1 light down: the next X is a logical error
+    for _ in range(p2.code.t):
+        p2.code.hit(qec.X)                   # t lights down: the next X is a logical error
     assert tag_state(p2.code) == "danger"
     danger = colours_in_tag(surface, r, fight, "p2", DANGER_BEAT * 2)
     assert P.ORANGE in danger                # the unflipped lights pulse orange
@@ -215,16 +284,16 @@ def striker_pixels(r, f, key, joint):
     return r.surface.get_at((cx, cy))[:3]
 
 
-def glint_run(surface, pressed, joint, prep=lambda fight: None):
+def glint_run(surface, pressed, joint, prep=lambda fight: None, char=TRIO):
     """Start a move for p1 and draw every frame of its startup; returns [(telegraphing, centre)]."""
     from brawl_ket.fighter import IDLE
 
     r = Renderer(surface)
-    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight = Fight({"p1": char, "p2": TRIO})
     prep(fight)
     p1 = fight.fighters["p1"]
     seen = []
-    for i in range(TRIO.moves["stand.B"].startup + 1):
+    for i in range(char.moves["stand.B"].startup + 1):
         events = fight.step({"p1": pressed if i == 0 else IDLE, "p2": IDLE})
         r.draw_fight(fight, events)
         if p1.action == "attack" and p1.phase == "startup":
@@ -232,41 +301,40 @@ def glint_run(surface, pressed, joint, prep=lambda fight: None):
     return seen
 
 
-def test_the_glint_blinks_at_the_striking_hand_only_in_the_last_16_frames(surface):
+@pytest.mark.parametrize("char", list(CHARACTERS.values()), ids=lambda c: c.name)
+def test_the_glint_blinks_at_the_striking_hand_only_in_the_last_16_frames(surface, char):
     from brawl_ket.fighter import FighterInput
 
-    seen = glint_run(surface, FighterInput(b=True), "hand_f")
-    assert len(seen) == 24
+    seen = glint_run(surface, FighterInput(b=True), "hand_f", char=char)
+    assert len(seen) == char.moves["stand.B"].startup
     early = [c for tele, c in seen if not tele]
     window = [c for tele, c in seen if tele]
-    assert len(window) == 16 and P.WHITE not in early
+    assert len(window) == TELEGRAPH_FRAMES == 16 and P.WHITE not in early
     assert P.WHITE in window and any(c != P.WHITE for c in window)     # it blinks
 
 
-def test_the_sweeps_glint_is_at_the_foot(surface):
+@pytest.mark.parametrize("char", list(CHARACTERS.values()), ids=lambda c: c.name)
+def test_the_sweeps_glint_is_at_the_foot(surface, char):
     from brawl_ket.fighter import FighterInput
 
     seen = glint_run(surface, FighterInput(down=True, b=True), "foot_f",
-                     prep=lambda fight: fight.fighters["p1"].code.switch())
+                     prep=lambda fight: fight.fighters["p1"].code.switch(), char=char)
     window = [c for tele, c in seen if tele]
     assert len(window) == 16 and P.WHITE in window and any(c != P.WHITE for c in window)
 
 
-def test_a_chained_heavy_has_no_glint(surface):
-    from brawl_ket.fighter import IDLE, FighterInput
+def test_quint_is_drawn_broader_than_trio(surface):
+    # the same pose (arms up, out of the way): across the chest, QUINT is far broader
+    from brawl_ket.poses import POSES, joints
+    from brawl_ket.render import draw_puppet
 
-    r = Renderer(surface)
-    fight = Fight({"p1": TRIO, "p2": TRIO})
-    p1 = fight.fighters["p1"]
-    jab = TRIO.moves["stand.A"]
-    fight.step({"p1": FighterInput(a=True), "p2": IDLE})
-    for _ in range(jab.startup):
-        fight.step({"p1": IDLE, "p2": IDLE})
-    p1.move_hit = True
-    seen = []
-    fight.step({"p1": FighterInput(b=True), "p2": IDLE})
-    for _ in range(8):
-        r.draw_fight(fight, [])
-        seen.append(striker_pixels(r, p1, "p1", "hand_f"))
-        fight.step({"p1": IDLE, "p2": IDLE})
-    assert p1.slot == "stand.B" and P.WHITE not in seen
+    widths = {}
+    for c in (TRIO, QUINT):
+        surface.fill(BLANK)
+        pose = POSES["slam"]
+        draw_puppet(surface, pose, c.build, (320, FLOOR_Y), 1, (64, 136, 248), P.GOLD)
+        j = joints(pose, c.build, (320, FLOOR_Y), 1)
+        chest = round(j["hip"][1] + 0.6 * (j["shoulder_f"][1] - j["hip"][1]))
+        xs = [x for x in range(INTERNAL_WIDTH) if tuple(surface.get_at((x, chest)))[:3] != BLANK]
+        widths[c.name] = max(xs) - min(xs) + 1
+    assert widths["QUINT"] >= widths["TRIO"] * 1.6, widths

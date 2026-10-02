@@ -77,6 +77,7 @@ class Fighter:
         self.switch_left = 0
         self.cooldowns: dict[str, int] = {}
         self.buffer: list[Press] = []   # oldest first
+        self.throw_range: float = THROW_RANGE   # the fight sets it from the pairing's push box
 
     # --- derived state ----------------------------------------------------------------
 
@@ -288,7 +289,7 @@ class Fighter:
     def _slot_for(self, btn: str, dx: int, rival_x: float) -> str:
         if self.y > 0:
             return f"air.{btn.upper()}"
-        if btn == "b" and dx == self.facing and abs(rival_x - self.x) <= THROW_RANGE:
+        if btn == "b" and dx == self.facing and abs(rival_x - self.x) <= self.throw_range:
             return "throw"
         prefix = "crouch" if self.stance == "crouch" else "stand"
         return f"{prefix}.{btn.upper()}"
@@ -374,7 +375,9 @@ class Fighter:
             self._land(events)
 
     def _land(self, events: list) -> None:
-        events.append(("land", {}))
+        # "dive": the fighter reached the floor in a dive's active frames (a landing
+        # shockwave, like COLLAPSE's, needs the slam; pressed too late, it lands without one)
+        events.append(("land", {"dive": self._diving()}))
         m = self.move
         if self.action == "attack" and m is not None:
             self.vx = 0.0

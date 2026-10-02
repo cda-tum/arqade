@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 
 from . import qec
 from .config import (
-    BODY_WIDTH,
+    BODY_MARGIN,
     FLOOR_Y,
     HITSTOP,
     HITSTOP_LOGICAL,
@@ -24,6 +24,7 @@ from .config import (
     STAGE_LEFT,
     STAGE_RIGHT,
     START_X,
+    THROW_SLACK,
 )
 from .fighter import IDLE, Fighter, FighterInput
 from .moves import Box, Character, Move
@@ -38,7 +39,8 @@ Rect = tuple[float, float, float, float]    # (left, top, w, h), y down
 
 @dataclass(frozen=True)
 class Event:
-    # attack, hit, logical, corrected, projectile, switch, ko, timeout, land, reencode
+    # attack, hit, logical, corrected, projectile, switch, ko, timeout, land, reencode,
+    # shockwave (a landing shockwave opens: error is its error, x/y where it spreads from)
     kind: str
     player: str | None = None       # who it happened TO (hit/logical: the defender)
     error: str | None = None        # X / Z / Y for hit and logical
@@ -102,6 +104,12 @@ def _overlap(a: Rect, b: Rect) -> tuple[float, float] | None:
     return ((left + right) / 2, (top + bottom) / 2)
 
 
+def body_width(a: Character, b: Character) -> float:
+    """How close two grounded fighters may stand (px between their x): the push box, each
+    standing hurtbox plus BODY_MARGIN. A heavy is broader, so it keeps a lean rival further off."""
+    return (a.hurt_stand.w + b.hurt_stand.w) / 2 + 2 * BODY_MARGIN
+
+
 def _other(key: str) -> str:
     return "p2" if key == "p1" else "p1"
 
@@ -112,6 +120,9 @@ class Fight:
             "p1": Fighter(chars["p1"], START_X["p1"], 1),
             "p2": Fighter(chars["p2"], START_X["p2"], -1),
         }
+        self.body_width = body_width(chars["p1"], chars["p2"])
+        for f in self.fighters.values():   # a throw reaches a little past the push box
+            f.throw_range = self.body_width + THROW_SLACK
         self.shots: list[Shot] = []
         self.frames_left = ROUND_FRAMES
         self.hitstop = 0
@@ -160,20 +171,23 @@ class Fight:
                     ))
                     events.append(Event("projectile", key))
                 else:
-                    if kind == "land" and f.move is not None and f.move.landing is not None:
-                        self._landings[key] = _Landing(f.move)
                     events.append(Event(kind, key))
+                    if kind == "land" and data["dive"] and f.move is not None \
+                            and f.move.landing is not None:
+                        self._landings[key] = _Landing(f.move)
+                        events.append(Event("shockwave", key, f.move.landing_error, f.x, FLOOR_Y))
 
     def _push_apart(self) -> None:
-        """The bodies are solid: two grounded fighters never stand closer than BODY_WIDTH."""
+        """The bodies are solid: two grounded fighters never stand closer than body_width."""
         a, b = self.fighters["p1"], self.fighters["p2"]
-        if a.y > 0 or b.y > 0 or abs(b.x - a.x) >= BODY_WIDTH:
+        width = self.body_width
+        if a.y > 0 or b.y > 0 or abs(b.x - a.x) >= width:
             return
         side = 1 if b.x > a.x else -1 if b.x < a.x else a.facing   # b is on this side of a
-        half = (BODY_WIDTH - abs(b.x - a.x)) / 2
+        half = (width - abs(b.x - a.x)) / 2
         a.x = _clamp(a.x - side * half)
         b.x = _clamp(b.x + side * half)
-        gap = BODY_WIDTH - abs(b.x - a.x)
+        gap = width - abs(b.x - a.x)
         if gap > 0:     # one of them is against a wall: the other takes all of it
             if a.x in (STAGE_LEFT, STAGE_RIGHT):
                 b.x = _clamp(b.x + side * gap)
@@ -264,7 +278,9 @@ class Fight:
             return
         move = win.move
         assert move.landing is not None and move.landing_error is not None
-        if not win.hit and rival.action != "knockdown":
+        # the shockwave knocks over a rival standing ready: one already reeling (from the
+        # slam itself, say) is not hit by it again
+        if not win.hit and rival.action not in _STUNNED:
             where = _overlap(f.world_box(move.landing), rival.hurtbox)
             if where is not None:
                 win.hit = True

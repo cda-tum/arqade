@@ -159,4 +159,82 @@ TRIO = Character(
     }),
 )
 
-CHARACTERS: dict[str, Character] = {"TRIO": TRIO}
+QUINT = Character(
+    name="QUINT",
+    build="heavy",
+    distance=5,                         # t = 2: three hits in one cycle to break it
+    cycle_frames=config.frames(1.5),    # a bigger code takes longer to measure
+    health=100,
+    walk=1.5,
+    jump_vy=10.5,
+    gravity=0.55,                       # an apex of about 100 px: lower and heavier than TRIO's
+    hurt_stand=Box(-18, 0, 36, 132),
+    hurt_crouch=Box(-20, 0, 40, 104),   # to about the drawn head's centre, as TRIO's
+    moves=MappingProxyType({
+        "stand.A": Move(
+            "jab", 6, 3, 10, Box(16, 76, 46, 16), qec.X,
+            chip=2, bonus=0, hitstun=17, knockback=2.0,
+            cancels=("stand.A", "stand.B"),
+            poses=("jab_wind", "jab_hit", "jab_wind"),
+        ),
+        "stand.B": Move(
+            "heavy", 28, 5, 20, Box(16, 70, 48, 22), qec.X,
+            chip=6, bonus=14, hitstun=22, knockback=6.0, chain_startup=11,
+            poses=("heavy_wind", "heavy_hit", "heavy_recover"),
+        ),
+        "crouch.A": Move(
+            "low jab", 7, 3, 11, Box(14, 22, 46, 14), qec.Z,
+            chip=2, bonus=0, hitstun=16, knockback=2.0,
+            cancels=("crouch.A", "crouch.B"),
+            poses=("low_wind", "low_hit", "low_wind"),
+        ),
+        "crouch.B": Move(
+            "sweep", 28, 4, 22, Box(12, 6, 54, 14), qec.Z,
+            chip=6, bonus=14, hitstun=24, knockback=2.5, knockdown=True, chain_startup=12,
+            poses=("sweep_wind", "sweep_hit", "crouch"),
+        ),
+        "air.A": Move(
+            "air jab", 5, 6, 5, Box(12, 54, 30, 20), qec.X,
+            chip=2, bonus=0, hitstun=15, knockback=1.5,
+            poses=("jump", "air_jab", "jump"),
+        ),
+        "air.B": Move(
+            "jump-in", 8, 6, 8, Box(10, 30, 40, 28), qec.X,
+            chip=6, bonus=14, hitstun=20, knockback=3.0,
+            poses=("jump", "air_kick", "jump"),
+        ),
+        "throw": Move(
+            "throw", 6, 2, 24, Box(0, 40, 44, 70), qec.Y,
+            chip=0, bonus=14, hitstun=30, knockback=6.0, knockdown=True,
+            kind="throw",
+            poses=("throw_reach", "throw_hold", "idle"),
+        ),
+        # A lunging command throw: a Y error, so a logical error in either stance. It
+        # reaches much further than a throw, but whiffs into a long recovery.
+        "stand.X": Move(
+            "SYNDROME GRAB", 18, 6, 30, Box(10, 40, 30, 70), qec.Y,
+            chip=0, bonus=16, hitstun=30, knockback=6.0, knockdown=True,
+            kind="throw", lunge=3.0,
+            poses=("grab_wind", "grab", "throw_hold"),
+        ),
+        # Wipes every flipped light at once (an early correction cycle). It never hits, so
+        # it has no hitbox; its error is unused.
+        "crouch.X": Move(
+            "RE-ENCODE", 6, 1, 18, None, qec.Z,
+            chip=0, bonus=0, hitstun=0, knockback=0.0,
+            kind="reencode", cooldown=config.frames(4.0),
+            poses=("crouch", "brace", "crouch"),
+        ),
+        # A body slam straight down: the body is an X error, and the landing shockwave
+        # deals a Z error to a rival standing near (fight.py, _Landing).
+        "air.X": Move(
+            "COLLAPSE", 6, 60, 16, Box(-20, 0, 40, 30), qec.X,
+            chip=6, bonus=16, hitstun=20, knockback=3.0,
+            kind="special", dive=(0.0, 9.0),
+            landing=Box(-45, 0, 90, 14), landing_error=qec.Z,
+            poses=("jump", "slam", "crouch"),
+        ),
+    }),
+)
+
+CHARACTERS: dict[str, Character] = {"TRIO": TRIO, "QUINT": QUINT}

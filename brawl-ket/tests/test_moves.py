@@ -50,17 +50,28 @@ def test_a_chain_startup_is_never_slower_than_the_neutral_one():
             assert 1 <= m.chain_startup <= m.startup, slot
 
 
+TELEGRAPHED = {"TRIO": {"stand.B": (24, 8), "crouch.B": (24, 9)},
+               "QUINT": {"stand.B": (28, 11), "crouch.B": (28, 12)}}
+
+
 def test_the_heavies_telegraph_from_neutral_and_stay_fast_in_a_chain():
-    trio = CHARACTERS["TRIO"].moves
-    assert (trio["stand.B"].startup, trio["stand.B"].chain_startup) == (24, 8)
-    assert (trio["crouch.B"].startup, trio["crouch.B"].chain_startup) == (24, 9)
-    # every other move starts the same way however it begins
-    for slot, m in trio.items():
-        if slot not in ("stand.B", "crouch.B"):
-            assert m.chain_startup is None, slot
-    # the telegraph leaves room for a human reaction plus the stance switch
+    assert set(TELEGRAPHED) == set(CHARACTERS)
+    for name, wanted in TELEGRAPHED.items():
+        moves = CHARACTERS[name].moves
+        for slot, startups in wanted.items():
+            assert (moves[slot].startup, moves[slot].chain_startup) == startups, (name, slot)
+        # every other move starts the same way however it begins
+        for slot, m in moves.items():
+            if slot not in wanted:
+                assert m.chain_startup is None, (name, slot)
+        # the telegraph leaves room for a human reaction plus the stance switch
+        for slot in wanted:
+            assert moves[slot].startup - config.REACTION_FRAMES - config.SWITCH_FRAMES >= 2, (name, slot)
+
+
+def test_quint_winds_up_slower_than_trio():
     for slot in ("stand.B", "crouch.B"):
-        assert trio[slot].startup - config.REACTION_FRAMES - config.SWITCH_FRAMES >= 2, slot
+        assert CHARACTERS["QUINT"].moves[slot].startup > CHARACTERS["TRIO"].moves[slot].startup
 
 
 def test_no_telegraphed_move_recovers_into_its_wind_up_pose():
@@ -79,6 +90,7 @@ def test_poses_exist():
 
 def test_cycle_is_in_frames():
     assert CHARACTERS["TRIO"].cycle_frames == config.frames(1.0) == 60
+    assert CHARACTERS["QUINT"].cycle_frames == config.frames(1.5) == 90
 
 
 def test_every_kind_is_known():
@@ -97,23 +109,32 @@ def logical_cost(m):
     return config.LOGICAL_DAMAGE + m.bonus
 
 
+def hitting(moves, slots):
+    """The slots among `slots` whose move can hit (RE-ENCODE never does)."""
+    return [s for s in slots if moves[s].kind != "reencode"]
+
+
 def test_a_heavy_logical_error_costs_at_least_twice_a_light_one():
-    trio = CHARACTERS["TRIO"].moves
-    for light in LIGHTS:
-        for heavy in HEAVIES + SPECIALS + ("throw",):
-            assert logical_cost(trio[heavy]) >= 2 * logical_cost(trio[light]), (light, heavy)
+    for c in CHARACTERS.values():
+        moves = c.moves
+        for light in LIGHTS:
+            for heavy in hitting(moves, HEAVIES + SPECIALS + ("throw",)):
+                assert logical_cost(moves[heavy]) >= 2 * logical_cost(moves[light]), (c.name, light, heavy)
 
 
 def test_the_damage_tiers():
-    trio = CHARACTERS["TRIO"].moves
     assert config.LOGICAL_DAMAGE == 12
-    for slot in LIGHTS:
-        assert (trio[slot].chip, logical_cost(trio[slot])) == (2, 12), slot
-    for slot in HEAVIES:
-        assert (trio[slot].chip, logical_cost(trio[slot])) == (6, 26), slot
-    for slot in SPECIALS:
-        assert (trio[slot].chip, logical_cost(trio[slot])) == (6, 28), slot
-    assert (trio["throw"].chip, logical_cost(trio["throw"])) == (0, 26)
+    for c in CHARACTERS.values():
+        moves = c.moves
+        for slot in LIGHTS:
+            assert (moves[slot].chip, logical_cost(moves[slot])) == (2, 12), (c.name, slot)
+        for slot in HEAVIES:
+            assert (moves[slot].chip, logical_cost(moves[slot])) == (6, 26), (c.name, slot)
+        for slot in hitting(moves, SPECIALS):
+            # a command throw (SYNDROME GRAB) has no chip: a Y is never a correctable hit
+            chip = 0 if moves[slot].kind == "throw" else 6
+            assert (moves[slot].chip, logical_cost(moves[slot])) == (chip, 28), (c.name, slot)
+        assert (moves["throw"].chip, logical_cost(moves["throw"])) == (0, 26), c.name
 
 
 def test_trio_jump_numbers():
@@ -125,3 +146,105 @@ def test_the_jab_boxes_are_long():
     trio = CHARACTERS["TRIO"].moves
     assert trio["stand.A"].hitbox == Box(14, 70, 44, 14)
     assert trio["crouch.A"].hitbox == Box(12, 20, 44, 12)
+
+
+# --- cross-field invariants -------------------------------------------------------------------
+
+
+def test_a_projectile_move_and_only_one_has_a_projectile():
+    for c, slot, m in all_moves():
+        assert (m.kind == "projectile") == (m.projectile is not None), (c.name, slot)
+
+
+def test_only_a_projectile_or_a_reencode_has_no_hitbox():
+    for c, slot, m in all_moves():
+        if m.hitbox is None:
+            assert m.kind in ("projectile", "reencode"), (c.name, slot)
+
+
+def test_a_dive_is_only_ever_an_air_move():
+    for c, slot, m in all_moves():
+        if m.dive is not None:
+            assert slot.startswith("air."), (c.name, slot)
+
+
+def test_a_landing_shockwave_always_has_its_error():
+    for c, slot, m in all_moves():
+        assert (m.landing is None) == (m.landing_error is None), (c.name, slot)
+        if m.landing is not None:
+            assert m.dive is not None, (c.name, slot)     # it is opened by a dive's landing
+
+
+# --- QUINT ------------------------------------------------------------------------------------
+
+
+def test_quint_stats():
+    q = CHARACTERS["QUINT"]
+    assert (q.build, q.distance, q.health) == ("heavy", 5, 100)
+    assert (q.walk, q.jump_vy, q.gravity) == (1.5, 10.5, 0.55)
+    assert q.hurt_stand == Box(-18, 0, 36, 132)
+    assert q.hurt_crouch == Box(-20, 0, 40, 104)
+
+
+def test_the_crouch_hurtbox_covers_the_drawn_crouch():
+    # up to about the head's centre, as TRIO's does: a hit on the drawn shoulders must land
+    from brawl_ket.poses import POSES, joints
+    for c in CHARACTERS.values():
+        j = joints(POSES["crouch"], c.build, (0.0, 0.0), 1)
+        assert -j["shoulder_f"][1] < c.hurt_crouch.h and abs(c.hurt_crouch.h + j["head"][1]) <= 4, c.name
+
+
+def apex(c):
+    return c.jump_vy ** 2 / (2 * c.gravity)
+
+
+def test_quint_is_the_slower_heavier_fighter():
+    trio, quint = CHARACTERS["TRIO"], CHARACTERS["QUINT"]
+    assert quint.distance > trio.distance and quint.cycle_frames > trio.cycle_frames
+    assert quint.walk < trio.walk
+    assert 95 <= apex(quint) <= 105 < apex(trio)        # about 100 px: lower and heavier
+    assert quint.hurt_stand.w > trio.hurt_stand.w and quint.hurt_stand.h > trio.hurt_stand.h
+
+
+QUINT_FRAMES = {
+    # slot: (name, startup, active, recovery, hitbox, error, hitstun, knockback)
+    "stand.A": ("jab", 6, 3, 10, Box(16, 76, 46, 16), qec.X, 17, 2.0),
+    "stand.B": ("heavy", 28, 5, 20, Box(16, 70, 48, 22), qec.X, 22, 6.0),
+    "crouch.A": ("low jab", 7, 3, 11, Box(14, 22, 46, 14), qec.Z, 16, 2.0),
+    "crouch.B": ("sweep", 28, 4, 22, Box(12, 6, 54, 14), qec.Z, 24, 2.5),
+    "air.A": ("air jab", 5, 6, 5, Box(12, 54, 30, 20), qec.X, 15, 1.5),
+    "air.B": ("jump-in", 8, 6, 8, Box(10, 30, 40, 28), qec.X, 20, 3.0),
+    "throw": ("throw", 6, 2, 24, Box(0, 40, 44, 70), qec.Y, 30, 6.0),
+    "stand.X": ("SYNDROME GRAB", 18, 6, 30, Box(10, 40, 30, 70), qec.Y, 30, 6.0),
+    "crouch.X": ("RE-ENCODE", 6, 1, 18, None, qec.Z, 0, 0.0),
+    "air.X": ("COLLAPSE", 6, 60, 16, Box(-20, 0, 40, 30), qec.X, 20, 3.0),
+}
+
+
+def test_quint_frame_data():
+    moves = CHARACTERS["QUINT"].moves
+    assert set(QUINT_FRAMES) == set(moves)
+    for slot, row in QUINT_FRAMES.items():
+        m = moves[slot]
+        got = (m.name, m.startup, m.active, m.recovery, m.hitbox, m.error, m.hitstun, m.knockback)
+        assert got == row, slot
+
+
+def test_quint_specials():
+    moves = CHARACTERS["QUINT"].moves
+    assert moves["stand.A"].cancels == ("stand.A", "stand.B")
+    assert moves["crouch.A"].cancels == ("crouch.A", "crouch.B")
+    assert moves["crouch.B"].knockdown and moves["throw"].knockdown
+    grab = moves["stand.X"]
+    assert (grab.kind, grab.lunge, grab.knockdown) == ("throw", 3.0, True)
+    reencode = moves["crouch.X"]
+    assert (reencode.kind, reencode.cooldown) == ("reencode", config.frames(4.0))
+    collapse = moves["air.X"]
+    assert collapse.dive == (0.0, 9.0)
+    assert (collapse.landing, collapse.landing_error) == (Box(-45, 0, 90, 14), qec.Z)
+
+
+def test_quint_light_reach_is_long():
+    moves = CHARACTERS["QUINT"].moves
+    assert moves["stand.A"].hitbox == Box(16, 76, 46, 16)
+    assert moves["crouch.A"].hitbox == Box(14, 22, 46, 14)

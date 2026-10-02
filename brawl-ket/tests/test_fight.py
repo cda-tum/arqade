@@ -4,7 +4,7 @@ from types import MappingProxyType
 
 from brawl_ket import qec
 from brawl_ket.config import (
-    BODY_WIDTH,
+    FLOOR_Y,
     HITSTOP,
     HITSTOP_LOGICAL,
     LOGICAL_DAMAGE,
@@ -14,10 +14,11 @@ from brawl_ket.config import (
     STAGE_RIGHT,
     START_X,
     THROW_RANGE,
+    THROW_SLACK,
 )
-from brawl_ket.fight import Event, Fight, Shot, _overlap
+from brawl_ket.fight import Event, Fight, Shot, _overlap, body_width
 from brawl_ket.fighter import IDLE, FighterInput
-from brawl_ket.moves import CHARACTERS, TRIO, Box
+from brawl_ket.moves import CHARACTERS, QUINT, TRIO, Box
 
 A = FighterInput(a=True)
 B = FighterInput(b=True)
@@ -25,12 +26,20 @@ X = FighterInput(x=True)
 JAB = TRIO.moves["stand.A"]
 PHOTON = TRIO.moves["stand.X"]
 
+BODY_WIDTH = body_width(TRIO, TRIO)     # the push box between two TRIOs
 JAB_HIT_STEP = JAB.startup     # 0-based step on which a jab pressed at step 0 first hits
 
 
 def new(gap=40.0):
     """A fresh fight with the fighters `gap` px apart (p1 stays at its start)."""
     fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight.fighters["p2"].x = fight.fighters["p1"].x + gap
+    return fight
+
+
+def versus(c1, c2, gap):
+    """A fresh fight between characters c1 (p1) and c2 (p2), `gap` px apart."""
+    fight = Fight({"p1": c1, "p2": c2})
     fight.fighters["p2"].x = fight.fighters["p1"].x + gap
     return fight
 
@@ -647,16 +656,201 @@ def test_same_inputs_same_fight():
     assert any(e.kind in ("hit", "logical") for e in results[0][0])      # the run did fight
 
 
+PAIRINGS = [(a, b) for a in CHARACTERS.values() for b in CHARACTERS.values()]
+
+
 def test_a_jab_connects_at_the_closest_spacing():
-    # Walked all the way in, the push box holds the fighters BODY_WIDTH apart: a jab
-    # (either side, standing or crouching rival) must still reach.
-    for crouching in (False, True):
+    # Walked all the way in, the push box holds the fighters body_width apart: a jab
+    # (either side, standing or crouching rival, every pairing) must still reach.
+    for (c1, c2), crouching in ((pair, c) for pair in PAIRINGS for c in (False, True)):
         for attacker, rival in (("p1", "p2"), ("p2", "p1")):
-            fight = new(gap=200.0)
+            fight = versus(c1, c2, 200.0)
             for _ in range(120):
                 fight.step({"p1": FighterInput(dx=1), "p2": FighterInput(dx=-1)})
-            assert abs(fight.fighters["p2"].x - fight.fighters["p1"].x) == BODY_WIDTH
+            assert abs(fight.fighters["p2"].x - fight.fighters["p1"].x) == body_width(c1, c2)
             if crouching:
                 fight.fighters[rival].code.switch()
             events = script(fight, 20, **{attacker: {0: A}})
-            assert [e.player for e in of(events, "hit", "logical")] == [rival], (attacker, crouching)
+            assert [e.player for e in of(events, "hit", "logical")] == [rival], (
+                c1.name, c2.name, attacker, crouching)
+
+
+# --- QUINT ------------------------------------------------------------------------------------
+
+GRAB = QUINT.moves["stand.X"]
+DOWN = FighterInput(down=True)
+
+
+def results(events):
+    return [(e.kind, e.error) for e in of(events, "hit", "logical")]
+
+
+def grab_lands(gap, press, crouching=False):
+    """QUINT (p1) presses `press` once at `gap` px from a TRIO; returns the fight and its hits."""
+    fight = versus(QUINT, TRIO, gap)
+    if crouching:
+        fight.fighters["p2"].code.switch()
+    events = script(fight, 70, p1={0: press}, p2=DOWN if crouching else IDLE)
+    return fight, results(events)
+
+
+def test_syndrome_grab_is_logical_on_trio_in_either_stance():
+    for crouching in (False, True):
+        fight, hits = grab_lands(64.0, X, crouching)        # well outside a throw's reach
+        assert hits == [("logical", qec.Y)], crouching      # a Y always beats the code
+        trio = fight.fighters["p2"]
+        assert trio.health == 100 - LOGICAL_DAMAGE - GRAB.bonus
+        assert trio.action == "knockdown"
+        assert trio.code.basis == (qec.PHASE if crouching else qec.BIT)
+
+
+def test_the_syndrome_grab_reaches_further_than_a_throw():
+    def longest(press):
+        return max(g for g in range(int(BODY_WIDTH), 140)
+                   if grab_lands(float(g), press)[1] == [("logical", qec.Y)])
+
+    grab, throw = longest(X), longest(FighterInput(dx=1, b=True))
+    assert throw <= body_width(QUINT, TRIO) + THROW_SLACK
+    assert grab >= throw + 15, (grab, throw)
+
+
+def test_a_whiffed_syndrome_grab_leaves_quint_open():
+    fight = versus(QUINT, TRIO, 140.0)
+    events = script(fight, GRAB.startup + GRAB.active + 5, p1={0: X})
+    assert results(events) == []
+    quint = fight.fighters["p1"]
+    assert (quint.slot, quint.phase) == ("stand.X", "recovery")    # stuck in its long recovery
+
+
+def test_reencode_clears_flipped_lights_and_has_a_cooldown():
+    reencode = QUINT.moves["crouch.X"]
+    fight = versus(TRIO, QUINT, 200.0)
+    quint = fight.fighters["p2"]
+    quint.code.switch()                     # crouched: |+++++>, and crouch.X is RE-ENCODE
+    quint.code.hit(qec.Z)
+    quint.code.hit(qec.Z)                   # t = 2 lights down: one more Z breaks the code
+    hold = {i: DOWN for i in range(400)}
+    events = script(fight, reencode.startup + 1, p2={**hold, 0: FighterInput(down=True, x=True)})
+    assert [(e.kind, e.player) for e in of(events, "attack", "reencode")] == [
+        ("attack", "p2"), ("reencode", "p2")]
+    assert quint.code.flipped == set()      # wiped before the cycle got to it
+    assert quint.code.timer < quint.char.cycle_frames
+    assert quint.code.hit(qec.Z) == qec.FLIPPED     # so the next hit is only correctable again
+    # on cooldown: another press does nothing for 4 s
+    events = script(fight, 60, p2={**hold, 40: FighterInput(down=True, x=True)})
+    assert of(events, "attack", "reencode") == []
+    assert quint.cooldowns["crouch.X"] > 0
+    events = script(fight, reencode.cooldown, p2=hold)
+    events = script(fight, 20, p2={**hold, 0: FighterInput(down=True, x=True)})
+    assert [e.kind for e in of(events, "attack", "reencode")] == ["attack", "reencode"]
+
+
+def collapse(trio_dx, crouching=False, press_at=60):
+    """QUINT (p1) jumps straight up and presses X once it is higher than `press_at` px
+    (on the way up), or, with a negative press_at, once it is falling and lower than
+    -press_at. A TRIO stands (or crouches) trio_dx px to its right. Returns the hits."""
+    fight = versus(QUINT, TRIO, trio_dx)
+    trio = fight.fighters["p2"]
+    if crouching:
+        trio.code.switch()
+    quint = fight.fighters["p1"]
+    events, pressed = [], False
+    for i in range(200):
+        due = quint.y > press_at if press_at > 0 else 0 < quint.y < -press_at and quint.vy < 0
+        inp = FighterInput(up=True) if i == 0 else IDLE
+        if not pressed and quint.action == "jump" and due:
+            inp, pressed = X, True
+        events += fight.step({"p1": inp, "p2": DOWN if crouching else IDLE})
+    assert pressed
+    return results(events), trio
+
+
+def test_collapse_hits_x_directly_and_z_with_the_shockwave():
+    collapse_move = QUINT.moves["air.X"]
+    # straight onto a crouching TRIO (|+++>): the direct X is a logical error, and the
+    # shockwave does not hit it again while it reels
+    hits, trio = collapse(10.0, crouching=True)
+    assert hits == [("logical", qec.X)]
+    assert trio.health == 100 - LOGICAL_DAMAGE - collapse_move.bonus
+    # next to a standing TRIO (|000>): the slam misses, and the Z shockwave is a logical error
+    hits, trio = collapse(48.0)
+    assert hits == [("logical", qec.Z)]
+    assert trio.health == 100 - LOGICAL_DAMAGE - collapse_move.bonus
+    # far away: nothing
+    hits, trio = collapse(150.0)
+    assert hits == [] and trio.health == 100
+
+
+def test_a_collapse_that_lands_before_it_dives_has_no_shockwave():
+    hits, trio = collapse(48.0, press_at=-25)
+    assert hits == [] and trio.health == 100
+
+
+def chain_on(fight, attacker, buttons):
+    """`attacker` presses the buttons as a chain: each one once the move before it has hit."""
+    f = fight.fighters[attacker]
+    queue, events = list(buttons), []
+    for i in range(150):
+        inp = IDLE
+        if queue and (i == 0 or (f.action == "attack" and f.move_hit
+                                 and f.chain == len(buttons) - len(queue))):
+            inp = FighterInput(**{queue.pop(0): True})
+        events += fight.step({attacker: inp})
+    return results(events)
+
+
+def test_quint_needs_three_hits_in_a_cycle():
+    jab, heavy = TRIO.moves["stand.A"], TRIO.moves["stand.B"]
+    fight = versus(TRIO, QUINT, 40.0)
+    assert chain_on(fight, "p1", "aab") == [("hit", qec.X), ("hit", qec.X), ("logical", qec.X)]
+    assert fight.fighters["p2"].health == 100 - 2 * jab.chip - (LOGICAL_DAMAGE + heavy.bonus)
+    # the two-hit string that breaks a TRIO only flips two of QUINT's five lights
+    fight = versus(TRIO, QUINT, 40.0)
+    assert chain_on(fight, "p1", "ab") == [("hit", qec.X), ("hit", qec.X)]
+    fight = versus(TRIO, TRIO, 40.0)
+    assert chain_on(fight, "p1", "ab") == [("hit", qec.X), ("logical", qec.X)]
+
+
+def test_quint_breaks_trio_with_two_hits():
+    fight = versus(QUINT, TRIO, 40.0)
+    assert chain_on(fight, "p1", "ab") == [("hit", qec.X), ("logical", qec.X)]
+
+
+def test_a_collapse_landing_reports_its_shockwave():
+    fight = versus(QUINT, TRIO, 150.0)
+    quint = fight.fighters["p1"]
+    events = []
+    for i in range(120):
+        inp = FighterInput(up=True) if i == 0 else X if quint.action == "jump" and quint.y > 60 else IDLE
+        events += fight.step({"p1": inp})
+    (wave,) = of(events, "shockwave")
+    assert (wave.player, wave.error) == ("p1", qec.Z)
+    assert wave.x == quint.x and wave.y == FLOOR_Y
+    # a plain jump's landing has none
+    fight = versus(QUINT, TRIO, 150.0)
+    assert of(script(fight, 80, p1={0: FighterInput(up=True)}), "shockwave") == []
+
+
+def test_the_push_box_fits_each_pairing():
+    assert BODY_WIDTH == 44 and THROW_RANGE == BODY_WIDTH + THROW_SLACK
+    assert body_width(TRIO, QUINT) == body_width(QUINT, TRIO) > BODY_WIDTH
+    assert body_width(QUINT, QUINT) > body_width(TRIO, QUINT)
+    for c1, c2 in PAIRINGS:
+        fight = versus(c1, c2, 200.0)
+        for _ in range(150):
+            fight.step({"p1": FighterInput(dx=1), "p2": FighterInput(dx=-1)})
+        gap = fight.fighters["p2"].x - fight.fighters["p1"].x
+        assert gap == body_width(c1, c2), (c1.name, c2.name)
+        for f in fight.fighters.values():
+            assert f.throw_range == gap + THROW_SLACK, (c1.name, c2.name)
+
+
+def test_a_throw_works_from_the_closest_spacing_to_the_end_of_its_range():
+    for (c1, c2), crouching in ((pair, c) for pair in PAIRINGS for c in (False, True)):
+        for gap in (body_width(c1, c2), body_width(c1, c2) + THROW_SLACK):
+            fight = versus(c1, c2, float(gap))
+            if crouching:
+                fight.fighters["p2"].code.switch()
+            events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)},
+                            p2=FighterInput(down=True) if crouching else IDLE)
+            assert results(events) == [("logical", qec.Y)], (c1.name, c2.name, gap, crouching)

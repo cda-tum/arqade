@@ -41,8 +41,10 @@ PLAYERS = ("p1", "p2")
 ACCENT = {"TRIO": P.CREAM, "QUINT": P.GOLD}
 
 # how each build is drawn (the skeleton's proportions are in poses.py)
-TORSO_EXTRA = {"lean": 5, "heavy": 8}      # the torso is this much thicker than a limb
-PLATES = {"lean": False, "heavy": True}    # shoulder plates
+TORSO_EXTRA = {"lean": 5, "heavy": 8}      # the lean torso is this much thicker than a limb
+PLATES = {"lean": False, "heavy": True}    # armour: the heavy's wedge torso, plates, helm, gauntlets
+# the heavy's wedge torso: half its width (px) at the shoulders, the waist and the belt
+CHEST_HALF, WAIST_HALF, BELT_HALF = 21, 13, 14
 
 LIGHT_GAP = 11
 DIVIDER_GAP = 4             # extra room after the first t lights, for the majority line
@@ -51,6 +53,7 @@ GLINT_BEAT = 2              # frames per blink phase of the telegraph glint on a
 GLINT_MIN, GLINT_MAX = 8, 16    # the star's reach in px: it grows as the strike gets closer
 TAG_ABOVE_HEAD = 34         # the code lights sit this far above the head's centre
 RING_STEPS = 24             # pre-drawn cycle-ring sprites
+RING_R = 7                  # the ring's radius, px
 BAR_W, BAR_H, BAR_Y = 250, 12, 14
 
 # effect lengths, in frames
@@ -60,12 +63,14 @@ BANNER_FRAMES = 75
 SHAKE_FRAMES = 20
 SHAKE_PX = 6
 FLASH_FRAMES = 24           # the lights after a correction (green) or a logical error (red)
+WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the floor
+WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
+PULSE_FRAMES = 20           # RE-ENCODE: a ring of light growing out of the fighter
 HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
 TAG_FOLLOW = 0.3            # the code lights ease towards the head by this much per frame
-TAG_W = 66                  # the width one code tag (ket, plate of lights and ring) needs
-TAG_LO, TAG_HI = TAG_W / 2 + 4, W - TAG_W / 2 - 4   # where a tag's centre may go
+TAG_EDGE = 4                # a tag keeps this far from the screen's edges
 BANNER_Y = 80
 BANNER_TEXT = "LOGICAL ERROR!"
 
@@ -114,6 +119,32 @@ def tag_state(code: qec.Code) -> str:
     return "danger" if len(code.flipped) == code.t else "ok"
 
 
+def tag_row(n: int) -> int:
+    """The width of a distance-n tag's row: its lights, the majority line and the ring."""
+    return (n - 1) * LIGHT_GAP + DIVIDER_GAP + 16
+
+
+@lru_cache(maxsize=8)
+def tag_half(n: int) -> float:
+    """Half the width a distance-n code tag needs around its centre: the most any part of
+    it reaches out (the plate, the cycle ring, or the ket with the danger "!" beside it).
+    A d=3 tag needs about 66 px, a d=5 one about 82 px. Needs pygame's font module."""
+    row = tag_row(n)
+    plate = row / 2 + 5                         # the plate is row + 8 wide, plus its ink
+    ring = row / 2 + RING_R + 1                 # the ring is centred on the row's right end
+    label = outlined("|" + "0" * n + ">", 8, P.WHITE).get_width()
+    bang = outlined("!", 8, P.BAD)
+    bang_right = label / 2 + 1 + bang.get_width() / 2 + 1 + bang.get_bounding_rect().right \
+        - bang.get_width() / 2
+    return max(plate, ring, label / 2 + 1, bang_right)
+
+
+def tag_bounds(n: int) -> tuple[float, float]:
+    """Where a distance-n tag's centre may go, so the whole tag stays on screen."""
+    half = tag_half(n)
+    return half + TAG_EDGE, W - half - TAG_EDGE
+
+
 def light_xs(x0: float, n: int, t: int) -> list[int]:
     """Where each of the code's n lights sits: evenly spaced, with DIVIDER_GAP extra after
     the first t (the ones the code can repair), where the majority line goes."""
@@ -149,6 +180,9 @@ def _ball(surf: pygame.Surface, p, r: int, color) -> None:
 def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body, accent) -> dict:
     """One fighter, back limbs first. Returns the joints (screen px)."""
     j = joints(pose, build, feet, facing)
+    if PLATES[build]:
+        _draw_armoured(surf, j, build, facing, body, accent)
+        return j
     w = LIMB_W[build]
     dark = P.shade(body, 0.65)
     # the back leg and arm, in shadow
@@ -180,12 +214,102 @@ def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body,
     pygame.draw.circle(surf, P.lighten(body, 0.5), (hx - 4 * facing, hy - 5), 3)
     # the front arm, in front of everything
     limb(surf, j["shoulder_f"], j["elbow_f"], w - 1, body)
-    if PLATES[build]:
-        _ball(surf, j["shoulder_f"], w // 2 + 4, P.shade(accent, 0.85))
-        pygame.draw.circle(surf, P.lighten(accent, 0.5), _pt((j["shoulder_f"][0] - 2 * facing, j["shoulder_f"][1] - 3)), 2)
     limb(surf, j["elbow_f"], j["hand_f"], w - 2, body)
     _ball(surf, j["hand_f"], w // 2 + 1, accent)
     return j
+
+
+def _block(surf: pygame.Surface, p, half: int, color, radius: int = 3) -> None:
+    """A square (a gauntlet), `half` px from its centre to each side, with a 2 px ink outline."""
+    rect = pygame.Rect(0, 0, 2 * half, 2 * half)
+    rect.center = _pt(p)
+    pygame.draw.rect(surf, P.INK, rect.inflate(4, 4), border_radius=radius + 2)
+    pygame.draw.rect(surf, color, rect, border_radius=radius)
+    surf.fill(P.lighten(color, 0.5), (rect.x + 2, rect.y + 2, max(2, half - 2), 2))
+
+
+def _boot(surf: pygame.Surface, foot, facing: int, w: int, color) -> None:
+    """A heavy boot: a block on the foot, its toe pointing the way the fighter faces."""
+    rect = pygame.Rect(0, 0, w + 10, w - 2)
+    rect.midbottom = _pt((foot[0] + 3 * facing, foot[1] + w // 2 + 1))
+    pygame.draw.rect(surf, P.INK, rect.inflate(4, 4), border_radius=4)
+    pygame.draw.rect(surf, color, rect, border_radius=3)
+
+
+def _draw_armoured(surf: pygame.Surface, j: dict, build: str, facing: int, body, accent) -> None:
+    """The heavy build: thick limbs, a broad wedge torso with a chest plate and a belt,
+    plates on both shoulders, gauntlets, boots and a flat-topped helm with a slit visor."""
+    w = LIMB_W[build]
+    dark = P.shade(body, 0.65)
+    boot = P.shade(body, 0.45)
+    metal = P.shade(accent, 0.85)
+    # the back leg and arm, in shadow
+    limb(surf, j["hip"], j["knee_b"], w + 4, dark)
+    limb(surf, j["knee_b"], j["foot_b"], w + 2, dark)
+    _boot(surf, j["foot_b"], facing, w, P.shade(boot, 0.8))
+    limb(surf, j["shoulder_b"], j["elbow_b"], w, dark)
+    limb(surf, j["elbow_b"], j["hand_b"], w - 1, dark)
+    _block(surf, j["hand_b"], w // 2 + 1, P.shade(accent, 0.65))
+    # the torso: a wedge, broad at the shoulders
+    hip, neck, sh = j["hip"], j["neck"], j["shoulder_f"]
+    tx, ty = neck[0] - hip[0], neck[1] - hip[1]
+    n = math.hypot(tx, ty) or 1.0
+    ux, uy = tx / n, ty / n                         # up the spine
+    fx, fy = -uy * facing, ux * facing              # towards the front
+
+    def at(base, up: float, front: float) -> tuple[float, float]:
+        return (base[0] + ux * up + fx * front, base[1] + uy * up + fy * front)
+
+    def wedge(pad: float) -> list[tuple[float, float]]:
+        rows = ((neck, 4 + pad, CHEST_HALF - 5), (sh, 0, CHEST_HALF), (hip, 10, WAIST_HALF),
+                (hip, -6 - pad, BELT_HALF))
+        front = [at(b, up, half + pad) for b, up, half in rows]
+        back = [at(b, up, -half - pad) for b, up, half in reversed(rows)]
+        return front + back
+
+    pygame.draw.polygon(surf, P.INK, wedge(2))
+    pygame.draw.polygon(surf, body, wedge(0))
+    # the chest plate, in a paler shade of the body, and a highlight down its front
+    plate = [at(sh, 2, CHEST_HALF - 4), at(sh, -14, CHEST_HALF - 6), at(sh, -20, 2), at(sh, -14, -8),
+             at(sh, 2, -8)]
+    pygame.draw.polygon(surf, P.INK, plate, 2)
+    pygame.draw.polygon(surf, P.lighten(body, 0.35), plate)
+    pygame.draw.polygon(surf, P.INK, plate, 1)
+    pygame.draw.line(surf, P.lighten(body, 0.6), _pt(at(sh, 0, CHEST_HALF - 7)),
+                     _pt(at(sh, -11, CHEST_HALF - 8)), 2)
+    # the belt, with a buckle in the accent colour
+    pygame.draw.line(surf, P.INK, _pt(at(hip, 2, -BELT_HALF)), _pt(at(hip, 2, BELT_HALF)), 6)
+    _block(surf, at(hip, 2, BELT_HALF - 7), 3, accent, radius=1)
+    # the back shoulder plate, behind the arm's line
+    _ball(surf, at(sh, 2, -CHEST_HALF + 6), w // 2 + 4, P.shade(metal, 0.7))
+    # the front leg
+    limb(surf, j["hip"], j["knee_f"], w + 4, body)
+    limb(surf, j["knee_f"], j["foot_f"], w + 2, body)
+    _boot(surf, j["foot_f"], facing, w, boot)
+    # the front upper arm under a big shoulder plate, then the helm over the plate's top
+    limb(surf, j["shoulder_f"], j["elbow_f"], w, body)
+    _ball(surf, at(sh, -3, 4), w // 2 + 4, metal)
+    pygame.draw.circle(surf, P.lighten(accent, 0.5), _pt(at(sh, 1, 1)), 3)
+    # the helm: flat-topped, with a slit visor across its front and a crest
+    hx, hy = _pt(j["head"])
+    r = HEAD_R[build]
+    helm = pygame.Rect(0, 0, 2 * r + 2, 2 * r)
+    helm.center = (hx, hy)
+    pygame.draw.rect(surf, P.INK, helm.inflate(4, 4), border_radius=8)
+    pygame.draw.rect(surf, body, helm, border_radius=7)
+    surf.fill(P.lighten(body, 0.45), (helm.x + 4 if facing > 0 else helm.right - 10, helm.y + 3, 6, 3))
+    crest = pygame.Rect(0, 0, 6, 6)
+    crest.midbottom = (hx - 3 * facing, helm.top + 2)
+    pygame.draw.rect(surf, P.INK, crest.inflate(4, 2), border_radius=2)
+    surf.fill(metal, crest)
+    slit = pygame.Rect(0, 0, r + 6, 5)
+    slit.midleft = (hx - 4, hy - 1) if facing > 0 else (hx - r - 2, hy - 1)
+    surf.fill(P.INK, slit.inflate(2, 2))
+    surf.fill(accent, slit)
+    surf.fill(P.lighten(accent, 0.6), (slit.x + (slit.w - 5 if facing > 0 else 2), slit.y + 1, 3, 2))
+    # the forearm and gauntlet, in front of everything
+    limb(surf, j["elbow_f"], j["hand_f"], w - 1, body)
+    _block(surf, j["hand_f"], w // 2 + 2, accent)
 
 
 # --- static art ----------------------------------------------------------------------------------
@@ -229,9 +353,9 @@ def make_stage() -> tuple[pygame.Surface, list[tuple[pygame.Rect, tuple]]]:
 
 def make_ring(k: float) -> pygame.Surface:
     """The cycle ring at progress k: a dark disc with a pie of white filling clockwise."""
-    s = pygame.Surface((15, 15), pygame.SRCALPHA)
-    c = (7, 7)
-    pygame.draw.circle(s, P.INK, c, 7)
+    s = pygame.Surface((2 * RING_R + 1, 2 * RING_R + 1), pygame.SRCALPHA)
+    c = (RING_R, RING_R)
+    pygame.draw.circle(s, P.INK, c, RING_R)
     pygame.draw.circle(s, P.SLATE, c, 5)
     if k > 0:
         pts = [c] + [(c[0] + 5.5 * math.sin(2 * math.pi * k * i / 12), c[1] - 5.5 * math.cos(2 * math.pi * k * i / 12))
@@ -337,6 +461,14 @@ class Renderer:
                     self.flash[e.player] = (P.BAD, FLASH_FRAMES)
             elif e.kind == "corrected" and e.player:
                 self.flash[e.player] = (P.GOOD, FLASH_FRAMES)
+            elif e.kind == "shockwave":
+                color = P.GATE.get(e.error or "Z", P.WHITE)
+                self.effects.append(Effect("wave", e.x, e.y, WAVE_FRAMES, WAVE_FRAMES, color))
+                self.shake = max(self.shake, SHAKE_FRAMES // 2)
+            elif e.kind == "reencode" and e.player and self._fight is not None:
+                f = self._fight.fighters[e.player]
+                self.flash[e.player] = (P.WHITE, FLASH_FRAMES)
+                self.effects.append(Effect("pulse", f.x, FLOOR_Y - f.y, PULSE_FRAMES, PULSE_FRAMES, P.SKY))
 
     def _advance(self) -> None:
         for fx in self.effects:
@@ -371,6 +503,15 @@ class Renderer:
                 if age < 4:
                     pygame.draw.circle(surf, P.WHITE, _pt((cx, cy)), 8 - age)
                     pygame.draw.circle(surf, fx.color, _pt((cx, cy)), 5 - age)
+            elif world and fx.kind == "wave":
+                self._wave(fx, age, ox, oy)
+            elif world and fx.kind == "pulse":
+                k = age / fx.life
+                rect = pygame.Rect(0, 0, round(40 + 80 * k), round(60 + 120 * k))
+                rect.midbottom = (round(fx.x) + ox, round(fx.y) + 6 + oy)
+                width = 3 if k < 0.5 else 2 if k < 0.8 else 1
+                pygame.draw.ellipse(surf, P.INK, rect.inflate(2, 2), width + 2)
+                pygame.draw.ellipse(surf, fx.color if age % 4 < 2 else P.WHITE, rect, width)
             elif world and fx.kind == "popup":
                 if fx.left < 10 and fx.left % 4 < 2:
                     continue
@@ -381,6 +522,33 @@ class Renderer:
                     continue
                 bounce = (6 - age) * 3 if age < 6 else 0
                 blit_center(surf, outlined(fx.text, 32, fx.color, thick=2), (fx.x, fx.y - bounce))
+
+    def _wave(self, fx: Effect, age: int, ox: int, oy: int) -> None:
+        """A landing shockwave: two flat rings racing out along the floor, with chips of
+        the floor kicked up between them, in the colour of the error it deals."""
+        surf = self.surface
+        k = (age + 1) / fx.life
+        cx, floor = round(fx.x) + ox, round(fx.y) + oy
+        for lag, height in ((0.0, 22), (0.25, 14)):
+            kk = max(0.0, k - lag) / (1 - lag)
+            if kk <= 0:
+                continue
+            reach = round(14 + (WAVE_REACH - 14) * (1 - (1 - kk) ** 2))
+            rect = pygame.Rect(0, 0, 2 * reach, height)
+            rect.center = (cx, floor - 2)
+            width = 4 if kk < 0.6 else 3 if kk < 0.85 else 2
+            color = P.lighten(fx.color, 0.35) if lag == 0 else fx.color
+            if lag == 0 and age < 3:
+                color = P.WHITE                 # the impact flash
+            pygame.draw.ellipse(surf, P.INK, rect.inflate(4, 4), width + 2)
+            pygame.draw.ellipse(surf, color, rect, width)
+        if k < 0.7:                     # the kicked-up floor chips, rising and falling
+            for side in (-1, 1):
+                for i, d in enumerate((18, 30, 42)):
+                    x = cx + side * round(d * (0.4 + 0.6 * k))
+                    y = floor - 6 - round(26 * math.sin(math.pi * min(1.0, k / 0.7)) * (1 - i * 0.25))
+                    surf.fill(P.INK, (x - 2, y - 2, 5, 5))
+                    surf.fill(P.WHITE if i == 0 else P.lighten(fx.color, 0.4), (x - 1, y - 1, 3, 3))
 
     # --- the world -----------------------------------------------------------------------------
 
@@ -461,23 +629,28 @@ class Renderer:
         y = self.tag_y[key]
         y = target if y is None else y + (target - y) * TAG_FOLLOW
         self.tag_y[key] = y
-        return [min(max(head[0], TAG_LO), TAG_HI), y, head[0]]     # x, y, the head's x
+        lo, hi = tag_bounds(f.code.distance)
+        return [min(max(head[0], lo), hi), y, head[0]]     # x, y, the head's x
 
     @staticmethod
     def _separate(tags: dict[str, list[float]], fight: Fight) -> None:
-        """Two tags never sit closer than TAG_W across, however far apart vertically: each
-        moves out to its own fighter's side, and both stay on screen (at a wall too)."""
+        """Two tags never overlap across, however far apart vertically (each code's tag has
+        its own width): each moves out to its own fighter's side, and both stay on screen
+        (at a wall too)."""
         a, b = tags["p1"], tags["p2"]
-        if abs(a[0] - b[0]) >= TAG_W:
-            return
         f1, f2 = fight.fighters["p1"], fight.fighters["p2"]
+        ha, hb = tag_half(f1.code.distance), tag_half(f2.code.distance)
+        need = ha + hb
+        if abs(a[0] - b[0]) >= need:
+            return
         if f2.x != f1.x:
             side = 1 if f2.x > f1.x else -1     # p2 stands on this side of p1
         else:
             side = 1 if b[0] >= a[0] else -1
+        left_half, right_half = (ha, hb) if side > 0 else (hb, ha)
         mid = (a[0] + b[0]) / 2
-        mid = min(max(mid, TAG_LO + TAG_W / 2), TAG_HI - TAG_W / 2)
-        a[0], b[0] = mid - side * TAG_W / 2, mid + side * TAG_W / 2
+        mid = min(max(mid, left_half + TAG_EDGE + need / 2), W - right_half - TAG_EDGE - need / 2)
+        a[0], b[0] = mid - side * need / 2, mid + side * need / 2
 
     def _code_tag(self, key: str, f: Fighter, at, ox: int, oy: int) -> None:
         """The code over the head: the ket, the lights (flipped ones red), the majority line
@@ -488,7 +661,7 @@ class Renderer:
         "danger") the rest pulse orange and a "!" pulses red beside the ket."""
         code = f.code
         n = code.distance
-        row = (n - 1) * LIGHT_GAP + DIVIDER_GAP + 16     # the lights, the majority line and the ring
+        row = tag_row(n)            # the lights, the majority line and the ring
         cx = at[0] + ox
         cy = round(at[1]) + oy
         x0 = cx - row / 2 + 4
