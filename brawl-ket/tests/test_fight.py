@@ -163,12 +163,14 @@ def test_a_lone_heavy_from_neutral_is_only_a_correctable_hit():
     assert fight.fighters["p2"].health == 100 - TRIO.moves["stand.B"].chip
 
 
-def test_a_throw_whiffs_on_an_airborne_rival():
+def test_a_throw_catches_an_airborne_rival():
+    # a throw is MID, and MID can't be dodged: a jump doesn't escape it
     fight = new(gap=float(BODY_WIDTH))
     p2 = fight.fighters["p2"]
     p2.y = 20.0                 # in the air, but still level with the throw box
     events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)})
-    assert of(events, "hit", "logical") == [] and p2.health == 100
+    assert [(e.kind, e.error, e.row) for e in of(events, "hit", "logical")] == [
+        ("hit", shor.Y, shor.MID)]
 
 
 def test_a_throw_whiffs_on_a_stunned_rival():
@@ -987,7 +989,7 @@ def test_a_crouching_rival_ducks_a_photon():
 def test_the_syndrome_grab_reaches_130_px():
     # Reach is the largest starting gap (between the fighters' x, from a standing start)
     # at which the grab still connects: the measure the playtest's "about 75 px" used.
-    fight = versus(QUINT, TRIO, 130.0)
+    fight = versus(QUINT, TRIO, 125.0)
     events = script(fight, 60, p1={0: X})
     assert [(e.kind, e.error, e.row) for e in of(events, "hit", "logical")] == [("hit", shor.Z, shor.MID)]
     for gap in (140.0, 150.0):
@@ -1042,3 +1044,44 @@ def test_collapse_slam_and_shockwave_together_are_a_logical_error():
 def test_collapse_shockwave_reaches_60_px_either_side():
     m = QUINT.moves["air.X"]
     assert m.landing == Box(-60, 0, 120, 14) and m.dive == (2.0, 9.0)
+
+
+def test_a_bounced_dive_recovers_on_landing_and_cannot_attack_again_in_the_air():
+    fight = new(gap=60.0)
+    script(fight, 1, p1=FighterInput(up=True, dx=1))
+    script(fight, 12)
+    steps = []                  # each step's p1 events: X is pressed on every one
+    for _ in range(120):
+        steps.append([e.kind for e in fight.step({"p1": X, "p2": IDLE}) if e.player in ("p1", "p2")])
+    hit_at = next(i for i, k in enumerate(steps) if "hit" in k or "logical" in k)
+    land_at = next(i for i, k in enumerate(steps) if i > hit_at and "land" in k)
+    attacks = [i for i, k in enumerate(steps) if "attack" in k]
+    assert attacks[0] < hit_at                      # the DIVE itself
+    assert not [i for i in attacks if hit_at < i <= land_at]     # no second air move
+    later = [i for i in attacks if i > land_at]
+    assert later and later[0] - land_at >= TRIO.moves["air.X"].recovery
+
+
+def test_the_syndrome_grab_catches_a_jumping_rival():
+    fight = versus(QUINT, TRIO, 64.0)
+    trio = fight.fighters["p2"]
+    events = script(fight, 40, p1={0: X}, p2={QUINT.moves["stand.X"].startup - 2: FighterInput(up=True)})
+    hits = of(events, "hit", "logical")
+    assert [(e.kind, e.error, e.row) for e in hits] == [("hit", shor.Z, shor.MID)]
+    assert trio.action == "knockdown"
+
+
+def test_a_jump_clears_a_sweep_that_hits_a_standing_rival():
+    SWEEP = TRIO.moves["crouch.B"]
+    sweep = {0: FighterInput(down=True, b=True)}
+    # standing, the sweep hits on its first active frame
+    hits = of(script(new(gap=50.0), 40, p1=sweep), "hit", "logical")
+    assert [(e.kind, e.row) for e in hits] == [("hit", shor.LOW)]
+    # jumping on that same frame, the rival is only 11.5 px up, still level with the sweep's
+    # box: it is the height rule, not the boxes, that makes it whiff
+    fight = new(gap=50.0)
+    p2 = fight.fighters["p2"]
+    events = script(fight, SWEEP.startup + 1, p1=sweep, p2={SWEEP.startup: FighterInput(up=True)})
+    assert 0 < p2.y < SWEEP.hitbox.y + SWEEP.hitbox.h
+    events += script(fight, 40)
+    assert of(events, "hit", "logical") == [] and p2.health == 100

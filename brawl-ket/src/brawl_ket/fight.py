@@ -289,7 +289,9 @@ class Fight:
             return
         if not can_reach(m.height, rival):
             return
-        if m.kind == "throw" and (rival.y != 0 or rival.action in _STUNNED):
+        # GAME RULE: a throw (the SYNDROME GRAB too) can't take a rival already reeling from
+        # a hit. A throw is MID, so it catches a jumping rival as well as a crouching one.
+        if m.kind == "throw" and rival.action in _STUNNED:
             return
         where = _overlap(f.world_box(m.hitbox), rival.hurtbox)
         if where is not None:

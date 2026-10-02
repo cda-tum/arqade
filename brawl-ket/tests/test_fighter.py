@@ -663,3 +663,15 @@ def test_down_a_from_standing_is_a_low_jab_at_once():
     f = Fighter(TRIO, 200, 1)
     f.step(FighterInput(down=True, a=True), 400)
     assert f.slot == "crouch.A"
+
+
+def test_a_bounced_diver_hit_in_a_trade_stops_springing_up():
+    f = make()
+    jump_until(f, lambda f: f.y > 40)
+    run(f, tap("x"))
+    run(f, IDLE, TRIO.moves["air.X"].startup)
+    assert f.phase == "active"
+    f.bounce()
+    assert f.vy > 0 and f.bounced
+    f.take_hit(JAB, -1)
+    assert f.vy <= 0 and not f.bounced

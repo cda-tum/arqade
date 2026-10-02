@@ -73,6 +73,7 @@ class Fighter:
         self.slot: str | None = None
         self.chained = False        # the move in progress was started by a cancel
         self.move_hit = False       # the fight sets this when the move connects
+        self.bounced = False        # a DIVE sprang back off a hit: its recovery waits for the floor
         self.chain = 0              # moves in the current string
         self.stun = 0
         self.cooldowns: dict[str, int] = {}
@@ -196,10 +197,13 @@ class Fighter:
         damage = LOGICAL_DAMAGE + move.bonus if result == shor.LOGICAL else move.chip
         self.health = max(0, self.health - damage)
 
+        if self.bounced:            # a diver hit in a trade stops springing up
+            self.vy = min(self.vy, 0.0)
         self.move = None
         self.slot = None
         self.chained = False
         self.move_hit = False
+        self.bounced = False
         self.buffer = []
         self.vx = move.knockback * from_facing
         self.frame = 0
@@ -214,12 +218,18 @@ class Fighter:
     BOUNCE_VX, BOUNCE_VY = 2.0, 5.0     # px per frame: a DIVE springs back off what it hit
 
     def bounce(self) -> None:
-        """A dive that connects springs back up and away, and its active frames end."""
+        """A dive that connects springs back up and away, and its active frames end.
+
+        The recovery is held at its first frame while the fighter is in the air (_advance),
+        so a bounced dive can't attack again in the same jump and always gets its full
+        landing recovery.
+        """
         m = self.move
         assert m is not None
         self.frame = self.startup + m.active        # straight into the recovery
         self.vx = -self.BOUNCE_VX * self.facing
         self.vy = self.BOUNCE_VY
+        self.bounced = True
 
     def knock_out(self, away: int, push: float) -> None:
         """Down for good: the round is over. Flies off `away` (+1 / -1) at least `push`
@@ -227,6 +237,7 @@ class Fighter:
         self.move = None
         self.slot = None
         self.chained = False
+        self.bounced = False
         self.buffer = []
         if self.action != "knockdown":
             self.action = "knockdown"
@@ -271,6 +282,8 @@ class Fighter:
         elif self.action == "attack":
             m = self.move
             assert m is not None
+            if self.bounced and self.y > 0:
+                self.frame = self.startup + m.active    # the recovery starts on the floor
             if self.frame >= self.startup + m.active + m.recovery:
                 self._end_move()
             else:
@@ -281,6 +294,7 @@ class Fighter:
         self.slot = None
         self.chained = False
         self.move_hit = False
+        self.bounced = False
         if self.y == 0:
             self.vx = 0.0
         self._neutral()
@@ -299,8 +313,8 @@ class Fighter:
                 self.vx = m.lunge * self.facing
         elif self.y == 0:
             self.vx = 0.0
-        elif m.dive is not None and self.frame == self.startup + m.active:
-            self.vx = 0.0           # the dive ran out before the floor
+        elif m.dive is not None and self.frame == self.startup + m.active and not self.bounced:
+            self.vx = 0.0           # the dive ran out before the floor (a bounce keeps its drift)
 
     def _slot_for(self, btn: str, dx: int, rival_x: float) -> str:
         if self.y > 0:
@@ -354,6 +368,7 @@ class Fighter:
         self.slot = slot
         self.chained = cancel       # a cancel uses the move's chain_startup, if it has one
         self.move_hit = False
+        self.bounced = False
         self.buffer = []            # an older press must not fire a cancel nobody made
         self.chain = self.chain + 1 if cancel else 1
         if move.cooldown > 0:
