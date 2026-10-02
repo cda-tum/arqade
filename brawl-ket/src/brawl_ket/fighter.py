@@ -125,6 +125,10 @@ class Fighter:
 
     @property
     def hurtbox(self) -> tuple[float, float, int, int]:
+        m = self.move
+        if self.action == "attack" and m is not None and m.hurt_active is not None \
+                and self.phase == "active":
+            return self.world_box(m.hurt_active)
         crouching = self.stance == "crouch"
         return self.world_box(self.char.hurt_crouch if crouching else self.char.hurt_stand)
 

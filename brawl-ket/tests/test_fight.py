@@ -854,3 +854,51 @@ def test_a_throw_works_from_the_closest_spacing_to_the_end_of_its_range():
             events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)},
                             p2=FighterInput(down=True) if crouching else IDLE)
             assert results(events) == [("logical", qec.Y)], (c1.name, c2.name, gap, crouching)
+
+
+# --- PHASE SLIDE passes under photons ---------------------------------------------------
+
+SLIDE = TRIO.moves["crouch.X"]
+DOWN_X = FighterInput(down=True, x=True)
+
+
+def photon_at(fight, owner, x):
+    """A photon from `owner`, placed at x and flying towards the other fighter."""
+    target = fight.fighters["p1" if owner == "p2" else "p2"]
+    vx = PHOTON.projectile.speed * (1 if target.x > x else -1)
+    shot = Shot(owner, PHOTON, x, 0.0, vx, PHOTON.projectile.lifetime)
+    fight.shots.append(shot)
+    return shot
+
+
+def test_a_phase_slide_passes_under_a_photon():
+    fight = new(gap=300.0)
+    p1 = fight.fighters["p1"]
+    script(fight, 30, p1=FighterInput(down=True))           # crouched: the switch is done
+    script(fight, SLIDE.startup + 2, p1={0: DOWN_X}, p2=FighterInput())
+    assert p1.slot == "crouch.X" and p1.phase == "active"
+    photon_at(fight, "p2", p1.x + 30)
+    events = script(fight, 12, p1=FighterInput(down=True))
+    assert not of(events, "hit", "logical")
+
+
+def test_a_plain_crouch_is_still_hit_by_a_photon():
+    fight = new(gap=300.0)
+    script(fight, 30, p1=FighterInput(down=True))
+    photon_at(fight, "p2", fight.fighters["p1"].x + 30)
+    events = script(fight, 12, p1=FighterInput(down=True))
+    assert of(events, "hit", "logical")
+
+
+def test_the_slides_hurtbox_is_below_a_photon_only_while_it_slides():
+    fight = new(gap=300.0)
+    p1 = fight.fighters["p1"]
+    script(fight, 30, p1=FighterInput(down=True))
+    photon_bottom = PHOTON.projectile.box.y
+    lows = []
+    for i in range(SLIDE.startup + SLIDE.active + SLIDE.recovery):
+        script(fight, 1, p1=DOWN_X if i == 0 else FighterInput(down=True))
+        left, top, w, h = p1.hurtbox
+        lows.append((p1.phase, FLOOR_Y - top < photon_bottom))
+    assert all(low for phase, low in lows if phase == "active")
+    assert not any(low for phase, low in lows if phase != "active")

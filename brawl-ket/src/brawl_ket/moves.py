@@ -56,6 +56,8 @@ class Move:
     landing: Box | None = None          # a shockwave hitbox on landing (COLLAPSE)
     landing_error: str | None = None
     cooldown: int = 0
+    hurt_active: Box | None = None      # the body's hurtbox in the active frames, if it changes
+                                        # (PHASE SLIDE lies low: photons pass over it)
     poses: tuple[str, str, str] = ("idle", "idle", "idle")   # startup / active / recovery
     # Startup when a cancel starts the move (None: the same as `startup`). A heavy has a long,
     # telegraphed wind-up from neutral, so a defender can read it, and a fast one inside a chain,
@@ -147,7 +149,7 @@ TRIO = Character(
         "crouch.X": Move(
             "PHASE SLIDE", 8, 14, 14, Box(6, 4, 40, 14), qec.Z,
             chip=6, bonus=16, hitstun=20, knockback=3.0, knockdown=True,
-            kind="special", lunge=5.0,
+            kind="special", lunge=5.0, hurt_active=Box(-74, 0, 130, 50),
             poses=("crouch", "slide", "crouch"),
         ),
         "air.X": Move(

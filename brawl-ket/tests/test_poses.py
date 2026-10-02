@@ -9,6 +9,7 @@ from brawl_ket.fighter import Fighter
 from brawl_ket.moves import CHARACTERS, QUINT, TRIO, Move
 from brawl_ket.poses import (
     EASE_FRAMES,
+    HEAD_R,
     POSE_NAMES,
     POSES,
     SCALE,
@@ -312,3 +313,14 @@ def test_the_heavy_wind_up_draws_the_fist_far_back_and_the_sweep_the_foot():
     sweep_hit = joints(POSES["sweep_hit"], "lean", FEET, 1)
     assert sweep["foot_f"][0] <= sweep["hip"][0] - 20            # the striking foot cocked behind
     assert sweep_hit["foot_f"][0] - sweep["foot_f"][0] >= 60
+
+
+def test_the_slide_is_drawn_under_a_photon():
+    """PHASE SLIDE passes under photons, so its drawn body (head and outline included)
+    must stay below a photon's bottom edge, as its active hurtbox does."""
+    j = joints(POSES["slide"], "lean", (0, 0), 1)
+    top = max(-y for _, y in j.values())
+    head_top = -j["head"][1] + HEAD_R["lean"] + 2      # the ink outline
+    photon_bottom = TRIO.moves["stand.X"].projectile.box.y
+    assert head_top < photon_bottom and top < photon_bottom
+    assert TRIO.moves["crouch.X"].hurt_active.h < photon_bottom

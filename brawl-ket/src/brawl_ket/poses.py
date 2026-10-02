@@ -82,8 +82,9 @@ POSES: dict[str, Pose] = {
     # stand.X PHOTON: draw back, then push both palms out
     "cast_wind": Pose(-10, 24, -6, -26, -14, -10, 40, -30, 40),
     "cast": Pose(10, 45, 5, -40, -25, 30, 90, 25, 88),
-    # crouch.X PHASE SLIDE: feet first along the floor, the lead knee bent
-    "slide": Pose(-58, 125, 55, 150, 70, 150, 170, -110, -150, drop=6),
+    # crouch.X PHASE SLIDE: feet first along the floor, the lead knee bent, the back hand on
+    # the floor behind and the front arm along the legs: all of it under a photon
+    "slide": Pose(-62, 125, 55, 150, 70, 70, 95, -45, -75, drop=6),
     # air.X DIVE: a steep diving kick, foot first
     "dive": Pose(-30, 30, 30, -10, 70, 120, 160, -60, -30),
     # QUINT's stand.X SYNDROME GRAB: both arms drawn back low, then a lunging two-handed grab
