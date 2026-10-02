@@ -172,3 +172,62 @@ def test_bad_arguments_are_rejected():
         code.apply("W", 0, 0)
     with pytest.raises(ValueError):
         code.apply_x(3, 0)
+
+
+def test_every_reachable_state_matches_the_reference():
+    """Breadth-first search over every grid state reachable from the empty one: from each,
+    all 27 hits are applied and checked against the reference. This reaches the states
+    that take 3 hits to build and checks their outgoing transitions too."""
+    start = (frozenset(), frozenset())
+    seen = {start}
+    queue = [(start, I)]            # (grid state, a reference error it stands for)
+    transitions = 0
+    while queue:
+        (xs, zs), acc0 = queue.pop()
+        for hit in HITS:
+            code = ShorCode(60)
+            code.x_cells, code.z_rows = set(xs), set(zs)
+            acc = _mul(acc0, ref_pauli(hit))
+            verdict = game_apply(code, hit)
+            transitions += 1
+            if ref_logical(acc):
+                assert verdict == LOGICAL, (xs, zs, hit)
+                assert code.lights == 0
+                acc = I
+            else:
+                assert verdict in (FLIPPED, CANCEL), (xs, zs, hit)
+                assert _mul(ref_state(code), acc) in GROUP, (xs, zs, hit)
+            state = (frozenset(code.x_cells), frozenset(code.z_rows))
+            if state not in seen:
+                seen.add(state)
+                queue.append((state, acc))
+    assert transitions == 27 * len(seen)
+    assert len(seen) > 200          # sanity: the search really did explore
+
+
+def test_a_y_on_a_lit_cell_of_an_unflipped_row_is_flipped():
+    code = ShorCode(60)
+    assert code.apply_x(MID, 0) == FLIPPED
+    # the X half cancels the lit cell, the Z half flips the row
+    assert code.apply_y(MID, 0) == FLIPPED
+    assert code.x_cells == set() and code.z_rows == {MID}
+
+
+def test_a_y_on_an_unlit_cell_of_a_flipped_row_is_flipped():
+    code = ShorCode(60)
+    assert code.apply_z(MID) == FLIPPED
+    # the X half lights the cell, the Z half cancels the flipped row
+    assert code.apply_y(MID, 1) == FLIPPED
+    assert code.x_cells == {(MID, 1)} and code.z_rows == set()
+
+
+def test_z_validates_its_column_like_x_and_y():
+    code = ShorCode(60)
+    for error in "XZY":
+        with pytest.raises(ValueError):
+            code.apply(error, 0, 3)
+        with pytest.raises(ValueError):
+            code.apply(error, 0, -1)
+        with pytest.raises(ValueError):
+            code.apply(error, 3, 0)
+    assert code.lights == 0

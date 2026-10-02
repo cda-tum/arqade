@@ -18,7 +18,8 @@ tests/test_shor.py checks all of this against the stabiliser formalism.
 
 GAME RULES:
 - An uncorrectable state is reported as a logical error at once (the decoder
-  is certain to fail at the next tick), and the qubit is then re-encoded.
+  would fail at the next tick if nothing else landed before it), and the
+  qubit is then re-encoded.
 - Correction runs on a fixed beat of cycle_frames.
 """
 
@@ -70,6 +71,7 @@ class ShorCode:
         if error == X:
             return self.apply_x(row, col)
         if error == Z:
+            _check(row, col)        # the column is ignored, but must still be a real one
             return self.apply_z(row)
         if error == Y:
             return self.apply_y(row, col)
