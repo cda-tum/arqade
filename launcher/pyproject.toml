@@ -1,0 +1,24 @@
+[project]
+name = "arqade-launcher"
+version = "0.1.0"
+description = "Local PC front-end for the Munich Quantum Arcade: a game menu, keyboard-to-cabinet-pad mapping, fullscreen"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    # Every game runs in this same interpreter, so this is the union of the
+    # games' own dependencies (tests/test_catalog.py checks it stays so).
+    "pygame==2.5.2",
+    "numpy==1.26.4",  # Qlinko's sandbox
+]
+
+[project.scripts]
+arqade = "arqade_launcher.main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
