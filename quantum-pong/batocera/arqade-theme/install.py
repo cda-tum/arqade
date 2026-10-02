@@ -246,3 +246,10 @@ patch("views/system.xml", [
      + hint("arqadeHintBack", "Press B button to return", 0.875)
      + '<image name="BottomBar" extra="static">'),
 ])
+
+# Game list (the default "Icons" view): a 4 x 3 grid, so 12 games fit on one
+# screen. The theme's own "0 2" is two rows with the columns left to the cell
+# proportion, which on the 16:9 panel is 4 x 2 = only 8 games.
+patch("views/icons.xml", [
+    ("<autoLayout>0 2</autoLayout>", "<autoLayout>4 3</autoLayout>"),
+])

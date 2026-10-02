@@ -174,6 +174,11 @@ Those hints are theme `<text>` elements, deliberately **not** painted into
 `<color>${backgroundColor}</color>` (`200000`, near-black), which would tint
 any baked-in text to invisibility.
 
+It patches `views/icons.xml` too: the game list is the theme's default
+"Icons" view, whose `<autoLayout>0 2</autoLayout>` (two rows, columns from
+the cell proportion) shows only 4 x 2 = 8 games on the 16:9 panel. It is set
+to `4 3`, so 12 fit on one screen.
+
 Every patch rebuilds from a `.bak` of the original, so `install.py` is safe
 to re-run; to see a theme change you must restart ES (or reboot).
 
