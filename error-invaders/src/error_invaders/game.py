@@ -345,7 +345,7 @@ def new_game(two):
                     else [make_player("p1", "tri", W/2)],
             pb=[], eb=[], caps=[], parts=[], pops=[], ufo=None, ufoT=rand(12, 20),
             lattice=None, merged=None, shake=0.0, chainId=1, waveT=0.0, overDelay=0.0, reason="", newHi=False,
-            F=None, efT=1.5, boss=None, minions=[])
+            F=None, efT=1.5, boss=None, minions=[], skipped=False)
     next_wave()
     state = "play"
 
@@ -722,7 +722,7 @@ def update(dt):
         g.overDelay -= dt
         if g.overDelay <= 0:
             state = "over"; over_t = 0.0
-            if g.score > hiscores.get(g.mode, 0):
+            if g.score > hiscores.get(g.mode, 0) and not g.skipped:   # a skipped boss doesn't count
                 hiscores[g.mode] = g.score; g.newHi = True; save_hiscores()
 
 # =====================================================================
@@ -1024,6 +1024,8 @@ def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=F
         elif state == "play":
             if inp.back: to_menu()
             else:
+                # PC-only dev shortcut: the cabinet runs --no-keyboard, so ev_keys stays empty there
+                if pygame.K_n in inp.ev_keys and pygame.key.get_mods() & pygame.KMOD_CTRL: bosses.skip()
                 update(dt)
                 draw_game(canvas)
                 ox = oy = 0
