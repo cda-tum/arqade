@@ -13,6 +13,7 @@ class FakeInput:
         self.pause = self.confirm = start
         self.back = False
         self.hits = set(hits)
+        self.ev_keys = set()
 
     def down(self, p, a): return a in self.hits
     def hit(self, p, a): return a in self.hits

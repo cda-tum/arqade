@@ -36,7 +36,7 @@ the cycle repeats, each boss tougher than before:
 | LOGICAL ERROR | An error chain that crawls down like Centipede. Some segments fire. | Shoot segments in their color, which splits the chain. If a head reaches the threshold, you lose a life. |
 | WAVE PACKET | Spread out (wide), it can't be hit and drops bullets from all along its width. | Wait for "MEASURED!". Collapsed, it can be hit in its color, but it darts around (sharp in x, wild in p). A bomb collapses it right away. |
 | SYNDROME | A check lattice. The errors are hidden, only the checks around them light up. | Shoot the qubit (dot) between two lit checks, in their color. A single lit check on the left or right edge means the boundary qubit. A faint hint appears after a while. |
-| CLIFFORD CORE | Immune to every Pauli shot (its shield blinks). Fires neutral bullet-hell patterns, plus now and then a colored curtain. | A colored shot that meets a ship of the same color is absorbed. Five absorbed shots charge a magic-state bomb (pips above the ship), and only that hurts the core. |
+| CLIFFORD CORE | Immune to every Pauli shot (its shield blinks). Fires bullet-hell patterns, a random few bullets of which get a random color (the core flashes in it). | A colored shot that meets a ship of the same color is absorbed. Three absorbed shots charge a magic-state bomb (pips above the ship), and only that hurts the core. |
 | BELL PAIR | Two entangled halves that fire mirrored shots and spawn mirrored minion pairs. | A hit half heals unless the other one is hit within the window (0.5 s with two players, 1.2 s alone). |
 
 Most bosses also spawn minions: single errors that waver down and shoot, and burst
@@ -62,7 +62,8 @@ uv run python -m error_invaders.main --fps               # force the FPS overlay
 uv run python -m error_invaders.main --window-size 1280x960
 ```
 
-Press **F3** in-game to toggle the FPS overlay at runtime. The game renders at 960×720
+Press **F3** in-game to toggle the FPS overlay at runtime. **Ctrl+N** skips the current boss fight (keyboard only, so not on the cabinet, which
+runs with `--no-keyboard`). A game with a skipped boss does not set a high score. The game renders at 960×720
 (4:3). On a 16:9 screen it is scaled up with black bars at the sides.
 
 ### Input test mode

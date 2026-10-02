@@ -40,7 +40,7 @@ INFO = {  # name, two lines for the intro card
 }
 INTRO = 3.0          # seconds of intro card; the boss can't hurt or be hurt meanwhile
 MAX_MINIONS = 8
-MAGIC_NEEDED = 5     # absorbed shots per magic-state bomb (Clifford Core)
+MAGIC_NEEDED = 3     # absorbed shots per magic-state bomb (Clifford Core)
 TOP = 70             # upper edge of the boss area (below the HUD)
 
 rand = random.uniform
@@ -140,7 +140,10 @@ def kill_minion(m):
     m.dead = True
     G.g.score += 20
     G.burst(m.x, m.y, G.COL.get(m.col, G.WHITE), 14)
-    if random.random() < 0.08: G.g.caps.append(G.make_cap(m.x, m.y))
+    # against the Wave Packet every minion drops one: power-ups are the way in
+    boss = G.g.boss
+    if (boss and boss.kind == "packet") or random.random() < 0.08:
+        G.g.caps.append(G.make_cap(m.x, m.y))
 
 def update_minions(dt, quiet):
     g = G.g
@@ -352,12 +355,14 @@ class Centipede(Boss):
 # WAVE PACKET: hittable only while collapsed
 # =====================================================================
 WIDE_SIGMA, NARROW_SIGMA = 105.0, 16.0
+CALM_BEFORE = 1.5   # seconds without fire before the collapse ...
+CALM_AFTER = 1.0    # ... and after it localizes
 
 class Packet(Boss):
     kind = "packet"
     def __init__(self, tier, two):
         super().__init__(tier, two)
-        self.hp = self.maxhp = 15 + 4 * tier + (3 if two else 0)
+        self.hp = self.maxhp = 12 + 3 * tier + (2 if two else 0)
         self.x, self.y = W / 2, -60
         self.vx = self.vy = 0.0
         self.sigma = WIDE_SIGMA
@@ -380,7 +385,7 @@ class Packet(Boss):
             self.col = pick(["X", "Z", "Y"] if self.tier and not self.two else ["X", "Z"])
             G.pop(self.x, self.y - 70, "MEASURED!", G.WHITE, 12, 0.9)
         elif ph == "narrow":
-            self.phaseT = 3.2; self.kickT = 0.0; self.shotT = 1.0
+            self.phaseT = 3.8; self.kickT = 0.0; self.shotT = CALM_AFTER
         elif ph == "spread": self.phaseT = 0.8; self.vx = self.vy = 0.0
         else: self.phaseT = max(2.2, 4.2 - 0.4 * self.tier); self.told = False
 
@@ -395,7 +400,7 @@ class Packet(Boss):
             # sharp in x, so wild in p: random momentum kicks
             self.kickT -= dt
             if self.kickT <= 0:
-                self.kickT = rand(0.35, 0.6); a = rand(0, 2 * math.pi); s = rand(230, 360 + 30 * self.tier)
+                self.kickT = rand(0.35, 0.6); a = rand(0, 2 * math.pi); s = rand(185, 290 + 25 * self.tier)
                 self.vx, self.vy = math.cos(a) * s, math.sin(a) * s * 0.6
             self.x += self.vx * dt; self.y += self.vy * dt
             if not 60 < self.x < W - 60: self.vx = -self.vx; self.x = clamp(self.x, 60, W - 60)
@@ -410,12 +415,12 @@ class Packet(Boss):
             self.x += (self.goal[0] - self.x) * min(1.0, dt * 0.8)
             self.y += (self.goal[1] - self.y) * min(1.0, dt * 0.8)
             self.rainT -= dt
-            if self.rainT <= 0:
+            if self.rainT <= 0 and self.phaseT > CALM_BEFORE:
                 self.rainT = self.rate(0.16)
                 bx = clamp(random.gauss(self.x, self.sigma), 10, W - 10)
                 shoot(bx, self.y + rand(-15, 15), math.pi / 2 + rand(-0.2, 0.2), rand(140, 190))
             self.minT -= dt
-            if self.minT <= 0:
+            if self.minT <= 0 and self.phaseT > CALM_BEFORE:
                 self.minT = self.rate(3.5)
                 spawn_minion(clamp(random.gauss(self.x, self.sigma), 40, W - 40), self.y + 20)
 
@@ -604,7 +609,8 @@ class Syndrome(Boss):
 # CLIFFORD CORE: only a magic state hurts it
 # =====================================================================
 CORE_R, SHIELD_R = 40, 62
-PATTERNS = ["spiral", "color", "rings", "color", "fans", "color"]
+PATTERNS = ["spiral", "rings", "fans"]
+COLOR_CHANCE = 0.08   # share of the Clifford Core's downward bullets that get a random color
 
 class Clifford(Boss):
     kind = "clifford"
@@ -625,14 +631,7 @@ class Clifford(Boss):
 
     def next_pattern(self):
         self.pi = (self.pi + 1) % len(PATTERNS)
-        self.pat = PATTERNS[self.pi]; self.emitT = 0.4
-        if self.pat == "color":
-            self.col = pick(["X", "Z", "Y"] if not self.two else ["X", "Z", "X", "Z", "Y"])
-            self.tele = 0.9; self.patT = 2.6; self.shots = 0
-            G.play("telegraph")
-            G.pop(self.x, self.y + 90, "ABSORB %s!" % self.col, G.COL[self.col], 12, 1.4)
-        else:
-            self.col = None; self.patT = 3.8
+        self.pat = PATTERNS[self.pi]; self.emitT = 0.4; self.patT = 3.8
 
     def update(self, dt):
         self.enter(dt)
@@ -643,17 +642,10 @@ class Clifford(Boss):
         self.patT -= dt
         if self.patT <= 0: self.next_pattern(); return
         h = self.heat
+        self.tele = max(0.0, self.tele - dt)
         self.emitT -= dt
-        if self.pat == "color":
-            if self.tele > 0: self.tele -= dt; return
-            # wide colored curtains, hard to dodge: switch to that color and catch them
-            if self.emitT <= 0 and self.shots < 5:
-                self.emitT = 0.38; self.shots += 1
-                base = math.pi / 2 + (0.07 if self.shots % 2 else -0.07)
-                for i in range(9):
-                    shoot(self.x, self.y + CORE_R, base + (i - 4) * 0.14, 165, "orb", self.col)
-            return
         if self.emitT > 0: return
+        n0 = len(G.g.eb)
         if self.pat == "spiral":
             self.emitT = 0.11 / h; self.spin += 0.32
             arms = 2 + (self.maxhp - self.hp) // 2
@@ -663,6 +655,13 @@ class Clifford(Boss):
             self.spin += 0.2
         elif self.pat == "fans":
             self.emitT = 0.7 / h; fan(self.x, self.y + CORE_R, aim(self.x, self.y), 5, 0.18, 200)
+        # a random few of the new bullets get a random color: switch to it and
+        # catch them. Only downward ones, the rest never reach a ship. The core
+        # flashes in the color it just used.
+        for q in G.g.eb[n0:]:
+            if q.vy > 40 and random.random() < COLOR_CHANCE:
+                q.col = self.col = pick(["X", "Z", "Y"] if not self.two else ["X", "Z", "X", "Z", "Y"])
+                self.tele = 0.3
 
     def hit(self, b):
         if math.hypot(b.x - self.x, b.y - self.y) > SHIELD_R + 6: return False
@@ -681,8 +680,7 @@ class Clifford(Boss):
 
     def draw(self, S):
         t = G.now(); x, y = self.x, self.y
-        core = G.COL[self.col] if self.col else (200, 205, 220)
-        if self.tele > 0 and int(t * 12) % 2: core = G.WHITE
+        core = G.COL[self.col] if (self.col and self.tele > 0) else (200, 205, 220)
         if self.flash > 0 or self.broken > 1.0: core = G.WHITE
         G.glow(S, x, y, 90, core, 0.35)
         # shield: hexagon that blinks, brighter when a shot bounces off it
@@ -835,6 +833,13 @@ def victory():
     G.arp(["n523", "n659", "n784", "n1047", "n1319"], 0.09)
     for dx in (-60, 60): g.caps.append(G.make_cap(clamp(b.x + dx, 40, W - 40), clamp(b.y, 80, 400)))
     g.boss = None; g.waveT = 3.0
+
+def skip():
+    """Dev shortcut (Ctrl+N, keyboard only): beat the current boss outright."""
+    g = G.g
+    if g.boss and g.boss.intro <= 0 and not g.overDelay:
+        g.boss.hp = 0; g.skipped = True
+        victory()
 
 def bullet_hit(b):
     """Player bullet vs minions and boss. True if the bullet is used up."""

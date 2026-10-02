@@ -369,6 +369,45 @@ like the button convention: new games follow it from the start.
   chips, Pong's white paddles) don't need to change, but blue and red is the
   natural choice there too.
 
+## Game logos: app icons, each with its own look (a taste)
+
+`batocera/logos/` renders every game's logo with `generate_logos.py`: a
+1024x1024 `<rom>-logo.png` and a transparent `<rom>-marquee.png`. Each game
+has its own `logo_<rom>.py`, which imports the game's package and draws with
+the game's own sprite and draw functions. `kit.py` has the shared lettering
+and light effects. A new game gets a module there too. These preferences were
+worked out with the cabinet's owners over several rounds:
+
+- **An app icon, not an arcade thumbnail.** One hero element and the title,
+  with plenty of empty space. No taglines, HUD, particles or extra sprites.
+  The hero must still be recognisable at 128 px and the title readable at
+  256 px.
+- **Each icon has its own design language.** Sharing a font is fine. One
+  common layout or lettering treatment on every icon is not: the second round
+  used the same glow wordmark on all of them, and they lost every distinctive
+  trait. The current identities:
+  - Pong: stark white on black.
+  - Pauli Invaders: flat, hard-edged 8-bit.
+  - Ion Surfer: retro surf poster.
+  - Superconductor: metro-map routes and a station sign.
+  - Overquqed: the one light, warm pixel kitchen.
+  - Qlimbers: the title carved into the tower.
+  - Qurves: neon tubes over a synthwave floor.
+
+  A new game picks a look none of these already has.
+- **Faithful to the game.** Use only elements and colours the game really
+  has. Pong's first icon got pushback for a made-up H ring and blue/red ball
+  trails the game never draws.
+- **Show the core mechanic or conflict, not decoration.**
+  - Qurves: one bike cut off by the other.
+  - Superconductor: two routes clashing at the game's own red collision X,
+    not a rail network.
+  - Pong: the paddles matter more than the gate.
+- **Motion reads left to right.** The Ion Surfer art is mirrored so the ion
+  moves to the right and down the slope.
+- The player colours above apply: P1 blue on the left, P2 red on the right.
+  Pixel art is scaled up nearest-neighbour by whole numbers.
+
 ## Input mapping: raw button numbers are NOT the print/position order
 
 This is the most important quirk, and the one most likely to bite a future

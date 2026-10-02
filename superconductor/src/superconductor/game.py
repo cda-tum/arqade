@@ -61,6 +61,12 @@ PAIR_COLORS = [
     (110, 240, 226),  # teal
 ]
 PLAYER_COLORS = {"p1": WHITE, "p2": GOLD}
+# CO-OP: the cursors take the cabinet's sides -- left pad blue, right pad red
+COOP_PLAYER_COLORS = {"p1": (70, 140, 255), "p2": (255, 60, 60)}
+
+
+def player_color(board, player):
+    return (COOP_PLAYER_COLORS if len(board.cursors) > 1 else PLAYER_COLORS)[player]
 MISCAL_COL = (255, 150, 40)
 BELL_COL = (150, 160, 255)
 SPECIAL_ON_TEXT = {"miscal": ("MISCALIBRATED", MISCAL_COL), "defect": ("COUPLER DEFECT", RED),
@@ -401,7 +407,7 @@ class View:
                 play("spawn")
             elif e.kind == "select":
                 if e.player is not None:
-                    self.ring(e.node, PLAYER_COLORS[e.player], self.spacing * 0.45 / U, self.spacing * 0.3, 0.25)
+                    self.ring(e.node, player_color(self.board, e.player), self.spacing * 0.45 / U, self.spacing * 0.3, 0.25)
                 play("select")
             elif e.kind == "step":
                 play("step")
@@ -651,7 +657,7 @@ def draw_board(S, v: View, t: float):
     for player, cur in b.cursors.items():
         if cur.pair_id is None:
             continue
-        pcol = PLAYER_COLORS[player]
+        pcol = player_color(b, player)
         pair = b.pairs[cur.pair_id]
         phase = 0 if player == "p1" else math.pi
         sx, sy = xy(cur.path[0])
