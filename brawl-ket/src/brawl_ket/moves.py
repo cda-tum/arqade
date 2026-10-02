@@ -101,24 +101,24 @@ TRIO = Character(
     moves=MappingProxyType({
         "stand.A": Move(
             "jab", 4, 3, 8, Box(14, 70, 44, 14), qec.X,
-            chip=2, bonus=0, hitstun=16, knockback=1.5,
+            chip=2, bonus=0, hitstun=16, knockback=0.8, lunge=1.5,
             cancels=("stand.A", "stand.B", "crouch.A"),
             poses=("jab_wind", "jab_hit", "jab_wind"),
         ),
         "stand.B": Move(
             "heavy", 24, 4, 16, Box(14, 64, 40, 18), qec.X,
-            chip=6, bonus=14, hitstun=20, knockback=4.0, chain_startup=8,
+            chip=6, bonus=14, hitstun=20, knockback=4.0, chain_startup=8, lunge=3.0,
             poses=("heavy_wind", "heavy_hit", "heavy_recover"),
         ),
         "crouch.A": Move(
             "low jab", 5, 3, 9, Box(12, 20, 44, 12), qec.Z,
-            chip=2, bonus=0, hitstun=15, knockback=1.5,
+            chip=2, bonus=0, hitstun=15, knockback=0.8, lunge=1.5,
             cancels=("crouch.A", "crouch.B", "stand.B"),
             poses=("low_wind", "low_hit", "low_wind"),
         ),
         "crouch.B": Move(
-            "sweep", 24, 4, 18, Box(10, 6, 46, 12), qec.Z,
-            chip=6, bonus=14, hitstun=22, knockback=2.0, knockdown=True, chain_startup=9,
+            "sweep", 24, 4, 18, Box(10, 6, 56, 12), qec.Z,
+            chip=6, bonus=14, hitstun=22, knockback=2.0, knockdown=True, chain_startup=9, lunge=3.0,
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),
         "air.A": Move(
@@ -175,24 +175,24 @@ QUINT = Character(
     moves=MappingProxyType({
         "stand.A": Move(
             "jab", 6, 3, 10, Box(16, 76, 46, 16), qec.X,
-            chip=2, bonus=0, hitstun=17, knockback=2.0,
+            chip=2, bonus=0, hitstun=17, knockback=1.0, lunge=1.5,
             cancels=("stand.A", "stand.B"),
             poses=("jab_wind", "jab_hit", "jab_wind"),
         ),
         "stand.B": Move(
             "heavy", 28, 5, 20, Box(16, 70, 48, 22), qec.X,
-            chip=6, bonus=12, hitstun=22, knockback=6.0, chain_startup=11,
+            chip=6, bonus=12, hitstun=22, knockback=6.0, chain_startup=11, lunge=3.0,
             poses=("heavy_wind", "heavy_hit", "heavy_recover"),
         ),
         "crouch.A": Move(
             "low jab", 7, 3, 11, Box(14, 22, 46, 14), qec.Z,
-            chip=2, bonus=0, hitstun=16, knockback=2.0,
+            chip=2, bonus=0, hitstun=16, knockback=1.0, lunge=1.5,
             cancels=("crouch.A", "crouch.B"),
             poses=("low_wind", "low_hit", "low_wind"),
         ),
         "crouch.B": Move(
-            "sweep", 28, 4, 22, Box(12, 6, 54, 14), qec.Z,
-            chip=6, bonus=12, hitstun=24, knockback=2.5, knockdown=True, chain_startup=12,
+            "sweep", 28, 4, 22, Box(12, 6, 64, 14), qec.Z,
+            chip=6, bonus=12, hitstun=24, knockback=2.5, knockdown=True, chain_startup=12, lunge=3.0,
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),
         "air.A": Move(

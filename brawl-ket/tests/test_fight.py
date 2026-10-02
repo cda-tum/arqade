@@ -1,4 +1,5 @@
 import random
+import pytest
 from dataclasses import replace
 from types import MappingProxyType
 
@@ -950,3 +951,43 @@ def test_the_ko_push_is_away_from_the_winner_even_off_a_light_hit():
     p2 = fight.fighters["p2"]
     assert p2.vx * (p2.x - fight.fighters["p1"].x) > 0
     assert abs(p2.vx) >= KO_PUSH * 0.5
+
+
+# --- a chain started by a jab that connects connects all the way -------------------------
+
+
+def run_chain(c1, c2, gap, buttons, crouch=False):
+    """p1 starts `buttons` with a jab at `gap`, pressing each next button the frame
+    after the previous one hits. Returns how many of them hit."""
+    fight = versus(c1, c2, gap)
+    held = FighterInput(down=crouch)
+    if crouch:
+        script(fight, 20, p1=held)
+        fight.fighters["p2"].x = fight.fighters["p1"].x + gap
+    hits, i, press_next = 0, 0, True
+    for _ in range(200):
+        btn = buttons[i] if press_next and i < len(buttons) else None
+        if btn:
+            i += 1
+        press_next = False
+        events = fight.step({"p1": replace(held, **({btn: True} if btn else {})), "p2": IDLE})
+        if of(events, "hit", "logical"):
+            hits += 1
+            press_next = True
+        if hits == len(buttons) or fight.over:
+            break
+    return hits
+
+
+def jab_reach(c1, c2, crouch=False):
+    return max(g for g in range(20, 120) if run_chain(c1, c2, g, ["a"], crouch) == 1)
+
+
+@pytest.mark.parametrize("c1,c2", [(TRIO, TRIO), (TRIO, QUINT), (QUINT, TRIO), (QUINT, QUINT)],
+                         ids=["TRIO-TRIO", "TRIO-QUINT", "QUINT-TRIO", "QUINT-QUINT"])
+@pytest.mark.parametrize("crouch", [False, True], ids=["stand", "crouch"])
+def test_a_chain_that_starts_with_a_hit_lands_every_hit(c1, c2, crouch):
+    lo = round(body_width(c1, c2))
+    for gap in range(lo, jab_reach(c1, c2, crouch) + 1, 2):
+        for buttons in (["a", "b"], ["a", "a", "b"]):
+            assert run_chain(c1, c2, gap, buttons, crouch) == len(buttons), (gap, buttons)

@@ -225,10 +225,10 @@ def test_quint_is_the_slower_heavier_fighter():
 
 QUINT_FRAMES = {
     # slot: (name, startup, active, recovery, hitbox, error, hitstun, knockback)
-    "stand.A": ("jab", 6, 3, 10, Box(16, 76, 46, 16), qec.X, 17, 2.0),
+    "stand.A": ("jab", 6, 3, 10, Box(16, 76, 46, 16), qec.X, 17, 1.0),
     "stand.B": ("heavy", 28, 5, 20, Box(16, 70, 48, 22), qec.X, 22, 6.0),
-    "crouch.A": ("low jab", 7, 3, 11, Box(14, 22, 46, 14), qec.Z, 16, 2.0),
-    "crouch.B": ("sweep", 28, 4, 22, Box(12, 6, 54, 14), qec.Z, 24, 2.5),
+    "crouch.A": ("low jab", 7, 3, 11, Box(14, 22, 46, 14), qec.Z, 16, 1.0),
+    "crouch.B": ("sweep", 28, 4, 22, Box(12, 6, 64, 14), qec.Z, 24, 2.5),
     "air.A": ("air jab", 5, 6, 5, Box(12, 54, 30, 20), qec.X, 15, 1.5),
     "air.B": ("jump-in", 8, 6, 8, Box(10, 30, 40, 28), qec.X, 20, 3.0),
     "throw": ("throw", 6, 2, 24, Box(0, 40, 44, 70), qec.Y, 30, 6.0),
