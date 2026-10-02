@@ -116,31 +116,44 @@ After every **12 wins** (in versus: microgames that anyone won) comes a
   loss costs a life, like any microgame.
 - **Rotation:** bosses come round in order. v1 has one.
 
-**TELEPORT!**: carry your qubit across four islands to the lab, before the
-decoherence wave behind you catches up.
+**SYNDROME!**: keep a logical qubit alive until the time runs out. (It
+replaced TELEPORT!, which playtested as too hard and too far from quantum
+computing.)
 
-- **Teleporting:** the islands are cut off from each other. Portals come in
-  entangled pairs (the same colour, joined by a wavy bond), and each pair
-  works once: teleporting **uses up entanglement**. A portal with no bond
-  does nothing.
-- **Arriving:** you arrive as a **ghost**, your state flipped by up to an X
-  and a Z. The two classical bits run to you along a cable at finite speed.
-  When they land, their corrections are applied and you are solid again.
-  Until then you can't teleport on. That is why teleportation can't beat
-  light.
-- **No coin flip:** the bits are random, but they only choose *which*
-  correction is applied, never whether you make it.
-- **The three hops:**
-  1. Calm.
-  2. Noise rains while you wait. Only a ghost can be hurt, and every other
-     drop aims at where you are, so freezing loses. The hitbox is smaller
-     than the sprite.
-  3. Three portals, and only the one matching the far portal's colour is
-     entangled with it.
-- **Losing:** touching the wave, or touching noise while a ghost, fails.
-  The wave reaches the lab just as the time runs out, so the timer and the
-  wave are the same thing.
-- **Caption:** "Teleporting uses up entanglement and needs 2 classical bits".
+- **The chip:** 5 data qubits in a row, a distance-5 repetition code. On
+  each link between neighbours is a parity check, a ZZ stabilizer measured by
+  an ancilla: 4 checks, each reading 0 (dim) or 1 (lit red, glowing). The
+  qubits are orbs that always read `|0>`.
+- **Noise:** from time to time an X error lands on a data qubit. The qubit
+  looks unchanged; only the checks on both sides of it flip. A middle error
+  lights the two checks either side, an end one the single check next to it.
+  The noise shows as a crackle over the whole chip, with no position.
+- **Fixing:** the stick steps a gold bracket along the qubits and A applies
+  an X. On a flipped qubit its checks go dark (a green pulse); on any other
+  it is a new error, and the checks change accordingly.
+- **Losing:** 3 flipped qubits outvote the other 2, so the majority reads the
+  wrong value: a logical error. The chip flashes red, every qubit turns over
+  to `|1>`, and the checks go dark, because that is a codeword again. Three
+  danger pips, top right, are the only place the hidden error count shows.
+- **Winning:** survive to the end (`timeout()` wins). Errors keep coming, so
+  doing nothing reaches 3 flips by about 40% of the time.
+- **The three phases** (thirds of the fight; all times shrink with speed):
+  1. One error at a time, on the middle three qubits. The next lands 2.0 s
+     after the chip is clean, or 3.0 s after the last error if it is left.
+  2. Faster (1.3 s). The phase's second error comes with a second one: a lit
+     pair plus a lone check at an end.
+  3. The cases that need reading, with room to think (2.2 s): first an end
+     qubit, then an adjacent pair (the shared check cancels, so the lit
+     checks are two links apart and the fix is both qubits in between).
+- **Only readable patterns land.** With 5 qubits, two errors one apart in the
+  middle (qubits 1 and 3) light all 4 checks, and an X on the qubit between
+  them would be a third error. That pattern, and the others with a lit run of
+  3 or a lone check away from the edges, never land; a player's own wrong
+  press can still make them.
+- **The bot** knows the flipped set; it looks for 0.2 s, then steps once
+  every 0.12 s to the nearest flipped qubit and presses A.
+- **Hint:** "A BETWEEN THE RED CHECKS".
+- **Caption:** "Parity checks find errors without measuring the qubits".
 
 ## 3. Architecture
 

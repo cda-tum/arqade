@@ -58,12 +58,16 @@ explains its concept in a one-line caption *afterwards*.
 | 12 | SORT! | stick | Slide each falling `|0>` / `|1>` into its bin |
 
 **Bosses:** after every 12 wins comes a BOSS! (worth 3 points, a life if
-lost). **TELEPORT!**: hop your qubit across four islands by entangled
-portals, each pair usable once, before the decoherence wave catches you.
-You arrive as a ghost and stay one until the two classical bits run in
-along the cable and apply their X/Z corrections. Noise rains on ghosts, so
-keep moving. On the last hop, only the portal matching the far one's colour
-is entangled.
+lost). **SYNDROME!**: keep a logical qubit alive on a chip of 5 data qubits
+(a distance-5 repetition code) until the time runs out. X errors land
+unseen, with only a crackle over the chip; the 4 parity checks between the
+qubits show where. A lit pair points at the qubit between them, and a lone
+lit check at an end points at the end qubit. Step the cursor and press A to
+apply an X: on the right qubit its checks go dark, on a wrong one it is a
+new error. Three flipped qubits outvote the other two: a logical error. The
+fight runs in thirds: one error at a time, then faster with some two at once,
+then end qubits and adjacent pairs (whose shared check cancels, so the lit
+checks are two links apart and both qubits in between need an X).
 
 | Action | Cabinet | P1 keyboard | P2 keyboard |
 |---|---|---|---|
