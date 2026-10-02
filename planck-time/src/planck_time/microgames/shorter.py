@@ -1,19 +1,21 @@
-"""SHORTER!: two small circuits sit side by side and do the same thing, but
-one carries redundant gates: an adjacent pair of the same self-inverse gate
-(X X, Z Z or H H), which cancels out. Push the stick left or right to pick a
-side and press A on the circuit with fewer gates.
+"""SHORTER!: two small circuits sit side by side, and they need not do the
+same thing. A compiler optimises both by cancelling gates: two identical
+self-inverse gates next to each other on a wire (X X, Y Y, Z Z or H H) are
+the identity, and cancelling a pair can bring two more together (X H H X
+goes all the way). Push the stick left or right and press A on the circuit
+that is SHORTER AFTER OPTIMISING. After the pick, the cancellations play out
+on both circuits, with the gate counts, so the player sees why.
 
-Picking the longer one fails, and so does never picking. The shorter
-circuit's own wires never hold two identical gates in a row, so it has
-nothing left to remove. At level 0 the longer circuit has two pairs more (or
-one, on a single wire); from level 2 it has just one more, among more gates.
-
-From level 2, half the rounds are a twist: the circuit with the redundant
-pairs is the one that *looks* longer but compiles shorter. The other one
-does the same thing with a gate swapped for an equal sandwich (Z = H X H,
-X = H Z H): longer, and nothing on it is a pair that cancels. Still exact,
-so the "=" between them still holds, and the rule is the same: fewest gates
-once identical neighbours cancel.
+The idea is taught over the session (`appearance`, see base.spawn):
+  1st time: one circuit is plainly shorter; the other carries one pair, and
+            even with that pair cancelled it is still longer. The reveal
+            shows that pairs cancel.
+  2nd time: the circuit with more gates as written is the shorter one once
+            its pairs cancel, so counting gates by eye picks wrong.
+  3rd time on: both sides have pairs, some nested, and the written counts
+            say nothing either way.
+Picking the longer one fails, and so does never picking. The two compiled
+lengths always differ.
 """
 
 from __future__ import annotations
@@ -26,23 +28,43 @@ from planck_time import palette as P
 from planck_time.microgames.base import IDLE, H, Microgame, PlayerInput, register
 from planck_time.pixel import backdrop, blit_center, card, outlined, result_overlay
 
-KINDS = ("X", "Y", "Z", "H")
-PAIRS = ("X", "Z", "H")  # the self-inverse pairs that get inserted
-SANDWICH = {"Z": ("H", "X", "H"), "X": ("H", "Z", "H")}  # H X H = Z and H Z H = X, exactly
-TWIST_FROM = 2  # the level from which the pairs can be the shorter side
+KINDS = ("X", "Y", "Z", "H")  # all self-inverse: a pair of any of them cancels
 SLOTS = 4  # gates per wire
+WIRES = 2
 CARD = 16
 PITCH = 18  # px from one gate to the next
 PANEL_X = (4, 128)  # left and right circuits
-PANEL_Y, PANEL_W, PANEL_H = 24, 108, 96
+PANEL_Y, PANEL_W, PANEL_H = 22, 108, 96
 WIRE_GAP = 36
+REVEAL_FLASH = 0.45  # seconds the cancelling gates flash before they go
 THINK = 0.7  # the bot looks before it moves...
 BOT_STEP = 0.25  # ...moves at a human pace...
 BOT_SETTLE = 0.3  # ...and checks once more before pressing A
 
 
-def sequence(rng, n: int) -> list[str]:
-    """n random gates with no two identical in a row: nothing that cancels."""
+def cancelled(wire: list[str]) -> set[int]:
+    """Indices of the gates a compiler removes from a wire: adjacent identical
+    pairs, repeatedly, so a cancellation can bring the next pair together."""
+    stack: list[int] = []
+    gone: set[int] = set()
+    for i, kind in enumerate(wire):
+        if stack and wire[stack[-1]] == kind:
+            gone.update((stack.pop(), i))
+        else:
+            stack.append(i)
+    return gone
+
+
+def written(circuit) -> int:
+    return sum(len(w) for w in circuit)
+
+
+def compiled(circuit) -> int:
+    return sum(len(w) - len(cancelled(w)) for w in circuit)
+
+
+def plain(rng, n: int) -> list[str]:
+    """n gates with no two identical in a row: nothing cancels."""
     seq: list[str] = []
     while len(seq) < n:
         k = rng.choice(KINDS)
@@ -51,93 +73,102 @@ def sequence(rng, n: int) -> list[str]:
     return seq
 
 
-def with_pairs(rng, wire: list[str], pairs: int) -> list[tuple[str, bool]]:
-    """The wire with `pairs` redundant pairs slotted in between its gates, each
-    a kind its neighbours aren't, so it reads as one clear pair. Returns
-    (kind, redundant) per gate."""
-    units = [[(k, False)] for k in wire]
-    for _ in range(pairs):
-        i = rng.randrange(len(units) + 1)
-        near = {units[i - 1][-1][0] if i > 0 else None, units[i][0][0] if i < len(units) else None}
-        k = rng.choice([p for p in PAIRS if p not in near])
-        units.insert(i, [(k, True), (k, True)])
-    return [g for u in units for g in u]
+def build(rng, cores: list[int], pairs: list[int], nest: bool = False) -> list[list[str]] | None:
+    """A circuit from irreducible wire lengths and pairs per wire, or None if
+    a wire would not fit."""
+    circuit = []
+    for n, p in zip(cores, pairs):
+        wire = plain(rng, n)
+        for _ in range(p):
+            k = rng.choice(KINDS)
+            if nest and len(wire) >= 2 and rng.random() < 0.5:
+                # a cascade: k (a pair that already cancels) k
+                j = rng.randrange(len(wire) - 1)
+                if wire[j] == wire[j + 1]:
+                    wire[j:j] = [k]
+                    wire[j + 3:j + 3] = [k]
+                    continue
+            wire[rng.randrange(len(wire) + 1):0] = [k, k]
+        if len(wire) > SLOTS:
+            return None
+        circuit.append(wire)
+    return circuit
 
 
-def sandwiched(rng, wire: list[str], count: int) -> list[str] | None:
-    """The wire with `count` of its X/Z gates swapped for the equal H.H
-    sandwich, or None if that would put two identical gates side by side."""
-    spots = [i for i, k in enumerate(wire) if k in SANDWICH]
-    if len(spots) < count:
-        return None
-    out = list(wire)
-    for i in sorted(rng.sample(spots, count), reverse=True):
-        out[i:i + 1] = SANDWICH[out[i]]
-    if any(a == b for a, b in zip(out, out[1:])):
-        return None
-    return out
-
-
-def no_pairs(wire) -> bool:
-    return all(a != b for a, b in zip(wire, wire[1:]))
+def split(rng, total: int) -> list[int]:
+    """`total` spread over the wires, each at most SLOTS."""
+    while True:
+        parts = [0] * WIRES
+        for _ in range(total):
+            parts[rng.randrange(WIRES)] += 1
+        if all(p <= SLOTS for p in parts):
+            return parts
 
 
 @register
 class Shorter(Microgame):
     VERB = "SHORTER!"
     INPUT = "stick+a"
-    CAPTION = "Compilers find shorter circuits"
+    CAPTION = "Compilers cancel gates to make circuits shorter"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:
         super().__init__(seed, level, duration)
-        self.twist = level >= TWIST_FROM and self.rng.random() < 0.5
-        if self.twist:
-            pairs_side, other = self._twisted()
-        else:
-            pairs_side, other = self._plain(level)
-        # the right answer is whichever is shorter once identical neighbours cancel
-        self.short = self.rng.randrange(2)
-        answer, decoy = (pairs_side, other) if self.twist else (other, pairs_side)
+        stage = min(self.appearance, 2)
+        self.looks = self.rng.choice((1, 1, 0, -1))  # stage 3 on: answer looks longer / same / shorter
+        for _ in range(2000):
+            pair = self._candidate(stage)
+            if pair is not None:
+                answer, decoy = pair
+                break
+        else:  # never seen in testing; fail loudly rather than build a broken round
+            raise RuntimeError(f"no SHORTER! round found for seed {seed}, stage {stage}")
+        self.stage = stage
+        self.short = self.rng.randrange(2)  # which side is the right answer
         self.circuits = [answer, decoy] if self.short == 0 else [decoy, answer]
+        self.gone = [[cancelled(w) for w in c] for c in self.circuits]
         self.cursor = self.rng.randrange(2)
         self.moved_at = 0.0
         self.picked: int | None = None
         self.backdrop = P.BACKDROPS[self.rng.randrange(len(P.BACKDROPS))]
 
-    def _plain(self, level: int):
-        """(the circuit with pairs, the plain one): the pairs make it longer."""
-        wires = 1 if level == 0 and self.rng.random() < 0.5 else 2
-        if wires == 1:
-            base, pairs = 1, 1
-        else:
-            base, pairs = (2, 3, 4, 5)[min(level, 3)], 2 if level < 2 else 1
-        while True:  # split the gates over the wires so every wire fits
-            split = [1] * wires
-            for _ in range(base - wires):
-                split[self.rng.randrange(wires)] += 1
-            extra = [0] * wires
-            for _ in range(pairs):
-                extra[self.rng.randrange(wires)] += 1
-            if all(b + 2 * p <= SLOTS for b, p in zip(split, extra)):
-                break
-        plain = [sequence(self.rng, n) for n in split]
-        return [with_pairs(self.rng, w, p) for w, p in zip(plain, extra)], [[(k, False) for k in w] for w in plain]
-
-    def _twisted(self):
-        """(the circuit with pairs, the sandwiched one): the same gates
-        underneath, two pairs on one side and one sandwich on the other, so
-        the pairs side shows more gates (n + 4 > n + 2) but compiles to n."""
-        while True:
-            split = [self.rng.choice((1, 2)) for _ in range(2)]
-            plain = [sequence(self.rng, n) for n in split]
-            extra = [1, 1]
-            sand_wire = self.rng.randrange(2)
-            sand = [sandwiched(self.rng, w, 1 if i == sand_wire else 0) for i, w in enumerate(plain)]
-            fits = all(len(w) + 2 * p <= SLOTS for w, p in zip(plain, extra))
-            if fits and all(w is not None and len(w) <= SLOTS and no_pairs(w) for w in sand):
-                break
-        with_redundant = [with_pairs(self.rng, w, p) for w, p in zip(plain, extra)]
-        return with_redundant, [[(k, False) for k in w] for w in sand]
+    def _candidate(self, stage: int):
+        """(answer, decoy) for this stage, or None to try again."""
+        rng = self.rng
+        if stage == 0:  # plainly shorter vs. longer-with-one-pair, still longer after it
+            n = rng.choice((2, 3))
+            answer = build(rng, split(rng, n), [0] * WIRES)
+            core = n + rng.choice((1, 2))
+            pairs = [0] * WIRES
+            pairs[rng.randrange(WIRES)] = 1
+            decoy = build(rng, split(rng, core), pairs)
+        elif stage == 1:  # more gates as written, fewer once its pairs cancel
+            n = rng.choice((3, 4, 5))
+            decoy = build(rng, split(rng, n), [0] * WIRES)
+            core = rng.randrange(1, n)
+            pairs = split(rng, rng.choice((1, 2)))
+            answer = build(rng, split(rng, core), pairs)
+            if answer is not None and decoy is not None and written(answer) <= written(decoy):
+                return None
+        else:  # pairs on both sides, some nested: the counts as written say nothing
+            nest = self.level >= 2 or stage >= 2
+            a_core, d_core = rng.randrange(1, 5), rng.randrange(1, 5)
+            answer = build(rng, split(rng, a_core), split(rng, rng.choice((1, 2))), nest)
+            decoy = build(rng, split(rng, d_core), split(rng, rng.choice((1, 2))), nest)
+            if answer is None or decoy is None:
+                return None
+            # how the answer looks as written: longer half the time, the same a quarter,
+            # honestly shorter a quarter, so neither counting nor "pick the longer" works
+            want = self.looks
+            have = (written(answer) > written(decoy)) - (written(answer) < written(decoy))
+            if have != want:
+                return None
+        if answer is None or decoy is None:
+            return None
+        if compiled(answer) >= compiled(decoy):
+            return None
+        if stage == 0 and written(answer) >= written(decoy):
+            return None
+        return answer, decoy
 
     def step(self, dt: float, inp: PlayerInput) -> None:
         dx = inp.step[0]
@@ -165,16 +196,13 @@ class Shorter(Microgame):
 
     def wire_ys(self) -> list[int]:
         mid = PANEL_Y + PANEL_H // 2
-        n = len(self.circuits[0])
-        return [round(mid + (i - (n - 1) / 2) * WIRE_GAP) for i in range(n)]
+        return [round(mid + (i - (WIRES - 1) / 2) * WIRE_GAP) for i in range(WIRES)]
 
     def draw(self, surf: pygame.Surface) -> None:
         backdrop(surf, self.backdrop, self.t)
-        # "=" between the two: they do the same thing
-        for y in (PANEL_Y + PANEL_H // 2 - 4, PANEL_Y + PANEL_H // 2 + 2):
-            surf.fill(P.INK, (113, y - 1, 14, 4))
-            surf.fill(P.WHITE, (114, y, 12, 2))
         blink = int(self.t * 6) % 2
+        revealing = self.result is not None
+        compact = revealing and self.since_end >= REVEAL_FLASH
         for side, x in enumerate(PANEL_X):
             panel = pygame.Rect(x, PANEL_Y, PANEL_W, PANEL_H)
             chosen = side == self.cursor if self.picked is None else side == self.picked
@@ -189,28 +217,36 @@ class Shorter(Microgame):
                 pygame.draw.rect(surf, edge, panel.inflate(4, 4), 3, border_radius=6)
             else:
                 pygame.draw.rect(surf, P.SLATE, panel, 1, border_radius=5)
-            for y, wire in zip(self.wire_ys(), self.circuits[side]):
+            for y, wire, gone in zip(self.wire_ys(), self.circuits[side], self.gone[side]):
                 blit_center(surf, outlined("|0>", 8, P.WHITE), (x + 15, y))
                 surf.fill(P.INK, (x + 29, y - 2, PANEL_W - 33, 5))
                 surf.fill(P.MIST, (x + 29, y - 1, PANEL_W - 33, 3))
-                for i, (kind, redundant) in enumerate(wire):
+                slot = 0
+                for i, kind in enumerate(wire):
+                    if compact and i in gone:
+                        continue  # optimised away
                     r = pygame.Rect(0, 0, CARD, CARD)
-                    r.center = (x + 39 + PITCH * i, y)
+                    r.center = (x + 39 + PITCH * slot, y)
+                    slot += 1
                     card(surf, r, P.GATE[kind])
                     blit_center(surf, outlined(kind, 8, P.WHITE, shadow=False), (r.centerx + 1, r.centery))
-                    if redundant and self.result is not None and i and wire[i - 1][1] and blink:
-                        pair = pygame.Rect(r.x - PITCH, r.y, CARD + PITCH, CARD).inflate(6, 6)
-                        pygame.draw.rect(surf, P.GOLD, pair, 2, border_radius=5)
+                    if revealing and not compact and i in gone and blink:
+                        pygame.draw.rect(surf, P.GOLD, r.inflate(4, 4), 2, border_radius=5)
+            if revealing:  # the gate counts, as written and after optimising
+                before, after = written(self.circuits[side]), compiled(self.circuits[side])
+                label = f"{before}->{after} GATES" if compact else f"{before} GATES"
+                blit_center(surf, outlined(label, 8, P.GOLD if compact else P.WHITE), (panel.centerx, panel.bottom - 8))
             if chosen and self.result is None:  # a bouncing arrow over the picked side
                 cx, top = panel.centerx, PANEL_Y - 6 + round(2 * math.sin(self.t * 8))
                 tri = [(cx - 6, top - 6), (cx + 6, top - 6), (cx, top)]
                 pygame.draw.polygon(surf, P.INK, [(px, py + 1) for px, py in tri])
                 pygame.draw.polygon(surf, P.GOLD, tri)
-            if chosen and self.result is False:  # a red X over the wrong pick
+            if chosen and self.result is False and not compact:  # a red X over the wrong pick
                 c = panel.center
                 for d in ((-1, -1), (1, -1)):
                     a, b = (c[0] - 22 * d[0], c[1] - 22 * d[1]), (c[0] + 22 * d[0], c[1] + 22 * d[1])
                     pygame.draw.line(surf, P.INK, a, b, 9)
                     pygame.draw.line(surf, P.BAD, a, b, 5)
-        blit_center(surf, outlined("A ON THE SHORTER ONE", 8, P.WHITE), (120, H - 14))
+        hint = "A ON THE SHORTER ONE" if self.stage == 0 else "PAIRS CANCEL! PICK SHORTER"
+        blit_center(surf, outlined(hint, 8, P.WHITE), (120, H - 14))
         result_overlay(surf, self.result, self.since_end, seed=11)

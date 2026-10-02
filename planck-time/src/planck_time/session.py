@@ -160,6 +160,7 @@ class Session:
         self.games: dict[str, Microgame] = {}
         self.first_time = False  # this microgame's first appearance in the session (the intro demo)
         self.seen: set[str] = set()
+        self.appearances: dict[str, int] = {}  # how often each microgame has come up this session
         self.played = 0
         self.lives = {p: config.LIVES for p in PLAYERS}
         self.scores = {p: 0 for p in PLAYERS}
@@ -429,6 +430,7 @@ class Session:
         self.toward_boss = 0
         self.boss_index = 0
         self.seen = set()
+        self.appearances = {}
         self.deck = Deck(self.registry, self.rng)
         self.winner = None
         self.new_rank = None
@@ -439,7 +441,10 @@ class Session:
     def _next_microgame(self, events: list, cls: type[Microgame] | None = None) -> None:
         self.game_cls = cls or self.deck.draw()
         self.seed = self.rng.randrange(1 << 30)
-        self.games = {p: self.game_cls(self.seed, self.level, self.duration) for p in self.players}
+        name = self.game_cls.__name__
+        n = self.appearances.get(name, 0)
+        self.appearances[name] = n + 1
+        self.games = {p: self.game_cls.spawn(self.seed, self.level, self.duration, n) for p in self.players}
         self.first_time = self.game_cls.__name__ not in self.seen
         self._cued = set()
         self._set_state(INTRO)

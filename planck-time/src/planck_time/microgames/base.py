@@ -45,7 +45,19 @@ class Microgame:
     INPUT = "stick"
     CAPTION = ""
     BOSS = False  # bosses are longer, come after every BOSS_EVERY wins, and score more
+    appearance = 0  # how many times this microgame has already come up this session (see spawn)
     POINTS = 1  # scored for a success
+
+    @classmethod
+    def spawn(cls, seed: int, level: int, duration: float, appearance: int = 0) -> "Microgame":
+        """An instance that knows it is the session's (appearance + 1)-th of
+        its kind, set before __init__ runs, so a microgame can introduce an
+        idea the first time and build on it later. Subclasses keep the plain
+        (seed, level, duration) constructor."""
+        game = cls.__new__(cls)
+        game.appearance = appearance
+        game.__init__(seed, level, duration)
+        return game
 
     @classmethod
     def duration_for(cls, level: int) -> float:
