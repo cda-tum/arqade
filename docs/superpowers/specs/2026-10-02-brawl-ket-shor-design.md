@@ -1,5 +1,9 @@
 # Brawl-Ket v2: the Shor code: design
 
+> **Superseded** by `2026-10-02-brawl-ket-basis-design.md` (v3). The v2 build reached its
+> step 5 (the playable core); the user's playtest found hits-as-code-errors still
+> unintuitive, so error correction was dropped. Kept as history.
+
 This replaces the rules of `2026-10-01-brawl-ket-design.md`, which built each
 fighter on a repetition code. The first cabinet playtest (2026-10-02) found:
 
