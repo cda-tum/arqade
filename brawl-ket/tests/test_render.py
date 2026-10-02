@@ -279,3 +279,34 @@ def test_the_grid_lights_an_x_cell_and_a_z_row(surface):
     z_back = (left + 3, top + 4 + 2 * (CELL + CELL_GAP) + 3)              # LOW row, left edge
     assert tuple(surface.get_at(x_cell))[:3] == P.GATE[shor.X]
     assert tuple(surface.get_at(z_back))[:3] == P.GATE[shor.Z]
+
+
+def test_a_cancel_pops_its_cell_white_on_the_tag(surface):
+    from brawl_ket import shor
+    from brawl_ket.render import CELL, CELL_GAP, PLATE
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [Event("cancel", "p2", shor.X, 400, 200, shor.MID, shor.B_COL)])
+    assert r.pops["p2"] and r.pops["p2"][0][:2] == (shor.MID, shor.B_COL)
+    surface.fill((0, 0, 0))
+    r._code_tag("p2", fight.fighters["p2"], (160, 120, 160), 0, 0)
+    left, top = 160 - PLATE // 2, 120 - PLATE // 2
+    cell = (left + 4 + shor.B_COL * (CELL + CELL_GAP) + 3, top + 4 + shor.MID * (CELL + CELL_GAP) + 3)
+    assert tuple(surface.get_at(cell))[:3] == P.WHITE
+    for _ in range(30):
+        r.draw_fight(fight, [])
+    assert r.pops["p2"] == []
+
+
+def test_a_new_popup_replaces_an_older_one_beside_it(surface):
+    # jab, jab: the cancel's I must not be drawn over the first jab's X!, still rising
+    from brawl_ket import shor
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [Event("hit", "p2", shor.X, 400, 200, shor.HIGH, shor.A_COL)])
+    for _ in range(10):
+        r.draw_fight(fight, [])
+    r.draw_fight(fight, [Event("cancel", "p2", shor.X, 404, 202, shor.HIGH, shor.A_COL),
+                         Event("hit", "p1", shor.X, 100, 200, shor.HIGH, shor.A_COL)])
+    assert sorted(fx.text for fx in r.effects if fx.kind == "popup") == ["I", "X!"]
+    assert {fx.x for fx in r.effects if fx.kind == "popup"} == {404, 100}

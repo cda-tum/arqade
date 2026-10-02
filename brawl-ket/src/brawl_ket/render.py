@@ -66,6 +66,8 @@ BANNER_FRAMES = 75
 SHAKE_FRAMES = 20
 SHAKE_PX = 6
 FLASH_FRAMES = 24           # the grid after a correction (green) or a logical error (red)
+POP_FRAMES = 12             # a cancelled light pops white this long
+POPUP_ROOM = 40             # a new pop-up replaces any older one this close across (px)
 WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the floor
 WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
 PULSE_FRAMES = 20           # RE-ENCODE: a ring of light growing out of the fighter
@@ -381,6 +383,8 @@ class Renderer:
         self.pose_start: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.pose_last: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.flash = {p: (None, 0) for p in PLAYERS}    # (colour, frames left) on the lights
+        # cancelled lights popping white: (row, col, frames left), col -1 for a whole row
+        self.pops: dict[str, list[tuple[int, int, int]]] = {p: [] for p in PLAYERS}
         self.effects.clear()
         self.shake = 0
 
@@ -427,7 +431,13 @@ class Renderer:
                 color = P.WHITE if e.kind == "cancel" else P.GATE.get(e.error or "X", P.WHITE)
                 text = "I" if e.kind == "cancel" else f"{e.error}!"
                 self.effects.append(Effect("spark", e.x, e.y, SPARK_FRAMES, SPARK_FRAMES, color))
+                # the newest wins: a jab's X! still rising would sit over the next jab's I
+                self.effects = [fx for fx in self.effects
+                                if fx.kind != "popup" or abs(fx.x - e.x) >= POPUP_ROOM]
                 self.effects.append(Effect("popup", e.x, e.y - 18, POPUP_FRAMES, POPUP_FRAMES, color, text))
+            if e.kind == "cancel" and e.player and e.row is not None:
+                # an X cancels its cell; a Z (or a Y) its row's flip, so the whole row pops
+                self.pops[e.player].append((e.row, e.col if e.error == shor.X else -1, POP_FRAMES))
             if e.kind == "logical":
                 self.effects = [fx for fx in self.effects if fx.kind != "banner"]
                 self.effects.append(Effect("banner", W / 2, BANNER_Y, BANNER_FRAMES, BANNER_FRAMES, P.BAD,
@@ -454,6 +464,7 @@ class Renderer:
         for p in PLAYERS:
             color, left = self.flash[p]
             self.flash[p] = (color, left - 1) if left > 1 else (None, 0)
+        self.pops = {p: [(r, c, n - 1) for r, c, n in v if n > 1] for p, v in self.pops.items()}
 
     def _shake_offset(self) -> tuple[int, int]:
         if self.shake <= 0:
@@ -622,7 +633,9 @@ class Renderer:
         Z gate's blue (its cells drop their ink outline, so the blue fills the gaps; a Z-danger row's
         orange backing does the same on the beat). Danger pulses orange: the other cells of a row holding one X (a
         different button there breaks the code), or the other rows once one is flipped
-        (a special there breaks it)."""
+        (a special there breaks it). A cancelled light pops white for POP_FRAMES (an X its
+        cell, a Z or a Y its whole row); the whole grid flashes green after a correction
+        and red after a logical error."""
         code = f.code
         surf = self.surface
         cx, cy = round(at[0]) + ox, round(at[1]) + oy
@@ -639,6 +652,7 @@ class Renderer:
         lit = flash is not None and left % 6 >= 2
         beat = (self.t // (DANGER_BEAT // 2)) % 2 == 0
         x_danger, z_danger = code.x_danger_rows(), code.z_danger_rows()
+        pops = {(r, c) for r, c, _ in self.pops[key]}
         for row in range(3):
             y = plate.top + 4 + row * (CELL + CELL_GAP)
             backed = row in code.z_rows or (row in z_danger and beat)
@@ -656,6 +670,8 @@ class Renderer:
                     c = P.ORANGE
                 else:
                     c = P.SLATE
+                if (row, col) in pops or (row, -1) in pops:
+                    c = P.WHITE                 # a cancelled light goes out with a white pop
                 if not backed:                  # a backed row's colour shows through its gaps
                     surf.fill(P.INK, (x - 1, y - 1, CELL + 2, CELL + 2))
                 surf.fill(c, (x, y, CELL, CELL))
