@@ -9,12 +9,11 @@ is verified on the cabinet with --input-test.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 import pygame
 
 from . import config
-from .fighter import IDLE, FighterInput
+from .fighter import FighterInput
+from .match import FrameInput
 
 PLAYERS = ("p1", "p2")
 
@@ -51,6 +50,11 @@ def keyboard_quit_held(keys) -> bool:
     return bool(keys[getattr(pygame, config.INPUT_CONFIG["system"]["keyboard_quit"])])
 
 
+def nav_push(prev: tuple[int, int], now: tuple[int, int]) -> tuple[int, int]:
+    """A menu step: each stick direction counts once, when it is pushed (no auto-repeat)."""
+    return tuple(v if v and v != was else 0 for was, v in zip(prev, now))
+
+
 # --- pure helpers ----------------------------------------------------------------------
 
 
@@ -78,26 +82,13 @@ def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: b
     return (p1_start and p1_select) or (p2_start and p2_select)
 
 
-# --- one frame's worth of input ------------------------------------------------------------
-
-
-@dataclass
-class FrameInput:
-    """What the game gets per display frame. (Task 10 moves this into match.py.)"""
-
-    fighters: dict[str, FighterInput] = field(default_factory=lambda: {p: IDLE for p in PLAYERS})
-    confirms: dict[str, bool] = field(default_factory=lambda: {p: False for p in PLAYERS})  # A or Start
-    backs: dict[str, bool] = field(default_factory=lambda: {p: False for p in PLAYERS})      # B
-    pauses: dict[str, bool] = field(default_factory=lambda: {p: False for p in PLAYERS})     # Start
-    activity: bool = False
-
-
 class Input:
     def __init__(self) -> None:
         self.joysticks: list = []
         self.keymap = {p: {act: _codes(names) for act, names in config.KEYMAP[p].items()} for p in PLAYERS}
         self._down: dict[str, set[int]] = {p: set() for p in PLAYERS}
         self._keys_prev: dict[str, set[str]] = {p: set() for p in PLAYERS}
+        self._stick_prev: dict[str, tuple[int, int]] = {p: (0, 0) for p in PLAYERS}
         self.frame = FrameInput()
         self.start_select = {p: (False, False) for p in PLAYERS}
         self.select_held_time = 0.0     # seconds Select has been held on either pad
@@ -161,6 +152,10 @@ class Input:
             frame.confirms[p] = a or start_pressed
             frame.backs[p] = b_btn in pressed or "b" in new_keys
             frame.pauses[p] = start_pressed
+            frame.nav[p] = nav_push(self._stick_prev[p], (dx, dn - up))
+            self._stick_prev[p] = (dx, dn - up)
+            if down or (held_keys - {"left", "right", "up", "down"}):
+                frame.held = True
             self.start_select[p] = (start in down, system["select_button"] in down)
             if down or dx or up or dn or held_keys:
                 frame.activity = True

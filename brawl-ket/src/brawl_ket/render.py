@@ -1,5 +1,5 @@
-"""The 640x360 fight: chunky GBA puppets on a quantum-lab stage, with the HUD
-and the hit effects.
+"""The 640x360 game: chunky GBA puppets on a quantum-lab stage, with the HUD,
+the hit effects and the match's screens (title, select, round calls, result, pause).
 
 The puppets are drawn from poses.joints() every frame as thick capsules with a
 2 px ink outline (back limbs a darker shade, a highlight stripe on the torso,
@@ -20,6 +20,7 @@ from functools import lru_cache
 
 import pygame
 
+from . import match as M
 from . import palette as P
 from . import qec
 from .config import (
@@ -27,13 +28,15 @@ from .config import (
     FPS,
     INTERNAL_HEIGHT,
     INTERNAL_WIDTH,
+    MATCH_RESULT_LOCK,
     PLAYER_COLORS,
     ROUNDS_TO_WIN,
 )
 from .fight import Fight
 from .fighter import TELEGRAPH_FRAMES, Fighter
 from .fonts import load_font
-from .poses import HEAD_R, LIMB_W, Pose, joints, pose_for
+from .moves import Character
+from .poses import HEAD_R, LIMB_W, POSES, Pose, joints, pose_for
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 MARGIN = 8                  # the stage is this much bigger on every side, for the shake
@@ -73,6 +76,12 @@ TAG_FOLLOW = 0.3            # the code lights ease towards the head by this much
 TAG_EDGE = 4                # a tag keeps this far from the screen's edges
 BANNER_Y = 80
 BANNER_TEXT = "LOGICAL ERROR!"
+CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are centred here
+BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
+
+# the select screen: what each fighter is, in a line, and how its X moves are entered
+TRAITS = {"TRIO": "FAST AND LIGHT", "QUINT": "SLOW AND HEAVY"}
+X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
 
 WALL = (40, 32, 80)
 WALL_TILE = (48, 40, 96)
@@ -385,6 +394,9 @@ class Renderer:
         stage, self.lights = make_stage()
         self.stage = stage.convert(surface)     # the same pixel format: the cheapest blit
         self.rings = [make_ring(i / RING_STEPS) for i in range(RING_STEPS + 1)]
+        self.dim = pygame.Surface((W, H), pygame.SRCALPHA)     # darkens the game under a menu
+        self.dim.fill((*P.INK, 150))
+        self.bands: dict[int, pygame.Surface] = {}
         self.effects: list[Effect] = []
         self.shake = 0              # frames of shake left
         self.t = 0                  # frames drawn
@@ -771,3 +783,189 @@ class Renderer:
             self.trail_wait[key] += 1
             return
         self.trail[key] = max(health, self.trail[key] - TRAIL_SPEED)
+
+    # --- the match's screens -------------------------------------------------------------------
+
+    def draw(self, match: M.Match, events: list) -> None:
+        """The whole frame for the match's state. Cues are the match's own; the fight's
+        events (hits, logical errors, ...) start the effects."""
+        fight_events = [e for e in events if not isinstance(e, M.Cue)]
+        state = match.state
+        if state == M.TITLE:
+            if match.attract is not None:
+                self.draw_fight(match.attract, fight_events)
+                self._attract_overlay()
+            else:
+                self._title()
+        elif state == M.SELECT:
+            self._select(match)
+        else:
+            self.draw_fight(match.fight, fight_events, match.wins)
+            if state == M.ROUND_INTRO:
+                self._round_intro(match)
+            elif state == M.ROUND_END:
+                self._round_end(match)
+            elif state == M.MATCH_RESULT:
+                self._match_result(match)
+            if match.paused:
+                self._pause(match)
+
+    def _backdrop(self, dim: bool = True) -> None:
+        """The lab, empty and still, as the menus' background."""
+        self.t += 1
+        self.surface.blit(self.stage, (-MARGIN, -MARGIN))
+        self._blink(0, 0)
+        if dim:
+            self.surface.blit(self.dim, (0, 0))
+
+    def _band(self, top: int, bottom: int) -> None:
+        """A dark see-through strip across the screen, so text reads over the fight."""
+        h = bottom - top
+        if h not in self.bands:
+            band = pygame.Surface((W, h), pygame.SRCALPHA)
+            band.fill((*P.INK, 170))
+            band.fill((*P.MIST, 120), (0, 0, W, 1))
+            band.fill((*P.MIST, 120), (0, h - 1, W, 1))
+            self.bands[h] = band
+        self.surface.blit(self.bands[h], (0, top))
+
+    def _call(self, text: str, color, y: float = CALL_Y, size: int = 32, age: int | None = None) -> None:
+        """A big centred call. With `age` it drops in over its first frames."""
+        drop = 0 if age is None or age >= 6 else (6 - age) * 4
+        blit_center(self.surface, outlined(text, size, color, thick=2), (W / 2, y - drop))
+
+    def _prompt(self, text: str, y: float, color=P.WHITE) -> None:
+        if (self.t // (BLINK // 2)) % 2 == 0:
+            blit_center(self.surface, outlined(text, 8, color), (W / 2, y))
+
+    def _logo(self, center_y: float, size: int = 48) -> None:
+        """BRAWL-KET: BRAWL in P1's blue, KET in P2's red, the cabinet's two sides."""
+        left = outlined("BRAWL-", size, PLAYER_COLORS["p1"], thick=3)
+        right = outlined("KET", size, PLAYER_COLORS["p2"], thick=3)
+        x = (W - left.get_width() - right.get_width()) // 2
+        y = round(center_y - left.get_height() / 2)
+        self.surface.blit(left, (x, y))
+        self.surface.blit(right, (x + left.get_width(), y))
+
+    def _title(self) -> None:
+        self._backdrop(dim=False)
+        surf = self.surface
+        for char, key, x, facing in ((M.ROSTER[0], "p1", 236, 1), (M.ROSTER[-1], "p2", 404, -1)):
+            rect = pygame.Rect(0, 0, 52, 8)
+            rect.center = (x, FLOOR_Y + 2)
+            pygame.draw.ellipse(surf, SHADOW, rect)
+            draw_puppet(surf, POSES["idle"], char.build, (x, FLOOR_Y), facing, PLAYER_COLORS[key],
+                        ACCENT.get(char.name, P.CREAM))
+        self._band(32, 156)
+        self._logo(72)
+        blit_center(surf, outlined("|000>  VS  |00000>", 8, P.MIST), (W / 2, 114))
+        self._prompt("PRESS START", 138, P.GOLD)
+
+    def _attract_overlay(self) -> None:
+        self._band(H - 58, H)
+        self._logo(H - 36, size=24)
+        self._prompt("PRESS START", H - 12, P.GOLD)
+        blit_center(self.surface, outlined("DEMO", 8, P.MIST), (W / 2, 64))
+
+    def _select(self, match: M.Match) -> None:
+        self._backdrop()
+        self._call("CHOOSE YOUR CODE", P.WHITE, y=24, size=16)
+        for key, side in (("p1", -1), ("p2", 1)):
+            self._select_panel(key, side, M.ROSTER[match.picks[key]], match.ready[key])
+        blit_center(self.surface, outlined("STICK: CHOOSE   A: READY   B: BACK", 8, P.MIST), (W / 2, H - 12))
+
+    def _select_panel(self, key: str, side: int, char: Character, ready: bool) -> None:
+        surf = self.surface
+        color = PLAYER_COLORS[key]
+        cx = W / 2 + side * 156
+        panel = pygame.Rect(0, 0, 296, 290)
+        panel.center = (round(cx), 186)
+        pygame.draw.rect(surf, P.INK, panel.inflate(4, 4), border_radius=8)
+        pygame.draw.rect(surf, P.NIGHT, panel, border_radius=7)
+        pygame.draw.rect(surf, color if ready else P.shade(color, 0.6), panel, 2, border_radius=7)
+        surf.blit(outlined(key.upper(), 8, color), (panel.x + 8, panel.y + 8))
+        # the fighter, facing the middle, flexing once ready
+        floor = panel.y + 176
+        rect = pygame.Rect(0, 0, 52, 8)
+        rect.center = (round(cx), floor + 2)
+        pygame.draw.ellipse(surf, SHADOW, rect)
+        draw_puppet(surf, POSES["jab_hit" if ready else "idle"], char.build, (cx, floor), -side, color,
+                    ACCENT.get(char.name, P.CREAM))
+        # the name between arrows (the arrows go once the pick is locked in)
+        name = outlined(char.name, 16, color, thick=2)
+        blit_center(surf, name, (cx, floor + 20))
+        if not ready:
+            nudge = 2 if (self.t // 15) % 2 else 0
+            for d in (-1, 1):
+                arrow = outlined("<" if d < 0 else ">", 16, P.WHITE, thick=2)
+                blit_center(surf, arrow, (cx + d * (name.get_width() / 2 + 18 + nudge), floor + 20))
+        # what it is: its code and its build
+        ket = "|" + "0" * char.distance + ">"
+        t = (char.distance - 1) // 2
+        lines = (f"{ket}  FIXES {t} FLIP{'S' if t > 1 else ''}", TRAITS.get(char.name, ""))
+        for i, line in enumerate(lines):
+            blit_center(surf, outlined(line, 8, P.MIST), (cx, floor + 40 + 12 * i))
+        # the X moves: the buttons, then the names
+        for i, (slot, how) in enumerate(X_INPUTS):
+            y = floor + 70 + 12 * i
+            surf.blit(outlined(how, 8, P.GOLD), (panel.x + 30, y))
+            surf.blit(outlined(char.moves[slot].name, 8, P.WHITE), (panel.x + 118, y))
+        if ready:
+            self._stamp("READY!", (panel.right - 58, panel.y + 20), P.GOOD)
+
+    def _stamp(self, text: str, center, color) -> None:
+        img = outlined(text, 16, color, thick=2)
+        box = img.get_rect(center=_pt(center)).inflate(12, 8)
+        pygame.draw.rect(self.surface, P.INK, box, border_radius=4)
+        pygame.draw.rect(self.surface, color, box, 2, border_radius=4)
+        blit_center(self.surface, img, center)
+
+    def _round_intro(self, match: M.Match) -> None:
+        self._band(CALL_Y - 26, CALL_Y + 26)
+        if match.t < M.FIGHT_CALL:
+            self._call(f"ROUND {match.round_no}", P.WHITE, age=match.t)
+        else:
+            self._call("FIGHT!", P.GOLD, age=match.t - M.FIGHT_CALL)
+
+    def _round_end(self, match: M.Match) -> None:
+        fight = match.fight
+        winner = match.round_winner
+        self._band(CALL_Y - 26, CALL_Y + (26 if winner is None else 80 if match.perfect else 54))
+        if winner is None:
+            self._call("DRAW", P.MIST, age=match.t)
+            return
+        ko = any(f.health <= 0 for f in fight.fighters.values())
+        self._call("K.O." if ko else "TIME", P.BAD if ko else P.GOLD, age=match.t)
+        if match.t >= FPS // 2:
+            line = f"{fight.fighters[winner].char.name} WINS THE ROUND"
+            blit_center(self.surface, outlined(line, 16, PLAYER_COLORS[winner], thick=2), (W / 2, CALL_Y + 36))
+        if match.perfect and match.t >= FPS:
+            self._call("PERFECT", P.GOLD, y=CALL_Y + 64, size=16, age=match.t - FPS)
+
+    def _match_result(self, match: M.Match) -> None:
+        self.surface.blit(self.dim, (0, 0))
+        winner = match.winner
+        self._band(CALL_Y - 48, CALL_Y + 76)
+        name = match.fight.fighters[winner].char.name
+        self._call(f"{winner.upper()} WINS!", PLAYER_COLORS[winner], y=CALL_Y - 20, age=match.t)
+        blit_center(self.surface, outlined(f"{name}  {match.wins['p1']} - {match.wins['p2']}", 16, P.WHITE,
+                                           thick=2), (W / 2, CALL_Y + 20))
+        if match.t >= MATCH_RESULT_LOCK:
+            self._prompt("A: REMATCH     B: TITLE", CALL_Y + 60, P.GOLD)
+
+    def _pause(self, match: M.Match) -> None:
+        surf = self.surface
+        surf.blit(self.dim, (0, 0))
+        box = pygame.Rect(0, 0, 220, 104)
+        box.center = (W // 2, H // 2)
+        pygame.draw.rect(surf, P.INK, box.inflate(4, 4), border_radius=8)
+        pygame.draw.rect(surf, P.NIGHT, box, border_radius=7)
+        pygame.draw.rect(surf, P.MIST, box, 2, border_radius=7)
+        blit_center(surf, outlined("PAUSED", 16, P.WHITE, thick=2), (W / 2, box.y + 20))
+        for i, item in enumerate(M.PAUSE_ITEMS):
+            on = i == match.pause_index
+            y = box.y + 50 + 18 * i
+            blit_center(surf, outlined(item, 8, P.GOLD if on else P.MIST), (W / 2, y))
+            if on:
+                blit_center(surf, outlined(">", 8, P.GOLD), (W / 2 - 70, y))
+        blit_center(surf, outlined("A: PICK   START: RESUME", 8, P.lighten(P.SLATE, 0.3)), (W / 2, box.bottom - 10))

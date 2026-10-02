@@ -58,13 +58,17 @@ def test_the_default_window_is_a_whole_multiple_of_the_internal_size() -> None:
 def test_a_press_is_used_by_exactly_one_step() -> None:
     """Several steps in one frame must not repeat an edge press; none must not lose it."""
     from brawl_ket.game import consume, merge_pending
+    from brawl_ket.match import FrameInput
 
-    idle = {"p1": FighterInput(), "p2": FighterInput()}
-    press = {"p1": FighterInput(dx=1, a=True), "p2": FighterInput()}
-    pending = merge_pending(idle, press)
-    assert pending["p1"].a
+    press = FrameInput(fighters={"p1": FighterInput(dx=1, a=True), "p2": FighterInput()},
+                       confirms={"p1": True, "p2": False}, nav={"p1": (0, 1), "p2": (0, 0)},
+                       activity=True)
+    pending = merge_pending(FrameInput(), press)
+    assert pending.fighters["p1"].a and pending.confirms["p1"] and pending.nav["p1"] == (0, 1)
     spent = consume(pending)
-    assert not spent["p1"].a and spent["p1"].dx == 1            # the stick is still held
-    # a frame with no step due: the next poll must not wipe the unspent press
-    again = merge_pending(pending, {"p1": FighterInput(dx=1), "p2": FighterInput()})
-    assert again["p1"].a
+    assert not spent.fighters["p1"].a and spent.fighters["p1"].dx == 1     # the stick is still held
+    assert not spent.confirm and spent.nav["p1"] == (0, 0)
+    assert spent.activity                                                 # holding the stick counts
+    # a frame with no step due: the next poll must not wipe the unspent presses
+    again = merge_pending(pending, FrameInput(fighters={"p1": FighterInput(dx=1), "p2": FighterInput()}))
+    assert again.fighters["p1"].a and again.confirms["p1"] and again.nav["p1"] == (0, 1)

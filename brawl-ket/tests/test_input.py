@@ -7,7 +7,7 @@ import pygame
 from brawl_ket import config
 from brawl_ket import input as binput
 from brawl_ket.fighter import IDLE
-from brawl_ket.input import Input, deadzone, edge_presses, should_quit, vertical
+from brawl_ket.input import Input, deadzone, edge_presses, nav_push, should_quit, vertical
 
 
 def test_deadzone_cuts_the_middle() -> None:
@@ -23,6 +23,13 @@ def test_up_and_down_need_a_firm_push_and_up_is_negative() -> None:
     assert vertical(0.4) == (False, False) and vertical(-0.4) == (False, False)
     assert vertical(-0.6) == (True, False)
     assert vertical(0.6) == (False, True)
+
+
+def test_a_menu_step_is_a_fresh_push_only() -> None:
+    assert nav_push((0, 0), (1, 0)) == (1, 0)
+    assert nav_push((1, 0), (1, 0)) == (0, 0)           # held: no repeat
+    assert nav_push((1, 0), (-1, 0)) == (-1, 0)         # flicked across
+    assert nav_push((1, 0), (1, 1)) == (0, 1)           # only the new direction
 
 
 def test_edge_presses_are_only_what_just_went_down() -> None:
@@ -60,6 +67,7 @@ def test_with_no_pads_and_no_keys_both_fighters_are_idle() -> None:
         fi = inp.frame_input()
         assert fi.fighters == {"p1": IDLE, "p2": IDLE}
         assert not any(fi.confirms.values()) and not any(fi.backs.values()) and not any(fi.pauses.values())
-        assert not fi.activity and not inp.quit_combo() and inp.select_held_time == 0.0
+        assert not fi.activity and not fi.held and fi.nav == {"p1": (0, 0), "p2": (0, 0)}
+        assert not inp.quit_combo() and inp.select_held_time == 0.0
     finally:
         binput.set_keyboard_enabled(True)

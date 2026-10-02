@@ -338,3 +338,42 @@ def test_quint_is_drawn_broader_than_trio(surface):
         xs = [x for x in range(INTERNAL_WIDTH) if tuple(surface.get_at((x, chest)))[:3] != BLANK]
         widths[c.name] = max(xs) - min(xs) + 1
     assert widths["QUINT"] >= widths["TRIO"] * 1.6, widths
+
+
+def test_every_match_screen_draws(surface):
+    """Drive a real Match through every state (and the pause menu), drawing each frame."""
+    import random
+
+    from brawl_ket import config
+    from brawl_ket import match as M
+
+    r = Renderer(surface)
+    m = M.Match(random.Random(2))
+    seen = set()
+
+    def step(n=1, **presses):
+        for _ in range(n):
+            inp = M.FrameInput(activity=bool(presses))
+            for name, (player, value) in presses.items():
+                getattr(inp, name)[player] = value
+            r.draw(m, m.update(inp))
+            seen.add((m.state, m.paused, m.attract is not None))
+
+    step(config.ATTRACT_DELAY + 120)                # the title, then its demo
+    step(confirms=("p1", True))
+    step(confirms=("p1", True))                     # select
+    step(confirms=("p1", True))
+    step(nav=("p2", (1, 0)))
+    step(confirms=("p2", True))
+    step(config.ROUND_INTRO_FRAMES // 2)
+    step(pauses=("p1", True), confirms=("p1", True))
+    step(3)
+    step(pauses=("p1", True), confirms=("p1", True))
+    step(config.ROUND_INTRO_FRAMES)                 # the fight
+    for _ in range(2):
+        m.fight.fighters["p2"].health = 0
+        step(config.ROUND_END_FRAMES + config.ROUND_INTRO_FRAMES)
+    step(config.MATCH_RESULT_LOCK + 2)
+    states = {s for s, _, _ in seen}
+    assert states == {M.TITLE, M.SELECT, M.ROUND_INTRO, M.FIGHT, M.ROUND_END, M.MATCH_RESULT}
+    assert (M.TITLE, False, True) in seen and (M.ROUND_INTRO, True, False) in seen

@@ -21,6 +21,8 @@ Writes:
 - quint_grab.png: the SYNDROME GRAB connecting;
 - vs_*.png: the same bot-fight moments as fight_*.png, TRIO (P1) against QUINT (P2), and
   vs_close.png, the two walked into each other;
+- screen_*.png: the match flow: the title, the attract demo, select (and with P1 ready),
+  the ROUND 1 and FIGHT! calls, the pause menu, a K.O. with PERFECT, and the result;
 - fight_start.png (the fighters walking in), fight_hit.png, fight_logical.png, fight_crouch.png, fight_shot.png,
   fight_knockdown.png: bot-against-bot frames at those moments (fight_boxes.png
   is the hit frame again with the hurt- and hitboxes drawn).
@@ -31,6 +33,7 @@ Everything is saved at x2 so the pixels are easy to see.
 from __future__ import annotations
 
 import os
+import random
 import sys
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -271,6 +274,55 @@ def find_frames(out_dir: str, chars=(TRIO, TRIO), prefix: str = "fight") -> None
         print(f"never saw: {prefix} {name}")
 
 
+def screen_frames(out_dir: str) -> None:
+    """Every screen of the match flow, driven through a real Match."""
+    from brawl_ket import match as M
+
+    surface = pygame.Surface((640, 360))
+    r = Renderer(surface)
+    m = M.Match(random.Random(3))
+
+    def step(n: int = 1, inp: M.FrameInput | None = None) -> None:
+        for _ in range(n):
+            r.draw(m, m.update(inp or M.FrameInput()))
+
+    def press(**kw) -> M.FrameInput:
+        inp = M.FrameInput(activity=True)
+        for name, (player, value) in kw.items():
+            getattr(inp, name)[player] = value
+        return inp
+
+    step(4)
+    save(surface, out_dir, "screen_title.png")
+    step(config.ATTRACT_DELAY + 200)
+    save(surface, out_dir, "screen_attract.png")
+    step(1, press(confirms=("p1", True)))      # stops the demo
+    step(1, press(confirms=("p1", True)))
+    step(4)
+    save(surface, out_dir, "screen_select.png")
+    step(1, press(confirms=("p1", True)))
+    step(4)
+    save(surface, out_dir, "screen_select_ready.png")
+    step(1, press(confirms=("p2", True)))
+    step(8)
+    save(surface, out_dir, "screen_round.png")
+    step(M.FIGHT_CALL)
+    save(surface, out_dir, "screen_fight_call.png")
+    step(config.ROUND_INTRO_FRAMES)
+    step(1, press(pauses=("p1", True), confirms=("p1", True)))
+    step(1, press(nav=("p1", (0, 1))))
+    step(2)
+    save(surface, out_dir, "screen_pause.png")
+    step(1, press(pauses=("p1", True), confirms=("p1", True)))
+    m.fight.fighters["p2"].health = 0
+    step(config.FPS + 10)
+    save(surface, out_dir, "screen_ko_perfect.png")
+    step(config.ROUND_END_FRAMES + config.ROUND_INTRO_FRAMES)
+    m.fight.fighters["p2"].health = 0
+    step(config.ROUND_END_FRAMES + config.MATCH_RESULT_LOCK + 2)
+    save(surface, out_dir, "screen_result.png")
+
+
 def main(argv: list[str]) -> None:
     if len(argv) != 1:
         sys.exit(__doc__)
@@ -289,6 +341,7 @@ def main(argv: list[str]) -> None:
     close_frame(out_dir)
     find_frames(out_dir)
     find_frames(out_dir, (TRIO, QUINT), "vs")
+    screen_frames(out_dir)
 
 
 if __name__ == "__main__":
