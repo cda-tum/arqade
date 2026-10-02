@@ -130,7 +130,7 @@ def tag_sheet(char=TRIO) -> pygame.Surface:
             setup(fight.fighters[key].code, r, key)
             r.draw_fight(fight, [])
             f = fight.fighters[key]
-            crop.center = (round(f.x), round(r.tag_y[key]) - 6)
+            crop.center = (round(f.x), round(r.tag_y[key]) + 3)     # the plate spans tag_y +-16, its tick +22
             shot = pygame.transform.scale_by(surface.subsurface(crop.clip(surface.get_rect())), zoom)
             x, y = col * crop.w * zoom, row * (crop.h * zoom + 16)
             sheet.blit(shot, (x, y + 16))

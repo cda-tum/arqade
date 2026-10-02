@@ -257,8 +257,6 @@ def test_quint_light_reach_is_long():
     assert moves["crouch.A"].hitbox == Box(14, 22, 46, 14)
 
 
-from brawl_ket import shor  # noqa: E402
-
 HEIGHTS = {"stand.A": shor.HIGH, "stand.B": shor.HIGH, "crouch.A": shor.LOW, "crouch.B": shor.LOW,
            "air.A": shor.MID, "air.B": shor.MID, "throw": shor.MID}
 COLUMNS = {"stand.A": shor.A_COL, "crouch.A": shor.A_COL, "air.A": shor.A_COL,

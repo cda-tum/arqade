@@ -43,6 +43,8 @@ class Move:
     recovery: int                       # frames, all >= 1
     hitbox: Box | None                  # None: no hitbox here (RE-ENCODE; PHOTON's box is the projectile's)
     error: str                          # shor.X (normals) / shor.Z (specials) / shor.Y (throws)
+    # GAME RULE: each hit is exactly one error, on the qubit its move and button choose:
+    # the row is the move's height, the column its button's (a Z acts on the whole row).
     height: int                         # shor.HIGH / MID / LOW: the row it lands in, and who dodges it
     chip: int                           # damage on a corrected hit
     bonus: int                          # added to LOGICAL_DAMAGE on a logical error

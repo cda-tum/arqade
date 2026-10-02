@@ -615,6 +615,13 @@ def test_syndrome_grab_lands_on_trio_in_either_stance():
         assert hits == [("hit", shor.Z)], crouching          # a Z on MID: alone, correctable
         trio = fight.fighters["p2"]
         assert trio.health == 100 - GRAB.chip
+    # the grab knocks down: a few frames after it lands, TRIO is on the floor
+    fight = versus(QUINT, TRIO, 64.0)
+    for i in range(70):
+        if of(fight.step({"p1": X if i == 0 else IDLE, "p2": IDLE}), "hit", "logical"):
+            break
+    script(fight, 8)
+    assert fight.fighters["p2"].action == "knockdown"
 
 
 def test_the_syndrome_grab_reaches_further_than_a_throw():
@@ -891,9 +898,6 @@ def test_a_chain_that_starts_with_a_hit_lands_every_hit(c1, c2, crouch):
 
 # --- the Shor grid ----------------------------------------------------------------------
 
-from brawl_ket import shor  # noqa: E402
-
-
 def press_at(fight, frames, **buttons):
     """p1 presses the given buttons on the given frames ({button: frame}), down held if `down`."""
     down = buttons.pop("down", False)
@@ -942,3 +946,12 @@ def run_chain_events(fight, buttons, crouch=False):
         if i == len(buttons) and not press_next and of(step, "hit", "cancel", "logical"):
             break
     return events
+
+
+def test_a_z_event_has_no_column_and_a_y_keeps_its_own():
+    fight = new(gap=200.0)
+    (hit,) = of(script(fight, 120, p1={0: X}), "hit")          # PHOTON: Z on HIGH
+    assert (hit.error, hit.row, hit.col) == (shor.Z, shor.HIGH, None)
+    fight = new(gap=float(BODY_WIDTH))
+    (hit,) = of(script(fight, 20, p1={0: FighterInput(dx=1, b=True)}), "hit")   # the throw: Y
+    assert (hit.error, hit.row, hit.col) == (shor.Y, shor.MID, shor.THROW_COL)

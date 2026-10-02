@@ -247,6 +247,8 @@ def test_a_logical_error_a_reencode_and_a_reset_restart_the_cycle():
         assert code.timer == 25
         restart(code)
         assert code.timer == 0 and code.progress == 0.0
-        for _ in range(59):
+        code.apply_x(MID, shor.B_COL)                       # an error to repair, after the restart
+        for _ in range(58):
             assert not code.tick()
-        assert code.tick() is False and code.timer == 0    # the full beat, from the restart
+        assert code.tick() is False                         # frame 59 of the beat: not yet
+        assert code.tick() is True and code.timer == 0      # frame 60: the full beat, from the restart

@@ -635,7 +635,8 @@ class Renderer:
         on a plate in the player's colour, and the cycle ring beside it.
 
         An X lights its cell in the X gate's red; a row flipped by a Z glows behind in the
-        Z gate's blue (its cells drop their ink outline, so the blue fills the gaps). Danger pulses orange: the other cells of a row holding one X (a
+        Z gate's blue (its cells drop their ink outline, so the blue fills the gaps; a Z-danger row's
+        orange backing does the same on the beat). Danger pulses orange: the other cells of a row holding one X (a
         different button there breaks the code), or the other rows once one is flipped
         (a special there breaks it)."""
         code = f.code
@@ -656,9 +657,10 @@ class Renderer:
         x_danger, z_danger = code.x_danger_rows(), code.z_danger_rows()
         for row in range(3):
             y = plate.top + 4 + row * (CELL + CELL_GAP)
+            backed = row in code.z_rows or (row in z_danger and beat)
             if row in code.z_rows:
                 surf.fill(P.GATE[shor.Z], (plate.left + 2, y - 1, PLATE - 4, CELL + 2))
-            elif row in z_danger and beat:
+            elif backed:
                 surf.fill(P.shade(P.ORANGE, 0.6), (plate.left + 2, y - 1, PLATE - 4, CELL + 2))
             for col in range(3):
                 x = plate.left + 4 + col * (CELL + CELL_GAP)
@@ -670,7 +672,7 @@ class Renderer:
                     c = P.ORANGE
                 else:
                     c = P.SLATE
-                if row not in code.z_rows:      # a flipped row's blue shows through its gaps
+                if not backed:                  # a backed row's colour shows through its gaps
                     surf.fill(P.INK, (x - 1, y - 1, CELL + 2, CELL + 2))
                 surf.fill(c, (x, y, CELL, CELL))
                 surf.fill(P.lighten(c, 0.5), (x, y, 2, 2))

@@ -46,8 +46,8 @@ class Event:
     error: str | None = None        # X / Z / Y for hit, cancel and logical
     x: float = 0.0                  # where, for sparks (screen px)
     y: float = 0.0
-    row: int | None = None          # hit / cancel / logical: the grid row (and the X's column)
-    col: int | None = None
+    row: int | None = None          # hit / cancel / logical: the grid row
+    col: int | None = None          # ... and the cell's column for an X or a Y (None for a Z: a row)
 
 
 @dataclass
@@ -255,8 +255,9 @@ class Fight:
             result = defender.take_hit(st.move, st.from_facing)
             self._landings.pop(st.defender, None)   # a hit fighter's shockwave is gone
             kind = {shor.FLIPPED: "hit", shor.CANCEL: "cancel", shor.LOGICAL: "logical"}[result]
+            col = None if st.move.error == shor.Z else st.move.column
             events.append(Event(kind, st.defender, st.move.error, st.where[0], st.where[1],
-                                st.move.height, st.move.column))
+                                st.move.height, col))
             stop = HITSTOP_LOGICAL if result == shor.LOGICAL else HITSTOP
             self.hitstop = max(self.hitstop, stop)
 

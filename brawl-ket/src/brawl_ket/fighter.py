@@ -191,6 +191,7 @@ class Fighter:
                 self.buffer.append(Press(btn, 0))
 
     def take_hit(self, move: Move, from_facing: int) -> str:
+        # GAME RULE: each hit is exactly one error, on the qubit its move and button choose
         result = self.code.apply(move.error, move.height, move.column)
         damage = LOGICAL_DAMAGE + move.bonus if result == shor.LOGICAL else move.chip
         self.health = max(0, self.health - damage)
