@@ -140,7 +140,7 @@ TRIO = Character(
         "stand.X": Move(
             "PHOTON", 14, 1, 20, None, qec.X,
             chip=6, bonus=16, hitstun=18, knockback=3.0,
-            kind="projectile",
+            kind="projectile", cooldown=config.frames(2.5),
             projectile=Projectile(4.0, Box(0, 56, 16, 14), 180),
             poses=("cast_wind", "cast", "cast"),
         ),
@@ -179,7 +179,7 @@ QUINT = Character(
         ),
         "stand.B": Move(
             "heavy", 28, 5, 20, Box(16, 70, 48, 22), qec.X,
-            chip=6, bonus=14, hitstun=22, knockback=6.0, chain_startup=11,
+            chip=6, bonus=12, hitstun=22, knockback=6.0, chain_startup=11,
             poses=("heavy_wind", "heavy_hit", "heavy_recover"),
         ),
         "crouch.A": Move(
@@ -190,7 +190,7 @@ QUINT = Character(
         ),
         "crouch.B": Move(
             "sweep", 28, 4, 22, Box(12, 6, 54, 14), qec.Z,
-            chip=6, bonus=14, hitstun=24, knockback=2.5, knockdown=True, chain_startup=12,
+            chip=6, bonus=12, hitstun=24, knockback=2.5, knockdown=True, chain_startup=12,
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),
         "air.A": Move(
@@ -200,12 +200,12 @@ QUINT = Character(
         ),
         "air.B": Move(
             "jump-in", 8, 6, 8, Box(10, 30, 40, 28), qec.X,
-            chip=6, bonus=14, hitstun=20, knockback=3.0,
+            chip=6, bonus=12, hitstun=20, knockback=3.0,
             poses=("jump", "air_kick", "jump"),
         ),
         "throw": Move(
             "throw", 6, 2, 24, Box(0, 40, 44, 70), qec.Y,
-            chip=0, bonus=14, hitstun=30, knockback=6.0, knockdown=True,
+            chip=0, bonus=12, hitstun=30, knockback=6.0, knockdown=True,
             kind="throw",
             poses=("throw_reach", "throw_hold", "idle"),
         ),
@@ -213,7 +213,7 @@ QUINT = Character(
         # reaches much further than a throw, but whiffs into a long recovery.
         "stand.X": Move(
             "SYNDROME GRAB", 18, 6, 30, Box(10, 40, 30, 70), qec.Y,
-            chip=0, bonus=16, hitstun=30, knockback=6.0, knockdown=True,
+            chip=0, bonus=12, hitstun=30, knockback=6.0, knockdown=True,
             kind="throw", lunge=3.0,
             poses=("grab_wind", "grab", "throw_hold"),
         ),
@@ -229,7 +229,7 @@ QUINT = Character(
         # deals a Z error to a rival standing near (fight.py, _Landing).
         "air.X": Move(
             "COLLAPSE", 6, 60, 16, Box(-20, 0, 40, 30), qec.X,
-            chip=6, bonus=16, hitstun=20, knockback=3.0,
+            chip=6, bonus=12, hitstun=20, knockback=3.0,
             kind="special", dive=(0.0, 9.0),
             landing=Box(-45, 0, 90, 14), landing_error=qec.Z,
             poses=("jump", "slam", "crouch"),

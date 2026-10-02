@@ -123,7 +123,7 @@ class Bot:
         if roll < 0.01:
             return FighterInput(up=True, dx=toward)             # jump in
         if roll < 0.03 and dist > 90 and self.gap == 0 and me.char.moves["stand.X"].kind == "projectile" \
-                and not any(s.owner == self.player for s in fight.shots):
+                and me.cooldowns.get("stand.X", 0) == 0:
             return self._press("x", 0)                          # a PHOTON from range
         return FighterInput(dx=toward)
 

@@ -3,7 +3,7 @@ import importlib.util
 import pytest
 
 from brawl_ket import config, qec
-from brawl_ket.moves import CHARACTERS, SLOTS, Box
+from brawl_ket.moves import CHARACTERS, QUINT, SLOTS, TRIO, Box
 
 
 def all_moves():
@@ -122,19 +122,36 @@ def test_a_heavy_logical_error_costs_at_least_twice_a_light_one():
                 assert logical_cost(moves[heavy]) >= 2 * logical_cost(moves[light]), (c.name, light, heavy)
 
 
+# (light, heavy, special, throw) logical costs. QUINT's are lower: its d=5 code means a TRIO
+# breaks after 2 hits in a cycle, so nearly every QUINT string ends in a logical error.
+DAMAGE_TIERS = {"TRIO": (12, 26, 28, 26), "QUINT": (12, 24, 24, 24)}
+
+
 def test_the_damage_tiers():
     assert config.LOGICAL_DAMAGE == 12
+    assert set(DAMAGE_TIERS) == set(CHARACTERS)
     for c in CHARACTERS.values():
         moves = c.moves
+        light, heavy, special, throw = DAMAGE_TIERS[c.name]
         for slot in LIGHTS:
-            assert (moves[slot].chip, logical_cost(moves[slot])) == (2, 12), (c.name, slot)
+            assert (moves[slot].chip, logical_cost(moves[slot])) == (2, light), (c.name, slot)
         for slot in HEAVIES:
-            assert (moves[slot].chip, logical_cost(moves[slot])) == (6, 26), (c.name, slot)
+            assert (moves[slot].chip, logical_cost(moves[slot])) == (6, heavy), (c.name, slot)
         for slot in hitting(moves, SPECIALS):
             # a command throw (SYNDROME GRAB) has no chip: a Y is never a correctable hit
             chip = 0 if moves[slot].kind == "throw" else 6
-            assert (moves[slot].chip, logical_cost(moves[slot])) == (chip, 28), (c.name, slot)
-        assert (moves["throw"].chip, logical_cost(moves["throw"])) == (0, 26), c.name
+            assert (moves[slot].chip, logical_cost(moves[slot])) == (chip, special), (c.name, slot)
+        assert (moves["throw"].chip, logical_cost(moves["throw"])) == (0, throw), c.name
+
+
+def test_quint_hits_no_harder_than_trio():
+    for slot, move in QUINT.moves.items():
+        if slot in TRIO.moves and move.kind != "reencode" and TRIO.moves[slot].kind != "reencode":
+            assert logical_cost(move) <= logical_cost(TRIO.moves[slot]), slot
+
+
+def test_photon_has_a_cooldown():
+    assert TRIO.moves["stand.X"].cooldown == config.frames(2.5)
 
 
 def test_trio_jump_numbers():
