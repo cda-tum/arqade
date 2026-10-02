@@ -73,4 +73,12 @@
 		<image>./images/planck_time-image.png</image>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./brawl_ket.pygame</path>
+		<name>Brawl-Ket</name>
+		<desc>Two-player fighting game where every fighter is a quantum error-correcting code: standing corrects bit flips, crouching corrects phase flips, and a combo that outvotes the code lands a logical error.</desc>
+		<image>./images/brawl_ket-logo.png</image>
+		<marquee>./images/brawl_ket-marquee.png</marquee>
+		<lang>en</lang>
+	</game>
 </gameList>

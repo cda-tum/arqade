@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
-`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, more later) built for the same
+`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
 Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. This file
 collects hardware facts and hard-won quirks that apply **across games**, so a
@@ -346,7 +346,7 @@ Where the games stand (2026-10-01): every game follows it except
 Superconductor, whose pause screen goes to its menu with Select rather than
 through a menu item. That one is deliberately left as it is.
 
-- Gate Drop, Planck Time, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
+- Gate Drop, Planck Time, Brawl-Ket, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
   RESUME and QUIT TO TITLE.
 - Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
   from Start to Select, so that Start can pause there too.
@@ -398,6 +398,7 @@ worked out with the cabinet's owners over several rounds:
   - Overquqed: the one light, warm pixel kitchen.
   - Qlimbers: the title carved into the tower.
   - Qurves: neon tubes over a synthwave floor.
+  - Brawl-Ket: a comic-book impact panel (halftone, speed lines, a POW burst).
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really

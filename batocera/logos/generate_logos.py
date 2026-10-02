@@ -36,6 +36,7 @@ ROMS = [
     "superconductor",
     "overquqed",
     "qurves",
+    "brawl_ket",
 ]
 SIZE = 1024
 
