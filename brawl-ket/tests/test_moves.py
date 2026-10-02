@@ -222,9 +222,9 @@ QUINT_FRAMES = {
     "air.A": ("air jab", 5, 6, 5, Box(12, 54, 30, 20), shor.X, 15, 1.5),
     "air.B": ("jump-in", 8, 6, 8, Box(10, 30, 40, 28), shor.X, 20, 3.0),
     "throw": ("throw", 6, 2, 24, Box(0, 40, 44, 70), shor.Y, 30, 6.0),
-    "stand.X": ("SYNDROME GRAB", 18, 6, 30, Box(10, 40, 30, 70), shor.Z, 30, 6.0),
+    "stand.X": ("SYNDROME GRAB", 16, 13, 30, Box(10, 40, 30, 70), shor.Z, 30, 6.0),
     "crouch.X": ("RE-ENCODE", 6, 1, 18, None, shor.Z, 0, 0.0),
-    "air.X": ("COLLAPSE", 6, 60, 16, Box(-20, 0, 40, 30), shor.Z, 20, 3.0),
+    "air.X": ("COLLAPSE", 6, 60, 20, Box(-20, 0, 40, 30), shor.Z, 20, 3.0),
 }
 
 
@@ -243,12 +243,12 @@ def test_quint_specials():
     assert moves["crouch.A"].cancels == ("crouch.A", "crouch.B")
     assert moves["crouch.B"].knockdown and moves["throw"].knockdown
     grab = moves["stand.X"]
-    assert (grab.kind, grab.lunge, grab.knockdown) == ("throw", 3.0, True)
+    assert (grab.kind, grab.lunge, grab.knockdown) == ("throw", 6.0, True)
     reencode = moves["crouch.X"]
     assert (reencode.kind, reencode.cooldown) == ("reencode", config.frames(4.0))
     collapse = moves["air.X"]
-    assert collapse.dive == (0.0, 9.0)
-    assert (collapse.landing, collapse.landing_error) == (Box(-45, 0, 90, 14), shor.Z)
+    assert collapse.dive == (2.0, 9.0)
+    assert (collapse.landing, collapse.landing_error) == (Box(-60, 0, 120, 14), shor.Z)
 
 
 def test_quint_light_reach_is_long():

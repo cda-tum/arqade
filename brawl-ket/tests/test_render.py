@@ -32,10 +32,10 @@ def bot_frames(n, seed=1, chars=(TRIO, TRIO)):
 
 
 @pytest.mark.parametrize("chars", PAIRINGS, ids=lambda cs: "-".join(c.name for c in cs))
-def test_600_bot_frames_draw(surface, chars):
+def test_900_bot_frames_draw(surface, chars):
     r = Renderer(surface)
     kinds = set()
-    for fight, events in bot_frames(600, chars=chars):
+    for fight, events in bot_frames(900, chars=chars):
         r.draw_fight(fight, events)
         kinds |= {e.kind for e in events}
     assert {"hit", "logical"} <= kinds      # the effects were exercised

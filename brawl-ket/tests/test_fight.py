@@ -580,14 +580,19 @@ PAIRINGS = [(a, b) for a in CHARACTERS.values() for b in CHARACTERS.values()]
 
 def test_a_jab_connects_at_the_closest_spacing():
     # Walked all the way in, the push box holds the fighters body_width apart: a jab
-    # (either side, standing or crouching rival, every pairing) must still reach.
+    # (either side, standing or crouching rival, every pairing) must still reach. A
+    # standing jab is HIGH and whiffs over a crouch, so against a crouching rival the
+    # attacker crouches too and throws the LOW jab.
     for (c1, c2), crouching in ((pair, c) for pair in PAIRINGS for c in (False, True)):
         for attacker, rival in (("p1", "p2"), ("p2", "p1")):
             fight = versus(c1, c2, 200.0)
             for _ in range(120):
                 fight.step({"p1": FighterInput(dx=1), "p2": FighterInput(dx=-1)})
             assert abs(fight.fighters["p2"].x - fight.fighters["p1"].x) == body_width(c1, c2)
-            events = script(fight, 20, **{attacker: {0: A}, rival: FighterInput(down=crouching)})
+            jab = FighterInput(down=crouching, a=True)
+            hold = FighterInput(down=crouching)
+            events = script(fight, 20, **{attacker: {i: jab if i == 0 else hold for i in range(20)},
+                                          rival: hold})
             assert [e.player for e in of(events, "hit", "logical")] == [rival], (
                 c1.name, c2.name, attacker, crouching)
 
@@ -635,7 +640,7 @@ def test_the_syndrome_grab_reaches_further_than_a_throw():
 
 
 def test_a_whiffed_syndrome_grab_leaves_quint_open():
-    fight = versus(QUINT, TRIO, 140.0)
+    fight = versus(QUINT, TRIO, 150.0)      # beyond its reach (about 130 px)
     events = script(fight, GRAB.startup + GRAB.active + 5, p1={0: X})
     assert results(events) == []
     quint = fight.fighters["p1"]
@@ -667,7 +672,8 @@ def test_reencode_clears_flipped_lights_and_has_a_cooldown():
 def collapse(trio_dx, crouching=False, press_at=60):
     """QUINT (p1) jumps straight up and presses X once it is higher than `press_at` px
     (on the way up), or, with a negative press_at, once it is falling and lower than
-    -press_at. A TRIO stands (or crouches) trio_dx px to its right. Returns the hits."""
+    -press_at. A TRIO stands (or crouches) trio_dx px to its right. Returns the hits as
+    (kind, error, row), and the TRIO."""
     fight = versus(QUINT, TRIO, trio_dx)
     trio = fight.fighters["p2"]
     quint = fight.fighters["p1"]
@@ -679,20 +685,20 @@ def collapse(trio_dx, crouching=False, press_at=60):
             inp, pressed = X, True
         events += fight.step({"p1": inp, "p2": DOWN if crouching else IDLE})
     assert pressed
-    return results(events), trio
+    return [(e.kind, e.error, e.row) for e in of(events, "hit", "logical")], trio
 
 
 def test_collapse_hits_z_high_directly_and_z_low_with_the_shockwave():
     collapse_move = QUINT.moves["air.X"]
-    # straight onto a crouching TRIO: the slam is a Z on HIGH, and the shockwave does not
-    # hit it again while it reels
+    # onto a crouching TRIO: the slam (HIGH) whiffs over the crouch, and the shockwave
+    # is a Z on LOW
     hits, trio = collapse(10.0, crouching=True)
-    assert hits == [("hit", shor.Z)]
+    assert hits == [("hit", shor.Z, shor.LOW)]
     assert trio.health == 100 - collapse_move.chip
-    # next to a standing TRIO: the slam misses, and the shockwave is a Z on LOW
+    # onto a standing TRIO: it takes both, two rows flipped: a logical error
     hits, trio = collapse(48.0)
-    assert hits == [("hit", shor.Z)]
-    assert trio.health == 100 - collapse_move.chip
+    assert hits == [("hit", shor.Z, shor.HIGH), ("logical", shor.Z, shor.LOW)]
+    assert trio.health == 100 - collapse_move.chip - (LOGICAL_DAMAGE + collapse_move.bonus)
     # far away: nothing
     hits, trio = collapse(150.0)
     assert hits == [] and trio.health == 100
@@ -784,14 +790,6 @@ def test_a_phase_slide_passes_under_a_photon():
     photon_at(fight, "p2", p1.x + 30)
     events = script(fight, 12, p1=FighterInput(down=True))
     assert not of(events, "hit", "logical")
-
-
-def test_a_plain_crouch_is_still_hit_by_a_photon():
-    fight = new(gap=300.0)
-    script(fight, 30, p1=FighterInput(down=True))
-    photon_at(fight, "p2", fight.fighters["p1"].x + 30)
-    events = script(fight, 12, p1=FighterInput(down=True))
-    assert of(events, "hit", "logical")
 
 
 def test_the_slides_hurtbox_is_below_a_photon_only_while_it_slides():
@@ -955,3 +953,92 @@ def test_a_z_event_has_no_column_and_a_y_keeps_its_own():
     fight = new(gap=float(BODY_WIDTH))
     (hit,) = of(script(fight, 20, p1={0: FighterInput(dx=1, b=True)}), "hit")   # the throw: Y
     assert (hit.error, hit.row, hit.col) == (shor.Y, shor.MID, shor.THROW_COL)
+
+
+# --- heights decide dodges; the specials rework -----------------------------------------
+
+from brawl_ket.fight import can_reach  # noqa: E402
+
+
+def test_high_whiffs_on_a_crouch_and_low_on_a_jump():
+    f = Fight({"p1": TRIO, "p2": TRIO}).fighters["p2"]
+    assert can_reach(shor.HIGH, f) and can_reach(shor.MID, f) and can_reach(shor.LOW, f)
+    f.crouching = True
+    assert not can_reach(shor.HIGH, f) and can_reach(shor.MID, f) and can_reach(shor.LOW, f)
+    f.crouching, f.y = False, 30.0
+    assert can_reach(shor.HIGH, f) and can_reach(shor.MID, f) and not can_reach(shor.LOW, f)
+
+
+def test_a_standing_jab_whiffs_over_a_crouching_rival():
+    fight = new(gap=50.0)
+    script(fight, 2, p2=FighterInput(down=True))
+    events = script(fight, 30, p1={0: A}, p2=FighterInput(down=True))
+    assert not of(events, "hit", "cancel", "logical")
+
+
+def test_a_crouching_rival_ducks_a_photon():
+    fight = new(gap=300.0)
+    script(fight, 2, p1=FighterInput(down=True))
+    photon_at(fight, "p2", fight.fighters["p1"].x + 30)
+    events = script(fight, 12, p1=FighterInput(down=True))
+    assert not of(events, "hit", "cancel", "logical")
+
+
+def test_the_syndrome_grab_reaches_130_px():
+    # Reach is the largest starting gap (between the fighters' x, from a standing start)
+    # at which the grab still connects: the measure the playtest's "about 75 px" used.
+    fight = versus(QUINT, TRIO, 130.0)
+    events = script(fight, 60, p1={0: X})
+    assert [(e.kind, e.error, e.row) for e in of(events, "hit", "logical")] == [("hit", shor.Z, shor.MID)]
+    for gap in (140.0, 150.0):
+        fight = versus(QUINT, TRIO, gap)
+        assert of(script(fight, 60, p1={0: X}), "hit", "logical") == [], gap
+
+
+def test_the_dive_lands_within_14_frames_of_the_apex():
+    fight = new(gap=300.0)
+    p1 = fight.fighters["p1"]
+    script(fight, 1, p1=FighterInput(up=True))
+    while p1.vy > 0:
+        script(fight, 1)
+    for n in range(1, 60):
+        script(fight, 1, p1=X if n == 1 else IDLE)
+        if p1.y == 0:
+            break
+    assert n <= 14
+
+
+def test_a_dive_that_hits_bounces_back():
+    fight = new(gap=60.0)
+    p1 = fight.fighters["p1"]
+    script(fight, 1, p1=FighterInput(up=True, dx=1))
+    for _ in range(12):
+        script(fight, 1)
+    hit = []
+    for i in range(30):
+        hit = of(script(fight, 1, p1={0: X} if i == 0 else IDLE), "hit", "logical")
+        if hit:
+            break
+    assert hit
+    # on the frame it connects, the diver springs back up and away from the rival
+    assert p1.vx * p1.facing < 0 and p1.vy > 0
+    assert p1.action != "attack" or p1.phase != "active"
+    x_at_hit = p1.x
+    script(fight, 12 + HITSTOP)
+    assert p1.x < x_at_hit
+
+
+def test_collapse_slam_and_shockwave_together_are_a_logical_error():
+    fight = versus(QUINT, TRIO, 40.0)
+    script(fight, 1, p1=FighterInput(up=True))
+    for _ in range(14):
+        script(fight, 1)
+    events = script(fight, 60, p1={0: X})
+    hits = of(events, "hit", "logical")
+    assert [e.kind for e in hits] == ["hit", "logical"]
+    assert [e.row for e in hits] == [shor.HIGH, shor.LOW]
+
+
+def test_collapse_shockwave_reaches_60_px_either_side():
+    m = QUINT.moves["air.X"]
+    assert m.landing == Box(-60, 0, 120, 14) and m.dive == (2.0, 9.0)

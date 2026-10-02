@@ -156,9 +156,12 @@ TRIO = Character(
             poses=("crouch", "slide", "crouch"),
         ),
         "air.X": Move(
-            "DIVE", 4, 40, 10, Box(6, 0, 26, 20), shor.Z, shor.MID,
+            "DIVE", 3, 40, 8, Box(6, 0, 26, 20), shor.Z, shor.MID,
             chip=6, bonus=16, hitstun=18, knockback=3.0,
-            kind="special", dive=(4.0, 6.0),
+            # Steep and fast: 13 px/frame lands about 14 frames after the apex, startup
+            # included. The spec's 10 px/frame can't make its ~12 frames: TRIO's jump peaks
+            # at about 138 px, so the fall alone would take 14 frames (17 with the startup).
+            kind="special", dive=(3.0, 13.0),
             poses=("jump", "dive", "crouch"),
         ),
     }),
@@ -213,12 +216,15 @@ QUINT = Character(
             kind="throw",
             poses=("throw_reach", "throw_hold", "idle"),
         ),
-        # A lunging command throw: a Z on MID. It reaches much further than a throw, but
-        # whiffs into a long recovery.
+        # A dashing command throw: a Z on MID, much further than a throw, but a whiff leaves
+        # a long recovery. Reach is measured as the largest starting gap (between the two
+        # fighters' x, from a standing start) at which the grab still connects, as the
+        # playtest measured "about 75 px": 13 active frames dashing at 6 px/frame, plus the
+        # box's 40 px and the rival's hurtbox, reach about 130 px.
         "stand.X": Move(
-            "SYNDROME GRAB", 18, 6, 30, Box(10, 40, 30, 70), shor.Z, shor.MID,
+            "SYNDROME GRAB", 16, 13, 30, Box(10, 40, 30, 70), shor.Z, shor.MID,
             chip=0, bonus=12, hitstun=30, knockback=6.0, knockdown=True,
-            kind="throw", lunge=3.0,
+            kind="throw", lunge=6.0,
             poses=("grab_wind", "grab", "throw_hold"),
         ),
         # An extra correction round, now: it clears every correctable error on QUINT's own
@@ -229,13 +235,14 @@ QUINT = Character(
             kind="reencode", cooldown=config.frames(4.0),
             poses=("crouch", "brace", "crouch"),
         ),
-        # A body slam straight down: the body is a Z on HIGH, and the landing shockwave
-        # a Z on LOW to a rival standing near (fight.py, _Landing).
+        # A body slam that drifts towards the rival: the body is a Z on HIGH, and the landing
+        # shockwave (60 px either side) a Z on LOW (fight.py, _Landing). A rival caught
+        # standing takes both, two rows flipped: a logical error.
         "air.X": Move(
-            "COLLAPSE", 6, 60, 16, Box(-20, 0, 40, 30), shor.Z, shor.HIGH,
+            "COLLAPSE", 6, 60, 20, Box(-20, 0, 40, 30), shor.Z, shor.HIGH,
             chip=6, bonus=12, hitstun=20, knockback=3.0,
-            kind="special", dive=(0.0, 9.0),
-            landing=Box(-45, 0, 90, 14), landing_error=shor.Z,
+            kind="special", dive=(2.0, 9.0),
+            landing=Box(-60, 0, 120, 14), landing_error=shor.Z,
             poses=("jump", "slam", "crouch"),
         ),
     }),

@@ -470,7 +470,7 @@ def test_dive_keeps_its_speed_when_facing_left():
     jump_until(f, lambda f: f.y > 40, rival_x=0)
     run(f, tap("x"), rival_x=0)
     run(f, IDLE, TRIO.moves["air.X"].startup, rival_x=0)
-    assert f.facing == -1 and f.vx == -4.0
+    assert f.facing == -1 and f.vx == -TRIO.moves["air.X"].dive[0]
 
 
 def test_an_air_jab_is_cancelled_by_landing():

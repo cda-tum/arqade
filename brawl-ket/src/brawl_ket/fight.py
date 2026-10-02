@@ -119,6 +119,19 @@ def _other(key: str) -> str:
     return "p2" if key == "p1" else "p1"
 
 
+def can_reach(height: int, target: Fighter) -> bool:
+    """Which heights can touch a fighter: a crouch ducks HIGH, a jump clears LOW.
+
+    GAME RULE: on top of the boxes overlapping, a HIGH move never hits a crouching
+    fighter and a LOW one never hits an airborne one; MID can't be dodged this way.
+    """
+    if height == shor.HIGH and target.stance == "crouch":
+        return False
+    if height == shor.LOW and target.y > 0:
+        return False
+    return True
+
+
 class Fight:
     def __init__(self, chars: dict[str, Character]) -> None:
         self.fighters: dict[str, Fighter] = {
@@ -238,6 +251,8 @@ class Fight:
             target = self.fighters[rival_key]
             if target.action == "knockdown":     # a downed fighter can't be hit; shots fly over
                 continue
+            if not can_reach(s.move.height, target):
+                continue
             where = _overlap(s.box, target.hurtbox)
             if where is not None:
                 strikes.append(_Strike(None, rival_key, s.move, s.facing, where, s))
@@ -246,7 +261,10 @@ class Fight:
         # so a trade (both fighters connecting on the same frame) applies both.
         for st in strikes:
             if st.attacker is not None:
-                self.fighters[st.attacker].move_hit = True
+                f = self.fighters[st.attacker]
+                f.move_hit = True
+                if f.move is not None and f.move.dive is not None and f.move.landing is None:
+                    f.bounce()      # a DIVE springs back off what it hit
         landed_shots = {id(st.shot) for st in strikes if st.shot is not None}
         self.shots = [s for s in self.shots if id(s) not in landed_shots]
 
@@ -269,6 +287,8 @@ class Fight:
             return
         if rival.action == "knockdown":
             return
+        if not can_reach(m.height, rival):
+            return
         if m.kind == "throw" and (rival.y != 0 or rival.action in _STUNNED):
             return
         where = _overlap(f.world_box(m.hitbox), rival.hurtbox)
@@ -286,9 +306,9 @@ class Fight:
             return
         move = win.move
         assert move.landing is not None and move.landing_error is not None
-        # the shockwave knocks over a rival standing ready: one already reeling (from the
-        # slam itself, say) is not hit by it again
-        if not win.hit and rival.action not in _STUNNED:
+        # the shockwave hits any rival still on its feet, one reeling from the slam itself
+        # too: slam and shockwave are two rows flipped, a logical error. A jump clears it.
+        if not win.hit and rival.action != "knockdown" and can_reach(move.landing_height, rival):
             where = _overlap(f.world_box(move.landing), rival.hurtbox)
             if where is not None:
                 win.hit = True

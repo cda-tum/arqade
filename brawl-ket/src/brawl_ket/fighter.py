@@ -211,6 +211,16 @@ class Fighter:
             self.stun = move.hitstun
         return result
 
+    BOUNCE_VX, BOUNCE_VY = 2.0, 5.0     # px per frame: a DIVE springs back off what it hit
+
+    def bounce(self) -> None:
+        """A dive that connects springs back up and away, and its active frames end."""
+        m = self.move
+        assert m is not None
+        self.frame = self.startup + m.active        # straight into the recovery
+        self.vx = -self.BOUNCE_VX * self.facing
+        self.vy = self.BOUNCE_VY
+
     def knock_out(self, away: int, push: float) -> None:
         """Down for good: the round is over. Flies off `away` (+1 / -1) at least `push`
         px per frame, whatever hit it, and never gets up."""
