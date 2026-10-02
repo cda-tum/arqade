@@ -42,6 +42,10 @@ def main(argv: list[str]) -> None:
     from brawl_ket.render import Renderer
 
     pygame.init()
+    try:
+        pygame.display.set_mode((1, 1))     # the dummy display; Batocera's SDL has none, and
+    except pygame.error:                    # Renderer then skips its convert()
+        pass
     surface = pygame.Surface((640, 360))
     renderer = Renderer(surface)
     chars = list(CHARACTERS.values())

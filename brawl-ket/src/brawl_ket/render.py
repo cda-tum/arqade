@@ -392,7 +392,10 @@ class Renderer:
     def __init__(self, surface: pygame.Surface) -> None:
         self.surface = surface
         stage, self.lights = make_stage()
-        self.stage = stage.convert(surface)     # the same pixel format: the cheapest blit
+        try:
+            self.stage = stage.convert(surface)     # the same pixel format: the cheapest blit
+        except pygame.error:    # no display (a headless benchmark on the cabinet, whose SDL has
+            self.stage = stage  # no dummy driver): both are plain surfaces in the default format
         self.rings = [make_ring(i / RING_STEPS) for i in range(RING_STEPS + 1)]
         self.dim = pygame.Surface((W, H), pygame.SRCALPHA)     # darkens the game under a menu
         self.dim.fill((*P.INK, 150))
