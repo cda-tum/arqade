@@ -50,7 +50,7 @@ explains its concept in a one-line caption *afterwards*.
 | 4 | MEASURE! | A | Press while the needle is in the top zone |
 | 5 | SHIELD! | stick | Dodge the noise until time's up |
 | 6 | VOTE! | stick + A | Pick the bit that disagrees with the others |
-| 7 | SHORTER! | stick + A | Pick the circuit with fewer gates |
+| 7 | SHORTER! | stick + A | Pick the circuit that is shorter once identical neighbours cancel (it gets harder each time it comes up) |
 | 8 | CONNECT! | stick | Walk your qubit along couplers to its partner |
 | 9 | PAIR! | stick + A | Pick one of the two particles swaying in sync |
 | 10 | REFRESH! | mash A | Keep the glow bar above the line |
