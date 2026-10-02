@@ -37,10 +37,6 @@ beside them (`|000>` standing, `|+++>` crouching).
   within a cycle would outvote the code: the second on TRIO (d = 3, t = 1),
   the third on QUINT (d = 5, t = 2). With t lights down, the tag shows the
   danger state (the other lights pulse, a "!" by the ket).
-- **Heavies are telegraphed.** From neutral, a standing heavy or a sweep
-  winds up for 24 frames, with a blinking star on the striking hand or foot
-  for the last 16: long enough to switch to the stance that corrects it.
-  Inside a chain (A, A, B) they come out fast.
 
 ## The fighters
 

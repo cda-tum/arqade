@@ -56,8 +56,8 @@ POSES: dict[str, Pose] = {
     # stand.A jab: a quick straight punch at the chest, leaning in (the fist reaches the 44 px jab box)
     "jab_wind": Pose(0, 26, -4, -24, -12, 30, 130, 24, 150),
     "jab_hit": Pose(12, 32, 0, -28, -14, 56, 56, 30, 150),
-    # stand.B heavy: a big stepping straight. A big wind-up:
-    # the whole body coiled back, the striking fist cocked far behind the hip, the guard hand up
+    # stand.B heavy: a big stepping straight, wound up with the whole body coiled back, the
+    # striking fist cocked far behind the hip and the guard hand up
     "heavy_wind": Pose(-26, 14, -6, -36, -16, -100, -125, 60, 150),
     "heavy_hit": Pose(8, 46, 6, -40, -26, 68, 68, -30, -60),
     # ...and the modest guard the heavy recovers into, so the big coil only ever means "a heavy

@@ -207,6 +207,20 @@ def test_a_downed_fighter_cannot_be_hit():
     assert len(fight.shots) == 1
 
 
+def test_a_breaks_knockdown_survives_a_second_hit_in_the_same_frame():
+    # p2 holds an X on (HIGH, B): p1's jab breaks the code on the very frame a photon arrives
+    fight = new()
+    p2 = fight.fighters["p2"]
+    p2.code.apply(shor.X, shor.HIGH, shor.B_COL)
+    script(fight, JAB_HIT_STEP, p1={0: A})
+    fight.shots.append(Shot("p1", PHOTON, p2.x - 8, 0.0, 0.0, 100))    # on p2, standing still
+    events = fight.step({"p1": IDLE, "p2": IDLE})
+    assert [e.kind for e in of(events, "hit", "cancel", "logical")] == ["logical"]
+    assert p2.action == "knockdown"
+    assert p2.health == 100 - (LOGICAL_DAMAGE + JAB.bonus)
+    assert len(fight.shots) == 1        # the photon flies on, over the downed fighter
+
+
 def test_the_landing_shockwave_skips_a_downed_rival():
     fight = Fight({"p1": COLLAPSE, "p2": TRIO})
     fight.fighters["p2"].x = fight.fighters["p1"].x + 60
@@ -1039,6 +1053,7 @@ def test_collapse_slam_and_shockwave_together_are_a_logical_error():
     hits = of(events, "hit", "logical")
     assert [e.kind for e in hits] == ["hit", "logical"]
     assert [e.row for e in hits] == [shor.HIGH, shor.LOW]
+    assert fight.fighters["p2"].action == "knockdown"
 
 
 def test_collapse_shockwave_reaches_60_px_either_side():

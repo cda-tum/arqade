@@ -265,12 +265,22 @@ class Fight:
                 f.move_hit = True
                 if f.move is not None and f.move.dive is not None and f.move.landing is None:
                     f.bounce()      # a DIVE springs back off what it hit
-        landed_shots = {id(st.shot) for st in strikes if st.shot is not None}
-        self.shots = [s for s in self.shots if id(s) not in landed_shots]
 
+        # A strike on a fighter already knocked down this frame (by a break, say) is dropped
+        # whole, as if the fighter had been down from the start: no event, no damage, and a
+        # shot flies on over them. A fighter's own move strike is always its first in the list,
+        # so the loop above never marks a move that is dropped here as having connected.
+        landed_shots: set[int] = set()
+        downed: set[str] = set()
         for st in strikes:
+            if st.defender in downed:
+                continue
+            if st.shot is not None:
+                landed_shots.add(id(st.shot))
             defender = self.fighters[st.defender]
             result = defender.take_hit(st.move, st.from_facing)
+            if defender.action == "knockdown":
+                downed.add(st.defender)
             self._landings.pop(st.defender, None)   # a hit fighter's shockwave is gone
             kind = {shor.FLIPPED: "hit", shor.CANCEL: "cancel", shor.LOGICAL: "logical"}[result]
             col = None if st.move.error == shor.Z else st.move.column
@@ -278,6 +288,7 @@ class Fight:
                                 st.move.height, col))
             stop = HITSTOP_LOGICAL if result == shor.LOGICAL else HITSTOP
             self.hitstop = max(self.hitstop, stop)
+        self.shots = [s for s in self.shots if id(s) not in landed_shots]
 
     def _move_strike(
         self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],

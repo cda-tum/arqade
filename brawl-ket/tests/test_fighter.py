@@ -633,12 +633,20 @@ def test_the_sweep_is_fast_from_neutral_and_faster_in_a_chain():
 
 
 def test_a_logical_error_knocks_down():
-    from brawl_ket import shor
     f = Fighter(TRIO, 200, 1)
     jab, heavy = TRIO.moves["stand.A"], TRIO.moves["stand.B"]
     assert f.take_hit(jab, -1) == shor.FLIPPED and f.action == "hitstun"
     assert f.take_hit(heavy, -1) == shor.LOGICAL and f.action == "knockdown"
     assert f.health == 100 - 2 - (25 + 5)
+
+
+def test_a_hit_never_turns_a_knockdown_into_hitstun():
+    f = Fighter(TRIO, 200, 1)
+    f.take_hit(SWEEP, -1)
+    assert f.action == "knockdown"
+    run(f, IDLE, 30)                    # most of the way up
+    f.take_hit(JAB, -1)
+    assert f.action == "knockdown" and f.stun >= JAB.hitstun
 
 
 def test_crouching_is_instant_and_has_no_switch():
