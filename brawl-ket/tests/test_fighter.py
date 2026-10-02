@@ -18,6 +18,7 @@ JAB = TRIO.moves["stand.A"]
 LOW_JAB = TRIO.moves["crouch.A"]
 SWEEP = TRIO.moves["crouch.B"]
 PHOTON = TRIO.moves["stand.X"]
+HEAVY = TRIO.moves["stand.B"]
 JAB_TOTAL = JAB.startup + JAB.active + JAB.recovery
 
 FAR = 500.0   # a rival far to the right of a fighter at x=300
@@ -643,3 +644,85 @@ def test_cancel_with_the_press_held_and_move_hit_set_on_the_first_active_frame()
     assert f.chain == 2 and f.frame == 0 and not f.move_hit
     assert f.phase == "startup"
     assert f.buffer == []
+
+
+def phases_of(f, first_events=()):
+    """The phase on every step of the move that has just started, until it ends."""
+    seen = [f.phase]
+    while f.action == "attack":
+        run(f)
+        if f.action == "attack":
+            seen.append(f.phase)
+    return seen
+
+
+def test_a_neutral_heavy_telegraphs_for_20_startup_frames():
+    f = make()
+    run(f, tap("b"))
+    assert f.slot == "stand.B" and f.chain == 1
+    assert f.startup == HEAVY.startup == 20
+    assert phases_of(f) == (
+        ["startup"] * 20 + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
+    )
+
+
+def test_a_heavy_cancelled_from_a_jab_that_hit_takes_8_startup_frames():
+    f = make()
+    start_jab(f)
+    run(f, IDLE, JAB.startup)
+    assert f.phase == "active"
+    f.move_hit = True
+    run(f, tap("b"))
+    assert f.slot == "stand.B" and f.chain == 2 and f.frame == 0
+    assert f.startup == HEAVY.chain_startup == 8
+    assert phases_of(f) == (
+        ["startup"] * 8 + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
+    )
+
+
+def test_the_chained_startup_is_forgotten_when_the_move_ends():
+    f = make()
+    start_jab(f)
+    run(f, IDLE, JAB.startup)
+    f.move_hit = True
+    run(f, tap("b"))
+    assert f.startup == 8
+    run(f, IDLE, 8 + HEAVY.active + HEAVY.recovery)
+    assert f.move is None
+    run(f, tap("b"))                    # the next heavy starts from neutral again
+    assert f.startup == 20
+
+
+def test_the_sweep_telegraphs_from_neutral_and_chains_fast():
+    sweep = TRIO.moves["crouch.B"]
+    f = make()
+    f.code.switch()
+    run(f, FighterInput(down=True, b=True))
+    assert f.slot == "crouch.B" and f.startup == sweep.startup == 20
+    g = make()
+    g.code.switch()
+    run(g, FighterInput(down=True, a=True))
+    run(g, FighterInput(down=True), LOW_JAB.startup)
+    assert g.phase == "active"
+    g.move_hit = True
+    run(g, FighterInput(down=True, b=True))
+    assert g.slot == "crouch.B" and g.startup == sweep.chain_startup == 9
+
+
+def test_only_a_neutral_heavy_telegraphs_and_only_in_its_last_12_startup_frames():
+    f = make()
+    run(f, tap("b"))
+    flags = [f.telegraphing]
+    for _ in range(HEAVY.startup + HEAVY.active):
+        run(f)
+        flags.append(f.telegraphing)
+    assert flags == [False] * (HEAVY.startup - 12) + [True] * 12 + [False] * (HEAVY.active + 1)
+    j = make()                          # a jab never does
+    run(j, tap("a"))
+    assert not j.telegraphing
+    c = make()                          # nor does a chained heavy
+    start_jab(c)
+    run(c, IDLE, JAB.startup)
+    c.move_hit = True
+    run(c, tap("b"))
+    assert not any((run(c), c.telegraphing)[1] for _ in range(8))

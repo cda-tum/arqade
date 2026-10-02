@@ -57,6 +57,10 @@ class Move:
     landing_error: str | None = None
     cooldown: int = 0
     poses: tuple[str, str, str] = ("idle", "idle", "idle")   # startup / active / recovery
+    # Startup when a cancel starts the move (None: the same as `startup`). A heavy has a long,
+    # telegraphed wind-up from neutral, so a defender can read it, and a fast one inside a chain,
+    # where the hit before it has already stunned the rival.
+    chain_startup: int | None = None
 
 
 @dataclass(frozen=True)
@@ -85,7 +89,7 @@ TRIO = Character(
     name="TRIO",
     build="lean",
     distance=3,
-    cycle_frames=config.frames(2.0),
+    cycle_frames=config.frames(1.0),
     health=100,
     walk=2.2,
     jump_vy=12.0,
@@ -100,8 +104,8 @@ TRIO = Character(
             poses=("jab_wind", "jab_hit", "jab_wind"),
         ),
         "stand.B": Move(
-            "heavy", 8, 4, 16, Box(14, 64, 40, 18), qec.X,
-            chip=6, bonus=14, hitstun=20, knockback=4.0,
+            "heavy", 20, 4, 16, Box(14, 64, 40, 18), qec.X,
+            chip=6, bonus=14, hitstun=20, knockback=4.0, chain_startup=8,
             poses=("heavy_wind", "heavy_hit", "heavy_wind"),
         ),
         "crouch.A": Move(
@@ -111,8 +115,8 @@ TRIO = Character(
             poses=("low_wind", "low_hit", "low_wind"),
         ),
         "crouch.B": Move(
-            "sweep", 9, 4, 18, Box(10, 6, 46, 12), qec.Z,
-            chip=6, bonus=14, hitstun=22, knockback=2.0, knockdown=True,
+            "sweep", 20, 4, 18, Box(10, 6, 46, 12), qec.Z,
+            chip=6, bonus=14, hitstun=22, knockback=2.0, knockdown=True, chain_startup=9,
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),
         "air.A": Move(

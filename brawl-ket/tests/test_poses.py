@@ -259,3 +259,36 @@ def test_photon_leaves_from_the_hand():
     box = move.projectile.box
     spawn = (FEET[0] + SHOT_SPAWN_OFFSET + box.x, FEET[1] - (box.y + box.h), box.w, box.h)
     assert distance_to_box(j["hand_f"], spawn) <= REACH
+
+
+# --- the long wind-up of a neutral heavy ------------------------------------------------------
+
+
+def test_a_chained_move_eases_into_its_wind_up_over_its_own_short_startup():
+    heavy = TRIO.moves["stand.B"]
+    f = fighter("attack", move=heavy, slot="stand.B", chained=True)
+    f.frame = heavy.chain_startup - 1
+    assert pose_for(f) == POSES[heavy.poses[0]]         # ends on the keyframe after 8 frames
+    f.frame = heavy.chain_startup                       # and 8 is already the impact
+    assert pose_for(f) == POSES[heavy.poses[1]]
+
+
+def test_a_neutral_heavy_holds_its_wind_up_until_frame_20():
+    heavy = TRIO.moves["stand.B"]
+    f = fighter("attack", move=heavy, slot="stand.B")
+    for frame in range(EASE_FRAMES, heavy.startup):
+        f.frame = frame
+        assert pose_for(f) == POSES["heavy_wind"], frame
+    f.frame = heavy.startup
+    assert pose_for(f) == POSES["heavy_hit"]
+
+
+def test_the_heavy_wind_up_draws_the_fist_far_back_and_the_sweep_the_foot():
+    heavy = joints(POSES["heavy_wind"], "lean", FEET, 1)
+    hit = joints(POSES["heavy_hit"], "lean", FEET, 1)
+    assert heavy["hand_f"][0] <= heavy["hip"][0] - 40            # the fist behind the hip
+    assert hit["hand_f"][0] - heavy["hand_f"][0] >= 100          # a long way to travel
+    sweep = joints(POSES["sweep_wind"], "lean", FEET, 1)
+    sweep_hit = joints(POSES["sweep_hit"], "lean", FEET, 1)
+    assert sweep["foot_f"][0] <= sweep["hip"][0] - 20            # the striking foot cocked behind
+    assert sweep_hit["foot_f"][0] - sweep["foot_f"][0] >= 60

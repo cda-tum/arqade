@@ -201,3 +201,72 @@ def test_the_majority_line_and_the_bang_are_drawn(surface):
         line2, bang2 = probe_tag(surface, r, fight, "p2", beat_on)
         assert line2 == line                                # the line stays put
         assert colour in bang2, beat_on                     # the "!" is there on both halves of the beat
+
+
+# --- the telegraph glint on a neutral heavy or sweep -------------------------------------------
+
+
+def striker_pixels(r, f, key, joint):
+    """The colour on the striking joint's centre, on the last frame drawn."""
+    from brawl_ket.poses import joints
+
+    feet = (f.x, FLOOR_Y - f.y)
+    cx, cy = (round(v) for v in joints(r.pose_last[key], f.char.build, feet, f.facing)[joint])
+    return r.surface.get_at((cx, cy))[:3]
+
+
+def glint_run(surface, pressed, joint, prep=lambda fight: None):
+    """Start a move for p1 and draw every frame of its startup; returns [(telegraphing, centre)]."""
+    from brawl_ket.fighter import IDLE
+
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    prep(fight)
+    p1 = fight.fighters["p1"]
+    seen = []
+    for i in range(TRIO.moves["stand.B"].startup + 1):
+        events = fight.step({"p1": pressed if i == 0 else IDLE, "p2": IDLE})
+        r.draw_fight(fight, events)
+        if p1.action == "attack" and p1.phase == "startup":
+            seen.append((p1.telegraphing, striker_pixels(r, p1, "p1", joint)))
+    return seen
+
+
+def test_the_glint_blinks_at_the_striking_hand_only_in_the_last_12_frames(surface):
+    from brawl_ket.fighter import FighterInput
+
+    seen = glint_run(surface, FighterInput(b=True), "hand_f")
+    assert len(seen) == 20
+    early = [c for tele, c in seen if not tele]
+    window = [c for tele, c in seen if tele]
+    assert len(window) == 12 and P.WHITE not in early
+    assert P.WHITE in window and any(c != P.WHITE for c in window)     # it blinks
+
+
+def test_the_sweeps_glint_is_at_the_foot(surface):
+    from brawl_ket.fighter import FighterInput
+
+    seen = glint_run(surface, FighterInput(down=True, b=True), "foot_f",
+                     prep=lambda fight: fight.fighters["p1"].code.switch())
+    window = [c for tele, c in seen if tele]
+    assert len(window) == 12 and P.WHITE in window and any(c != P.WHITE for c in window)
+
+
+def test_a_chained_heavy_has_no_glint(surface):
+    from brawl_ket.fighter import IDLE, FighterInput
+
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    p1 = fight.fighters["p1"]
+    jab = TRIO.moves["stand.A"]
+    fight.step({"p1": FighterInput(a=True), "p2": IDLE})
+    for _ in range(jab.startup):
+        fight.step({"p1": IDLE, "p2": IDLE})
+    p1.move_hit = True
+    seen = []
+    fight.step({"p1": FighterInput(b=True), "p2": IDLE})
+    for _ in range(8):
+        r.draw_fight(fight, [])
+        seen.append(striker_pixels(r, p1, "p1", "hand_f"))
+        fight.step({"p1": IDLE, "p2": IDLE})
+    assert p1.slot == "stand.B" and P.WHITE not in seen

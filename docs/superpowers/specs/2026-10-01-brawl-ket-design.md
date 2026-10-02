@@ -47,8 +47,8 @@ font has no ⟩, so kets are written with ASCII, as in the other games.
 - **Distance:** a distance-d code corrects t = (d − 1) / 2 errors per cycle.
   TRIO has d = 3 (t = 1) and QUINT has d = 5 (t = 2).
 - **Correction cycle:** each fighter's code is corrected on a fixed cycle,
-  shown as a ring that fills up and then ticks. TRIO's cycle is 2.0 s and
-  QUINT's is 3.0 s: a bigger code takes longer to measure. At each tick the
+  shown as a ring that fills up and then ticks. TRIO's cycle is 1.0 s and
+  QUINT's is 1.5 s: a bigger code takes longer to measure. At each tick the
   majority vote repairs every flipped light.
 - **Stance is the code basis:**
   - Standing is the **bit-flip code** (`|000>`/`|111>`). It corrects X
@@ -100,7 +100,15 @@ frame data:
 | A | jab | low jab | air jab |
 | B | heavy, knockback | sweep, knockdown | heavy jump-in |
 
-**TRIO** is fast, with a distance-3 code (corrects 1 per 2.0 s cycle), a quick
+A standing heavy and a sweep are **telegraphed**: from neutral they start up in
+20 frames (the last 12 show a blinking white star on the striking hand or foot,
+and the wind-up pose is drawn far back), long enough for a defender to see them
+and switch to the matching stance (an 8-frame switch). Cancelled into from a
+chain (jab, jab, heavy) they keep a fast startup (8 and 9 frames), so a combo
+still lands. The short 1.0 s cycle repairs isolated hits, so only a real combo
+or a wrong-stance hit breaks a code.
+
+**TRIO** is fast, with a distance-3 code (corrects 1 per 1.0 s cycle), a quick
 walk and a high jump. It's lean, and wears a visor.
 - **Standing X, PHOTON:** a projectile dealing an X error. Slow to start.
 - **Crouching X, PHASE SLIDE:** a low slide forwards, dealing a Z error. It
@@ -108,7 +116,7 @@ walk and a high jump. It's lean, and wears a visor.
 - **Air X, DIVE:** a steep diving kick, dealing an X error. It beats a
   crouching rival: the mix-up tool.
 
-**QUINT** is heavy, with a distance-5 code (corrects 2 per 3.0 s cycle) and a
+**QUINT** is heavy, with a distance-5 code (corrects 2 per 1.5 s cycle) and a
 slow walk. It's broad, with armour plates.
 - **Standing X, SYNDROME GRAB:** a lunging command throw, dealing a Y error,
   so always a logical error. Long range, but slow and punishable on a miss.

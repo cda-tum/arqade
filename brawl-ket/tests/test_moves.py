@@ -32,11 +32,34 @@ def test_error_types_follow_the_stance():
             assert m.error in (qec.X, qec.Y)
 
 
+def chain_startup(move):
+    """The startup a move has when a cancel starts it (what a chain really waits for)."""
+    return move.startup if move.chain_startup is None else move.chain_startup
+
+
 def test_every_chain_link_really_combos():
     # cancelling on the hit frame, the next move's first active frame lands inside the hitstun
     for c, _slot, m in all_moves():
         for nxt in m.cancels:
-            assert c.moves[nxt].startup < m.hitstun - 1, (c.name, m.name, nxt)
+            assert chain_startup(c.moves[nxt]) < m.hitstun - 1, (c.name, m.name, nxt)
+
+
+def test_a_chain_startup_is_never_slower_than_the_neutral_one():
+    for _c, slot, m in all_moves():
+        if m.chain_startup is not None:
+            assert 1 <= m.chain_startup <= m.startup, slot
+
+
+def test_the_heavies_telegraph_from_neutral_and_stay_fast_in_a_chain():
+    trio = CHARACTERS["TRIO"].moves
+    assert (trio["stand.B"].startup, trio["stand.B"].chain_startup) == (20, 8)
+    assert (trio["crouch.B"].startup, trio["crouch.B"].chain_startup) == (20, 9)
+    # every other move starts the same way however it begins
+    for slot, m in trio.items():
+        if slot not in ("stand.B", "crouch.B"):
+            assert m.chain_startup is None, slot
+    # the telegraph is longer than a stance switch, so a defender who sees it can react
+    assert trio["stand.B"].startup - 10 >= config.SWITCH_FRAMES
 
 
 @pytest.mark.skipif(importlib.util.find_spec("brawl_ket.poses") is None, reason="Task 7")
@@ -47,7 +70,7 @@ def test_poses_exist():
 
 
 def test_cycle_is_in_frames():
-    assert CHARACTERS["TRIO"].cycle_frames == config.frames(2.0)
+    assert CHARACTERS["TRIO"].cycle_frames == config.frames(1.0) == 60
 
 
 def test_every_kind_is_known():

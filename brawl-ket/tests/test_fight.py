@@ -149,12 +149,77 @@ def test_throw_is_always_logical():
 
 def test_the_cycle_repairs_between_spaced_hits():
     fight = new()
-    events = script(fight, 200, p1={0: A, 130: A})
+    gap = TRIO.cycle_frames + 10        # more than one whole cycle apart
+    events = script(fight, gap + 80, p1={0: A, gap: A})
     assert of(events, "logical") == []
     assert len(of(events, "hit")) == 2
     corrected = of(events, "corrected")
-    assert [e.player for e in corrected] == ["p2"]
+    assert [e.player for e in corrected] == ["p2", "p2"]    # one repair after each hit
     assert fight.fighters["p2"].health == 100 - 2 * JAB.chip
+
+
+def test_two_hits_within_one_cycle_still_break_the_code():
+    fight = new()
+    gap = TRIO.cycle_frames - 20        # the second jab lands inside the same 1 s cycle
+    events = script(fight, gap + 40, p1={0: A, gap: A})
+    assert [e.kind for e in of(events, "hit", "logical")] == ["hit", "logical"]
+
+
+def test_a_jab_into_a_heavy_still_combos():
+    HEAVY = TRIO.moves["stand.B"]
+    fight = new()
+    events = script(fight, 60, p1={0: A, JAB_HIT_STEP: B})
+    hits = of(events, "hit", "logical")
+    assert [(e.kind, e.error) for e in hits] == [("hit", qec.X), ("logical", qec.X)]
+    assert fight.fighters["p1"].chain == 2
+    assert fight.fighters["p2"].health == 100 - JAB.chip - (LOGICAL_DAMAGE + HEAVY.bonus)
+
+
+def test_a_lone_heavy_from_neutral_is_only_a_correctable_hit():
+    fight = new()
+    events = script(fight, 60, p1={0: B})
+    assert [(e.kind, e.error) for e in of(events, "hit", "logical")] == [("hit", qec.X)]
+    assert fight.fighters["p2"].health == 100 - TRIO.moves["stand.B"].chip
+
+
+REACTION = 10       # frames a defender needs to see a move start and decide
+
+
+def test_a_crouching_defender_can_react_to_a_neutral_standing_heavy():
+    heavy = TRIO.moves["stand.B"]
+    # without a reaction the standing heavy on a croucher is a logical error at once
+    fight = new()
+    fight.fighters["p2"].code.switch()
+    events = script(fight, 60, p1={0: B}, p2=FighterInput(down=True))
+    assert [e.kind for e in of(events, "hit", "logical")] == ["logical"]
+    # it sees the heavy begin, waits a reaction, then stands up (an 8-frame switch back to |000>)
+    fight = new()
+    fight.fighters["p2"].code.switch()
+    held = {i: FighterInput(down=True) for i in range(REACTION)}
+    events = script(fight, 60, p1={0: B}, p2=held)
+    hits = of(events, "hit", "logical")
+    assert [(e.kind, e.error) for e in hits] == [("hit", qec.X)]
+    assert fight.fighters["p2"].health == 100 - heavy.chip
+    assert fight.fighters["p2"].code.basis == qec.BIT
+
+
+def test_a_standing_defender_can_react_to_a_neutral_sweep():
+    sweep = TRIO.moves["crouch.B"]
+    fight = new()
+    fight.fighters["p1"].code.switch()
+    attack = {0: FighterInput(down=True, b=True)}
+    keep_down = {i: FighterInput(down=True) for i in range(1, 80)}
+    p1 = {**keep_down, **attack}
+    p2 = {i: FighterInput(down=True) for i in range(REACTION, 80)}
+    events = script(fight, 60, p1=p1, p2=p2)
+    hits = of(events, "hit", "logical")
+    assert [(e.kind, e.error) for e in hits] == [("hit", qec.Z)]
+    assert fight.fighters["p2"].health == 100 - sweep.chip
+    # a defender who never reacts is swept into a logical error
+    fight = new()
+    fight.fighters["p1"].code.switch()
+    events = script(fight, 60, p1=p1)
+    assert [e.kind for e in of(events, "hit", "logical")] == ["logical"]
 
 
 def test_a_throw_whiffs_on_an_airborne_rival():

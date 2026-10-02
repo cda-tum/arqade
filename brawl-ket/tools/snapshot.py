@@ -11,6 +11,9 @@ Writes:
   light flipped (danger, both beats of the pulse), the green flash after a correction, the
   red flash after a logical error;
 - fight_danger.png: a bot fight at the moment a code is one hit from a logical error;
+- fight_glint.png, fight_glint_sweep.png: a neutral heavy / sweep late in its 20-frame wind-up,
+  with the telegraph glint on the striking hand / foot (and fight_glint_off.png, a blink-off
+  frame of the heavy);
 - fight_start.png (the fighters walking in), fight_hit.png, fight_logical.png, fight_crouch.png, fight_shot.png,
   fight_knockdown.png: bot-against-bot frames at those moments (fight_boxes.png
   is the hit frame again with the hurt- and hitboxes drawn).
@@ -120,6 +123,28 @@ def tag_sheet() -> pygame.Surface:
     return sheet
 
 
+def glint_frames(out_dir: str) -> None:
+    """A scripted heavy and a scripted sweep, frozen in the telegraph window."""
+    from brawl_ket.fighter import IDLE, FighterInput
+
+    surface = pygame.Surface((W, H))
+    for name, pressed, crouch in (
+        ("fight_glint", FighterInput(b=True), False),
+        ("fight_glint_sweep", FighterInput(down=True, b=True), True),
+    ):
+        fight = Fight({"p1": TRIO, "p2": TRIO})
+        fight.fighters["p1"].x, fight.fighters["p2"].x = 250, 340
+        if crouch:
+            fight.fighters["p1"].code.switch()
+        r = Renderer(surface)
+        for i in range(19):
+            r.draw_fight(fight, fight.step({"p1": pressed if i == 0 else IDLE, "p2": IDLE}), {"p1": 0, "p2": 0})
+            if fight.fighters["p1"].frame == 17:
+                save(surface, out_dir, f"{name}.png")
+            if name == "fight_glint" and fight.fighters["p1"].frame == 14:
+                save(surface, out_dir, "fight_glint_off.png")      # the blink's dark phase
+
+
 def find_frames(out_dir: str) -> None:
     """Play bot fights until each wanted moment has been seen, saving the frame."""
     surface = pygame.Surface((W, H))
@@ -171,6 +196,7 @@ def main(argv: list[str]) -> None:
         save(pose_sheet(build), out_dir, f"poses_{build}.png")
     save(move_sheet(), out_dir, "moves_lean.png")
     save(tag_sheet(), out_dir, "code_tags.png")
+    glint_frames(out_dir)
     find_frames(out_dir)
 
 

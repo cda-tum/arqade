@@ -28,6 +28,7 @@ from .config import (
 )
 from .moves import Box, Character, Move
 
+TELEGRAPH_FRAMES = 12      # the last frames of a neutral heavy's startup show a glint on the striker
 KNOCKDOWN_FRAMES = 40
 STUN_DECAY = 0.85          # vx multiplier per frame of hitstun / knockdown
 
@@ -69,6 +70,7 @@ class Fighter:
         self.frame = 0              # frames into the action (0 on its first frame)
         self.move: Move | None = None
         self.slot: str | None = None
+        self.chained = False        # the move in progress was started by a cancel
         self.move_hit = False       # the fight sets this when the move connects
         self.chain = 0              # moves in the current string
         self.stun = 0
@@ -85,17 +87,40 @@ class Fighter:
         return "crouch" if self.code.basis == qec.PHASE else "stand"
 
     @property
+    def startup(self) -> int:
+        """The startup of the move in progress: its chain_startup when a cancel started it
+        (and it has one), else its own. Every phase is computed from this, never from
+        move.startup."""
+        m = self.move
+        assert m is not None
+        return m.chain_startup if self.chained and m.chain_startup is not None else m.startup
+
+    @property
     def phase(self) -> str | None:
         m = self.move
         if m is None:
             return None
-        if self.frame < m.startup:
+        startup = self.startup
+        if self.frame < startup:
             return "startup"
-        if self.frame < m.startup + m.active:
+        if self.frame < startup + m.active:
             return "active"
-        if self.frame < m.startup + m.active + m.recovery:
+        if self.frame < startup + m.active + m.recovery:
             return "recovery"
         return None
+
+    @property
+    def telegraphing(self) -> bool:
+        """In the last TELEGRAPH_FRAMES of the startup of a move that has a long wind-up
+        from neutral (not one cancelled into, which comes out fast)."""
+        m = self.move
+        return (
+            m is not None
+            and m.chain_startup is not None
+            and not self.chained
+            and self.action == "attack"
+            and m.startup - TELEGRAPH_FRAMES <= self.frame < m.startup
+        )
 
     @property
     def hurtbox(self) -> tuple[float, float, int, int]:
@@ -175,6 +200,7 @@ class Fighter:
 
         self.move = None
         self.slot = None
+        self.chained = False
         self.move_hit = False
         self.buffer = []
         self.vx = move.knockback * from_facing
@@ -228,7 +254,7 @@ class Fighter:
         elif self.action == "attack":
             m = self.move
             assert m is not None
-            if self.frame >= m.startup + m.active + m.recovery:
+            if self.frame >= self.startup + m.active + m.recovery:
                 self._end_move()
             else:
                 self._move_effects(m, events)
@@ -236,6 +262,7 @@ class Fighter:
     def _end_move(self) -> None:
         self.move = None
         self.slot = None
+        self.chained = False
         self.move_hit = False
         if self.y == 0:
             self.vx = 0.0
@@ -243,7 +270,7 @@ class Fighter:
 
     def _move_effects(self, m: Move, events: list) -> None:
         if self.phase == "active":
-            if self.frame == m.startup:
+            if self.frame == self.startup:
                 if m.kind == "projectile":
                     events.append(("projectile", {"move": m}))
                 elif m.kind == "reencode":
@@ -255,7 +282,7 @@ class Fighter:
                 self.vx = m.lunge * self.facing
         elif self.y == 0:
             self.vx = 0.0
-        elif m.dive is not None and self.frame == m.startup + m.active:
+        elif m.dive is not None and self.frame == self.startup + m.active:
             self.vx = 0.0           # the dive ran out before the floor
 
     def _slot_for(self, btn: str, dx: int, rival_x: float) -> str:
@@ -320,6 +347,7 @@ class Fighter:
     def _start_move(self, slot: str, move: Move, cancel: bool, events: list) -> None:
         self.move = move
         self.slot = slot
+        self.chained = cancel       # a cancel uses the move's chain_startup, if it has one
         self.move_hit = False
         self.buffer = []            # an older press must not fire a cancel nobody made
         self.chain = self.chain + 1 if cancel else 1
@@ -352,7 +380,7 @@ class Fighter:
             self.vx = 0.0
             if m.dive is not None:
                 # a dive that reaches the floor skips to its recovery
-                self.frame = max(self.frame, m.startup + m.active)
+                self.frame = max(self.frame, self.startup + m.active)
             else:
                 self._end_move()    # any other air move is land-cancelled
         elif self.action == "jump":

@@ -58,14 +58,17 @@ POSES: dict[str, Pose] = {
     # stand.A jab: a quick straight punch at the chest, leaning in (the fist reaches the 44 px jab box)
     "jab_wind": Pose(0, 26, -4, -24, -12, 30, 130, 24, 150),
     "jab_hit": Pose(12, 32, 0, -28, -14, 56, 56, 30, 150),
-    # stand.B heavy: a big stepping straight, the back arm thrown back
-    "heavy_wind": Pose(-14, 20, -6, -30, -14, -20, 80, 50, 140),
+    # stand.B heavy: a big stepping straight. The wind-up is the telegraph (20 frames from neutral):
+    # the whole body coiled back, the striking fist cocked far behind the hip, the guard hand up
+    "heavy_wind": Pose(-26, 14, -6, -36, -16, -100, -125, 60, 150),
     "heavy_hit": Pose(8, 46, 6, -40, -26, 68, 68, -30, -60),
     # crouch.A low jab: a punch at the shins from the crouch
     "low_wind": Pose(24, 95, -4, 30, -86, 20, 120, 30, 155),
     "low_hit": Pose(20, 95, -4, 30, -86, 44, 44, 30, 155),
-    # crouch.B sweep: a low kick along the floor, a hand down for balance
-    "sweep_wind": Pose(45, 95, -4, 30, -86, -40, -20, 10, 0),
+    # crouch.B sweep: a low kick along the floor, a hand down for balance. The wind-up (the
+    # telegraph, 20 frames from neutral) rocks back on the planted leg with the kicking foot
+    # cocked far behind the hip
+    "sweep_wind": Pose(35, -75, -140, 70, 0, -40, -20, 10, 0),
     "sweep_hit": Pose(50, 70, 78, 20, -85, -60, -40, 10, 20),
     # air
     "air_jab": Pose(16, 100, 15, 40, -50, 40, 40, 30, 150),
@@ -163,9 +166,10 @@ def _move_pose(f: Fighter, start: Pose | None) -> Pose:
     m = f.move
     assert m is not None
     rest = POSES[_rest(f.slot, f)]
-    active, end = m.startup, m.startup + m.active
+    startup = f.startup         # a cancelled-into heavy winds up faster than one from neutral
+    active, end = startup, startup + m.active
     if f.frame < active:
-        return lerp(start or rest, POSES[m.poses[0]], _ease(f.frame, m.startup))
+        return lerp(start or rest, POSES[m.poses[0]], _ease(f.frame, startup))
     if f.frame < end:
         return POSES[m.poses[1]]
     pose = lerp(POSES[m.poses[1]], POSES[m.poses[2]], _ease(f.frame - end, m.recovery))
