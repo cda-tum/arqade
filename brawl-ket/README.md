@@ -82,6 +82,7 @@ uv run python -m brawl_ket          # windowed
 uv run python -m brawl_ket --fps    # with the FPS overlay
 uv run pytest
 uv run python tools/snapshot.py /tmp/brawl-snaps   # poses, moves, fights and screens to PNGs
+uv run python tools/benchmark.py                    # frame cost (on the cabinet: see below)
 ```
 
 ## Layout
@@ -107,3 +108,11 @@ The first time, you also need to add the `batocera/gamelist.xml` entry and
 copy `batocera/logos/brawl_ket-logo.png` and `-marquee.png` to the cabinet,
 with EmulationStation stopped, and then restart it (see `../AGENTS.md`).
 Later deploys only replace the code.
+
+To time a frame on the Pi itself, copy `tools/benchmark.py` over and run it
+against the deployed package:
+
+```bash
+scp tools/benchmark.py root@batocera.local:/tmp/
+ssh root@batocera.local "python3 /tmp/benchmark.py /userdata/games/brawl_ket"
+```
