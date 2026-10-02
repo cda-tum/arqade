@@ -116,17 +116,20 @@ and axis mappings live there.
 |---|---|---|
 | Select electrode | Stick left/right or Y/A / ← → | Stick left/right or Y/A / D G |
 | Voltage | Stick up/down or X/B / ↑ ↓ | Stick up/down or X/B / R F |
-| Confirm | L or R / LCtrl, Space, Enter | L or R / A |
-| Start | Start / 1 | Start / 2 |
+| Start (menus) / pause (in play) | Start / 1 | Start / 2 |
 | Menu: confirm | **A** / Ctrl, Space, Enter | **A** / A |
 | Menu: back | **B** / Backspace | **B** / S |
-| Sandbox: laser kick | Start / 1 | Start / 2 |
+| Sandbox: laser kick | Select / 5 | Select / 6 |
 | Sandbox: L | remove ion (key Q) | cool while held (key C) |
 | Sandbox: R | add ion (key E) | passive cooling on/off (key V) |
 
-- **Select** (or Esc) opens the pause menu.
-- **Quit:** hold Start and Select together on either controller, or choose QUIT in the
-  main menu.
+- **Start** pauses during play, on either controller, in every mode including the
+  sandbox (Esc too, on the keyboard). The pause menu has RESUME, RESTART and QUIT TO
+  TITLE (QUIT with `--sandbox`, which has no title screen): the stick moves the
+  selection, A picks, Start or B resumes. Select does not pause; it is reserved for
+  the quit combo (and fires the laser kick in the sandbox).
+- **Quit:** hold Start and Select together on either controller (1+5 or 2+6 on the
+  keyboard), paused or not, or choose QUIT in the main menu.
 - The keyboard keys are a dev fallback only. The cabinet loader runs the game with `--no-keyboard`: Batocera also turns P1's pad into keystrokes (arrow keys, numpad, letters, Enter/Space — see `../AGENTS.md`), which would otherwise let P1's stick or buttons drive P2 or fire two actions at once.
 
 Records (solo and co-op) are saved to `~/.ion_surfer_scores.json`. On Batocera that is
@@ -153,15 +156,16 @@ uv run pytest
 
 The tests cover the pure input functions, `Pad`'s hold/press/auto-repeat logic, the
 config (every key name exists, and start/select aren't action buttons),
-`display.py`'s scaling math, and the sandbox physics:
+`display.py`'s scaling math, the pause menu (`tests/test_game.py`, which drives
+`Game` with the cabinet's raw joystick events), and the sandbox physics:
 - `quantum.py`: norm conservation, a stationary ground state, coherent-state
   oscillation, squeezed-state breathing with even-only Fock populations, kicks and
   cooling.
 - `crystal.py`: the Coulomb spacing, COM at ω and stretch at √3·ω, three-ion mode
   ratios, kicks that excite only COM vs COM and stretch, and following a moving trap.
 
-The game loop and rendering (`game.py`, `sandbox.py`) are integration glue. They are
-verified by running the game.
+Apart from the pause menu, the game loop and rendering (`game.py`, `sandbox.py`) are
+integration glue. They are verified by running the game.
 
 ## Tuning
 

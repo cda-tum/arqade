@@ -170,3 +170,37 @@ def test_a_minute_without_input_returns_to_the_title():
     mt = won_match()
     run(mt, config.IDLE_TIMEOUT + 1.0, dt=0.5)
     assert mt.state == m.TITLE
+
+
+# --- pausing ---------------------------------------------------------------------------
+
+
+def test_start_pauses_the_round_and_everything_freezes():
+    mt = in_round()
+    events = mt.update(1 / 60, FrameInput(pause=True, confirm=True, activity=True))
+    assert mt.paused and Cue("pause") in events
+    pos = mt.round.players["p1"].bikes[0].pos
+    run(mt, 2.0)
+    assert mt.round.players["p1"].bikes[0].pos == pos and mt.state == m.ROUND
+
+
+def test_start_or_b_resumes():
+    mt = in_round()
+    mt.update(1 / 60, FrameInput(pause=True, activity=True))
+    mt.update(1 / 60, FrameInput(pause=True, activity=True))
+    assert not mt.paused
+    mt.update(1 / 60, FrameInput(pause=True, activity=True))
+    mt.update(1 / 60, FrameInput(back=True, activity=True))
+    assert not mt.paused
+
+
+def test_a_picks_resume_or_quit_to_title():
+    mt = in_round()
+    mt.update(1 / 60, FrameInput(pause=True, activity=True))
+    mt.update(1 / 60, FrameInput(pick=True, confirm=True, activity=True))
+    assert not mt.paused and mt.state == m.ROUND
+    mt.update(1 / 60, FrameInput(pause=True, activity=True))
+    mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    assert m.PAUSE_ITEMS[mt.pause_index] == "QUIT TO TITLE"
+    mt.update(1 / 60, FrameInput(pick=True, confirm=True, activity=True))
+    assert mt.state == m.TITLE and not mt.paused and mt.round is None

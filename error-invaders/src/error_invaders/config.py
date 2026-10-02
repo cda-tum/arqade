@@ -33,6 +33,9 @@ KEY_PRESETS = {
 }
 KEYS_CONFIRM = ["K_RETURN", "K_KP_ENTER", "K_1", "K_2"]
 KEYS_BACK = ["K_ESCAPE"]
+# Pause / resume during play (the keyboard twin of Start). Not one of P1's
+# evmapy letters l x r b y a, see ../AGENTS.md.
+KEYS_PAUSE = ["K_p", "K_ESCAPE"]
 
 # Joysticks. Raw button numbers confirmed on the cabinet (both pads, see
 # ../AGENTS.md): printed L X R / Y B A = raw 4 0 5 / 3 2 1. The stick is an
@@ -57,8 +60,8 @@ INPUT_CONFIG = {
         },
     },
     "system": {
-        # Start confirms, Select goes back (to the menu). Quit combo: Start +
-        # Select held together, on either controller.
+        # Start confirms, and pauses during play; Select goes back (in the
+        # menus). Quit combo: Start + Select held together, on either controller.
         # Raw 9 is the button printed START and raw 8 is SELECT -- the
         # reverse of what these were set to originally. EmulationStation's own
         # es_input.cfg for this pad agrees (select id=8, start id=9), and the

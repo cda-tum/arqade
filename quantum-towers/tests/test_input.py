@@ -1,6 +1,7 @@
 import pygame
 
 from quantum_towers.input import (
+    axis_indicates_down,
     axis_indicates_up,
     keyboard_enabled,
     pressed_edge,
@@ -29,6 +30,13 @@ def test_axis_indicates_up_false_within_the_deadzone():
 
 def test_axis_indicates_up_false_when_pushed_down():
     assert axis_indicates_up(0.9, deadzone=0.25) is False
+
+
+def test_axis_indicates_down_mirrors_up():
+    # Only the pause menu reads "down": positive is down in SDL's convention.
+    assert axis_indicates_down(0.9, deadzone=0.25) is True
+    assert axis_indicates_down(0.1, deadzone=0.25) is False
+    assert axis_indicates_down(-0.9, deadzone=0.25) is False
 
 
 def test_should_quit_requires_start_and_select_on_same_pad():

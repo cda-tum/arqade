@@ -20,13 +20,14 @@ COUNTDOWN = "countdown"
 ROUND = "round"
 ROUND_RESULT = "round_result"
 MATCH_RESULT = "match_result"
+PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 
 
 @dataclass(frozen=True)
 class Cue:
     """A match-level event for the sound and the renderer."""
 
-    kind: str  # "beep", "go", "blip", "round_won", "draw" or "match_won"
+    kind: str  # "beep", "go", "blip", "pause", "round_won", "draw" or "match_won"
     player: str | None = None
 
 
@@ -37,6 +38,8 @@ class FrameInput:
     nav: rules.Vec | None = None  # a stick direction newly pushed this frame (menus)
     confirm: bool = False  # A or Start pressed this frame, either pad
     back: bool = False  # B pressed this frame, either pad
+    pause: bool = False  # Start pressed this frame, either pad
+    pick: bool = False  # A pressed this frame, either pad (picks a pause-menu item)
     activity: bool = False  # any input at all (for the idle timeout)
 
 
@@ -70,6 +73,8 @@ class Match:
         self.match_winner: str | None = None
         self._beeps = 0
         self._pending: dict = {}
+        self.paused = False
+        self.pause_index = 0
 
     @property
     def players(self) -> tuple[str, ...]:
@@ -85,8 +90,11 @@ class Match:
         if self.state != TITLE and self.idle >= config.IDLE_TIMEOUT:
             self._to_title()
             return []
-        self.t += dt
         events: list = []
+        if self.state == ROUND and (self.paused or inp.pause):
+            self._on_pause(inp, events)
+            return events
+        self.t += dt
         if self.state == TITLE:
             if inp.nav in ((-1, 0), (1, 0)):
                 step = 1 if inp.nav == (1, 0) else -1
@@ -132,7 +140,30 @@ class Match:
 
     def _to_title(self) -> None:
         self.round = None
+        self.paused = False
         self._set_state(TITLE)
+
+    def _on_pause(self, inp: FrameInput, events: list) -> None:
+        """Start pauses a round (either pad). In the menu the stick moves, A
+        picks, and Start or B resumes. Nothing in the round moves meanwhile."""
+        if not self.paused:
+            self.paused = True
+            self.pause_index = 0
+            events.append(Cue("pause"))
+            return
+        if inp.pause or inp.back:
+            self.paused = False
+            events.append(Cue("blip"))
+            return
+        if inp.nav in ((0, -1), (0, 1)):
+            self.pause_index = (self.pause_index + inp.nav[1]) % len(PAUSE_ITEMS)
+            events.append(Cue("blip"))
+        if inp.pick:
+            events.append(Cue("blip"))
+            if PAUSE_ITEMS[self.pause_index] == "RESUME":
+                self.paused = False
+            else:
+                self._to_title()
 
     def _start_match(self, events: list) -> None:
         self.scores = {p: 0 for p in self.players}

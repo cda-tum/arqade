@@ -1,13 +1,14 @@
 # Arcade cabinet & hardware notes
 
-This directory holds independent pygame games (`quantum-pong/`, `quantum-towers/`,
-`error-invaders/`, `ion-surfer/`, `overquqed/`, `superconductor/`, `qurves/`,
-more later) built for the same physical target: a Batocera-based arcade
-cabinet ("IconicArcade"), a Raspberry Pi 4 with a 21" 1920x1080 screen and
-two 6-button joystick pads. This file collects hardware facts and hard-won
-quirks that apply **across games**, so a future session doesn't have to
-rediscover them from scratch. Per-game specifics (gameplay, architecture,
-tests) belong in each game's own `README.md`.
+This directory holds independent pygame games (`quantum-pong/`,
+`quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
+`superconductor/`, `qurves/`, `gate-drop/`, more later) built for the same
+physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
+Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. This file
+collects hardware facts and hard-won quirks that apply **across games**, so a
+future session doesn't have to rediscover them from scratch. Per-game
+specifics (gameplay, architecture, tests) belong in each game's own
+`README.md`.
 
 ## Runtime environment
 
@@ -296,6 +297,7 @@ exists** — a game with no "back" simply has nothing to bind:
 | Confirm / select a menu item | **A** | 1 |
 | Back / return to the previous screen | **B** | 2 |
 | Start the game from its title or main menu | **Start** | 9 |
+| Pause during play | **Start** | 9 |
 
 Notes and deliberate limits:
 
@@ -316,6 +318,36 @@ Notes and deliberate limits:
   goes back with A. `batocera/kiosk.py --controls` sets ES's `InvertButtons`
   to fix that; the bottom-right hints in the theme (`install.py`) must be kept
   in agreement with it.
+
+### Pausing (all games must follow this)
+
+Every game can be paused, and a paused game is always one step from its own
+title screen. That matters on a public cabinet: someone walks up to a game
+left mid-round, or a round needs to stop without power-cycling anything.
+
+- **Start pauses** during play, from either pad. Everything freezes: timers,
+  falling pieces, the round clock. Select is not a pause button, because it is
+  reserved for the Start + Select quit combo.
+- **The pause menu offers at least RESUME and QUIT TO TITLE.** QUIT TO TITLE
+  goes back to the game's own title or home screen, not out to
+  EmulationStation; quitting to ES stays the Start + Select combo. A game may
+  add items such as RESTART.
+- **In the menu:** the stick moves the selection, A picks an item, and Start
+  or B resumes.
+- **Start + Select still quits at once**, paused or not, and the idle timeout
+  back to the title keeps running while paused.
+
+Where the games stand (2026-10-01): every game follows it except
+Superconductor, whose pause screen goes to its menu with Select rather than
+through a menu item. That one is deliberately left as it is.
+
+- Gate Drop, Qurves, Quantum Pong, Qlimbers and Pauli Invaders: RESUME and
+  QUIT TO TITLE.
+- Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
+  from Start to Select, so that Start can pause there too.
+- A title screen reached from QUIT TO TITLE must wait for the buttons to be
+  let go, or the A that picked the item starts a new match on its first frame
+  (Quantum Pong and Qlimbers do this).
 
 ## Player colours: left is blue, right is red (a taste)
 

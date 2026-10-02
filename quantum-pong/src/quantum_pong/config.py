@@ -30,11 +30,12 @@ INPUT_CONFIG = {
     },
     "system": {
         # Quit combo: Start + Select held together, on either controller.
-        # Confirm button: printed A (raw 1). The cabinet-wide convention is
-        # A = confirm, B = back, Start = start the game -- see "Button
-        # convention" in ../AGENTS.md. This game has no menu to go back in,
-        # so it binds confirm only.
+        # Confirm button: printed A (raw 1), back: printed B (raw 2). The
+        # cabinet-wide convention is A = confirm, B = back, Start = start the
+        # game -- see "Button convention" in ../AGENTS.md. Back is only used
+        # by the pause menu (Start pauses; Start or B resumes).
         "confirm_button": 1,
+        "back_button": 2,
         # Raw 9 is the button printed START and raw 8 is SELECT -- the
         # reverse of what these were set to originally. EmulationStation's own
         # es_input.cfg for this pad agrees (select id=8, start id=9), and the
@@ -44,6 +45,11 @@ INPUT_CONFIG = {
         "start_button": 9,
         "select_button": 8,
         "keyboard_quit": "K_ESCAPE",
+        # Dev-only pause menu keys. P pauses/resumes (Start), Enter picks
+        # (A); W/S and Up/Down move the selection. Not one of P1's evmapy
+        # letters (l x r b y a) -- see ../AGENTS.md.
+        "keyboard_pause": "K_p",
+        "keyboard_confirm": "K_RETURN",
     },
     "axis_deadzone": 0.25,
 }
@@ -94,7 +100,8 @@ COLOR_MIDLINE = (60, 60, 80)
 COLOR_PADDLE = (230, 230, 230)
 COLOR_BALL = (230, 230, 230)
 COLOR_TEXT = (230, 230, 230)
-COLOR_FPS = (255, 210, 0)
+COLOR_FPS = (255, 210, 0)  # also the highlight colour (title prompt, pause menu)
+COLOR_HINT = (140, 140, 160)  # pause menu's control hint
 
 GATE_COLORS = {
     "H": (120, 200, 255),

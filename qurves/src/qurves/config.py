@@ -116,3 +116,4 @@ KEYMAP = {
 }
 KEYS_CONFIRM = ["K_RETURN", "K_1", "K_2"]
 KEYS_BACK = ["K_BACKSPACE"]
+KEYS_PAUSE = ["K_p"]

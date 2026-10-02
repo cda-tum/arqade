@@ -501,6 +501,77 @@ def qurves() -> pygame.Surface:
     return surf
 
 
+# --- Gate Drop (gate-drop) ------------------------------------------------------
+# SNES-style pixel art like the game's: an X/Z gate pill, a steel CNOT and a
+# grumpy Y error bug on the tiled title background. Drawn at 64x64 and scaled
+# by 8 (nearest). Colours copied from gate-drop/src/gate_drop/config.py.
+
+_GLYPHS = {
+    "X": ("1...1", ".1.1.", "..1..", ".1.1.", "1...1"),
+    "Y": ("1...1", ".1.1.", "..1..", "..1..", "..1.."),
+    "Z": ("11111", "...1.", "..1..", ".1...", "11111"),
+}
+
+
+def gate_drop() -> pygame.Surface:
+    ink, white = (24, 18, 40), (255, 255, 255)
+    red, blue, purple, steel = (232, 64, 72), (56, 124, 236), (170, 82, 220), (170, 182, 204)
+    s = pygame.Surface((64, 64))
+    s.fill((40, 44, 120))
+    for ty in range(-8, 64, 16):
+        for tx in range(-8, 64, 16):
+            pygame.draw.polygon(s, (54, 60, 152), [(tx + 8, ty + 1), (tx + 15, ty + 8), (tx + 8, ty + 15), (tx + 1, ty + 8)])
+
+    def glyph(ch, x, y, color):
+        for gy, row in enumerate(_GLYPHS[ch]):
+            for gx, bit in enumerate(row):
+                if bit == "1":
+                    s.fill(color, (x + gx, y + gy, 1, 1))
+
+    def capsule(rect, color, radii):
+        pygame.draw.rect(s, ink, rect, **radii)
+        inner = rect.inflate(-2, -2)
+        pygame.draw.rect(s, shade(color, 0.7), inner, **{k: max(0, v - 1) for k, v in radii.items()})
+        top = inner.copy()
+        top.height -= 3
+        pygame.draw.rect(s, color, top, **{k: max(0, v - 1) for k, v in radii.items()})
+        s.fill(tuple(round(c + (255 - c) * 0.6) for c in color), (rect.x + 3, rect.y + 3, 3, 1))
+
+    # a vertical X / Z pill
+    capsule(pygame.Rect(8, 8, 16, 32), red, {"border_radius": 7})
+    s.fill(shade(blue, 0.7), (9, 24, 14, 15))
+    s.fill(blue, (9, 24, 14, 12))
+    pygame.draw.rect(s, ink, (8, 8, 16, 32), 1, border_radius=7)
+    glyph("X", 14, 13, white)
+    glyph("Z", 14, 29, white)
+    # a steel CNOT: control dot, wire, target circle-plus
+    capsule(pygame.Rect(26, 44, 32, 14), steel, {"border_radius": 6})
+    s.fill(ink, (33, 50, 18, 2))
+    pygame.draw.circle(s, ink, (34, 50), 3)
+    pygame.draw.circle(s, (210, 216, 230), (50, 50), 5)
+    pygame.draw.circle(s, ink, (50, 50), 5, 1)
+    s.fill(ink, (46, 50, 9, 1))
+    s.fill(ink, (50, 46, 1, 9))
+    # a grumpy Y error bug
+    for ly in (24, 28, 32):
+        s.fill(shade(purple, 0.55), (34, ly, 3, 1))
+        s.fill(shade(purple, 0.55), (55, ly + 1, 3, 1))
+    pygame.draw.ellipse(s, ink, (36, 19, 20, 17))
+    pygame.draw.ellipse(s, shade(purple, 0.75), (37, 20, 18, 15))
+    pygame.draw.ellipse(s, tuple(round(c + (255 - c) * 0.15) for c in purple), (38, 21, 16, 11))
+    for ex in (42, 50):
+        pygame.draw.circle(s, ink, (ex, 18), 4)
+        pygame.draw.circle(s, white, (ex, 18), 3)
+        s.fill(ink, (ex + (1 if ex < 46 else -2), 18, 2, 2))
+    s.fill(ink, (39, 13, 5, 1))
+    s.fill(ink, (48, 13, 5, 1))
+    glyph("Y", 44, 25, ink)
+    # a sparkle
+    for x, y in ((28, 14), (28, 12), (28, 16), (26, 14), (30, 14)):
+        s.fill((250, 196, 40), (x, y, 1, 1))
+    return pygame.transform.scale(s, (SIZE, SIZE))
+
+
 ICONS = {
     "quantum_towers-image.png": qlimbers,
     "quantum_pong-image.png": quantum_pong,
@@ -510,6 +581,7 @@ ICONS = {
     "superconductor-image.png": superconductor,
     "overquqed-image.png": overquqed,
     "qurves-image.png": qurves,
+    "gate_drop-image.png": gate_drop,
 }
 
 

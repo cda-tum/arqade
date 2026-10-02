@@ -85,6 +85,7 @@ INPUT_CONFIG = {
             "RESET": "K_f",
         },
         "up_keyboard": "K_UP",
+        "down_keyboard": "K_DOWN",  # pause menu only
     },
     "p2": {
         "joystick_index": 1,
@@ -105,14 +106,17 @@ INPUT_CONFIG = {
             "RESET": "K_KP9",
         },
         "up_keyboard": "K_KP8",  # numpad 8 -- already spatially "up"
+        "down_keyboard": "K_KP2",  # pause menu only
     },
     "system": {
         # Quit combo: Start + Select held together, on either controller.
-        # Confirm button: printed A (raw 1). The cabinet-wide convention is
-        # A = confirm, B = back, Start = start the game -- see "Button
-        # convention" in ../AGENTS.md. This game has no menu to go back in,
-        # so it binds confirm only.
+        # Confirm button: printed A (raw 1), back: printed B (raw 2). The
+        # cabinet-wide convention is A = confirm, B = back, Start = start the
+        # game and pause it -- see "Button convention" and "Pausing" in
+        # ../AGENTS.md. Raw 1 and 2 are also the RESET and H gates; they only
+        # act as confirm/back on the title screen and in the pause menu.
         "confirm_button": 1,
+        "back_button": 2,
         # Raw 9 is the button printed START and raw 8 is SELECT -- the
         # reverse of what these were set to originally. EmulationStation's own
         # es_input.cfg for this pad agrees (select id=8, start id=9), and the
@@ -122,6 +126,12 @@ INPUT_CONFIG = {
         "start_button": 9,
         "select_button": 8,
         "keyboard_quit": "K_ESCAPE",
+        # Dev keyboard for the pause menu: P pauses/resumes (P is not one of
+        # the l/x/r/b/y/a letters P1's encoder types), Enter picks, Backspace
+        # resumes, and each player's up/down keys move the selection.
+        "keyboard_pause": "K_p",
+        "keyboard_menu_confirm": "K_RETURN",
+        "keyboard_menu_back": "K_BACKSPACE",
     },
 }
 

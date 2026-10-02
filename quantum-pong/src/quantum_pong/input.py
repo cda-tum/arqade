@@ -83,6 +83,7 @@ class PlayerRawInput:
     start_held: bool
     select_held: bool
     confirm_held: bool
+    back_held: bool
 
 
 def get_joystick(index: int) -> pygame.joystick.JoystickType | None:
@@ -105,6 +106,7 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
     start_held = False
     select_held = False
     confirm_held = False
+    back_held = False
 
     joystick = get_joystick(cfg["joystick_index"])
     if joystick is not None:
@@ -119,6 +121,8 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
             select_held = bool(joystick.get_button(system["select_button"]))
         if system["confirm_button"] < num_buttons:
             confirm_held = bool(joystick.get_button(system["confirm_button"]))
+        if system["back_button"] < num_buttons:
+            back_held = bool(joystick.get_button(system["back_button"]))
 
     return PlayerRawInput(
         up_held=up_held,
@@ -127,9 +131,22 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
         start_held=start_held,
         select_held=select_held,
         confirm_held=confirm_held,
+        back_held=back_held,
     )
 
 
-def keyboard_quit_held(keys: pygame.key.ScancodeWrapper) -> bool:
-    key_name = INPUT_CONFIG["system"]["keyboard_quit"]
+def _system_key_held(keys: pygame.key.ScancodeWrapper, config_name: str) -> bool:
+    key_name = INPUT_CONFIG["system"][config_name]
     return bool(keys[getattr(pygame, key_name)])
+
+
+def keyboard_quit_held(keys: pygame.key.ScancodeWrapper) -> bool:
+    return _system_key_held(keys, "keyboard_quit")
+
+
+def keyboard_pause_held(keys: pygame.key.ScancodeWrapper) -> bool:
+    return _system_key_held(keys, "keyboard_pause")
+
+
+def keyboard_confirm_held(keys: pygame.key.ScancodeWrapper) -> bool:
+    return _system_key_held(keys, "keyboard_confirm")

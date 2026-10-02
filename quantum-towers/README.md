@@ -52,6 +52,14 @@ charge); confirming while *not* actually on the target locks out that player's i
 (default 3) floors, regenerating fresh targets for the floors they lose (their qubit state itself
 is untouched, only position and targets). First to the top of the tower wins.
 
+**Start pauses** the match, from either pad, following the cabinet-wide convention ("Pausing"
+in `../AGENTS.md`). Everything freezes — climbs, stuns, flashes, the attack beam — and a menu
+offers **RESUME** and **QUIT TO TITLE**: the stick moves the selection, **A** picks, and **Start**
+or **B** resumes. A and B are the RESET and H gates during play; they only act as menu buttons
+while paused, and the press that closes the menu never reaches the game as a gate. Start+Select
+still quits at once, paused or not, and the idle timeout keeps counting while paused, so an
+abandoned paused match still goes back to the title by itself. The menu's logic is in `pause.py`.
+
 Each player's tower is drawn as a stack of shaded blocks (the target ket rendered directly on
 the block, per the original design) with a simple anti-aliased humanoid figure climbing it —
 the bottom visible block is the player's current (cleared) floor, then the current target, then
@@ -117,9 +125,11 @@ observe. That's the single place all button mappings live.
 | X / Y / Z | Q / W / E | Numpad 4 / 5 / 6 |
 | H / RESET | D / F | Numpad 7 / 9 |
 | Push up (confirm climb) | Up arrow | Numpad 8 |
+| Pause / resume | P (either player) | P (either player) |
+| Pause menu: move / pick / resume | Up, Down / Enter / Backspace | Numpad 8, 2 / Enter / Backspace |
 | Quit | Esc (either player) | Esc (either player) |
 
-On the cabinet, quit is Start+Select held together on either controller.
+On the cabinet, quit is Start+Select held together on either controller, and Start pauses.
 
 The cabinet loader runs the game with `--no-keyboard`: Batocera also turns P1's pad into
 keystrokes (arrow keys, numpad, letters, Enter/Space — see `../AGENTS.md`), which would
@@ -145,7 +155,9 @@ Covers `quantum.py` (gate matrices, global-phase normalization/equality), `searc
 minimum-steps search, including a case where the true shortest path is shorter than however the
 target was generated), `targets.py` (random-walk generation), `player.py` (floor-advance/charge
 logic and knockback), `notation.py` (ket rendering, including the general fallback form), and
-`sound.py` (tone-sample generation) — this is most of the game's actual complexity, and none of
+`sound.py` (tone-sample generation), and `pause.py` (the pause menu; `tests/test_pause.py` also
+drives the real `run_game` loop headlessly with scripted input, to check that a pause really
+freezes play) — this is most of the game's actual complexity, and none of
 it depends on pygame. The pygame game
 loop and screen/visuals rendering (`main.py`, `visuals.py`) are integration glue — verified by
 running it, and by a large (20k-step) scripted simulation exercising real attack/knockback

@@ -86,8 +86,10 @@ axis mappings live there.
 | Fire / confirm | A / Y (or Z) | A / `,` |
 | Switch color / back | B / X | B / `.` |
 
-- **Start** (or Enter) confirms in menus. **Select** (or Esc) goes back to the menu during
-  play.
+- **Start** (or Enter) confirms in menus. **Select** (or Esc) goes back a menu page.
+- **Pause:** press **Start** (or P / Esc) during play, on either controller. Everything
+  freezes. In the pause menu the stick picks RESUME or QUIT TO TITLE, A (fire) chooses,
+  and Start or B resumes. Quitting to the title doesn't record a score.
 - **Quit:** hold Start and Select together on either controller. You can also hold Select
   (or press Esc) for 2 s on the first menu page.
 - The keyboard keys are a dev fallback only. On the cabinet the loader passes

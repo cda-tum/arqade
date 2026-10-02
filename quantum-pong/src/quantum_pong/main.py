@@ -1,9 +1,9 @@
 """Entry point: CLI args, window setup, screen flow, game loop.
 
 This module wires pygame I/O to the pure logic in pong.py/gates.py/screens.py/
-sound.py/input.py/display.py. It is not unit tested (no headless assertions on
-rendered output make sense); verify by running it and by the --input-test
-smoke path.
+sound.py/input.py/display.py/pause.py. It is not unit tested (no headless
+assertions on rendered output make sense); verify by running it and by the
+--input-test smoke path.
 """
 
 from __future__ import annotations
@@ -18,13 +18,17 @@ from quantum_pong import config, fonts, gates as gates_mod, screens, sound
 from quantum_pong.display import make_display, present
 from quantum_pong.gates import Gate
 from quantum_pong.input import (
+    keyboard_confirm_held,
+    keyboard_pause_held,
     keyboard_quit_held,
+    pressed_edge,
     read_keys,
     read_player_raw_input,
     resolve_paddle_direction,
     set_keyboard_enabled,
     should_quit,
 )
+from quantum_pong.pause import PLAY, QUIT_TO_TITLE, PauseInput, PauseMenu, nav_edge
 from quantum_pong.pong import (
     Ball,
     Paddle,
@@ -130,6 +134,20 @@ def _wants_start(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> bool:
     )
 
 
+def _pause_buttons_held(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> dict[str, tuple]:
+    """Held state of each pause-menu button, per source (P1 pad, P2 pad,
+    keyboard), so each source's presses are edge-detected on their own."""
+    return {
+        "pause": (p1_raw.start_held, p2_raw.start_held, keyboard_pause_held(keys)),
+        "back": (p1_raw.back_held, p2_raw.back_held),
+        "confirm": (p1_raw.confirm_held, p2_raw.confirm_held, keyboard_confirm_held(keys)),
+    }
+
+
+def _pressed(previous: dict[str, tuple], held: dict[str, tuple], name: str) -> bool:
+    return any(pressed_edge(p, c) for p, c in zip(previous[name], held[name]))
+
+
 def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> str:
     """Attract/title screen. Returns 'start' or 'quit'."""
     internal = surface
@@ -138,6 +156,10 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
     legend_font = fonts.load_font(9)
     prompt_font = fonts.load_font(12)
     t = 0.0
+    # Only start once every start button has been let go: the A that picked
+    # QUIT TO TITLE (or the Start that left the winner screen) is usually
+    # still held on the first frame here, and would start a new match at once.
+    armed = False
 
     while True:
         dt = clock.tick(config.FPS) / 1000.0
@@ -152,8 +174,10 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
 
         if _wants_quit(p1_raw, p2_raw, keys):
             return "quit"
-        if _wants_start(p1_raw, p2_raw, keys):
+        wants_start = _wants_start(p1_raw, p2_raw, keys)
+        if armed and wants_start:
             return "start"
+        armed = armed or not wants_start
 
         screens.draw_title_screen(
             internal, title_font, legend_font, prompt_font,
@@ -199,14 +223,16 @@ def run_game(
     surface: pygame.Surface, window: pygame.Surface | None, sounds: sound.Sounds, show_fps: bool
 ) -> tuple[str, dict[str, int]]:
     """Play one match. Returns (result, final_score); result is 'p1', 'p2',
-    'quit', or 'idle' (no input for IDLE_TIMEOUT_SECONDS -- back to the title
-    screen, since the cabinet runs unattended at events)."""
+    'quit', 'title' (QUIT TO TITLE from the pause menu), or 'idle' (no input
+    for IDLE_TIMEOUT_SECONDS -- back to the title screen, since the cabinet
+    runs unattended at events)."""
     internal = surface
     clock = pygame.time.Clock()
     font = fonts.load_font(10)
     score_font = fonts.load_font(16)
     gate_font = fonts.load_font(10)
     gate_label_surfaces = _make_gate_label_surfaces(gate_font)
+    pause_hint_font = fonts.load_font(8)
     rng = random.Random()
 
     cached_score: dict[str, int] | None = None
@@ -226,9 +252,16 @@ def run_game(
     p2_x = float(config.INTERNAL_WIDTH - config.PADDLE_MARGIN - config.PADDLE_WIDTH)
     deadzone = config.INPUT_CONFIG["axis_deadzone"]
 
+    # Start pauses. Seed the edge detection with what's held right now, so the
+    # Start (or A) that began the match on the title screen can't also pause
+    # it on the first frame.
+    pause_menu = PauseMenu()
+    keys = read_keys()
+    prev_held = _pause_buttons_held(*_poll_players(keys), keys)
+    prev_dirs = (0, 0)
+
     while True:
         dt = clock.tick(config.FPS) / 1000.0
-        game_time += dt
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -251,60 +284,83 @@ def run_game(
             axis_value=p2_raw.axis_value, deadzone=deadzone,
         )
 
-        idle_seconds = 0.0 if (p1_dir or p2_dir) else idle_seconds + dt
+        held = _pause_buttons_held(p1_raw, p2_raw, keys)
+        pause_input = PauseInput(
+            pause=_pressed(prev_held, held, "pause"),
+            back=_pressed(prev_held, held, "back"),
+            confirm=_pressed(prev_held, held, "confirm"),
+            nav=nav_edge(prev_dirs[0], p1_dir) or nav_edge(prev_dirs[1], p2_dir),
+        )
+        prev_held, prev_dirs = held, (p1_dir, p2_dir)
+
+        step = pause_menu.update(pause_input)
+        if step == QUIT_TO_TITLE:
+            return "title", score
+
+        # The idle timeout keeps counting while paused, so a match left paused
+        # still drops back to the title; using the menu counts as input.
+        active = (p1_dir or p2_dir) if step == PLAY else pause_input.any
+        idle_seconds = 0.0 if active else idle_seconds + dt
         if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
             return "idle", score
 
-        p1_paddle = move_paddle(p1_paddle, p1_dir, dt, config.INTERNAL_HEIGHT)
-        p2_paddle = move_paddle(p2_paddle, p2_dir, dt, config.INTERNAL_HEIGHT)
+        # Paused: nothing below moves -- game_time drives gate spawns and the
+        # flashes, so not advancing it freezes those too.
+        if step == PLAY:
+            game_time += dt
 
-        balls = [step_ball(b, dt, config.INTERNAL_HEIGHT, config.BALL_RADIUS) for b in balls]
+            p1_paddle = move_paddle(p1_paddle, p1_dir, dt, config.INTERNAL_HEIGHT)
+            p2_paddle = move_paddle(p2_paddle, p2_dir, dt, config.INTERNAL_HEIGHT)
 
-        active_gates, last_gate_spawn_at = gates_mod.maybe_spawn_gate(
-            active_gates, game_time, last_gate_spawn_at, rng
-        )
-        gate_count_before = len(active_gates)
-        balls, active_gates = gates_mod.check_gate_collisions(balls, active_gates, config.BALL_RADIUS)
-        if len(active_gates) < gate_count_before:
-            sounds.gate.play()
+            balls = [step_ball(b, dt, config.INTERNAL_HEIGHT, config.BALL_RADIUS) for b in balls]
 
-        remaining_balls: list[Ball] = []
-        scorers: list[str] = []
-        flashes = [f for f in flashes if game_time - f[2] < config.FLASH_DURATION]
-        for ball in balls:
-            if reached_left_paddle_line(ball, p1_x, config.PADDLE_WIDTH, config.BALL_RADIUS):
-                bounced, caught = resolve_ball_at_paddle(
-                    ball, p1_paddle, bounce_direction=1, grace=config.PADDLE_CATCH_GRACE
-                )
-                flashes.append((ball.x, ball.y, game_time))
-                if caught:
-                    sounds.bounce.play()
-                    remaining_balls.append(bounced)
+            active_gates, last_gate_spawn_at = gates_mod.maybe_spawn_gate(
+                active_gates, game_time, last_gate_spawn_at, rng
+            )
+            gate_count_before = len(active_gates)
+            balls, active_gates = gates_mod.check_gate_collisions(
+                balls, active_gates, config.BALL_RADIUS
+            )
+            if len(active_gates) < gate_count_before:
+                sounds.gate.play()
+
+            remaining_balls: list[Ball] = []
+            scorers: list[str] = []
+            flashes = [f for f in flashes if game_time - f[2] < config.FLASH_DURATION]
+            for ball in balls:
+                if reached_left_paddle_line(ball, p1_x, config.PADDLE_WIDTH, config.BALL_RADIUS):
+                    bounced, caught = resolve_ball_at_paddle(
+                        ball, p1_paddle, bounce_direction=1, grace=config.PADDLE_CATCH_GRACE
+                    )
+                    flashes.append((ball.x, ball.y, game_time))
+                    if caught:
+                        sounds.bounce.play()
+                        remaining_balls.append(bounced)
+                    else:
+                        sounds.score.play()
+                        scorers.append("p2")
+                elif reached_right_paddle_line(ball, p2_x, config.BALL_RADIUS):
+                    bounced, caught = resolve_ball_at_paddle(
+                        ball, p2_paddle, bounce_direction=-1, grace=config.PADDLE_CATCH_GRACE
+                    )
+                    flashes.append((ball.x, ball.y, game_time))
+                    if caught:
+                        sounds.bounce.play()
+                        remaining_balls.append(bounced)
+                    else:
+                        sounds.score.play()
+                        scorers.append("p1")
                 else:
-                    sounds.score.play()
-                    scorers.append("p2")
-            elif reached_right_paddle_line(ball, p2_x, config.BALL_RADIUS):
-                bounced, caught = resolve_ball_at_paddle(
-                    ball, p2_paddle, bounce_direction=-1, grace=config.PADDLE_CATCH_GRACE
-                )
-                flashes.append((ball.x, ball.y, game_time))
-                if caught:
-                    sounds.bounce.play()
-                    remaining_balls.append(bounced)
-                else:
-                    sounds.score.play()
-                    scorers.append("p1")
-            else:
-                remaining_balls.append(ball)
-        balls = remaining_balls
+                    remaining_balls.append(ball)
+            balls = remaining_balls
 
-        for scorer in scorers:
-            score[scorer] += 1
-        if not balls:
-            # Field's empty (every ball just scored/was caught away) -- fresh serve.
-            # Toward whichever side conceded; if several scored this frame, the
-            # last one wins the serve direction.
-            balls = [serve_ball(direction=1 if (scorers and scorers[-1] == "p1") else -1)]
+            for scorer in scorers:
+                score[scorer] += 1
+            if not balls:
+                # Field's empty (every ball just scored/was caught away) -- fresh serve.
+                # Toward whichever side conceded; if several scored this frame, the
+                # last one wins the serve direction.
+                balls = [serve_ball(direction=1 if (scorers and scorers[-1] == "p1") else -1)]
 
         internal.fill(config.COLOR_BACKGROUND)
         pygame.draw.line(
@@ -345,6 +401,9 @@ def run_game(
             fps_surf = font.render(f"{clock.get_fps():.0f} fps", False, config.COLOR_FPS)
             internal.blit(fps_surf, (4, 4))
 
+        if pause_menu.paused:
+            screens.draw_pause_menu(internal, score_font, font, pause_hint_font, pause_menu.index)
+
         present(internal, window)
         pygame.display.flip()
 
@@ -383,7 +442,7 @@ def main(argv: list[str] | None = None) -> None:
                 sounds.win.play()
                 if run_winner_screen(surface, window, result, final_score) == "quit":
                     break
-            # result == "idle" falls straight back to the title screen
+            # result == "idle" or "title" falls straight back to the title screen
 
     pygame.quit()
     sys.exit(0)

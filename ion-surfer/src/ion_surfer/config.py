@@ -1,8 +1,8 @@
 """Single source of truth for input mapping and tuning constants.
 
 Button/axis indices follow the same cabinet layout as Quantum Pong / Quantum
-Towers (joystick 0 = P1, joystick 1 = P2, Start = 8, Select = 9). They are
-still placeholders -- run `--input-test` on the real hardware and fill them in.
+Towers (joystick 0 = P1, joystick 1 = P2, Start = raw 9, Select = raw 8),
+confirmed on the cabinet -- see the comments below and ../AGENTS.md.
 """
 
 from pathlib import Path
@@ -14,15 +14,19 @@ INTERNAL_HEIGHT = 640
 # --- Input mapping ---
 # Keyboard (pygame key names, resolved at runtime). Defaults follow the common
 # MAME / I-PAC keyboard-encoder layout. Pad 0 = P1 (blue), pad 1 = P2 (red).
+# Start is 1/2 and Select is the coin key 5/6, as on an I-PAC, so the keyboard
+# also has Start + Select (1+5, 2+6) as the quit combo.
 KEYMAP = {
     0: dict(left=["K_LEFT"], right=["K_RIGHT"], up=["K_UP"], down=["K_DOWN"],
-            confirm=["K_LCTRL", "K_SPACE", "K_RETURN"], back=["K_BACKSPACE"], start=["K_1"],
+            confirm=["K_LCTRL", "K_SPACE", "K_RETURN"], back=["K_BACKSPACE"],
+            start=["K_1"], select=["K_5"],
             remove_ion=["K_q"], add_ion=["K_e"]),
     1: dict(left=["K_d"], right=["K_g"], up=["K_r"], down=["K_f"],
-            confirm=["K_a"], back=["K_s"], start=["K_2"],
+            confirm=["K_a"], back=["K_s"], start=["K_2"], select=["K_6"],
             cool=["K_c"], passive_cool=["K_v"]),
 }
-SELECT_KEYS = ["K_ESCAPE"]
+# Extra keyboard-only pause/resume key, besides Start (1/2).
+PAUSE_KEYS = ["K_ESCAPE"]
 
 INPUT_CONFIG = {
     "p1": {
@@ -51,8 +55,11 @@ INPUT_CONFIG = {
                     "cool": [4], "passive_cool": [5]},
     },
     "system": {
-        # Select opens the pause menu. Quit combo: Start + Select held
-        # together, on either controller.
+        # Start pauses (and resumes) during play, on either controller --
+        # the cabinet's pause convention (see "Pausing" in ../AGENTS.md).
+        # Select is never a pause button: it is half of the quit combo,
+        # Start + Select held together on either controller. In the SANDBOX
+        # alone it also fires that pad's laser kick.
         # Raw 9 is the button printed START and raw 8 is SELECT -- the
         # reverse of what these were set to originally. EmulationStation's own
         # es_input.cfg for this pad agrees (select id=8, start id=9), and the

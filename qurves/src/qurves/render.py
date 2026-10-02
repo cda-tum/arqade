@@ -17,7 +17,7 @@ import pygame
 from qurves import config, rules
 from qurves.fonts import load_font
 from qurves.fx import Fx
-from qurves.match import COUNTDOWN, MATCH_RESULT, ROUND, ROUND_RESULT, TITLE, Match
+from qurves.match import COUNTDOWN, MATCH_RESULT, PAUSE_ITEMS, ROUND, ROUND_RESULT, TITLE, Match
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 CELL, HUD = config.CELL, config.HUD_HEIGHT
@@ -266,6 +266,8 @@ class Renderer:
             self._draw_arena(match)
             self._draw_hud(match)
             self._draw_banner(match)
+            if match.paused:
+                self._draw_pause(match)
         if self.scanlines is not None:
             self.surface.blit(self.scanlines, (0, 0), special_flags=pygame.BLEND_MULT)
 
@@ -435,6 +437,19 @@ class Renderer:
             if match.t >= config.MATCH_RESULT_LOCK:
                 self._center(self._plain("A / START: REMATCH      B: TITLE", self.font16, config.COLOR_TEXT),
                              H // 2 + 88, add=False)
+
+    def _draw_pause(self, match: Match) -> None:
+        veil = pygame.Surface((W, H), pygame.SRCALPHA)
+        veil.fill((*config.COLOR_BACKGROUND, 190))
+        self.surface.blit(veil, (0, 0))
+        self._center(self._glow("PAUSED", self.font48, WHITE), H // 2 - 60)
+        for i, item in enumerate(PAUSE_ITEMS):
+            active = i == match.pause_index
+            label = f"> {item} <" if active else item
+            self._center(self._glow(label, self.font16, config.COLOR_FPS if active else config.COLOR_TEXT),
+                         H // 2 + 6 + i * 34)
+        self._center(self._plain("STICK: CHOOSE    A: PICK    START / B: RESUME", self.font8, config.COLOR_DIM),
+                     H // 2 + 96, add=False)
 
     # --- the title ------------------------------------------------------------------------
 

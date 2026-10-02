@@ -55,6 +55,12 @@ def axis_indicates_up(axis_value: float, deadzone: float) -> bool:
     return axis_value < -deadzone
 
 
+def axis_indicates_down(axis_value: float, deadzone: float) -> bool:
+    """The mirror of axis_indicates_up (positive = down); only the pause menu
+    reads it, to move its selection."""
+    return axis_value > deadzone
+
+
 def should_quit(
     *, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool, keyboard_quit: bool
 ) -> bool:
@@ -69,6 +75,8 @@ class PlayerRawInput:
     start_held: bool
     select_held: bool
     confirm_held: bool
+    down_held: bool = False  # pause menu only
+    back_held: bool = False  # B; pause menu only
 
 
 def get_joystick(index: int) -> pygame.joystick.JoystickType | None:
@@ -86,10 +94,12 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
     kb = cfg["keyboard"]
     button_held = {name: bool(keys[getattr(pygame, kb[name])]) for name in ACTION_NAMES}
     up_held = bool(keys[getattr(pygame, cfg["up_keyboard"])])
+    down_held = bool(keys[getattr(pygame, cfg["down_keyboard"])])
 
     start_held = False
     select_held = False
     confirm_held = False
+    back_held = False
 
     joystick = get_joystick(cfg["joystick_index"])
     if joystick is not None:
@@ -104,11 +114,14 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
         if hat_index < num_hats:
             _hat_x, hat_y = joystick.get_hat(hat_index)
             up_held = up_held or hat_y > 0
+            down_held = down_held or hat_y < 0
 
         num_axes = joystick.get_numaxes()
         vertical_axis = cfg["vertical_axis"]
         if vertical_axis < num_axes:
-            up_held = up_held or axis_indicates_up(joystick.get_axis(vertical_axis), AXIS_DEADZONE)
+            axis_value = joystick.get_axis(vertical_axis)
+            up_held = up_held or axis_indicates_up(axis_value, AXIS_DEADZONE)
+            down_held = down_held or axis_indicates_down(axis_value, AXIS_DEADZONE)
 
         system = INPUT_CONFIG["system"]
         if system["start_button"] < num_buttons:
@@ -117,6 +130,8 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
             select_held = bool(joystick.get_button(system["select_button"]))
         if system["confirm_button"] < num_buttons:
             confirm_held = bool(joystick.get_button(system["confirm_button"]))
+        if system["back_button"] < num_buttons:
+            back_held = bool(joystick.get_button(system["back_button"]))
 
     return PlayerRawInput(
         button_held=button_held,
@@ -124,6 +139,8 @@ def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> 
         start_held=start_held,
         select_held=select_held,
         confirm_held=confirm_held,
+        down_held=down_held,
+        back_held=back_held,
     )
 
 
