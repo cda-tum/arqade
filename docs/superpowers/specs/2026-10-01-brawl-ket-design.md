@@ -101,7 +101,7 @@ frame data:
 | B | heavy, knockback | sweep, knockdown | heavy jump-in |
 
 A standing heavy and a sweep are **telegraphed**: from neutral they start up in
-20 frames (the last 12 show a blinking white star on the striking hand or foot,
+24 frames (the last 16 show a blinking white star on the striking hand or foot,
 and the wind-up pose is drawn far back), long enough for a defender to see them
 and switch to the matching stance (an 8-frame switch). Cancelled into from a
 chain (jab, jab, heavy) they keep a fast startup (8 and 9 frames), so a combo

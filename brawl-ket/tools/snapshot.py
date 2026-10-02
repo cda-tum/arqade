@@ -11,7 +11,7 @@ Writes:
   light flipped (danger, both beats of the pulse), the green flash after a correction, the
   red flash after a logical error;
 - fight_danger.png: a bot fight at the moment a code is one hit from a logical error;
-- fight_glint.png, fight_glint_sweep.png: a neutral heavy / sweep late in its 20-frame wind-up,
+- fight_glint.png, fight_glint_sweep.png: a neutral heavy / sweep late in its 24-frame wind-up,
   with the telegraph glint on the striking hand / foot (and fight_glint_off.png, a blink-off
   frame of the heavy);
 - fight_start.png (the fighters walking in), fight_hit.png, fight_logical.png, fight_crouch.png, fight_shot.png,
@@ -137,11 +137,11 @@ def glint_frames(out_dir: str) -> None:
         if crouch:
             fight.fighters["p1"].code.switch()
         r = Renderer(surface)
-        for i in range(19):
+        for i in range(23):
             r.draw_fight(fight, fight.step({"p1": pressed if i == 0 else IDLE, "p2": IDLE}), {"p1": 0, "p2": 0})
-            if fight.fighters["p1"].frame == 17:
+            if fight.fighters["p1"].frame == 21:
                 save(surface, out_dir, f"{name}.png")
-            if name == "fight_glint" and fight.fighters["p1"].frame == 14:
+            if name == "fight_glint" and fight.fighters["p1"].frame == 18:
                 save(surface, out_dir, "fight_glint_off.png")      # the blink's dark phase
 
 

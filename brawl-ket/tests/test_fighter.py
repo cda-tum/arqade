@@ -656,13 +656,13 @@ def phases_of(f, first_events=()):
     return seen
 
 
-def test_a_neutral_heavy_telegraphs_for_20_startup_frames():
+def test_a_neutral_heavy_telegraphs_for_24_startup_frames():
     f = make()
     run(f, tap("b"))
     assert f.slot == "stand.B" and f.chain == 1
-    assert f.startup == HEAVY.startup == 20
+    assert f.startup == HEAVY.startup == 24
     assert phases_of(f) == (
-        ["startup"] * 20 + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
+        ["startup"] * 24 + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
     )
 
 
@@ -690,7 +690,7 @@ def test_the_chained_startup_is_forgotten_when_the_move_ends():
     run(f, IDLE, 8 + HEAVY.active + HEAVY.recovery)
     assert f.move is None
     run(f, tap("b"))                    # the next heavy starts from neutral again
-    assert f.startup == 20
+    assert f.startup == 24
 
 
 def test_the_sweep_telegraphs_from_neutral_and_chains_fast():
@@ -698,7 +698,7 @@ def test_the_sweep_telegraphs_from_neutral_and_chains_fast():
     f = make()
     f.code.switch()
     run(f, FighterInput(down=True, b=True))
-    assert f.slot == "crouch.B" and f.startup == sweep.startup == 20
+    assert f.slot == "crouch.B" and f.startup == sweep.startup == 24
     g = make()
     g.code.switch()
     run(g, FighterInput(down=True, a=True))
@@ -709,14 +709,14 @@ def test_the_sweep_telegraphs_from_neutral_and_chains_fast():
     assert g.slot == "crouch.B" and g.startup == sweep.chain_startup == 9
 
 
-def test_only_a_neutral_heavy_telegraphs_and_only_in_its_last_12_startup_frames():
+def test_only_a_neutral_heavy_telegraphs_and_only_in_its_last_16_startup_frames():
     f = make()
     run(f, tap("b"))
     flags = [f.telegraphing]
     for _ in range(HEAVY.startup + HEAVY.active):
         run(f)
         flags.append(f.telegraphing)
-    assert flags == [False] * (HEAVY.startup - 12) + [True] * 12 + [False] * (HEAVY.active + 1)
+    assert flags == [False] * (HEAVY.startup - 16) + [True] * 16 + [False] * (HEAVY.active + 1)
     j = make()                          # a jab never does
     run(j, tap("a"))
     assert not j.telegraphing

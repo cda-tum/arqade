@@ -232,14 +232,14 @@ def glint_run(surface, pressed, joint, prep=lambda fight: None):
     return seen
 
 
-def test_the_glint_blinks_at_the_striking_hand_only_in_the_last_12_frames(surface):
+def test_the_glint_blinks_at_the_striking_hand_only_in_the_last_16_frames(surface):
     from brawl_ket.fighter import FighterInput
 
     seen = glint_run(surface, FighterInput(b=True), "hand_f")
-    assert len(seen) == 20
+    assert len(seen) == 24
     early = [c for tele, c in seen if not tele]
     window = [c for tele, c in seen if tele]
-    assert len(window) == 12 and P.WHITE not in early
+    assert len(window) == 16 and P.WHITE not in early
     assert P.WHITE in window and any(c != P.WHITE for c in window)     # it blinks
 
 
@@ -249,7 +249,7 @@ def test_the_sweeps_glint_is_at_the_foot(surface):
     seen = glint_run(surface, FighterInput(down=True, b=True), "foot_f",
                      prep=lambda fight: fight.fighters["p1"].code.switch())
     window = [c for tele, c in seen if tele]
-    assert len(window) == 12 and P.WHITE in window and any(c != P.WHITE for c in window)
+    assert len(window) == 16 and P.WHITE in window and any(c != P.WHITE for c in window)
 
 
 def test_a_chained_heavy_has_no_glint(surface):

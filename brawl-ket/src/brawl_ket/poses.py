@@ -58,7 +58,7 @@ POSES: dict[str, Pose] = {
     # stand.A jab: a quick straight punch at the chest, leaning in (the fist reaches the 44 px jab box)
     "jab_wind": Pose(0, 26, -4, -24, -12, 30, 130, 24, 150),
     "jab_hit": Pose(12, 32, 0, -28, -14, 56, 56, 30, 150),
-    # stand.B heavy: a big stepping straight. The wind-up is the telegraph (20 frames from neutral):
+    # stand.B heavy: a big stepping straight. The wind-up is the telegraph (24 frames from neutral):
     # the whole body coiled back, the striking fist cocked far behind the hip, the guard hand up
     "heavy_wind": Pose(-26, 14, -6, -36, -16, -100, -125, 60, 150),
     "heavy_hit": Pose(8, 46, 6, -40, -26, 68, 68, -30, -60),
@@ -66,7 +66,7 @@ POSES: dict[str, Pose] = {
     "low_wind": Pose(24, 95, -4, 30, -86, 20, 120, 30, 155),
     "low_hit": Pose(20, 95, -4, 30, -86, 44, 44, 30, 155),
     # crouch.B sweep: a low kick along the floor, a hand down for balance. The wind-up (the
-    # telegraph, 20 frames from neutral) rocks back on the planted leg with the kicking foot
+    # telegraph, 24 frames from neutral) rocks back on the planted leg with the kicking foot
     # cocked far behind the hip
     "sweep_wind": Pose(35, -75, -140, 70, 0, -40, -20, 10, 0),
     "sweep_hit": Pose(50, 70, 78, 20, -85, -60, -40, 10, 20),

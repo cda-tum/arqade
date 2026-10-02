@@ -52,14 +52,15 @@ def test_a_chain_startup_is_never_slower_than_the_neutral_one():
 
 def test_the_heavies_telegraph_from_neutral_and_stay_fast_in_a_chain():
     trio = CHARACTERS["TRIO"].moves
-    assert (trio["stand.B"].startup, trio["stand.B"].chain_startup) == (20, 8)
-    assert (trio["crouch.B"].startup, trio["crouch.B"].chain_startup) == (20, 9)
+    assert (trio["stand.B"].startup, trio["stand.B"].chain_startup) == (24, 8)
+    assert (trio["crouch.B"].startup, trio["crouch.B"].chain_startup) == (24, 9)
     # every other move starts the same way however it begins
     for slot, m in trio.items():
         if slot not in ("stand.B", "crouch.B"):
             assert m.chain_startup is None, slot
-    # the telegraph is longer than a stance switch, so a defender who sees it can react
-    assert trio["stand.B"].startup - 10 >= config.SWITCH_FRAMES
+    # the telegraph leaves room for a 14-frame (about 230 ms) reaction plus the stance switch
+    for slot in ("stand.B", "crouch.B"):
+        assert trio[slot].startup - 14 - config.SWITCH_FRAMES >= 2, slot
 
 
 @pytest.mark.skipif(importlib.util.find_spec("brawl_ket.poses") is None, reason="Task 7")

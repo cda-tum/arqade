@@ -28,7 +28,7 @@ from .config import (
 )
 from .moves import Box, Character, Move
 
-TELEGRAPH_FRAMES = 12      # the last frames of a neutral heavy's startup show a glint on the striker
+TELEGRAPH_FRAMES = 16      # the last frames of a neutral heavy's startup show a glint on the striker
 KNOCKDOWN_FRAMES = 40
 STUN_DECAY = 0.85          # vx multiplier per frame of hitstun / knockdown
 

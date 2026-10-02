@@ -104,7 +104,7 @@ TRIO = Character(
             poses=("jab_wind", "jab_hit", "jab_wind"),
         ),
         "stand.B": Move(
-            "heavy", 20, 4, 16, Box(14, 64, 40, 18), qec.X,
+            "heavy", 24, 4, 16, Box(14, 64, 40, 18), qec.X,
             chip=6, bonus=14, hitstun=20, knockback=4.0, chain_startup=8,
             poses=("heavy_wind", "heavy_hit", "heavy_wind"),
         ),
@@ -115,7 +115,7 @@ TRIO = Character(
             poses=("low_wind", "low_hit", "low_wind"),
         ),
         "crouch.B": Move(
-            "sweep", 20, 4, 18, Box(10, 6, 46, 12), qec.Z,
+            "sweep", 24, 4, 18, Box(10, 6, 46, 12), qec.Z,
             chip=6, bonus=14, hitstun=22, knockback=2.0, knockdown=True, chain_startup=9,
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),

@@ -182,44 +182,58 @@ def test_a_lone_heavy_from_neutral_is_only_a_correctable_hit():
     assert fight.fighters["p2"].health == 100 - TRIO.moves["stand.B"].chip
 
 
-REACTION = 10       # frames a defender needs to see a move start and decide
+REACTION = 14       # frames (about 230 ms) a defender takes to see a move start and decide
+TOO_LATE = 18       # waiting this long leaves no time to finish the 8-frame switch
+
+
+def heavy_vs_croucher(wait=None):
+    """p1 throws a neutral heavy at a crouching p2, who stands up `wait` frames in (None: never).
+    Returns the hit / logical events and p2."""
+    fight = new()
+    fight.fighters["p2"].code.switch()
+    p2 = FighterInput(down=True) if wait is None else {i: FighterInput(down=True) for i in range(wait)}
+    events = script(fight, 80, p1={0: B}, p2=p2)
+    return of(events, "hit", "logical"), fight.fighters["p2"]
 
 
 def test_a_crouching_defender_can_react_to_a_neutral_standing_heavy():
     heavy = TRIO.moves["stand.B"]
     # without a reaction the standing heavy on a croucher is a logical error at once
-    fight = new()
-    fight.fighters["p2"].code.switch()
-    events = script(fight, 60, p1={0: B}, p2=FighterInput(down=True))
-    assert [e.kind for e in of(events, "hit", "logical")] == ["logical"]
+    hits, _ = heavy_vs_croucher(None)
+    assert [e.kind for e in hits] == ["logical"]
     # it sees the heavy begin, waits a reaction, then stands up (an 8-frame switch back to |000>)
-    fight = new()
-    fight.fighters["p2"].code.switch()
-    held = {i: FighterInput(down=True) for i in range(REACTION)}
-    events = script(fight, 60, p1={0: B}, p2=held)
-    hits = of(events, "hit", "logical")
+    hits, p2 = heavy_vs_croucher(REACTION)
     assert [(e.kind, e.error) for e in hits] == [("hit", qec.X)]
-    assert fight.fighters["p2"].health == 100 - heavy.chip
-    assert fight.fighters["p2"].code.basis == qec.BIT
+    assert p2.health == 100 - heavy.chip
+    assert p2.code.basis == qec.BIT
+
+
+def test_waiting_too_long_to_react_to_a_neutral_heavy_is_a_logical_error():
+    hits, p2 = heavy_vs_croucher(TOO_LATE)      # the heavy lands in the middle of the switch
+    assert [e.kind for e in hits] == ["logical"]
+    assert p2.health == 100 - LOGICAL_DAMAGE - TRIO.moves["stand.B"].bonus
+
+
+def sweep_vs_stander(wait=None):
+    """p1 (crouched) sweeps from neutral at a standing p2, who crouches `wait` frames in."""
+    fight = new()
+    fight.fighters["p1"].code.switch()
+    p1 = {i: FighterInput(down=True) for i in range(1, 80)}
+    p1[0] = FighterInput(down=True, b=True)
+    p2 = {} if wait is None else {i: FighterInput(down=True) for i in range(wait, 80)}
+    events = script(fight, 80, p1=p1, p2=p2)
+    return of(events, "hit", "logical"), fight.fighters["p2"]
 
 
 def test_a_standing_defender_can_react_to_a_neutral_sweep():
     sweep = TRIO.moves["crouch.B"]
-    fight = new()
-    fight.fighters["p1"].code.switch()
-    attack = {0: FighterInput(down=True, b=True)}
-    keep_down = {i: FighterInput(down=True) for i in range(1, 80)}
-    p1 = {**keep_down, **attack}
-    p2 = {i: FighterInput(down=True) for i in range(REACTION, 80)}
-    events = script(fight, 60, p1=p1, p2=p2)
-    hits = of(events, "hit", "logical")
+    hits, p2 = sweep_vs_stander(REACTION)
     assert [(e.kind, e.error) for e in hits] == [("hit", qec.Z)]
-    assert fight.fighters["p2"].health == 100 - sweep.chip
-    # a defender who never reacts is swept into a logical error
-    fight = new()
-    fight.fighters["p1"].code.switch()
-    events = script(fight, 60, p1=p1)
-    assert [e.kind for e in of(events, "hit", "logical")] == ["logical"]
+    assert p2.health == 100 - sweep.chip
+    # a defender who never reacts is swept into a logical error, and so is one who is too late
+    for wait in (None, TOO_LATE):
+        hits, _ = sweep_vs_stander(wait)
+        assert [e.kind for e in hits] == ["logical"], wait
 
 
 def test_a_throw_whiffs_on_an_airborne_rival():
