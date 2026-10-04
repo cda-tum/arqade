@@ -261,3 +261,38 @@ def test_the_striking_limb_glows_in_the_attacks_colour(surface):
         j = joints(r.pose_last["p1"], TRIO.build, (f.x, FLOOR_Y - f.y), f.facing)
         x, y = round(j["hand_f"][0]), round(j["hand_f"][1])
         assert tuple(surface.get_at((x, y)))[:3] == colour, button
+
+
+def test_the_teaching_text_is_ascii_capitals():
+    from brawl_ket.render import CARD_LINES, HINT, RULE_LINES
+    for text in (HINT, *RULE_LINES, *("".join(t for t, _ in parts) for parts in CARD_LINES)):
+        assert text.isascii() and text == text.upper(), text
+
+
+def test_the_rules_card_plays_its_three_beats(surface):
+    import random
+
+    from brawl_ket import config
+    from brawl_ket import match as M
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    seen = set()
+    for _ in range(config.ATTRACT_DELAY + config.DEMO_FRAMES + config.CARD_FRAMES + 5):
+        r.draw(m, m.update(M.FrameInput()))
+        if m.card:
+            seen.add(min(2, m._title_phase // (config.CARD_FRAMES // 3)))
+    assert seen == {0, 1, 2} and not m.card
+
+
+def test_the_first_round_intro_draws_its_hint(surface):
+    import random
+
+    from brawl_ket import match as M
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    for kind in ("p1", "p1", "p2"):
+        inp = M.FrameInput(activity=True)
+        inp.confirms[kind] = True
+        m.update(inp)
+    assert m.state == M.ROUND_INTRO and m.hint
+    r.draw(m, [])

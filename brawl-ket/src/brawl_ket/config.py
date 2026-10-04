@@ -51,6 +51,8 @@ MATCH_RESULT_LOCK = frames(1.0)
 KO_SLOW_FRAMES = frames(1.2)    # after a K.O. the round end plays in slow motion this long,
 KO_SLOW_RATE = 3                # stepping the fight once every this many frames
 ATTRACT_DELAY = frames(4.0)
+DEMO_FRAMES = frames(20.0)      # the title's bot demo runs this long, then the rules card
+CARD_FRAMES = frames(9.0)       # the COLOUR MUST MATCH card: three beats of 3 s
 IDLE_TIMEOUT = frames(60.0)
 BACK_HOLD_TO_QUIT = frames(2.0)
 

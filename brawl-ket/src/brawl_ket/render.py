@@ -25,6 +25,7 @@ from . import match as M
 from . import palette as P
 from . import basis
 from .config import (
+    CARD_FRAMES,
     FLOOR_Y,
     FPS,
     INTERNAL_HEIGHT,
@@ -88,6 +89,14 @@ BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 # the select screen: what each fighter is, in a line, and how its X moves are entered
 TRAITS = {"TRIO": "FAST AND LIGHT", "QUINT": "SLOW AND HEAVY"}
 X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
+RULE_LINES = ("A YOUR COLOUR, B THE OTHER", "Y SWITCHES YOUR COLOUR")
+HINT = "MATCH THEIR COLOUR TO HURT - Y SWITCHES"
+# the title's COLOUR MUST MATCH card: three beats, each a line of (text, colour) parts
+CARD_LINES = (
+    (("GREEN", GREEN), (" HITS ", P.WHITE), ("GREEN", GREEN), (": HURTS", P.WHITE)),
+    (("GREEN", GREEN), (" HITS ", P.WHITE), ("PURPLE", PURPLE), (": BOUNCES", P.WHITE)),
+    (("Y", P.GOLD), (" SWITCHES YOUR COLOUR", P.WHITE)),
+)
 
 WALL = (40, 32, 80)
 WALL_TILE = (48, 40, 96)
@@ -700,7 +709,9 @@ class Renderer:
         fight_events = [e for e in events if not isinstance(e, M.Cue)]
         state = match.state
         if state == M.TITLE:
-            if match.attract is not None:
+            if match.card:
+                self._rules_card(match)
+            elif match.attract is not None:
                 self.draw_fight(match.attract, fight_events)
                 self._attract_overlay()
             else:
@@ -809,16 +820,88 @@ class Renderer:
                 arrow = outlined("<" if d < 0 else ">", 16, P.WHITE, thick=2)
                 blit_center(surf, arrow, (cx + d * (name.get_width() / 2 + 18 + nudge), floor + 20))
         # what it is: its code and its build
-        lines = ("A YOUR COLOUR, B THE OTHER", TRAITS.get(char.name, ""))
+        lines = (TRAITS.get(char.name, ""), *RULE_LINES)
         for i, line in enumerate(lines):
-            blit_center(surf, outlined(line, 8, P.MIST), (cx, floor + 40 + 12 * i))
-        # the X moves: the buttons, then the names
+            blit_center(surf, outlined(line, 8, P.MIST), (cx, floor + 36 + 11 * i))
+        # the X moves: the buttons, the names, and the colour each one hits in
         for i, (slot, how) in enumerate(X_INPUTS):
-            y = floor + 70 + 12 * i
-            surf.blit(outlined(how, 8, P.GOLD), (panel.x + 30, y))
-            surf.blit(outlined(char.moves[slot].name, 8, P.WHITE), (panel.x + 118, y))
+            y = floor + 76 + 12 * i
+            move = char.moves[slot]
+            surf.blit(outlined(how, 8, P.GOLD), (panel.x + 14, y))
+            surf.blit(outlined(move.name, 8, P.WHITE), (panel.x + 82, y))
+            self._colour_chip(move, (panel.right - 12, y + 4))
         if ready:
             self._stamp("READY!", (panel.right - 58, panel.y + 20), P.GOOD)
+
+    def _colour_chip(self, move, right_mid) -> None:
+        """The colour a move hits in, as a word: GREEN, PURPLE, YOURS (your basis's), BOTH (a Y),
+        or H (the WAVE, which switches instead)."""
+        if move.switch_rival:
+            text, fill, edge = "H", P.WHITE, P.INK
+        else:
+            text, fill, edge = {
+                basis.GREEN: ("GREEN", GREEN, P.INK), basis.PURPLE: ("PURPLE", PURPLE, P.INK),
+                basis.OWN: ("YOURS", P.WHITE, P.INK), basis.OPPOSITE: ("OTHER", P.WHITE, P.INK),
+                basis.BOTH: ("BOTH", GREEN, PURPLE),
+            }[move.colour]
+        img = outlined(text, 8, fill, outline=edge)
+        self.surface.blit(img, img.get_rect(midright=_pt(right_mid)))
+
+    def _parts(self, parts, center) -> None:
+        """A line of differently coloured parts, centred."""
+        imgs = [outlined(text, 8, colour) for text, colour in parts]
+        x = round(center[0] - sum(i.get_width() for i in imgs) / 2)
+        for img in imgs:
+            self.surface.blit(img, img.get_rect(midleft=(x, round(center[1]))))
+            x += img.get_width()
+
+    def _rules_card(self, match: M.Match) -> None:
+        """COLOUR MUST MATCH: three beats of 3 s, each a tiny scene and its line (the others
+        dim): a green jab hurting green, the same jab bouncing off purple, Y switching."""
+        self._backdrop()
+        surf = self.surface
+        self._logo(34, size=24)
+        self._call("COLOUR MUST MATCH", P.WHITE, y=74, size=16)
+        beat_len = CARD_FRAMES // 3
+        beat = min(2, match._title_phase // beat_len)
+        k = (match._title_phase % beat_len) / beat_len
+        floor = 236
+        for x in (260, 380):
+            rect = pygame.Rect(0, 0, 52, 8)
+            rect.center = (x, floor + 2)
+            pygame.draw.ellipse(surf, SHADOW, rect)
+        if beat < 2:
+            struck = k > 0.4
+            j = draw_puppet(surf, POSES["jab_hit" if struck else "jab_wind"], "lean", (260, floor), 1, GREEN,
+                            P.CREAM)
+            fist = _pt(j["hand_f"])
+            pygame.draw.circle(surf, P.INK, fist, 9)
+            pygame.draw.circle(surf, P.lighten(GREEN, 0.5), fist, 8)
+            pygame.draw.circle(surf, GREEN, fist, 6)
+            target = GREEN if beat == 0 else PURPLE
+            hurt = beat == 0 and struck
+            draw_puppet(surf, POSES["hitstun" if hurt else "idle"], "lean", (380, floor), -1, target, P.CREAM)
+            if struck and beat == 0:
+                blit_center(surf, outlined("X!", 16, GREEN, thick=2), (380, floor - 150))
+            elif struck:
+                r = 8 + round(20 * min(1.0, (k - 0.4) / 0.3))
+                pygame.draw.circle(surf, P.INK, fist, r + 1, 4)
+                pygame.draw.circle(surf, GREEN, fist, r, 2)
+        else:
+            switched = k > 0.4
+            white = 0.4 < k < 0.5
+            colour = P.WHITE if white else PURPLE if switched else GREEN
+            draw_puppet(surf, POSES["idle"], "lean", (320, floor), 1, colour, P.CREAM)
+            if switched:
+                blit_center(surf, outlined("H", 16, P.WHITE, thick=2), (320, floor - 150))
+        for i, parts in enumerate(CARD_LINES):
+            y = 274 + 18 * i
+            if i == beat:
+                self._parts(parts, (W / 2, y))
+            else:
+                text = "".join(t for t, _ in parts)
+                blit_center(surf, outlined(text, 8, P.SLATE), (W / 2, y))
+        self._prompt("PRESS START", H - 14, P.GOLD)
 
     def _stamp(self, text: str, center, color) -> None:
         img = outlined(text, 16, color, thick=2)
@@ -828,7 +911,9 @@ class Renderer:
         blit_center(self.surface, img, center)
 
     def _round_intro(self, match: M.Match) -> None:
-        self._band(CALL_Y - 26, CALL_Y + 26)
+        self._band(CALL_Y - 26, CALL_Y + (52 if match.hint else 26))
+        if match.hint:
+            blit_center(self.surface, outlined(HINT, 8, P.GOLD), (W / 2, CALL_Y + 38))
         if match.t < M.FIGHT_CALL:
             self._call(f"ROUND {match.round_no}", P.WHITE, age=match.t)
         else:

@@ -371,3 +371,34 @@ def test_a_timeout_is_not_slowed_down() -> None:
     m.update(idle())
     assert m.state == ROUND_END and not m.ko
     assert steps_of(m, 30) == 30
+
+
+# --- teaching: the rules card and the first-round hint -----------------------------------
+
+
+def test_the_title_alternates_the_demo_and_the_rules_card() -> None:
+    m = Match(random.Random(1))
+    run(m, config.ATTRACT_DELAY + 1)
+    assert m.attract is not None and not m.card
+    run(m, config.DEMO_FRAMES)
+    assert m.card and m.attract is None
+    run(m, config.CARD_FRAMES)
+    assert not m.card and m.attract is not None
+    run(m, config.DEMO_FRAMES)
+    assert m.card
+    m.update(press("confirm"))              # any input ends the card, and does nothing else
+    assert not m.card and m.attract is None and m.state == TITLE
+    m.update(press("confirm"))
+    assert m.state == SELECT
+
+
+def test_only_a_matchs_first_round_intro_shows_the_hint() -> None:
+    m = Match(random.Random(1))
+    m.update(press("confirm"))
+    m.update(press("confirm", "p1"))
+    m.update(press("confirm", "p2"))
+    assert m.state == ROUND_INTRO and m.hint
+    run(m, config.ROUND_INTRO_FRAMES)
+    assert m.state == FIGHT
+    ko(m, "p2")
+    assert m.state == ROUND_INTRO and not m.hint

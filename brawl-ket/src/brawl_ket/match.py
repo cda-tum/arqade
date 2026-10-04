@@ -88,6 +88,9 @@ class Match:
         self.pause_index = 0
         self.wait_release = False   # the title ignores buttons until all are let go
         self.attract: Fight | None = None
+        self.card = False           # the title shows the COLOUR MUST MATCH card (between demos)
+        self.hint = False           # this round intro shows the rules hint (a match's first)
+        self._title_phase = 0       # frames into the current demo or card
         self.bots: dict[str, Bot] = {}
         self._attract_over = 0
 
@@ -135,9 +138,21 @@ class Match:
             if inp.held:
                 return
             self.wait_release = False
-        if self.attract is not None:
-            if inp.activity:        # any input ends the demo, and does nothing else
+        if self.attract is not None or self.card:
+            if inp.activity:        # any input ends the demo or the card, and does nothing else
+                self.card = False
                 self._stop_attract()
+                return
+            self._title_phase += 1
+            if self.card:
+                if self._title_phase >= config.CARD_FRAMES:     # the card's done: the demo again
+                    self.card = False
+                    self._start_attract()
+                return
+            if self._title_phase >= config.DEMO_FRAMES:          # the demo's done: the card
+                self._stop_attract()
+                self.card = True
+                self._title_phase = 0
                 return
             self._step_attract()
             return
@@ -208,6 +223,7 @@ class Match:
             events.append(Cue("match_won", leader))
         else:
             self.round_no += 1
+            self.hint = False
             self._start_round(events)
 
     def _on_match_result(self, inp: FrameInput, events: list) -> None:
@@ -225,6 +241,7 @@ class Match:
     def _start_attract(self) -> None:
         chars = {p: self.rng.choice(ROSTER) for p in PLAYERS}
         self.attract = Fight(chars)
+        self._title_phase = 0
         seed = self.rng.randrange(1 << 30)
         self.bots = {p: Bot(p, seed + i) for i, p in enumerate(PLAYERS)}
         self._attract_over = 0
@@ -254,6 +271,7 @@ class Match:
     def _to_title(self) -> None:
         self.fight = None
         self.paused = False
+        self.card = False
         self._stop_attract()
         self._set_state(TITLE)
 
@@ -261,6 +279,7 @@ class Match:
         self.wins = {p: 0 for p in PLAYERS}
         self.winner = None
         self.round_no = 1
+        self.hint = True            # a match's first round intro teaches the rule
         self._start_round(events)
 
     def _start_round(self, events: list) -> None:
