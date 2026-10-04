@@ -1,10 +1,12 @@
 """Brawl-Ket: the clash, as a comic-book impact panel.
 
-The hero is the game's core conflict, one hit: P1's TRIO (blue, on the left)
-lands a heavy on P2's QUINT (red, on the right), who reels back in hitstun.
-Both are the game's own puppets, drawn by its own draw_puppet from its own
-poses at the game's pixel size and scaled up nearest-neighbour, with the
-game's hit spark on the fist. Behind them is the look none of the other icons
+The hero is the game's one rule, colour must match to hurt, in one hit: P1's
+TRIO (on the left, its blue player ring under it) is purple, in the X basis,
+and lands a heavy, its other colour, so its fist glows green; P2's QUINT (on
+the right, its red ring under it) is green, in the Z basis, so the green hit
+matches and QUINT reels back. Both are the game's own puppets, drawn by its own
+draw_puppet from its own poses at the game's pixel size and scaled up
+nearest-neighbour, with the game's striker glow and hit spark in green. Behind them is the look none of the other icons
 has: a comic panel split on the diagonal into each player's side, with
 halftone dots and speed lines bursting out of the impact. BRAWL-KET sits
 below as the title screen draws it: BRAWL- in P1's blue and KET in P2's red,
@@ -24,7 +26,7 @@ from brawl_ket import palette as P  # noqa: E402
 from brawl_ket.config import PLAYER_COLORS  # noqa: E402
 from brawl_ket.moves import QUINT, TRIO  # noqa: E402
 from brawl_ket.poses import POSES  # noqa: E402
-from brawl_ket.render import ACCENT, draw_puppet  # noqa: E402
+from brawl_ket.render import ACCENT, GREEN, PURPLE, draw_puppet  # noqa: E402
 
 ROM = "brawl_ket"
 BLUE, RED = PLAYER_COLORS["p1"], PLAYER_COLORS["p2"]
@@ -36,13 +38,21 @@ FLOOR = 168
 def hero() -> tuple[pygame.Surface, tuple[int, int]]:
     """The two puppets at game resolution on transparency, and where the fist lands."""
     s = pygame.Surface(NATIVE, pygame.SRCALPHA)
-    # QUINT first, behind: the one being hit
-    draw_puppet(s, POSES["hitstun"], QUINT.build, (128, FLOOR), -1, RED, ACCENT["QUINT"])
-    j = draw_puppet(s, POSES["heavy_hit"], TRIO.build, (52, FLOOR), 1, BLUE, ACCENT["TRIO"])
+    # the players' rings under their feet (Renderer._shadow): P1 blue, P2 red
+    for x, colour in ((52, BLUE), (128, RED)):
+        ring = pygame.Rect(0, 0, 60, 12)
+        ring.center = (x, FLOOR + 2)
+        pygame.draw.ellipse(s, P.INK, ring.inflate(2, 2), 3)
+        pygame.draw.ellipse(s, colour, ring, 2)
+    # QUINT first, behind: the one being hit, green (the Z basis)
+    draw_puppet(s, POSES["hitstun"], QUINT.build, (128, FLOOR), -1, GREEN, ACCENT["QUINT"])
+    # TRIO purple (the X basis); its heavy is the other colour, green
+    j = draw_puppet(s, POSES["heavy_hit"], TRIO.build, (52, FLOOR), 1, PURPLE, ACCENT["TRIO"])
     fist = (round(j["hand_f"][0]) + 3, round(j["hand_f"][1]))
-    # the game's hit spark (Renderer._draw_effects) on the fist, in the X error's colour
+    # the striker glow and the game's hit spark (Renderer._striker, _draw_effects), green
+    pygame.draw.circle(s, P.INK, fist, 10)
     pygame.draw.circle(s, P.WHITE, fist, 8)
-    pygame.draw.circle(s, P.GATE["X"], fist, 5)
+    pygame.draw.circle(s, GREEN, fist, 5)
     pygame.draw.circle(s, P.WHITE, fist, 2)
     return s, fist
 

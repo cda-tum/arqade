@@ -76,7 +76,7 @@
 	<game>
 		<path>./brawl_ket.pygame</path>
 		<name>Brawl-Ket</name>
-		<desc>Two-player fighting game where every fighter is a quantum error-correcting code: standing corrects bit flips, crouching corrects phase flips, and a combo that outvotes the code lands a logical error.</desc>
+		<desc>Two-player fighting game where every fighter is in a quantum basis, shown by their colour: green attacks (X) only hurt green fighters, purple attacks (Z) only purple ones, throws (Y) hurt both, and Y switches your colour (a Hadamard).</desc>
 		<image>./images/brawl_ket-logo.png</image>
 		<marquee>./images/brawl_ket-marquee.png</marquee>
 		<lang>en</lang>

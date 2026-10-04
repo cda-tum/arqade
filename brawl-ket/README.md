@@ -2,12 +2,13 @@
 
 A one-on-one fighting game for the ARQADE cabinet (Batocera, `pygame`
 system), in the style of a small Street Fighter: health bars, light and heavy
-attacks, chains and specials. The twist is quantum error correction, and it
-is exact: each fighter is a logical qubit protected by a repetition code, and
-the oldest mind game in fighting games, high or low, is the choice between a
-bit-flip and a phase-flip code. The name is a pun on bra-ket notation and
-tournament brackets. Design:
-`../docs/superpowers/specs/2026-10-01-brawl-ket-design.md`.
+attacks, chains and specials. The quantum idea is one visible rule: each
+fighter is in a measurement basis, shown by their body colour, and only an
+attack of the matching colour hurts them. The name is a pun on bra-ket
+notation and tournament brackets. Design:
+`../docs/superpowers/specs/2026-10-02-brawl-ket-basis-design.md` (v3; it
+replaces the repetition-code v1 and the Shor-code v2, which playtests found
+too hard to read).
 
 **Status:**
 - **The game:** two fighters (TRIO and QUINT), versus only, best of 3
@@ -17,36 +18,47 @@ tournament brackets. Design:
 - **Extras:** chiptune (a title and a fight loop), `--input-test`, a
   snapshot tool and a Batocera deploy script.
 
-## The rules: a fighter is a code
+## The rules: colour must match
 
-The lights over each fighter's head are its code, with the code's state
-beside them (`|000>` standing, `|+++>` crouching).
+Every fighter is in one of two bases, shown by the colour of the whole body:
 
-- **Stance is the code basis.** Standing is the bit-flip code: it corrects X
-  errors and can't see Z. Crouching is the phase-flip code: it corrects Z and
-  can't see X. Switching between them is a transversal H, which takes 8 frames
-  (a game rule; a hit during it is a logical error).
-- **Attacks deal errors.** Standing attacks and jump-ins deal X, low attacks
-  Z, throws Y = XZ (half of a Y always gets past either code, so a throw is
-  always a logical error).
-- **A hit the code can correct** flips one light and does a little chip
-  damage. The ring beside the lights is the correction cycle: when it ticks,
-  the majority vote repairs every flipped light.
-- **A logical error** costs a big chunk of health and resets the lights. It
-  happens when a hit comes from the wrong stance, or when one more hit
-  within a cycle would outvote the code: the second on TRIO (d = 3, t = 1),
-  the third on QUINT (d = 5, t = 2). With t lights down, the tag shows the
-  danger state (the other lights pulse, a "!" by the ket).
+| Basis | States | Colour | Hurt by |
+|---|---|---|---|
+| Z basis | \|0>, \|1> | green | X (green attacks), which flips \|0> and \|1> |
+| X basis | \|+>, \|-> | purple | Z (purple attacks), which flips \|+> and \|-> |
+
+This is exact: X leaves \|+> and \|-> unchanged (up to a phase), and Z leaves
+\|0> and \|1> unchanged. An attack is drawn in the colour of the basis it
+changes, so the rule a player reads is: **colour must match to hurt.**
+
+- **A** is always in **your own** colour, **B** in the **other** one. Against a
+  rival of your colour A hurts; against the other colour B does. In an A then B
+  chain exactly one half matches.
+- **Throws** are Y = iXZ, which flips both bases: they hurt either colour.
+- **A wrong-colour hit** does no damage (the state is unchanged), but the
+  defender is still pushed back and held in block-stun, so the string goes on
+  and its matching half can land (a game rule).
+- **Y switches basis:** an H on yourself, at once. For 10 frames after it you
+  can't attack (you can move, crouch and be hit, judged by your new colour).
+  Only when free to act: idle, walking, crouching or in the air.
+- **Heights:** standing normals are HIGH (a crouch ducks them), crouching
+  normals LOW (a jump clears them), air normals and throws MID.
+- **Damage:** light 4, heavy 8, special 10, throw 10, MEASURE 12. Health:
+  TRIO 100, QUINT 115.
+
+On screen: P1 has a blue ring under their feet and P2 a red one; each health
+bar has a basis badge (`0/1` green, `+/-` purple); an attack's hand or foot
+glows in its colour from the wind-up on, so you see before contact whether it
+will match. A wrong-colour hit pings, a switch flashes white with an `H`.
 
 ## The fighters
 
 | | TRIO | QUINT |
 |---|---|---|
-| Code | `|000>`, d = 3, corrects 1 per 1.0 s | `|00000>`, d = 5, corrects 2 per 1.5 s |
-| Build | lean and fast, high jump | heavy and slow, long reach |
-| X (standing) | PHOTON: a projectile, an X error (2.5 s cooldown) | SYNDROME GRAB: a lunging command throw, a Y error |
-| Down + X | PHASE SLIDE: a low slide, a Z error, under photons | RE-ENCODE: wipes every flipped light (4 s cooldown) |
-| Air X | DIVE: a steep kick, an X error | COLLAPSE: a body slam (X), whose landing shockwave deals Z |
+| Build | lean and fast, high jump | heavy and slow, long reach, 115 health |
+| X (standing) | PHOTON: a projectile, always green (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into QUINT's basis |
+| Down + X | PHASE SLIDE: a low slide, always purple; it slides under photons | HADAMARD WAVE: a short ground wave (~70 px, LOW) that switches the rival's basis, no damage (3 s cooldown) |
+| Air X | HADAMARD DIVE: a steep dive in your colour; when it lands, you switch basis | COLLAPSE: a drifting body slam, green (HIGH), whose landing shockwave is purple (LOW) |
 
 Both share the normals: A is a jab (standing, crouching, in the air), B a
 heavy, a sweep (knockdown) or a jump-in, and B up close while pushing towards
@@ -60,6 +72,7 @@ the rival is a throw. A chains A, A, B.
 | Light (and confirm in menus) | A | Q | . |
 | Heavy (and back in menus) | B | W | , |
 | Special | X | T | / |
+| Switch basis (H) | Y | G | ; |
 | Start / pause (resume or quit to the title) | Start | 1 | 2 |
 | Quit | Start + Select, or hold Select 2 s on the title | Esc | Esc |
 
@@ -85,11 +98,11 @@ uv run python tools/benchmark.py                    # frame cost (on the cabinet
 
 | Module | Role |
 |---|---|
-| `qec.py` | The repetition code: stance, flipped lights, the cycle, logical errors. Pure, exact. |
-| `moves.py` | Frame data: `Move`, `Character`, TRIO and QUINT. |
-| `fighter.py`, `fight.py` | One fighter's state machine; a round at a fixed 60 Hz (hits, projectiles, shockwaves, the timer). Pure. |
+| `basis.py` | The two bases, which errors change which, H, and each attack's error from its colour rule. Pure, exact, tested against 2x2 matrices. |
+| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, TRIO and QUINT. |
+| `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). Pure. |
 | `match.py` | Title, select, rounds, the result, pause, idle and the attract demo. Pure. |
-| `poses.py`, `render.py` | The skeleton and keyframe poses; the puppets, stage, HUD, effects and screens. |
+| `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens. |
 | `bot.py` | The CPU for the attract demo and the tests. |
 | `audio.py` | Chiptune effects and music, adapted from Planck Time's. |
 | `input.py`, `config.py` | Pads and the dev keyboard; every tuning number and button. |
