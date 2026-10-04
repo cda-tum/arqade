@@ -2,9 +2,10 @@
 
 Pure logic, no pygame, no randomness: the same inputs always give the same
 round. The fight drives two Fighters (fighter.py), spawns and moves the shots,
-resolves hitboxes against hurtboxes under the Shor code's rules (the defender's
-own code decides whether a hit lights its grid, cancels or is a logical error), ticks both codes
-and reports everything that happened as Events for the renderer and audio.
+resolves hitboxes against hurtboxes, turns each attack's colour rule into an error
+using its attacker's basis at the moment of the hit (basis.py), lets the defender's
+basis decide between damage and a block, applies the specials' twists, and reports
+everything that happened as Events for the renderer and audio.
 
 Everything is counted in integer frames at 60 Hz. Positions are screen px with
 y pointing down for boxes (see Fighter.world_box).
@@ -14,12 +15,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from . import shor
+from . import basis
 from .config import (
+    BLOCK_HITSTOP,
     BODY_MARGIN,
     FLOOR_Y,
     HITSTOP,
-    HITSTOP_LOGICAL,
+    HITSTOP_KNOCKDOWN,
     ROUND_FRAMES,
     STAGE_LEFT,
     STAGE_RIGHT,
@@ -27,7 +29,7 @@ from .config import (
     THROW_SLACK,
 )
 from .fighter import IDLE, Fighter, FighterInput
-from .moves import Box, Character, Move
+from .moves import HIGH, LOW, Box, Character, Move
 
 SHOT_SPAWN_OFFSET = 24      # a shot appears this far in front of its owner, px
 LANDING_FRAMES = 4          # how long a landing shockwave stays live
@@ -39,15 +41,14 @@ Rect = tuple[float, float, float, float]    # (left, top, w, h), y down
 
 @dataclass(frozen=True)
 class Event:
-    # attack, hit, cancel, logical, corrected, projectile, ko, timeout, land, reencode,
-    # shockwave (a landing shockwave opens: error is its error, x/y where it spreads from)
+    # attack, hit, block (a wrong-colour hit bounced off), switch (a basis changed: Y, a DIVE
+    # that lands, a WAVE), measure (MEASURE collapsed the rival into its basis), projectile,
+    # ko, timeout, land, shockwave (a landing shockwave opens: x/y where it spreads from)
     kind: str
-    player: str | None = None       # who it happened TO (hit/cancel/logical: the defender)
-    error: str | None = None        # X / Z / Y for hit, cancel and logical
+    player: str | None = None       # who it happened TO (hit/block/switch/measure: the one hit)
+    error: str | None = None        # X / Z / Y for hit and block (shockwave: its error)
     x: float = 0.0                  # where, for sparks (screen px)
     y: float = 0.0
-    row: int | None = None          # hit / cancel / logical: the grid row
-    col: int | None = None          # ... and the cell's column for an X or a Y (None for a Z: a row)
 
 
 @dataclass
@@ -82,8 +83,9 @@ class _Landing:
 @dataclass
 class _Strike:
     attacker: str | None        # whose move connected; None for a shot or a shockwave
+    owner: str                  # whose attack it is (a shot's or a shockwave's too)
     defender: str
-    move: Move                  # what take_hit gets (a landing hit has its error swapped in)
+    move: Move                  # what take_hit gets (a landing hit has its colour swapped in)
     from_facing: int
     where: tuple[float, float]
     shot: Shot | None = None
@@ -125,9 +127,9 @@ def can_reach(height: int, target: Fighter) -> bool:
     GAME RULE: on top of the boxes overlapping, a HIGH move never hits a crouching
     fighter and a LOW one never hits an airborne one; MID can't be dodged this way.
     """
-    if height == shor.HIGH and target.stance == "crouch":
+    if height == HIGH and target.stance == "crouch":
         return False
-    if height == shor.LOW and target.y > 0:
+    if height == LOW and target.y > 0:
         return False
     return True
 
@@ -166,9 +168,6 @@ class Fight:
         self._push_apart()
         self._move_shots()
         self._resolve_hits(events)
-        for key, f in self.fighters.items():
-            if f.code.tick():
-                events.append(Event("corrected", key))
         self.frames_left -= 1
         self._check_end(events)
         return events
@@ -194,7 +193,8 @@ class Fight:
                     if kind == "land" and data["dive"] and f.move is not None \
                             and f.move.landing is not None:
                         self._landings[key] = _Landing(f.move)
-                        events.append(Event("shockwave", key, f.move.landing_error, f.x, FLOOR_Y))
+                        error = basis.error_for(f.move.landing_colour, f.basis)
+                        events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
 
     def _push_apart(self) -> None:
         """The bodies are solid: two grounded fighters never stand closer than body_width."""
@@ -255,21 +255,17 @@ class Fight:
                 continue
             where = _overlap(s.box, target.hurtbox)
             if where is not None:
-                strikes.append(_Strike(None, rival_key, s.move, s.facing, where, s))
+                strikes.append(_Strike(None, s.owner, rival_key, s.move, s.facing, where, s))
 
         # Every strike was found against the state at the start of the resolution,
         # so a trade (both fighters connecting on the same frame) applies both.
         for st in strikes:
             if st.attacker is not None:
-                f = self.fighters[st.attacker]
-                f.move_hit = True
-                if f.move is not None and f.move.dive is not None and f.move.landing is None:
-                    f.bounce()      # a DIVE springs back off what it hit
+                self.fighters[st.attacker].move_hit = True
 
-        # A strike on a fighter already knocked down this frame (by a break, say) is dropped
+        # A strike on a fighter already knocked down this frame (by a sweep, say) is dropped
         # whole, as if the fighter had been down from the start: no event, no damage, and a
-        # shot flies on over them. A fighter's own move strike is always its first in the list,
-        # so the loop above never marks a move that is dropped here as having connected.
+        # shot flies on over them.
         landed_shots: set[int] = set()
         downed: set[str] = set()
         for st in strikes:
@@ -277,18 +273,42 @@ class Fight:
                 continue
             if st.shot is not None:
                 landed_shots.add(id(st.shot))
-            defender = self.fighters[st.defender]
-            result = defender.take_hit(st.move, st.from_facing)
-            if defender.action == "knockdown":
-                downed.add(st.defender)
-            self._landings.pop(st.defender, None)   # a hit fighter's shockwave is gone
-            kind = {shor.FLIPPED: "hit", shor.CANCEL: "cancel", shor.LOGICAL: "logical"}[result]
-            col = None if st.move.error == shor.Z else st.move.column
-            events.append(Event(kind, st.defender, st.move.error, st.where[0], st.where[1],
-                                st.move.height, col))
-            stop = HITSTOP_LOGICAL if result == shor.LOGICAL else HITSTOP
-            self.hitstop = max(self.hitstop, stop)
+            self._apply_strike(st, events, downed)
         self.shots = [s for s in self.shots if id(s) not in landed_shots]
+
+    def _apply_strike(self, st: _Strike, events: list[Event], downed: set[str]) -> None:
+        defender = self.fighters[st.defender]
+        owner = self.fighters[st.owner]
+        x, y = st.where
+        m = st.move
+        if m.switch_rival:                  # HADAMARD WAVE: an H on the rival, nothing else
+            defender.switch()
+            events.append(Event("switch", st.defender, None, x, y))
+            self.hitstop = max(self.hitstop, BLOCK_HITSTOP)
+            return
+        # The colour rule against the attacker's basis now: a DIVE's or an A's colour is
+        # whatever the attacker is in at the moment of the hit.
+        error = basis.error_for(m.colour, owner.basis)
+        if defender.take_hit(m, error, st.from_facing) == "block":
+            events.append(Event("block", st.defender, error, x, y))
+            self.hitstop = max(self.hitstop, BLOCK_HITSTOP)
+            return
+        self._landings.pop(st.defender, None)   # a hit fighter's shockwave is gone
+        events.append(Event("hit", st.defender, error, x, y))
+        knocked = defender.action == "knockdown"
+        if knocked:
+            downed.add(st.defender)
+        self.hitstop = max(self.hitstop, HITSTOP_KNOCKDOWN if knocked else HITSTOP)
+        if m.measure_rival and defender.basis != owner.basis:
+            # MEASURE projects the rival onto QUINT's basis
+            defender.basis = owner.basis
+            events.append(Event("measure", st.defender, None, x, y))
+        if st.attacker is not None and owner.move is m:
+            if m.switch_self_on_hit:        # HADAMARD DIVE: an H on the diver, at once
+                owner.switch()
+                events.append(Event("switch", st.attacker, None, owner.x, FLOOR_Y - owner.y - 60))
+            if m.dive is not None and m.landing is None:
+                owner.bounce()              # a DIVE springs back off what it hit
 
     def _move_strike(
         self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],
@@ -300,13 +320,13 @@ class Fight:
             return
         if not can_reach(m.height, rival):
             return
-        # GAME RULE: a throw (the SYNDROME GRAB too) can't take a rival already reeling from
+        # GAME RULE: a throw (MEASURE too) can't take a rival already reeling from
         # a hit. A throw is MID, so it catches a jumping rival as well as a crouching one.
         if m.kind == "throw" and rival.action in _STUNNED:
             return
         where = _overlap(f.world_box(m.hitbox), rival.hurtbox)
         if where is not None:
-            strikes.append(_Strike(key, rival_key, m, f.facing, where))
+            strikes.append(_Strike(key, key, rival_key, m, f.facing, where))
 
     def _landing_strike(
         self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],
@@ -318,16 +338,17 @@ class Fight:
             del self._landings[key]
             return
         move = win.move
-        assert move.landing is not None and move.landing_error is not None
+        assert move.landing is not None and move.landing_colour is not None
         # the shockwave hits any rival still on its feet, one reeling from the slam itself
-        # too: slam and shockwave are two rows flipped, a logical error. A jump clears it.
+        # too (slam and shockwave are opposite colours: a standing rival takes one). A jump
+        # clears it.
         if not win.hit and rival.action != "knockdown" and can_reach(move.landing_height, rival):
             where = _overlap(f.world_box(move.landing), rival.hurtbox)
             if where is not None:
                 win.hit = True
                 strikes.append(_Strike(
-                    None, rival_key, replace(move, error=move.landing_error, height=move.landing_height), f.facing,
-                    where,
+                    None, key, rival_key, replace(move, colour=move.landing_colour, height=move.landing_height),
+                    f.facing, where,
                 ))
         win.left -= 1
         if win.left <= 0:
@@ -337,8 +358,7 @@ class Fight:
 
     def _settle(self) -> None:
         """After the round, the bodies play out (the KO's flight and fall, a move
-        finishing) with nobody's input, while nothing else moves: no hits, no clock,
-        no correction cycles. The match shows this in slow motion after a KO."""
+        finishing) with nobody's input, while nothing else moves: no hits, no clock. The match shows this in slow motion after a KO."""
         if self.hitstop > 0:
             self.hitstop -= 1
             return

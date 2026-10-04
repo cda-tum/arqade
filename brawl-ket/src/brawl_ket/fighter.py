@@ -1,9 +1,9 @@
 """One fighter's state machine: movement, stance, attacks, input buffer, getting hit.
 
 Pure logic, no pygame. The fight (fight.py) runs two of these: it feeds each one
-a FighterInput per frame, ticks each fighter's shor.ShorCode (so it can emit the
-cycle events), resolves hitboxes and calls take_hit. Everything is counted in
-integer frames at 60 Hz.
+a FighterInput per frame, resolves hitboxes, works out each hit's error from the
+attack's colour rule (basis.py) and calls take_hit, which hurts only if the error
+changes the fighter's basis state. Everything is counted in integer frames at 60 Hz.
 
 Coordinates: x is in screen px; y is the height above the floor (>= 0), and
 vy > 0 means moving up. world_box() turns a Box (relative to the feet) into
@@ -15,14 +15,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from . import shor
+from . import basis
 from .config import (
+    BLOCK_PUSH,
     BUFFER_FRAMES,
     CHAIN_MAX,
     FLOOR_Y,
-    LOGICAL_DAMAGE,
     STAGE_LEFT,
     STAGE_RIGHT,
+    SWITCH_RECOVERY,
     THROW_RANGE,
 )
 from .moves import Box, Character, Move
@@ -40,9 +41,10 @@ class FighterInput:
     dx: int = 0             # -1 / 0 / 1 (stick, deadzoned)
     up: bool = False
     down: bool = False
-    a: bool = False         # a, b, x: pressed this frame
+    a: bool = False         # a, b, x, y: pressed this frame
     b: bool = False
     x: bool = False
+    y: bool = False         # switch basis (an H on yourself)
 
 
 IDLE = FighterInput()
@@ -64,7 +66,8 @@ class Fighter:
         self.vy = 0.0
         self.facing = facing
         self.health = char.health
-        self.code = shor.ShorCode(char.cycle_frames)
+        self.basis = basis.Z_BASIS      # green: |0>, |1>
+        self.switch_lock = 0            # frames left after a switch in which you can't attack
         self.crouching = False
         self.action = "idle"        # idle walk crouch jump attack hitstun knockdown
         self.frame = 0              # frames into the action (0 on its first frame)
@@ -143,14 +146,16 @@ class Fighter:
     def step(self, inp: FighterInput, rival_x: float) -> list[tuple[str, dict]]:
         """Advance one frame; returns local events.
 
-        The Shor code's own cycle is NOT ticked here: the fight ticks each code so
-        it can report the repairs.
+        A Y press switches basis at once if the fighter is free to act (idle, walking,
+        crouching or in the air); it isn't buffered.
         """
         events: list[tuple[str, dict]] = []
         for slot in self.cooldowns:
             if self.cooldowns[slot] > 0:
                 self.cooldowns[slot] -= 1
         self.frame += 1
+        if self.switch_lock > 0:
+            self.switch_lock -= 1
 
         # Presses are buffered even during hitstun, so one made in the last frames
         # of stun comes out on the first free frame.
@@ -177,12 +182,15 @@ class Fighter:
             if getattr(inp, btn):
                 self.buffer.append(Press(btn, 0))
 
-    def take_hit(self, move: Move, from_facing: int) -> str:
+    def take_hit(self, move: Move, error: str, from_facing: int) -> str:
+        """An attack dealing `error` reaches this fighter. Returns "hit" if the error changes
+        its basis state (damage, stun, knockback, maybe a knockdown), else "block": no damage
+        and its state unchanged, but (GAME RULE) block-stun for the move's hitstun and a
+        pushback, never a knockdown."""
+        hurt = basis.hurts(error, self.basis)
         was_down = self.action == "knockdown"
-        # GAME RULE: each hit is exactly one error, on the qubit its move and button choose
-        result = self.code.apply(move.error, move.height, move.column)
-        damage = LOGICAL_DAMAGE + move.bonus if result == shor.LOGICAL else move.chip
-        self.health = max(0, self.health - damage)
+        if hurt:
+            self.health = max(0, self.health - move.damage)
 
         if self.bounced:            # a diver hit in a trade stops springing up
             self.vy = min(self.vy, 0.0)
@@ -192,17 +200,21 @@ class Fighter:
         self.move_hit = False
         self.bounced = False
         self.buffer = []
-        self.vx = move.knockback * from_facing
+        self.vx = (move.knockback if hurt else max(move.knockback, BLOCK_PUSH)) * from_facing
         self.frame = 0
         if was_down:                # a knockdown is never cut short into hitstun
             self.stun = max(self.stun, KNOCKDOWN_FRAMES)
-        elif move.knockdown or result == shor.LOGICAL:
+        elif hurt and move.knockdown:
             self.action = "knockdown"
             self.stun = KNOCKDOWN_FRAMES
         else:
             self.action = "hitstun"
             self.stun = move.hitstun
-        return result
+        return "hit" if hurt else "block"
+
+    def switch(self) -> None:
+        """An H on yourself: the basis (and so the body's colour) swaps at once."""
+        self.basis = basis.hadamard(self.basis)
 
     BOUNCE_VX, BOUNCE_VY = 2.0, 5.0     # px per frame: a DIVE springs back off what it hit
 
@@ -293,8 +305,6 @@ class Fighter:
             if self.frame == self.startup:
                 if m.kind == "projectile":
                     events.append(("projectile", {"move": m}))
-                elif m.kind == "reencode":
-                    events.append(("reencode", {"repaired": self.code.reencode()}))
             if m.dive is not None:
                 self.vx = m.dive[0] * self.facing
                 self.vy = -m.dive[1]
@@ -319,11 +329,14 @@ class Fighter:
             self.facing = 1 if rival_x > self.x else -1
 
         if on_ground_free:
-            # Crouching is instant: it is ducking, not a change of code.
-            self.crouching = inp.down and not inp.up
+            self.crouching = inp.down and not inp.up    # crouching is instant: it's ducking
 
         free = on_ground_free or self.action == "jump"
-        if free or self.action == "attack":
+        if inp.y and free:
+            self.switch()
+            self.switch_lock = SWITCH_RECOVERY
+            events.append(("switch", {}))
+        if (free or self.action == "attack") and self.switch_lock == 0:
             self._try_buffer(inp.dx, rival_x, free, events)
 
         if self.action not in _GROUND_FREE:

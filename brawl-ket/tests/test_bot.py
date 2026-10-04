@@ -31,7 +31,20 @@ def test_bot_vs_bot_rounds_always_finish(pairing):
     for seed in SEEDS:
         fight, events = play(seed, pairing)
         assert fight.over, f"seed {seed} did not finish"
-        assert any(e.kind == "logical" for e in events), f"seed {seed}: no logical error"
+
+
+@pytest.mark.parametrize("pairing", PAIRINGS)
+def test_bots_land_hits_in_both_colours(pairing):
+    errors = set()
+    for seed in SEEDS:
+        _, events = play(seed, pairing)
+        errors |= {e.error for e in events if e.kind == "hit"}
+    assert {"X", "Z"} <= errors, (pairing, errors)       # green and purple attacks both land
+
+
+def test_bots_switch_basis_sometimes():
+    switches = sum(1 for seed in SEEDS for e in play(seed)[1] if e.kind == "switch")
+    assert switches > 0
 
 
 @pytest.mark.parametrize("pairing", PAIRINGS)
@@ -42,17 +55,7 @@ def test_bots_are_deterministic(pairing):
         assert e1 == e2
 
 
-QUINT_TRIO_XFAIL = pytest.mark.xfail(
-    strict=False,
-    reason="with QUINT as p1, TRIO (p2) still wins every seed after Task 4's numbers (115 health, "
-           "fast heavies): the bots don't read the grid yet; grid-reading bots land in Task 6, "
-           "re-enable then",
-)
-
-
-@pytest.mark.parametrize("pairing", [
-    pytest.param(p, marks=QUINT_TRIO_XFAIL) if p == ("QUINT", "TRIO") else p for p in PAIRINGS
-])
+@pytest.mark.parametrize("pairing", PAIRINGS)
 def test_neither_side_is_favoured(pairing):
     winners = {play(seed, pairing)[0].winner for seed in SEEDS}
     assert {"p1", "p2"} <= winners
@@ -70,7 +73,7 @@ def test_neither_character_always_wins():
 
 
 def test_quint_bots_use_their_specials():
-    # over some rounds, a QUINT bot grabs, re-encodes and slams
+    # over some rounds, a QUINT bot measures, waves and slams
     slots = set()
     for seed in range(40):
         if {"stand.X", "crouch.X", "air.X"} <= slots:
@@ -95,6 +98,6 @@ def test_presses_are_edges_not_held(pairing):
             break
         mine = bot.input(fight)
         fight.step({"p1": mine, "p2": rival.input(fight)})
-        pressed = (mine.a, mine.b, mine.x)
-        assert not any(p and q for p, q in zip(pressed, last or (False,) * 3))
+        pressed = (mine.a, mine.b, mine.x, mine.y)
+        assert not any(p and q for p, q in zip(pressed, last or (False,) * 4))
         last = pressed

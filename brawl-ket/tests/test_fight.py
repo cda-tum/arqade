@@ -3,12 +3,13 @@ import pytest
 from dataclasses import replace
 from types import MappingProxyType
 
-from brawl_ket import shor
+from brawl_ket import basis
+from brawl_ket.basis import X_BASIS, Z_BASIS
 from brawl_ket.config import (
+    BLOCK_HITSTOP,
     FLOOR_Y,
     HITSTOP,
-    HITSTOP_LOGICAL,
-    LOGICAL_DAMAGE,
+    HITSTOP_KNOCKDOWN,
     ROUND_FRAMES,
     STAGE_LEFT,
     STAGE_RIGHT,
@@ -18,12 +19,13 @@ from brawl_ket.config import (
 )
 from brawl_ket.fight import KO_PUSH, Event, Fight, Shot, _overlap, body_width
 from brawl_ket.fighter import IDLE, FighterInput
-from brawl_ket.moves import CHARACTERS, QUINT, TRIO, Box
+from brawl_ket.moves import CHARACTERS, HIGH, LOW, MID, QUINT, TRIO, Box
 
 A = FighterInput(a=True)
 B = FighterInput(b=True)
 X = FighterInput(x=True)
 JAB = TRIO.moves["stand.A"]
+HEAVY = TRIO.moves["stand.B"]
 PHOTON = TRIO.moves["stand.X"]
 
 BODY_WIDTH = body_width(TRIO, TRIO)     # the push box between two TRIOs
@@ -70,7 +72,7 @@ def of(events, *wanted):
 def snapshot(fight):
     return (
         fight.frames_left,
-        [(f.x, f.y, f.frame, f.stun, f.code.timer) for f in fight.fighters.values()],
+        [(f.x, f.y, f.frame, f.stun, f.basis) for f in fight.fighters.values()],
         [(s.x, s.life) for s in fight.shots],
     )
 
@@ -89,23 +91,55 @@ def test_a_new_round():
     assert not fight.over and fight.winner is None and fight.shots == []
 
 
-# --- hits and the Shor code's rules ----------------------------------------------------
+# --- hits and the basis rule ------------------------------------------------------------
 
-def test_jab_hits_a_standing_rival_and_flips_a_light():
+def test_both_fighters_start_green():
+    fight = new()
+    assert fight.fighters["p1"].basis == fight.fighters["p2"].basis == Z_BASIS
+
+
+def test_a_jab_hurts_a_rival_of_the_attackers_colour():
     fight = new()
     events = script(fight, 20, p1={0: A})
-    hits = of(events, "hit", "logical")
-    assert [(e.kind, e.player, e.error) for e in hits] == [("hit", "p2", shor.X)]
-    p2 = fight.fighters["p2"]
-    assert p2.health == 100 - JAB.chip
-    assert p2.code.x_cells == {(shor.HIGH, shor.A_COL)}
+    hits = of(events, "hit", "block")
+    assert [(e.kind, e.player, e.error) for e in hits] == [("hit", "p2", basis.X)]   # A: own colour
+    assert fight.fighters["p2"].health == 100 - JAB.damage
     assert fight.fighters["p1"].health == 100
+
+
+def test_a_jab_bounces_off_a_rival_of_the_other_colour():
+    fight = new()
+    p2 = fight.fighters["p2"]
+    p2.basis = X_BASIS
+    x0 = p2.x
+    events = script(fight, 20, p1={0: A})
+    assert [(e.kind, e.error) for e in of(events, "hit", "block")] == [("block", basis.X)]
+    assert p2.health == 100 and p2.basis == X_BASIS     # the state is unchanged
+    assert p2.x > x0                                     # GAME RULE: pushed back
+
+
+def test_a_heavy_is_the_other_colour():
+    for rival, kind in ((Z_BASIS, "block"), (X_BASIS, "hit")):
+        fight = new()
+        fight.fighters["p2"].basis = rival
+        events = script(fight, 40, p1={0: B})
+        assert [(e.kind, e.error) for e in of(events, "hit", "block")] == [(kind, basis.Z)]
+        assert fight.fighters["p2"].health == (100 - HEAVY.damage if kind == "hit" else 100)
+
+
+def test_a_then_b_lands_exactly_one_half():
+    for rival, landed in ((Z_BASIS, ["hit", "block"]), (X_BASIS, ["block", "hit"])):
+        fight = new()
+        fight.fighters["p2"].basis = rival
+        events = script(fight, 60, p1={0: A, JAB_HIT_STEP: B})
+        assert kinds(of(events, "hit", "block")) == landed, rival
+        assert fight.fighters["p1"].chain == 2
 
 
 def test_the_jab_reaches_70_px_but_not_80():
     # the jab box ends 58 px ahead; the rival's hurtbox starts 14 px before its x
-    hit = of(script(new(gap=70.0), 20, p1={0: A}), "hit", "logical")
-    miss = of(script(new(gap=80.0), 20, p1={0: A}), "hit", "logical")
+    hit = of(script(new(gap=70.0), 20, p1={0: A}), "hit", "block")
+    miss = of(script(new(gap=80.0), 20, p1={0: A}), "hit", "block")
     assert [e.kind for e in hit] == ["hit"]
     assert miss == []
 
@@ -119,48 +153,21 @@ def test_hit_event_is_where_the_boxes_overlap():
     assert 200 <= hit.y <= 240      # screen px, y down: the jab is 70..84 up from the floor
 
 
-def test_jab_jab_cancels():
+def test_two_jabs_both_hurt():
     fight = new()
     events = script(fight, 40, p1={0: A, JAB_HIT_STEP: A})
-    hits = of(events, "hit", "cancel", "logical")
-    assert [e.kind for e in hits] == ["hit", "cancel"]       # XX = I
-    assert fight.fighters["p2"].health == 100 - 2 * JAB.chip  # the chip is not refunded
-    assert fight.fighters["p2"].code.lights == 0
+    assert kinds(of(events, "hit", "block")) == ["hit", "hit"]
+    assert fight.fighters["p2"].health == 100 - 2 * JAB.damage
 
 
-def test_the_cycle_repairs_between_spaced_hits():
-    fight = new()
-    gap = TRIO.cycle_frames + 10        # more than one whole cycle apart
-    events = script(fight, gap + 80, p1={0: A, gap: A})
-    assert of(events, "logical") == []
-    assert len(of(events, "hit")) == 2
-    corrected = of(events, "corrected")
-    assert [e.player for e in corrected] == ["p2", "p2"]    # one repair after each hit
-    assert fight.fighters["p2"].health == 100 - 2 * JAB.chip
-
-
-def test_two_hits_within_one_cycle_still_count_against_each_other():
-    fight = new()
-    gap = TRIO.cycle_frames - 20        # the second jab lands inside the same 1 s cycle
-    events = script(fight, gap + 40, p1={0: A, gap: A})
-    assert [e.kind for e in of(events, "hit", "cancel", "logical")] == ["hit", "cancel"]
-
-
-def test_a_jab_into_a_heavy_still_combos():
-    HEAVY = TRIO.moves["stand.B"]
-    fight = new()
-    events = script(fight, 60, p1={0: A, JAB_HIT_STEP: B})
-    hits = of(events, "hit", "logical")
-    assert [(e.kind, e.error) for e in hits] == [("hit", shor.X), ("logical", shor.X)]
-    assert fight.fighters["p1"].chain == 2
-    assert fight.fighters["p2"].health == 100 - JAB.chip - (LOGICAL_DAMAGE + HEAVY.bonus)
-
-
-def test_a_lone_heavy_from_neutral_is_only_a_correctable_hit():
-    fight = new()
-    events = script(fight, 60, p1={0: B})
-    assert [(e.kind, e.error) for e in of(events, "hit", "logical")] == [("hit", shor.X)]
-    assert fight.fighters["p2"].health == 100 - TRIO.moves["stand.B"].chip
+def test_a_throw_hurts_either_colour_and_knocks_down():
+    for rival in (Z_BASIS, X_BASIS):
+        fight = new(gap=float(BODY_WIDTH))
+        fight.fighters["p2"].basis = rival
+        events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)})
+        assert [(e.kind, e.error) for e in of(events, "hit", "block")] == [("hit", basis.Y)]
+        p2 = fight.fighters["p2"]
+        assert p2.health == 100 - TRIO.moves["throw"].damage and p2.action == "knockdown"
 
 
 def test_a_throw_catches_an_airborne_rival():
@@ -169,25 +176,24 @@ def test_a_throw_catches_an_airborne_rival():
     p2 = fight.fighters["p2"]
     p2.y = 20.0                 # in the air, but still level with the throw box
     events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)})
-    assert [(e.kind, e.error, e.row) for e in of(events, "hit", "logical")] == [
-        ("hit", shor.Y, shor.MID)]
+    assert [(e.kind, e.error) for e in of(events, "hit", "block")] == [("hit", basis.Y)]
 
 
 def test_a_throw_whiffs_on_a_stunned_rival():
     fight = new(gap=float(BODY_WIDTH))
     p2 = fight.fighters["p2"]
-    p2.take_hit(replace(JAB, knockback=0.0, hitstun=30, chip=0), 1)
+    p2.take_hit(replace(JAB, knockback=0.0, hitstun=30, damage=0), basis.X, 1)
     assert p2.action == "hitstun"
     events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)})
-    assert of(events, "hit", "logical") == [] and p2.health == 100
+    assert of(events, "hit", "block") == [] and p2.health == 100
 
 
 def test_a_trade_applies_both_hits():
     fight = new()
     events = script(fight, 20, p1={0: A}, p2={0: A})
-    hits = of(events, "hit", "logical")
+    hits = of(events, "hit", "block")
     assert sorted((e.kind, e.player) for e in hits) == [("hit", "p1"), ("hit", "p2")]
-    assert fight.fighters["p1"].health == fight.fighters["p2"].health == 100 - JAB.chip
+    assert fight.fighters["p1"].health == fight.fighters["p2"].health == 100 - JAB.damage
     # both moves count as having connected, and both fighters are stunned
     assert fight.fighters["p1"].action == fight.fighters["p2"].action == "hitstun"
 
@@ -196,28 +202,33 @@ def test_a_downed_fighter_cannot_be_hit():
     SWEEP = TRIO.moves["crouch.B"]
     fight = new()
     p2 = fight.fighters["p2"]
-    p2.take_hit(replace(SWEEP, chip=0, error=shor.X, bonus=0), 1)
-    # a knockdown with a corrected hit: no health lost
+    p2.take_hit(replace(SWEEP, damage=0), basis.Y, 1)
     assert p2.action == "knockdown" and p2.health == 100
     events = script(fight, 12, p1={0: A})
-    assert of(events, "hit", "logical") == [] and p2.health == 100 and p2.action == "knockdown"
+    assert of(events, "hit", "block") == [] and p2.health == 100 and p2.action == "knockdown"
     # a shot flies over a downed fighter
     fight.shots.append(Shot("p1", PHOTON, p2.x - 10, 0.0, 4.0, 100))
-    assert of(script(fight, 3), "hit", "logical") == [] and p2.health == 100
+    assert of(script(fight, 3), "hit", "block") == [] and p2.health == 100
     assert len(fight.shots) == 1
 
 
-def test_a_breaks_knockdown_survives_a_second_hit_in_the_same_frame():
-    # p2 holds an X on (HIGH, B): p1's jab breaks the code on the very frame a photon arrives
+def test_a_knockdown_survives_a_second_hit_in_the_same_frame():
+    # p1's sweep knocks p2 down on the very frame a photon arrives: the photon flies on over
     fight = new()
     p2 = fight.fighters["p2"]
-    p2.code.apply(shor.X, shor.HIGH, shor.B_COL)
-    script(fight, JAB_HIT_STEP, p1={0: A})
-    fight.shots.append(Shot("p1", PHOTON, p2.x - 8, 0.0, 0.0, 100))    # on p2, standing still
-    events = fight.step({"p1": IDLE, "p2": IDLE})
-    assert [e.kind for e in of(events, "hit", "cancel", "logical")] == ["logical"]
-    assert p2.action == "knockdown"
-    assert p2.health == 100 - (LOGICAL_DAMAGE + JAB.bonus)
+    p2.basis = X_BASIS                      # the sweep (the other colour) matches
+    sweep = TRIO.moves["crouch.B"]
+    script(fight, 20, p1=FighterInput(down=True))
+    p2.x = fight.fighters["p1"].x + 50
+    events = []
+    for i in range(40):
+        if fight.fighters["p1"].frame == sweep.startup - 1 and fight.fighters["p1"].slot == "crouch.B":
+            fight.shots.append(Shot("p1", PHOTON, p2.x - 8, 0.0, 0.0, 100))   # on p2, standing still
+        events += fight.step({"p1": FighterInput(down=True, b=i == 0), "p2": IDLE})
+        if of(events, "hit"):
+            break
+    assert [e.kind for e in of(events, "hit", "block")] == ["hit"]
+    assert p2.action == "knockdown" and p2.health == 100 - sweep.damage
     assert len(fight.shots) == 1        # the photon flies on, over the downed fighter
 
 
@@ -225,7 +236,7 @@ def test_the_landing_shockwave_skips_a_downed_rival():
     fight = Fight({"p1": COLLAPSE, "p2": TRIO})
     fight.fighters["p2"].x = fight.fighters["p1"].x + 60
     p2 = fight.fighters["p2"]
-    p2.take_hit(replace(TRIO.moves["crouch.B"], chip=0, error=shor.X, bonus=0), 1)
+    p2.take_hit(replace(TRIO.moves["crouch.B"], damage=0), basis.Y, 1)
     p1 = fight.fighters["p1"]
     events = []
     for i in range(300):
@@ -236,7 +247,7 @@ def test_the_landing_shockwave_skips_a_downed_rival():
         if of(events, "land"):
             break
     events += script(fight, 3)
-    assert of(events, "hit", "logical") == [] and p2.health == 100
+    assert of(events, "hit", "block") == [] and p2.health == 100
 
 
 # --- hitstop ----------------------------------------------------------------------------
@@ -265,12 +276,11 @@ def test_presses_in_hitstop_are_buffered_so_the_chain_cancel_comes_out():
     fight = new()
     events = []
     for i in range(80):
-        done = bool(of(events, "cancel", "logical"))
+        done = len(of(events, "hit")) >= 2
         inp = A if not done and (i == 0 or fight.hitstop > 0) else IDLE   # A on every hitstop frame
         events += fight.step({"p1": inp, "p2": IDLE})
-    hits = of(events, "hit", "cancel", "logical")
-    assert [e.kind for e in hits] == ["hit", "cancel"]          # the second jab came out and landed
-    assert fight.fighters["p2"].health == 100 - 2 * JAB.chip
+    assert kinds(of(events, "hit", "block")) == ["hit", "hit"]   # the second jab came out and landed
+    assert fight.fighters["p2"].health == 100 - 2 * JAB.damage
 
 
 def test_a_press_in_hitstop_does_not_age():
@@ -285,13 +295,18 @@ def test_a_press_in_hitstop_does_not_age():
     assert [p.age for p in buffered] == [0] and buffered[0].button == "a"
 
 
-def test_a_logical_error_stops_the_game_for_longer():
-    fight = new()
-    fight.fighters["p2"].code.apply_x(shor.HIGH, shor.B_COL)   # a jab on HIGH A now breaks it
+def test_a_knockdown_stops_the_game_for_longer_and_a_block_for_less():
+    fight = new(gap=float(BODY_WIDTH))
     for i in range(30):
-        if of(fight.step({"p1": A if i == 0 else IDLE, "p2": IDLE}), "logical"):
+        if of(fight.step({"p1": FighterInput(dx=1, b=i == 0), "p2": IDLE}), "hit"):
             break
-    assert fight.hitstop == HITSTOP_LOGICAL
+    assert fight.hitstop == HITSTOP_KNOCKDOWN
+    fight = new()
+    fight.fighters["p2"].basis = X_BASIS
+    for i in range(30):
+        if of(fight.step({"p1": A if i == 0 else IDLE, "p2": IDLE}), "block"):
+            break
+    assert fight.hitstop == BLOCK_HITSTOP
 
 
 # --- projectiles ------------------------------------------------------------------------
@@ -300,9 +315,9 @@ def test_photon_travels_and_hits():
     fight = new(gap=200.0)
     events = script(fight, 120, p1={0: X})
     assert [e.player for e in of(events, "projectile")] == ["p1"]
-    hits = of(events, "hit", "logical")
-    assert [(e.kind, e.player, e.error, e.row) for e in hits] == [("hit", "p2", shor.Z, shor.HIGH)]
-    assert fight.fighters["p2"].health == 100 - PHOTON.chip
+    hits = of(events, "hit", "block")
+    assert [(e.kind, e.player, e.error) for e in hits] == [("hit", "p2", basis.X)]   # green
+    assert fight.fighters["p2"].health == 100 - PHOTON.damage
     assert fight.shots == []            # removed on hitting
 
 
@@ -328,7 +343,7 @@ def test_photon_expires_off_stage():
     fight.fighters["p2"].x = STAGE_LEFT + 10    # out of its way
     events = script(fight, 60)
     assert fight.shots == []
-    assert of(events, "hit", "logical") == []
+    assert of(events, "hit", "block") == []
     assert fight.fighters["p2"].health == 100
 
 
@@ -346,7 +361,7 @@ def test_shots_from_different_owners_cancel_each_other():
     events = script(fight, 90, p1={0: X}, p2={0: X})
     assert len(of(events, "projectile")) == 2
     assert fight.shots == []
-    assert of(events, "hit", "logical") == []
+    assert of(events, "hit", "block") == []
     assert fight.fighters["p1"].health == fight.fighters["p2"].health == 100
 
 
@@ -356,18 +371,18 @@ def test_a_shot_cannot_hit_its_own_owner():
     fight.shots.append(Shot("p1", PHOTON, p1.x, 0.0, 4.0, 100))     # inside p1's own hurtbox
     assert _overlap(fight.shots[0].box, p1.hurtbox) is not None
     events = script(fight, 3)
-    assert of(events, "hit", "logical") == []
+    assert of(events, "hit", "block") == []
     assert p1.health == 100 and len(fight.shots) == 1
 
 
 def photon_run(jump_at, gap=80.0, frames=120):
     """A PHOTON `gap` px from a standing p1, flying at it; p1 jumps straight up on frame jump_at
-    (None: it stays put). Returns every hit or logical event."""
+    (None: it stays put). Returns every hit or block event."""
     fight = new(gap=300.0)
     p1 = fight.fighters["p1"]
     fight.shots.append(Shot("p2", PHOTON, p1.x + gap, 0.0, -PHOTON.projectile.speed, 200))
     return of(script(fight, frames, p1={jump_at: FighterInput(up=True)} if jump_at is not None else IDLE),
-              "hit", "logical")
+              "hit", "block")
 
 
 def test_a_jump_clears_a_photon_80_px_away():
@@ -387,7 +402,7 @@ def test_projectiles_are_too_slow_to_tunnel():
 # --- landing shockwave ----------------------------------------------------------------
 
 SHOCK_DIVE = replace(
-    TRIO.moves["air.X"], landing=Box(-70, 0, 140, 16), landing_error=shor.Z,
+    TRIO.moves["air.X"], landing=Box(-70, 0, 140, 16), landing_colour=basis.PURPLE,
 )
 COLLAPSE = with_move("air.X", SHOCK_DIVE)
 
@@ -396,6 +411,7 @@ def dive_and_land(rival_dx):
     """p1 jumps and dives; the rival stands rival_dx px to p1's right. Returns (fight, events)."""
     fight = Fight({"p1": COLLAPSE, "p2": TRIO})
     fight.fighters["p2"].x = fight.fighters["p1"].x + rival_dx
+    fight.fighters["p2"].basis = X_BASIS     # purple: the (purple) shockwave matches
     p1 = fight.fighters["p1"]
     events = []
     for i in range(300):
@@ -412,23 +428,22 @@ def dive_and_land(rival_dx):
 def test_the_landing_shockwave_hits_a_nearby_rival_with_its_own_error():
     fight, events = dive_and_land(rival_dx=60)
     p2 = fight.fighters["p2"]
-    assert [(e.kind, e.player, e.error, e.row) for e in of(events, "hit", "logical")] == [
-        ("hit", "p2", shor.Z, shor.LOW),     # the shockwave's own error, on its own row
+    assert [(e.kind, e.player, e.error) for e in of(events, "hit", "block")] == [
+        ("hit", "p2", basis.Z),     # the shockwave's own colour: purple, a Z
     ]
-    assert p2.health == 100 - SHOCK_DIVE.chip
-    assert p2.code.z_rows == {shor.LOW}
+    assert p2.health == 100 - SHOCK_DIVE.damage
 
 
 def test_the_landing_shockwave_misses_a_far_rival():
     fight, events = dive_and_land(rival_dx=300)
-    assert of(events, "hit", "logical") == []
+    assert of(events, "hit", "block") == []
     assert fight.fighters["p2"].health == 100
 
 
 def test_the_landing_shockwave_hits_once():
     fight, events = dive_and_land(rival_dx=60)
     events += script(fight, 30)
-    assert len(of(events, "hit", "logical")) == 1
+    assert len(of(events, "hit", "block")) == 1
 
 
 def test_an_ordinary_dive_has_no_shockwave():
@@ -441,7 +456,7 @@ def test_an_ordinary_dive_has_no_shockwave():
         events += fight.step({"p1": inp, "p2": IDLE})
         if p1.action == "attack":
             p1.move_hit = True
-    assert of(events, "hit", "logical") == []
+    assert of(events, "hit", "block") == []
 
 
 # --- p1 and p2 are treated alike ----------------------------------------------------------
@@ -457,7 +472,7 @@ def test_a_throw_against_a_walking_rival_is_the_same_for_p1_and_p2():
         assert fight.fighters[attacker].slot == "throw", attacker
         for _ in range(20):
             events += fight.step({attacker: IDLE, rival: FighterInput(dx=side)})
-        hits = [(e.kind, e.player, e.error) for e in of(events, "hit", "logical")]
+        hits = [(e.kind, e.player, e.error) for e in of(events, "hit", "block")]
         outcomes.append((
             [(k, "rival" if p == rival else "attacker", err) for k, p, err in hits],
             fight.fighters[rival].health,
@@ -506,7 +521,7 @@ def test_fighters_in_the_air_pass_through_each_other():
 
 def test_ko_ends_the_round():
     fight = new()
-    fight.fighters["p2"].health = JAB.chip
+    fight.fighters["p2"].health = JAB.damage
     events = script(fight, 20, p1={0: A})
     assert kinds(events)[-1] == "ko" and kinds(events).count("ko") == 1
     assert fight.over and fight.winner == "p1"
@@ -517,7 +532,7 @@ def test_ko_ends_the_round():
 
 def test_a_double_ko_is_a_draw():
     fight = new()
-    fight.fighters["p1"].health = fight.fighters["p2"].health = JAB.chip
+    fight.fighters["p1"].health = fight.fighters["p2"].health = JAB.damage
     events = script(fight, 20, p1={0: A}, p2={0: A})
     assert "ko" in kinds(events)
     assert fight.over and fight.winner is None
@@ -538,7 +553,7 @@ def test_timeout_higher_health_wins_and_equal_is_a_draw():
 
 def test_ko_beats_timeout_on_the_same_frame():
     fight = new()
-    fight.fighters["p2"].health = JAB.chip
+    fight.fighters["p2"].health = JAB.damage
     fight.frames_left = JAB_HIT_STEP + 1
     events = script(fight, 20, p1={0: A})
     assert "ko" in kinds(events) and "timeout" not in kinds(events)
@@ -583,12 +598,11 @@ def test_same_inputs_same_fight():
         events = []
         for _ in range(600):
             events.extend(fight.step(random_inputs(rng)))
-        state = [(f.x, f.y, f.health, f.action, sorted(f.code.x_cells), sorted(f.code.z_rows),
-                  f.crouching)
+        state = [(f.x, f.y, f.health, f.action, f.basis, f.crouching)
                  for f in fight.fighters.values()]
         results.append((events, state, fight.frames_left, fight.over, fight.winner))
     assert results[0] == results[1]
-    assert any(e.kind in ("hit", "logical") for e in results[0][0])      # the run did fight
+    assert any(e.kind in ("hit", "block") for e in results[0][0])      # the run did fight
 
 
 PAIRINGS = [(a, b) for a in CHARACTERS.values() for b in CHARACTERS.values()]
@@ -609,7 +623,7 @@ def test_a_jab_connects_at_the_closest_spacing():
             hold = FighterInput(down=crouching)
             events = script(fight, 20, **{attacker: {i: jab if i == 0 else hold for i in range(20)},
                                           rival: hold})
-            assert [e.player for e in of(events, "hit", "logical")] == [rival], (
+            assert [e.player for e in of(events, "hit", "block")] == [rival], (
                 c1.name, c2.name, attacker, crouching)
 
 
@@ -620,7 +634,7 @@ DOWN = FighterInput(down=True)
 
 
 def results(events):
-    return [(e.kind, e.error) for e in of(events, "hit", "logical")]
+    return [(e.kind, e.error) for e in of(events, "hit", "block")]
 
 
 def grab_lands(gap, press, crouching=False):
@@ -630,32 +644,47 @@ def grab_lands(gap, press, crouching=False):
     return fight, results(events)
 
 
-def test_syndrome_grab_lands_on_trio_in_either_stance():
+def test_measure_lands_on_trio_in_either_stance_and_colour():
     for crouching in (False, True):
-        fight, hits = grab_lands(64.0, X, crouching)        # well outside a throw's reach
-        assert hits == [("hit", shor.Z)], crouching          # a Z on MID: alone, correctable
-        trio = fight.fighters["p2"]
-        assert trio.health == 100 - GRAB.chip
+        for colour in (Z_BASIS, X_BASIS):
+            fight = versus(QUINT, TRIO, 64.0)                   # well outside a throw's reach
+            fight.fighters["p2"].basis = colour
+            events = script(fight, 70, p1={0: X}, p2=DOWN if crouching else IDLE)
+            assert results(events) == [("hit", basis.Y)], (crouching, colour)   # a throw: both
+            trio = fight.fighters["p2"]
+            assert trio.health == 100 - GRAB.damage
     # the grab knocks down: a few frames after it lands, TRIO is on the floor
     fight = versus(QUINT, TRIO, 64.0)
     for i in range(70):
-        if of(fight.step({"p1": X if i == 0 else IDLE, "p2": IDLE}), "hit", "logical"):
+        if of(fight.step({"p1": X if i == 0 else IDLE, "p2": IDLE}), "hit", "block"):
             break
     script(fight, 8)
     assert fight.fighters["p2"].action == "knockdown"
 
 
-def test_the_syndrome_grab_reaches_further_than_a_throw():
-    def longest(press, error):
-        return max(g for g in range(int(BODY_WIDTH), 140)
-                   if grab_lands(float(g), press)[1] == [("hit", error)])
+def test_measure_collapses_the_rival_into_quints_basis():
+    for quint_basis in (Z_BASIS, X_BASIS):
+        for trio_basis in (Z_BASIS, X_BASIS):
+            fight = versus(QUINT, TRIO, 64.0)
+            fight.fighters["p1"].basis = quint_basis
+            fight.fighters["p2"].basis = trio_basis
+            events = script(fight, 70, p1={0: X})
+            assert fight.fighters["p2"].basis == quint_basis
+            # a measure event only when the rival really changed basis
+            assert len(of(events, "measure")) == (quint_basis != trio_basis)
 
-    grab, throw = longest(X, shor.Z), longest(FighterInput(dx=1, b=True), shor.Y)
+
+def test_measure_reaches_further_than_a_throw():
+    def longest(press):
+        return max(g for g in range(int(BODY_WIDTH), 140)
+                   if grab_lands(float(g), press)[1] == [("hit", basis.Y)])
+
+    grab, throw = longest(X), longest(FighterInput(dx=1, b=True))
     assert throw <= body_width(QUINT, TRIO) + THROW_SLACK
     assert grab >= throw + 15, (grab, throw)
 
 
-def test_a_whiffed_syndrome_grab_leaves_quint_open():
+def test_a_whiffed_measure_leaves_quint_open():
     fight = versus(QUINT, TRIO, 150.0)      # beyond its reach (about 130 px)
     events = script(fight, GRAB.startup + GRAB.active + 5, p1={0: X})
     assert results(events) == []
@@ -663,35 +692,50 @@ def test_a_whiffed_syndrome_grab_leaves_quint_open():
     assert (quint.slot, quint.phase) == ("stand.X", "recovery")    # stuck in its long recovery
 
 
-def test_reencode_clears_flipped_lights_and_has_a_cooldown():
-    reencode = QUINT.moves["crouch.X"]
-    fight = versus(TRIO, QUINT, 200.0)
-    quint = fight.fighters["p2"]
-    quint.code.apply_x(shor.HIGH, shor.A_COL)
-    quint.code.apply_z(shor.MID)             # every row in danger
-    hold = {i: DOWN for i in range(400)}
-    events = script(fight, reencode.startup + 1, p2={**hold, 0: FighterInput(down=True, x=True)})
-    assert [(e.kind, e.player) for e in of(events, "attack", "reencode")] == [
-        ("attack", "p2"), ("reencode", "p2")]
-    assert quint.code.lights == 0            # wiped before the cycle got to it
-    assert quint.code.timer < quint.char.cycle_frames
-    assert quint.code.apply_z(shor.LOW) == shor.FLIPPED     # so the next hit is only correctable again
-    # on cooldown: another press does nothing for 4 s
-    events = script(fight, 60, p2={**hold, 40: FighterInput(down=True, x=True)})
-    assert of(events, "attack", "reencode") == []
-    assert quint.cooldowns["crouch.X"] > 0
-    events = script(fight, reencode.cooldown, p2=hold)
-    events = script(fight, 20, p2={**hold, 0: FighterInput(down=True, x=True)})
-    assert [e.kind for e in of(events, "attack", "reencode")] == ["attack", "reencode"]
+WAVE = QUINT.moves["crouch.X"]
 
 
-def collapse(trio_dx, crouching=False, press_at=60):
+def wave_at(gap, trio_input=IDLE, frames=40):
+    fight = versus(QUINT, TRIO, gap)
+    hold = {i: DOWN for i in range(frames)}
+    events = script(fight, frames, p1={**hold, 0: FighterInput(down=True, x=True)}, p2=trio_input)
+    return fight, events
+
+
+def test_the_hadamard_wave_switches_the_rival_and_does_no_damage():
+    fight, events = wave_at(60.0)
+    trio = fight.fighters["p2"]
+    assert [(e.kind, e.player) for e in of(events, "hit", "block", "switch")] == [("switch", "p2")]
+    assert trio.basis == X_BASIS and trio.health == 100 and trio.action in ("idle", "walk")
+    # about 70 px of reach: further away it misses
+    fight, events = wave_at(140.0)
+    assert of(events, "switch") == [] and fight.fighters["p2"].basis == Z_BASIS
+
+
+def test_a_jump_clears_the_hadamard_wave():
+    fight = versus(QUINT, TRIO, 60.0)
+    trio = fight.fighters["p2"]
+    hold = {i: DOWN for i in range(40)}
+    events = script(fight, 40, p1={**hold, 2: FighterInput(down=True, x=True)}, p2={0: FighterInput(up=True)})
+    assert of(events, "switch") == [] and trio.basis == Z_BASIS
+
+
+def test_the_hadamard_wave_has_a_3_s_cooldown():
+    fight, _ = wave_at(60.0)
+    assert WAVE.cooldown == 180 and fight.fighters["p1"].cooldowns["crouch.X"] > 0
+    hold = {i: DOWN for i in range(30)}
+    events = script(fight, 30, p1={**hold, 0: FighterInput(down=True, x=True)})
+    assert of(events, "attack") == []
+
+
+def collapse(trio_dx, crouching=False, press_at=60, trio_basis=Z_BASIS):
     """QUINT (p1) jumps straight up and presses X once it is higher than `press_at` px
     (on the way up), or, with a negative press_at, once it is falling and lower than
-    -press_at. A TRIO stands (or crouches) trio_dx px to its right. Returns the hits as
-    (kind, error, row), and the TRIO."""
+    -press_at. A TRIO stands (or crouches) trio_dx px to its right, in trio_basis. Returns
+    the hits and blocks as (kind, error, height), and the TRIO."""
     fight = versus(QUINT, TRIO, trio_dx)
     trio = fight.fighters["p2"]
+    trio.basis = trio_basis
     quint = fight.fighters["p1"]
     events, pressed = [], False
     for i in range(200):
@@ -701,23 +745,28 @@ def collapse(trio_dx, crouching=False, press_at=60):
             inp, pressed = X, True
         events += fight.step({"p1": inp, "p2": DOWN if crouching else IDLE})
     assert pressed
-    return [(e.kind, e.error, e.row) for e in of(events, "hit", "logical")], trio
+    heights = {basis.X: HIGH, basis.Z: LOW}     # the slam is green, the shockwave purple
+    return [(e.kind, e.error, heights[e.error]) for e in of(events, "hit", "block")], trio
 
 
-def test_collapse_hits_z_high_directly_and_z_low_with_the_shockwave():
-    collapse_move = QUINT.moves["air.X"]
-    # onto a crouching TRIO: the slam (HIGH) whiffs over the crouch, and the shockwave
-    # is a Z on LOW
+def test_collapse_slam_is_green_and_its_shockwave_purple():
+    # onto a crouching TRIO: the slam (HIGH) whiffs over the crouch; the shockwave is a purple
+    # Z on LOW, so it bounces off a green TRIO and hurts a purple one
     hits, trio = collapse(10.0, crouching=True)
-    assert hits == [("hit", shor.Z, shor.LOW)]
-    assert trio.health == 100 - collapse_move.chip
-    # onto a standing TRIO: it takes both, two rows flipped: a logical error
-    hits, trio = collapse(48.0)
-    assert hits == [("hit", shor.Z, shor.HIGH), ("logical", shor.Z, shor.LOW)]
-    assert trio.health == 100 - collapse_move.chip - (LOGICAL_DAMAGE + collapse_move.bonus)
+    assert hits == [("block", basis.Z, LOW)] and trio.health == 100
+    hits, trio = collapse(10.0, crouching=True, trio_basis=X_BASIS)
+    assert hits == [("hit", basis.Z, LOW)] and trio.health == 100 - QUINT.moves["air.X"].damage
     # far away: nothing
     hits, trio = collapse(150.0)
     assert hits == [] and trio.health == 100
+
+
+def test_collapse_always_has_one_matching_half_for_a_standing_rival():
+    for colour in (Z_BASIS, X_BASIS):
+        hits, trio = collapse(48.0, trio_basis=colour)
+        assert [h[2] for h in hits] == [HIGH, LOW], colour          # slam, then shockwave
+        assert [h[0] for h in hits].count("hit") == 1, (colour, hits)
+        assert trio.health == 100 - QUINT.moves["air.X"].damage
 
 
 def test_a_collapse_that_lands_before_it_dives_has_no_shockwave():
@@ -738,10 +787,13 @@ def chain_on(fight, attacker, buttons):
     return results(events)
 
 
-def test_a_then_b_at_one_height_breaks_either_fighter():
+def test_a_then_b_lands_exactly_one_half_in_every_pairing():
     for c1, c2 in PAIRINGS:
-        fight = versus(c1, c2, 40.0)
-        assert chain_on(fight, "p1", "ab") == [("hit", shor.X), ("logical", shor.X)], (c1.name, c2.name)
+        for colour in (Z_BASIS, X_BASIS):
+            fight = versus(c1, c2, 40.0)
+            fight.fighters["p2"].basis = colour
+            got = [k for k, _ in chain_on(fight, "p1", "ab")]
+            assert sorted(got) == ["block", "hit"], (c1.name, c2.name, colour, got)
 
 
 def test_a_collapse_landing_reports_its_shockwave():
@@ -752,7 +804,7 @@ def test_a_collapse_landing_reports_its_shockwave():
         inp = FighterInput(up=True) if i == 0 else X if quint.action == "jump" and quint.y > 60 else IDLE
         events += fight.step({"p1": inp})
     (wave,) = of(events, "shockwave")
-    assert (wave.player, wave.error) == ("p1", shor.Z)
+    assert (wave.player, wave.error) == ("p1", basis.Z)       # purple
     assert wave.x == quint.x and wave.y == FLOOR_Y
     # a plain jump's landing has none
     fight = versus(QUINT, TRIO, 150.0)
@@ -779,7 +831,7 @@ def test_a_throw_works_from_the_closest_spacing_to_the_end_of_its_range():
             fight = versus(c1, c2, float(gap))
             events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)},
                             p2=FighterInput(down=True) if crouching else IDLE)
-            assert results(events) == [("hit", shor.Y)], (c1.name, c2.name, gap, crouching)
+            assert results(events) == [("hit", basis.Y)], (c1.name, c2.name, gap, crouching)
 
 
 # --- PHASE SLIDE passes under photons ---------------------------------------------------
@@ -805,7 +857,7 @@ def test_a_phase_slide_passes_under_a_photon():
     assert p1.slot == "crouch.X" and p1.phase == "active"
     photon_at(fight, "p2", p1.x + 30)
     events = script(fight, 12, p1=FighterInput(down=True))
-    assert not of(events, "hit", "logical")
+    assert not of(events, "hit", "block")
 
 
 def test_the_slides_hurtbox_is_below_a_photon_only_while_it_slides():
@@ -852,13 +904,13 @@ def test_after_the_round_the_bodies_move_but_nothing_else_does():
     p2 = fight.fighters["p2"]
     x, frames_left = p2.x, fight.frames_left
     health = {k: f.health for k, f in fight.fighters.items()}
-    lights = {k: (sorted(f.code.x_cells), sorted(f.code.z_rows)) for k, f in fight.fighters.items()}
+    bases = {k: f.basis for k, f in fight.fighters.items()}
     events = script(fight, 120, p1=A, p2=A)          # presses after the end do nothing
     assert events == []
     assert p2.x > x                                  # the KO's knockback carries it away
     assert fight.frames_left == frames_left
     assert {k: f.health for k, f in fight.fighters.items()} == health
-    assert {k: (sorted(f.code.x_cells), sorted(f.code.z_rows)) for k, f in fight.fighters.items()} == lights
+    assert {k: f.basis for k, f in fight.fighters.items()} == bases
     assert fight.fighters["p1"].action == "idle"     # the winner finishes its move and stands
 
 
@@ -888,7 +940,7 @@ def run_chain(c1, c2, gap, buttons, crouch=False):
             i += 1
         press_next = False
         events = fight.step({"p1": replace(held, **({btn: True} if btn else {})), "p2": IDLE})
-        if of(events, "hit", "cancel", "logical"):
+        if of(events, "hit", "block"):
             hits += 1
             press_next = True
         if hits == len(buttons) or fight.over:
@@ -910,65 +962,74 @@ def test_a_chain_that_starts_with_a_hit_lands_every_hit(c1, c2, crouch):
             assert run_chain(c1, c2, gap, buttons, crouch) == len(buttons), (gap, buttons)
 
 
-# --- the Shor grid ----------------------------------------------------------------------
+# --- Y: an H on yourself ---------------------------------------------------------------
 
-def press_at(fight, frames, **buttons):
-    """p1 presses the given buttons on the given frames ({button: frame}), down held if `down`."""
-    down = buttons.pop("down", False)
-    events = []
-    for i in range(frames):
-        pressed = {b: f == i for b, f in buttons.items()}
-        events += fight.step({"p1": FighterInput(down=down, **pressed), "p2": IDLE})
-    return events
+Y = FighterInput(y=True)
 
 
-def test_a_jab_lights_its_cell_on_the_rivals_grid():
-    fight = new(gap=50.0)
-    events = press_at(fight, 30, a=0)
-    hit = of(events, "hit")[0]
-    assert (hit.error, hit.row, hit.col) == (shor.X, shor.HIGH, shor.A_COL)
-    assert fight.fighters["p2"].code.x_cells == {(shor.HIGH, shor.A_COL)}
-
-
-def test_two_jabs_at_one_height_cancel():
-    fight = new(gap=50.0)
-    events = press_at(fight, 40, a=0)
-    events += press_at(fight, 40, a=0)
-    assert kinds(of(events, "hit", "cancel", "logical")) == ["hit", "cancel"]
-    assert fight.fighters["p2"].code.lights == 0
-
-
-def test_jab_then_heavy_at_one_height_is_a_logical_error():
-    fight = new(gap=50.0)
-    events = run_chain_events(fight, ["a", "b"])
-    assert kinds(of(events, "hit", "cancel", "logical")) == ["hit", "logical"]
-
-
-def run_chain_events(fight, buttons, crouch=False):
-    """Like run_chain, but returns the events."""
-    held = FighterInput(down=crouch)
-    events, i, press_next = [], 0, True
-    for _ in range(200):
-        btn = buttons[i] if press_next and i < len(buttons) else None
-        if btn:
-            i += 1
-        press_next = False
-        step = fight.step({"p1": replace(held, **({btn: True} if btn else {})), "p2": IDLE})
-        events += step
-        if of(step, "hit", "cancel", "logical"):
-            press_next = True
-        if i == len(buttons) and not press_next and of(step, "hit", "cancel", "logical"):
-            break
-    return events
-
-
-def test_a_z_event_has_no_column_and_a_y_keeps_its_own():
+def test_y_switches_basis_at_once():
     fight = new(gap=200.0)
-    (hit,) = of(script(fight, 120, p1={0: X}), "hit")          # PHOTON: Z on HIGH
-    assert (hit.error, hit.row, hit.col) == (shor.Z, shor.HIGH, None)
-    fight = new(gap=float(BODY_WIDTH))
-    (hit,) = of(script(fight, 20, p1={0: FighterInput(dx=1, b=True)}), "hit")   # the throw: Y
-    assert (hit.error, hit.row, hit.col) == (shor.Y, shor.MID, shor.THROW_COL)
+    p1 = fight.fighters["p1"]
+    events = fight.step({"p1": Y, "p2": IDLE})
+    assert p1.basis == X_BASIS and [(e.kind, e.player) for e in of(events, "switch")] == [("switch", "p1")]
+    fight.step({"p1": Y, "p2": IDLE})
+    assert p1.basis == Z_BASIS                      # and back
+
+
+def test_after_a_switch_you_cannot_attack_for_10_frames_but_can_move():
+    fight = new(gap=200.0)
+    p1 = fight.fighters["p1"]
+    x0 = p1.x
+    script(fight, 1, p1=Y)
+    events = script(fight, 9, p1=FighterInput(dx=1, a=True))
+    assert of(events, "attack") == [] and p1.x > x0     # no attack, but it walked
+    events = script(fight, 2, p1=FighterInput(dx=1, a=True))
+    assert of(events, "attack")                         # the 10 frames are up
+
+
+def test_a_hit_during_the_switch_recovery_is_judged_by_the_new_colour():
+    fight = new()
+    p2 = fight.fighters["p2"]
+    # p2 switches to purple just before p1's (green) jab lands: it bounces off
+    events = script(fight, 30, p1={0: A}, p2={JAB_HIT_STEP - 1: Y})
+    assert p2.basis == X_BASIS and kinds(of(events, "hit", "block")) == ["block"]
+
+
+def test_switching_is_only_possible_when_free():
+    fight = new(gap=200.0)
+    p1 = fight.fighters["p1"]
+    script(fight, 1, p1=A)
+    assert p1.action == "attack"
+    script(fight, 1, p1=Y)                          # mid-attack: no switch
+    assert p1.basis == Z_BASIS
+    fight = new()
+    p2 = fight.fighters["p2"]
+    script(fight, JAB_HIT_STEP + 1, p1={0: A})
+    assert p2.action == "hitstun"
+    script(fight, 1, p2=Y)                          # in hitstun: no switch
+    assert p2.basis == Z_BASIS
+    fight = new(gap=200.0)
+    p1 = fight.fighters["p1"]
+    script(fight, 3, p1=FighterInput(up=True))
+    script(fight, 1, p1=Y)                          # in the air: a switch
+    assert p1.basis == X_BASIS
+
+
+def test_a_dive_that_lands_switches_the_diver_and_one_that_bounces_off_does_not():
+    for rival, switched in ((Z_BASIS, True), (X_BASIS, False)):
+        fight = new(gap=60.0)
+        p1 = fight.fighters["p1"]
+        fight.fighters["p2"].basis = rival
+        script(fight, 1, p1=FighterInput(up=True, dx=1))
+        script(fight, 12)
+        events = []
+        for i in range(30):
+            events += script(fight, 1, p1={0: X} if i == 0 else IDLE)
+            if of(events, "hit", "block"):
+                break
+        assert kinds(of(events, "hit", "block")) == ["hit" if switched else "block"]
+        assert (p1.basis == X_BASIS) == switched
+        assert len(of(events, "switch")) == switched
 
 
 # --- heights decide dodges; the specials rework -----------------------------------------
@@ -978,18 +1039,18 @@ from brawl_ket.fight import can_reach  # noqa: E402
 
 def test_high_whiffs_on_a_crouch_and_low_on_a_jump():
     f = Fight({"p1": TRIO, "p2": TRIO}).fighters["p2"]
-    assert can_reach(shor.HIGH, f) and can_reach(shor.MID, f) and can_reach(shor.LOW, f)
+    assert can_reach(HIGH, f) and can_reach(MID, f) and can_reach(LOW, f)
     f.crouching = True
-    assert not can_reach(shor.HIGH, f) and can_reach(shor.MID, f) and can_reach(shor.LOW, f)
+    assert not can_reach(HIGH, f) and can_reach(MID, f) and can_reach(LOW, f)
     f.crouching, f.y = False, 30.0
-    assert can_reach(shor.HIGH, f) and can_reach(shor.MID, f) and not can_reach(shor.LOW, f)
+    assert can_reach(HIGH, f) and can_reach(MID, f) and not can_reach(LOW, f)
 
 
 def test_a_standing_jab_whiffs_over_a_crouching_rival():
     fight = new(gap=50.0)
     script(fight, 2, p2=FighterInput(down=True))
     events = script(fight, 30, p1={0: A}, p2=FighterInput(down=True))
-    assert not of(events, "hit", "cancel", "logical")
+    assert not of(events, "hit", "block")
 
 
 def test_a_crouching_rival_ducks_a_photon():
@@ -997,18 +1058,18 @@ def test_a_crouching_rival_ducks_a_photon():
     script(fight, 2, p1=FighterInput(down=True))
     photon_at(fight, "p2", fight.fighters["p1"].x + 30)
     events = script(fight, 12, p1=FighterInput(down=True))
-    assert not of(events, "hit", "cancel", "logical")
+    assert not of(events, "hit", "block")
 
 
-def test_the_syndrome_grab_reaches_130_px():
+def test_measure_reaches_130_px():
     # Reach is the largest starting gap (between the fighters' x, from a standing start)
     # at which the grab still connects: the measure the playtest's "about 75 px" used.
     fight = versus(QUINT, TRIO, 125.0)
     events = script(fight, 60, p1={0: X})
-    assert [(e.kind, e.error, e.row) for e in of(events, "hit", "logical")] == [("hit", shor.Z, shor.MID)]
+    assert [(e.kind, e.error) for e in of(events, "hit", "block")] == [("hit", basis.Y)]
     for gap in (140.0, 150.0):
         fight = versus(QUINT, TRIO, gap)
-        assert of(script(fight, 60, p1={0: X}), "hit", "logical") == [], gap
+        assert of(script(fight, 60, p1={0: X}), "hit", "block") == [], gap
 
 
 def test_the_dive_lands_within_14_frames_of_the_apex():
@@ -1032,7 +1093,7 @@ def test_a_dive_that_hits_bounces_back():
         script(fight, 1)
     hit = []
     for i in range(30):
-        hit = of(script(fight, 1, p1={0: X} if i == 0 else IDLE), "hit", "logical")
+        hit = of(script(fight, 1, p1={0: X} if i == 0 else IDLE), "hit", "block")
         if hit:
             break
     assert hit
@@ -1042,18 +1103,6 @@ def test_a_dive_that_hits_bounces_back():
     x_at_hit = p1.x
     script(fight, 12 + HITSTOP)
     assert p1.x < x_at_hit
-
-
-def test_collapse_slam_and_shockwave_together_are_a_logical_error():
-    fight = versus(QUINT, TRIO, 40.0)
-    script(fight, 1, p1=FighterInput(up=True))
-    for _ in range(14):
-        script(fight, 1)
-    events = script(fight, 60, p1={0: X})
-    hits = of(events, "hit", "logical")
-    assert [e.kind for e in hits] == ["hit", "logical"]
-    assert [e.row for e in hits] == [shor.HIGH, shor.LOW]
-    assert fight.fighters["p2"].action == "knockdown"
 
 
 def test_collapse_shockwave_reaches_60_px_either_side():
@@ -1068,7 +1117,7 @@ def test_a_bounced_dive_recovers_on_landing_and_cannot_attack_again_in_the_air()
     steps = []                  # each step's p1 events: X is pressed on every one
     for _ in range(120):
         steps.append([e.kind for e in fight.step({"p1": X, "p2": IDLE}) if e.player in ("p1", "p2")])
-    hit_at = next(i for i, k in enumerate(steps) if "hit" in k or "logical" in k)
+    hit_at = next(i for i, k in enumerate(steps) if "hit" in k)
     land_at = next(i for i, k in enumerate(steps) if i > hit_at and "land" in k)
     attacks = [i for i, k in enumerate(steps) if "attack" in k]
     assert attacks[0] < hit_at                      # the DIVE itself
@@ -1077,26 +1126,30 @@ def test_a_bounced_dive_recovers_on_landing_and_cannot_attack_again_in_the_air()
     assert later and later[0] - land_at >= TRIO.moves["air.X"].recovery
 
 
-def test_the_syndrome_grab_catches_a_jumping_rival():
+def test_measure_catches_a_jumping_rival():
     fight = versus(QUINT, TRIO, 64.0)
     trio = fight.fighters["p2"]
     events = script(fight, 40, p1={0: X}, p2={QUINT.moves["stand.X"].startup - 2: FighterInput(up=True)})
-    hits = of(events, "hit", "logical")
-    assert [(e.kind, e.error, e.row) for e in hits] == [("hit", shor.Z, shor.MID)]
+    hits = of(events, "hit", "block")
+    assert [(e.kind, e.error) for e in hits] == [("hit", basis.Y)]
     assert trio.action == "knockdown"
 
 
 def test_a_jump_clears_a_sweep_that_hits_a_standing_rival():
     SWEEP = TRIO.moves["crouch.B"]
     sweep = {0: FighterInput(down=True, b=True)}
-    # standing, the sweep hits on its first active frame
-    hits = of(script(new(gap=50.0), 40, p1=sweep), "hit", "logical")
-    assert [(e.kind, e.row) for e in hits] == [("hit", shor.LOW)]
+    # standing, the sweep (the other colour: it matches a purple rival) hits on its first
+    # active frame
+    fight = new(gap=50.0)
+    fight.fighters["p2"].basis = X_BASIS
+    hits = of(script(fight, 40, p1=sweep), "hit", "block")
+    assert [(e.kind, e.error) for e in hits] == [("hit", basis.Z)]
     # jumping on that same frame, the rival is only 11.5 px up, still level with the sweep's
     # box: it is the height rule, not the boxes, that makes it whiff
     fight = new(gap=50.0)
     p2 = fight.fighters["p2"]
+    p2.basis = X_BASIS
     events = script(fight, SWEEP.startup + 1, p1=sweep, p2={SWEEP.startup: FighterInput(up=True)})
     assert 0 < p2.y < SWEEP.hitbox.y + SWEEP.hitbox.h
     events += script(fight, 40)
-    assert of(events, "hit", "logical") == [] and p2.health == 100
+    assert of(events, "hit", "block") == [] and p2.health == 100

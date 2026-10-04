@@ -2,7 +2,7 @@
 
 Joystick 0 = P1 (left, blue), joystick 1 = P2 (right, red). The raw button
 numbers are the ones confirmed on the cabinet (see ../../../AGENTS.md):
-printed A = 1, B = 2, X = 0, Start = 9, Select = 8.
+printed A = 1, B = 2, X = 0, Y = 3, Start = 9, Select = 8.
 """
 
 from __future__ import annotations
@@ -28,9 +28,14 @@ START_X = {"p1": 220, "p2": 420}
 # --- Round timing and rules ---------------------------------------------------
 ROUND_FRAMES = frames(60.0)
 ROUNDS_TO_WIN = 2
-LOGICAL_DAMAGE = 25         # plus Move.bonus (5 for heavies and specials)
 HITSTOP = 5
-HITSTOP_LOGICAL = 12
+HITSTOP_KNOCKDOWN = 10   # a hit that knocks down freezes the fight a little longer
+SWITCH_RECOVERY = 10     # after Y (an H on yourself): frames you can't attack (you can move)
+# GAME RULE: a wrong-colour hit changes nothing (that is the physics: no damage), but the
+# defender is still pushed back (at least BLOCK_PUSH px/frame) and held in block-stun for the
+# move's hitstun, so the attacker's string goes on and its matching half can land.
+BLOCK_PUSH = 2.0
+BLOCK_HITSTOP = 3
 BUFFER_FRAMES = 6
 CHAIN_MAX = 3
 BODY_MARGIN = 8          # the push box reaches this far past each fighter's standing hurtbox, px
@@ -60,7 +65,7 @@ INPUT_CONFIG = {
     "p1": {"joystick_index": 0, "hat_index": 0, "axes": (0, 1)},
     "p2": {"joystick_index": 1, "hat_index": 0, "axes": (0, 1)},
     "system": {
-        "a_button": 1, "b_button": 2, "x_button": 0, "start_button": 9,
+        "a_button": 1, "b_button": 2, "x_button": 0, "y_button": 3, "start_button": 9,
         "select_button": 8, "keyboard_quit": "K_ESCAPE",
     },
     "axis_deadzone": 0.25,
@@ -72,9 +77,9 @@ INPUT_CONFIG = {
 KEYMAP = {
     # P1's dev keys must avoid the pad's own letters l, x, r, b, y, a.
     "p1": {"left": ["K_s"], "right": ["K_f"], "up": ["K_e"], "down": ["K_d"],
-           "a": ["K_q"], "b": ["K_w"], "x": ["K_t"], "start": ["K_1"]},
+           "a": ["K_q"], "b": ["K_w"], "x": ["K_t"], "y": ["K_g"], "start": ["K_1"]},
     "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"],
-           "a": ["K_PERIOD"], "b": ["K_COMMA"], "x": ["K_SLASH"], "start": ["K_2"]},
+           "a": ["K_PERIOD"], "b": ["K_COMMA"], "x": ["K_SLASH"], "y": ["K_SEMICOLON"], "start": ["K_2"]},
 }
 
 

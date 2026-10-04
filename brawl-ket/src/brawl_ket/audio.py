@@ -1,5 +1,5 @@
 """Synthesised chiptune: a title loop, a 150 bpm fight loop and the effects for
-every hit, logical error and round call. No audio files, no numpy.
+every hit, bounce, basis switch and round call. No audio files, no numpy.
 
 Adapted from Planck Time's audio.py (from Gate Drop's, from Overquqed's). Music
 is built by tiling one waveform period per note (array repetition runs in C),
@@ -230,23 +230,24 @@ def build_sfx() -> dict[str, list[int]]:
         # the fight
         "swing": noise_wave(0.06, 0.1, decay=45, hold=3, seed=2),
         "hit": mix(tone(150, 0.08, 0.35, "square", decay=30, slide=0.5), noise_wave(0.06, 0.3, decay=50, hold=2)),
-        # the logical error: a low tritone chord over a long crunch
-        "logical": mix(tone(c("E3"), 0.45, 0.2, "saw", decay=4), tone(c("A#3"), 0.45, 0.18, "square", decay=4),
-                       tone(c("E4"), 0.3, 0.12, "square", decay=6), noise_wave(0.3, 0.25, decay=8, hold=4, seed=9)),
-        "tick": concat(tone(1320, 0.025, 0.14, "triangle"), tone(1760, 0.035, 0.14, "triangle", decay=20)),
+        # a wrong-colour hit: a bright ping as the attack bounces off
+        "ping": concat(tone(c("E6"), 0.03, 0.2, "triangle"), tone(c("B6"), 0.09, 0.16, "triangle", decay=18)),
+        # a basis switch (an H): a quick rising whoosh
+        "whoosh": mix(tone(400, 0.12, 0.14, "triangle", decay=8, slide=2.5), noise_wave(0.1, 0.1, decay=25, hold=2, seed=4)),
+        # MEASURE collapsing the rival into QUINT's basis: a falling zap
+        "measure": tone(c("C6"), 0.18, 0.2, "square", decay=10, slide=0.35),
         "photon": tone(700, 0.16, 0.2, "pulse", decay=10, slide=2.2),
-        "reencode": _arp([c("E5"), c("B5"), c("E6"), c("B6")], 0.035, 0.18, "triangle"),
         "shockwave": mix(tone(70, 0.3, 0.45, "sine", decay=8, slide=0.5), noise_wave(0.25, 0.3, decay=12, hold=6)),
     }
 
 
 CUE_SOUNDS = {"blip": "blip", "pause": "pause", "round": "round", "fight": "fight", "ko": "ko",
               "timeout": "timeout", "perfect": "perfect", "draw": "draw", "match_won": "match"}
-# the fight's events; None: deliberately silent (a stance switch or a landing would chatter)
-EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "logical": "logical", "corrected": "tick",
-                "projectile": "photon", "reencode": "reencode", "shockwave": "shockwave",
-                "switch": None, "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
-SUPERSEDES = {"logical": "hit"}     # a logical error's sting replaces its own hit's thump
+# the fight's events; None: deliberately silent (a landing would chatter)
+EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "whoosh", "measure": "measure",
+                "projectile": "photon", "shockwave": "shockwave",
+                "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
+SUPERSEDES = {"measure": "hit"}     # MEASURE's zap replaces the thump of its own throw
 
 
 def sounds_for(events: list) -> list[str]:

@@ -3,13 +3,14 @@ the hit effects and the match's screens (title, select, round calls, result, pau
 
 The puppets are drawn from poses.joints() every frame as thick capsules with a
 2 px ink outline (back limbs a darker shade, a highlight stripe on the torso,
-a visor in the character's accent colour). Everything static, the lab wall,
-the floor, the ring sprites and every piece of text, is drawn once and blitted,
-so a frame costs well under 2 ms of CPU on the dev machine.
+a visor in the character's accent colour), the whole body in the colour of
+its basis: green for the Z basis, purple for the X basis. Everything static,
+the lab wall, the floor and every piece of text, is drawn once and blitted, so
+a frame costs well under 2 ms of CPU on the dev machine.
 
-The renderer only reads the fight. Effects (sparks, pop-ups, the LOGICAL ERROR!
-banner, the shake, the light flashes) are started by the frame's events and
-timed in frames, advanced once per draw_fight call.
+The renderer only reads the fight. Effects (sparks, pop-ups, pings, the shake)
+are started by the frame's events and timed in frames, advanced once per
+draw_fight call.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import pygame
 
 from . import match as M
 from . import palette as P
-from . import shor
+from . import basis
 from .config import (
     FLOOR_Y,
     FPS,
@@ -49,36 +50,27 @@ PLATES = {"lean": False, "heavy": True}    # armour: the heavy's wedge torso, pl
 # the heavy's wedge torso: half its width (px) at the shoulders, the waist and the belt
 CHEST_HALF, WAIST_HALF, BELT_HALF = 21, 13, 14
 
-DANGER_BEAT = 24            # frames in one pulse of the danger cells and rows
-TAG_ABOVE_HEAD = 46         # the grid sits this far above the head's centre
-RING_STEPS = 24             # pre-drawn cycle-ring sprites
-RING_R = 7                  # the ring's radius, px
-CELL, CELL_GAP = 6, 3       # a grid cell and the gap between cells, px
-GRID = 3 * CELL + 2 * CELL_GAP              # 24: the 3x3 grid
-PLATE = GRID + 8                            # the plate around it
-TAG_HALF = PLATE / 2 + 2 + 2 * RING_R + 1   # half a tag's width: the plate, then the ring
 BAR_W, BAR_H, BAR_Y = 250, 12, 14
-Z_CELL = P.shade(P.GATE[shor.Z], 0.6)      # the clear cells of a flipped row, dark on its blue
+
+# The bases' colours: a body is drawn in its basis's, an attack in the colour of the basis it
+# changes (an X is green, a Z purple; a Y, a throw, both).
+GREEN = (72, 200, 96)
+PURPLE = (160, 88, 232)
+BASIS_BODY = {basis.Z_BASIS: GREEN, basis.X_BASIS: PURPLE}
+ERROR_COLOUR = {basis.X: GREEN, basis.Z: PURPLE, basis.Y: P.WHITE}
 
 # effect lengths, in frames
 SPARK_FRAMES = 10
 POPUP_FRAMES = 40
-BANNER_FRAMES = 75
+PING_FRAMES = 16            # a wrong-colour hit: a ring bouncing off
 SHAKE_FRAMES = 20
 SHAKE_PX = 6
-FLASH_FRAMES = 24           # the grid after a correction (green) or a logical error (red)
-POP_FRAMES = 12             # a cancelled light pops white this long
 POPUP_ROOM = 40             # a new pop-up replaces any older one this close across (px)
 WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the floor
 WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
-PULSE_FRAMES = 20           # RE-ENCODE: a ring of light growing out of the fighter
 HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
-TAG_FOLLOW = 0.3            # the grid eases towards the head by this much per frame
-TAG_EDGE = 4                # a tag keeps this far from the screen's edges
-BANNER_Y = 80
-BANNER_TEXT = "LOGICAL ERROR!"
 CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are centred here
 BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 
@@ -323,20 +315,6 @@ def make_stage() -> tuple[pygame.Surface, list[tuple[pygame.Rect, tuple]]]:
     return surf, lights
 
 
-def make_ring(k: float) -> pygame.Surface:
-    """The cycle ring at progress k: a dark disc with a pie of white filling clockwise."""
-    s = pygame.Surface((2 * RING_R + 1, 2 * RING_R + 1), pygame.SRCALPHA)
-    c = (RING_R, RING_R)
-    pygame.draw.circle(s, P.INK, c, RING_R)
-    pygame.draw.circle(s, P.SLATE, c, 5)
-    if k > 0:
-        pts = [c] + [(c[0] + 5.5 * math.sin(2 * math.pi * k * i / 12), c[1] - 5.5 * math.cos(2 * math.pi * k * i / 12))
-                     for i in range(13)]
-        pygame.draw.polygon(s, P.WHITE, pts)
-    pygame.draw.circle(s, P.INK, c, 2)
-    return s
-
-
 # --- effects -------------------------------------------------------------------------------------
 
 
@@ -359,7 +337,6 @@ class Renderer:
             self.stage = stage.convert(surface)     # the same pixel format: the cheapest blit
         except pygame.error:    # no display (a headless benchmark on the cabinet, whose SDL has
             self.stage = stage  # no dummy driver): both are plain surfaces in the default format
-        self.rings = [make_ring(i / RING_STEPS) for i in range(RING_STEPS + 1)]
         self.dim = pygame.Surface((W, H), pygame.SRCALPHA)     # darkens the game under a menu
         self.dim.fill((*P.INK, 150))
         self.bands: dict[int, pygame.Surface] = {}
@@ -370,27 +347,16 @@ class Renderer:
         self._fight: Fight | None = None
         self._reset()
         # render the effects' text now, so the first hit doesn't stall a frame
-        for e in (shor.X, shor.Y, shor.Z):
-            outlined(f"{e}!", 16, P.GATE[e], thick=2)
-        outlined("I", 16, P.WHITE, thick=2)
-        outlined(BANNER_TEXT, 32, P.BAD, thick=2)
+        for e in (basis.X, basis.Y, basis.Z):
+            outlined(f"{e}!", 16, ERROR_COLOUR[e], thick=2)
 
     def _reset(self) -> None:
         self.trail = {p: 0.0 for p in PLAYERS}          # the damage trail on each bar
         self.trail_wait = {p: 0 for p in PLAYERS}
         self.last_health = {p: 0.0 for p in PLAYERS}
-        self.tag_y: dict[str, float | None] = {p: None for p in PLAYERS}
         self.pose_seen: dict[str, tuple] = {p: (None, 0) for p in PLAYERS}
         self.pose_start: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.pose_last: dict[str, Pose | None] = {p: None for p in PLAYERS}
-        self.flash = {p: (None, 0) for p in PLAYERS}    # (colour, frames left) on the lights
-        # the cells a flash lights: None for the whole grid, else the (row, col) cells
-        self.flash_cells: dict[str, frozenset[tuple[int, int]] | None] = {p: None for p in PLAYERS}
-        # each code as last drawn, (x cells, z rows): the state before this frame's events
-        self.seen_code: dict[str, tuple[frozenset, frozenset]] = {p: (frozenset(), frozenset())
-                                                                  for p in PLAYERS}
-        # cancelled lights popping white: (row, col, frames left), col -1 for a whole row
-        self.pops: dict[str, list[tuple[int, int, int]]] = {p: [] for p in PLAYERS}
         self.effects.clear()
         self.shake = 0
 
@@ -421,72 +387,37 @@ class Renderer:
         if self.show_boxes:
             self._boxes(fight, ox, oy)
         self._draw_effects(ox, oy, world=True)
-        tags = {p: self._tag_place(p, fight.fighters[p], heads[p]) for p in PLAYERS}
-        self._separate(tags, fight)
-        for p in PLAYERS:
-            self._code_tag(p, fight.fighters[p], tags[p], ox, oy)
         self._hud(fight, wins)
         self._draw_effects(0, 0, world=False)
         self._advance()
-        for p in PLAYERS:
-            code = fight.fighters[p].code
-            self.seen_code[p] = (frozenset(code.x_cells), frozenset(code.z_rows))
 
     # --- effects ----------------------------------------------------------------------------
 
     def _start_effects(self, events: list) -> None:
         older = [fx for fx in self.effects if fx.kind == "popup"]     # from earlier frames
         for e in events:
-            if e.kind in ("hit", "logical", "cancel"):
-                color = P.WHITE if e.kind == "cancel" else P.GATE.get(e.error or "X", P.WHITE)
-                text = "I" if e.kind == "cancel" else f"{e.error}!"
+            if e.kind == "hit":
+                color = ERROR_COLOUR.get(e.error or basis.X, P.WHITE)
                 self.effects.append(Effect("spark", e.x, e.y, SPARK_FRAMES, SPARK_FRAMES, color))
-                # the newest wins: a jab's X! still rising would sit over the next jab's I
+                # the newest wins: an older pop-up still rising here would sit over this one
                 stale = {id(fx) for fx in older if abs(fx.x - e.x) < POPUP_ROOM}
                 if stale:
                     self.effects = [fx for fx in self.effects if id(fx) not in stale]
-                self.effects.append(Effect("popup", e.x, e.y - 18, POPUP_FRAMES, POPUP_FRAMES, color, text))
-            if e.kind == "cancel" and e.player and e.row is not None:
-                # an X cancels its cell; a Z (or a Y) its row's flip, so the whole row pops
-                self.pops[e.player].append((e.row, e.col if e.error == shor.X else -1, POP_FRAMES))
-            elif (e.kind == "hit" and e.error == shor.Y and e.player and e.row is not None
-                  and (e.row, e.col) in self.seen_code[e.player][0]):
-                # a Y's X half went first and cancelled a lit cell (its Z half then flipped the
-                # row, so the event is a hit): the cell pops like any cancel, its I under the Y!
-                self.pops[e.player].append((e.row, e.col, POP_FRAMES))
-                self.effects.append(Effect("popup", e.x, e.y + 2, POPUP_FRAMES, POPUP_FRAMES, P.WHITE, "I"))
-            if e.kind == "logical":
-                self.effects = [fx for fx in self.effects if fx.kind != "banner"]
-                self.effects.append(Effect("banner", W / 2, BANNER_Y, BANNER_FRAMES, BANNER_FRAMES, P.BAD,
-                                           BANNER_TEXT))
-                self.shake = SHAKE_FRAMES
-                if e.player:
-                    self.flash[e.player] = (P.BAD, FLASH_FRAMES)
-                    self.flash_cells[e.player] = None           # the whole grid
-            elif e.kind == "corrected" and e.player:
-                # only the lights the tick cleared: the X cells and every cell of a flipped row
-                x_cells, z_rows = self.seen_code[e.player]
-                self.flash[e.player] = (P.GOOD, FLASH_FRAMES)
-                self.flash_cells[e.player] = x_cells | {(r, c) for r in z_rows for c in range(3)}
+                self.effects.append(Effect("popup", e.x, e.y - 18, POPUP_FRAMES, POPUP_FRAMES, color,
+                                           f"{e.error}!"))
+            elif e.kind == "block":
+                color = ERROR_COLOUR.get(e.error or basis.X, P.WHITE)
+                self.effects.append(Effect("ping", e.x, e.y, PING_FRAMES, PING_FRAMES, color))
             elif e.kind == "shockwave":
-                color = P.GATE.get(e.error or "Z", P.WHITE)
+                color = ERROR_COLOUR.get(e.error or basis.Z, P.WHITE)
                 self.effects.append(Effect("wave", e.x, e.y, WAVE_FRAMES, WAVE_FRAMES, color))
                 self.shake = max(self.shake, SHAKE_FRAMES // 2)
-            elif e.kind == "reencode" and e.player and self._fight is not None:
-                f = self._fight.fighters[e.player]
-                self.flash[e.player] = (P.WHITE, FLASH_FRAMES)
-                self.flash_cells[e.player] = None
-                self.effects.append(Effect("pulse", f.x, FLOOR_Y - f.y, PULSE_FRAMES, PULSE_FRAMES, P.SKY))
 
     def _advance(self) -> None:
         for fx in self.effects:
             fx.left -= 1
         self.effects = [fx for fx in self.effects if fx.left > 0]
         self.shake = max(0, self.shake - 1)
-        for p in PLAYERS:
-            color, left = self.flash[p]
-            self.flash[p] = (color, left - 1) if left > 1 else (None, 0)
-        self.pops = {p: [(r, c, n - 1) for r, c, n in v if n > 1] for p, v in self.pops.items()}
 
     def _shake_offset(self) -> tuple[int, int]:
         if self.shake <= 0:
@@ -514,23 +445,18 @@ class Renderer:
                     pygame.draw.circle(surf, fx.color, _pt((cx, cy)), 5 - age)
             elif world and fx.kind == "wave":
                 self._wave(fx, age, ox, oy)
-            elif world and fx.kind == "pulse":
+            elif world and fx.kind == "ping":
+                # the attack bounces off: a ring in its colour springing out
                 k = age / fx.life
-                rect = pygame.Rect(0, 0, round(40 + 80 * k), round(60 + 120 * k))
-                rect.midbottom = (round(fx.x) + ox, round(fx.y) + 6 + oy)
-                width = 3 if k < 0.5 else 2 if k < 0.8 else 1
-                pygame.draw.ellipse(surf, P.INK, rect.inflate(2, 2), width + 2)
-                pygame.draw.ellipse(surf, fx.color if age % 4 < 2 else P.WHITE, rect, width)
+                r = round(6 + 16 * (1 - (1 - k) ** 2))
+                width = 3 if k < 0.5 else 2
+                pygame.draw.circle(surf, P.INK, _pt((fx.x + ox, fx.y + oy)), r + 1, width + 2)
+                pygame.draw.circle(surf, P.WHITE if age < 3 else fx.color, _pt((fx.x + ox, fx.y + oy)), r, width)
             elif world and fx.kind == "popup":
                 if fx.left < 10 and fx.left % 4 < 2:
                     continue
                 rise = min(age, 12) * 1.2 + age * 0.15
                 blit_center(surf, outlined(fx.text, 16, fx.color, thick=2), (fx.x + ox, fx.y + oy - rise))
-            elif not world and fx.kind == "banner":
-                if fx.left < 16 and fx.left % 4 < 2:
-                    continue
-                bounce = (6 - age) * 3 if age < 6 else 0
-                blit_center(surf, outlined(fx.text, 32, fx.color, thick=2), (fx.x, fx.y - bounce))
 
     def _wave(self, fx: Effect, age: int, ox: int, oy: int) -> None:
         """A landing shockwave: two flat rings racing out along the floor, with chips of
@@ -574,7 +500,7 @@ class Renderer:
         pygame.draw.ellipse(self.surface, SHADOW, rect)
 
     def _fighter(self, key: str, f: Fighter, ox: int, oy: int) -> tuple[float, float]:
-        body = PLAYER_COLORS[key]
+        body = BASIS_BODY[f.basis]
         accent = ACCENT.get(f.char.name, P.CREAM)
         if f.action in ("hitstun", "knockdown") and f.frame < HIT_FLASH_FRAMES:
             body, accent = P.lighten(body, 0.6), P.WHITE
@@ -597,7 +523,7 @@ class Renderer:
     def _shot(self, s, ox: int, oy: int) -> None:
         left, top, w, h = s.box
         cx, cy = left + w / 2 + ox, top + h / 2 + oy
-        color = P.GATE["X"]
+        color = ERROR_COLOUR[basis.error_for(s.move.colour, basis.Z_BASIS)]
         back = -s.facing
         for i, r in ((3, 2), (2, 3), (1, 4)):       # the trail
             pygame.draw.circle(self.surface, P.shade(color, 0.5 + 0.12 * (3 - i)),
@@ -617,96 +543,6 @@ class Renderer:
                 pygame.draw.rect(self.surface, P.BAD, pygame.Rect(f.world_box(m.hitbox)).move(ox, oy), 1)
         for s in fight.shots:
             pygame.draw.rect(self.surface, P.BAD, pygame.Rect(s.box).move(ox, oy), 1)
-
-    def _tag_place(self, key: str, f: Fighter, head) -> list[float]:
-        """Where a fighter's code tag goes: over the head, easing after it vertically."""
-        target = max(70.0, head[1] - TAG_ABOVE_HEAD)
-        y = self.tag_y[key]
-        y = target if y is None else y + (target - y) * TAG_FOLLOW
-        self.tag_y[key] = y
-        lo, hi = TAG_HALF + TAG_EDGE, W - TAG_HALF - TAG_EDGE
-        return [min(max(head[0], lo), hi), y, head[0]]     # x, y, the head's x
-
-    @staticmethod
-    def _separate(tags: dict[str, list[float]], fight: Fight) -> None:
-        """Two tags never overlap across, however far apart vertically (each code's tag has
-        its own width): each moves out to its own fighter's side, and both stay on screen
-        (at a wall too)."""
-        a, b = tags["p1"], tags["p2"]
-        f1, f2 = fight.fighters["p1"], fight.fighters["p2"]
-        ha = hb = TAG_HALF
-        need = ha + hb
-        if abs(a[0] - b[0]) >= need:
-            return
-        if f2.x != f1.x:
-            side = 1 if f2.x > f1.x else -1     # p2 stands on this side of p1
-        else:
-            side = 1 if b[0] >= a[0] else -1
-        left_half, right_half = (ha, hb) if side > 0 else (hb, ha)
-        mid = (a[0] + b[0]) / 2
-        mid = min(max(mid, left_half + TAG_EDGE + need / 2), W - right_half - TAG_EDGE - need / 2)
-        a[0], b[0] = mid - side * need / 2, mid + side * need / 2
-
-    def _code_tag(self, key: str, f: Fighter, at, ox: int, oy: int) -> None:
-        """The code over the head: a 3x3 grid (rows HIGH, MID, LOW; columns A, B, THROW)
-        on a plate in the player's colour, and the cycle ring beside it.
-
-        An X lights its cell in the X gate's red. A row flipped by a Z is a solid bar of the
-        Z gate's blue, gaps and all, its clear cells a darker blue on it. Danger is a warning,
-        never a state, so it is only an orange outline, on the beat: round the other cells of
-        a row holding one X (a different button there breaks the code), or round each other
-        row once one is flipped (a special there breaks it). A cancelled light pops white for
-        POP_FRAMES (an X its cell, a Z or a whole Y its row). A correction flashes the lights
-        it cleared green; a logical error (and RE-ENCODE, white) flashes the whole grid."""
-        code = f.code
-        surf = self.surface
-        cx, cy = round(at[0]) + ox, round(at[1]) + oy
-        color = PLAYER_COLORS[key]
-        plate = pygame.Rect(0, 0, PLATE, PLATE)
-        plate.center = (cx, cy)
-        tick = min(max(round(at[2] + ox), plate.left + 4), plate.right - 4)
-        pygame.draw.polygon(surf, P.INK, ((tick - 5, plate.bottom), (tick + 5, plate.bottom), (tick, plate.bottom + 6)))
-        pygame.draw.polygon(surf, color, ((tick - 3, plate.bottom), (tick + 3, plate.bottom), (tick, plate.bottom + 3)))
-        pygame.draw.rect(surf, P.INK, plate.inflate(2, 2), border_radius=5)
-        pygame.draw.rect(surf, color, plate, border_radius=4)
-        pygame.draw.rect(surf, P.NIGHT, plate.inflate(-4, -4), border_radius=3)
-        flash, left = self.flash[key]
-        flashing = flash is not None and left % 6 >= 2
-        flash_cells = self.flash_cells[key]
-        beat = (self.t // (DANGER_BEAT // 2)) % 2 == 0
-        x_danger = code.x_danger_rows() if beat else ()
-        z_danger = code.z_danger_rows() if beat else ()
-        pops = {(r, c) for r, c, _ in self.pops[key]}
-        for row in range(3):
-            y = plate.top + 4 + row * (CELL + CELL_GAP)
-            flipped = row in code.z_rows
-            if flipped:                         # solid blue right across the row, gaps and all
-                surf.fill(P.GATE[shor.Z], (plate.left + 3, y - 2, PLATE - 6, CELL + 4))
-            for col in range(3):
-                x = plate.left + 4 + col * (CELL + CELL_GAP)
-                lit_x = (row, col) in code.x_cells
-                if flashing and (flash_cells is None or (row, col) in flash_cells):
-                    c = flash
-                elif lit_x:
-                    c = P.GATE[shor.X]
-                elif flipped:
-                    c = Z_CELL
-                else:
-                    c = P.SLATE
-                if (row, col) in pops or (row, -1) in pops:
-                    c = P.WHITE                 # a cancelled light goes out with a white pop
-                if row in x_danger and not lit_x:
-                    edge = P.ORANGE             # a different button here breaks the code
-                else:
-                    edge = None if flipped else P.INK   # a flipped row's blue shows round its cells
-                if edge is not None:
-                    surf.fill(edge, (x - 1, y - 1, CELL + 2, CELL + 2))
-                surf.fill(c, (x, y, CELL, CELL))
-                surf.fill(P.lighten(c, 0.5), (x, y, 2, 2))
-            if row in z_danger:                 # a special at this height breaks the code
-                pygame.draw.rect(surf, P.ORANGE, (plate.left + 3, y - 1, PLATE - 6, CELL + 2), 1)
-        ring = self.rings[min(RING_STEPS, int(code.progress * RING_STEPS))]
-        blit_center(surf, ring, (plate.right + 2 + RING_R, cy))
 
     # --- the HUD -------------------------------------------------------------------------------
 
@@ -778,7 +614,7 @@ class Renderer:
 
     def draw(self, match: M.Match, events: list) -> None:
         """The whole frame for the match's state. Cues are the match's own; the fight's
-        events (hits, logical errors, ...) start the effects."""
+        events (hits, blocks, switches, ...) start the effects."""
         fight_events = [e for e in events if not isinstance(e, M.Cue)]
         state = match.state
         if state == M.TITLE:
@@ -844,11 +680,12 @@ class Renderer:
             rect = pygame.Rect(0, 0, 52, 8)
             rect.center = (x, FLOOR_Y + 2)
             pygame.draw.ellipse(surf, SHADOW, rect)
-            draw_puppet(surf, POSES["idle"], char.build, (x, FLOOR_Y), facing, PLAYER_COLORS[key],
+            body = GREEN if key == "p1" else PURPLE
+            draw_puppet(surf, POSES["idle"], char.build, (x, FLOOR_Y), facing, body,
                         ACCENT.get(char.name, P.CREAM))
         self._band(32, 156)
         self._logo(72)
-        blit_center(surf, outlined("SHOR CODE  VS  SHOR CODE", 8, P.MIST), (W / 2, 114))
+        blit_center(surf, outlined("COLOUR MUST MATCH TO HURT", 8, P.MIST), (W / 2, 114))
         self._prompt("PRESS START", 138, P.GOLD)
 
     def _attract_overlay(self) -> None:
@@ -859,7 +696,7 @@ class Renderer:
 
     def _select(self, match: M.Match) -> None:
         self._backdrop()
-        self._call("CHOOSE YOUR CODE", P.WHITE, y=24, size=16)
+        self._call("CHOOSE YOUR FIGHTER", P.WHITE, y=24, size=16)
         for key, side in (("p1", -1), ("p2", 1)):
             self._select_panel(key, side, M.ROSTER[match.picks[key]], match.ready[key])
         blit_center(self.surface, outlined("STICK: CHOOSE   A: READY   B: BACK", 8, P.MIST), (W / 2, H - 12))
@@ -879,7 +716,7 @@ class Renderer:
         rect = pygame.Rect(0, 0, 52, 8)
         rect.center = (round(cx), floor + 2)
         pygame.draw.ellipse(surf, SHADOW, rect)
-        draw_puppet(surf, POSES["jab_hit" if ready else "idle"], char.build, (cx, floor), -side, color,
+        draw_puppet(surf, POSES["jab_hit" if ready else "idle"], char.build, (cx, floor), -side, GREEN,
                     ACCENT.get(char.name, P.CREAM))
         # the name between arrows (the arrows go once the pick is locked in)
         name = outlined(char.name, 16, color, thick=2)
@@ -890,7 +727,7 @@ class Renderer:
                 arrow = outlined("<" if d < 0 else ">", 16, P.WHITE, thick=2)
                 blit_center(surf, arrow, (cx + d * (name.get_width() / 2 + 18 + nudge), floor + 20))
         # what it is: its code and its build
-        lines = ("SHOR CODE  |0>_L", TRAITS.get(char.name, ""))
+        lines = ("A YOUR COLOUR, B THE OTHER", TRAITS.get(char.name, ""))
         for i, line in enumerate(lines):
             blit_center(surf, outlined(line, 8, P.MIST), (cx, floor + 40 + 12 * i))
         # the X moves: the buttons, then the names

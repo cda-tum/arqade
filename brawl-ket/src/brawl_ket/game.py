@@ -28,7 +28,8 @@ def merge_pending(pending: FrameInput, now: FrameInput) -> FrameInput:
         now,
         fighters={p: replace(now.fighters[p], a=pending.fighters[p].a or now.fighters[p].a,
                              b=pending.fighters[p].b or now.fighters[p].b,
-                             x=pending.fighters[p].x or now.fighters[p].x) for p in PLAYERS},
+                             x=pending.fighters[p].x or now.fighters[p].x,
+                             y=pending.fighters[p].y or now.fighters[p].y) for p in PLAYERS},
         nav={p: now.nav[p] if now.nav[p] != (0, 0) else pending.nav[p] for p in PLAYERS},
         confirms=either(pending.confirms, now.confirms),
         backs=either(pending.backs, now.backs),
@@ -42,7 +43,7 @@ def consume(pending: FrameInput) -> FrameInput:
     none = {p: False for p in PLAYERS}
     return replace(
         pending,
-        fighters={p: replace(f, a=False, b=False, x=False) for p, f in pending.fighters.items()},
+        fighters={p: replace(f, a=False, b=False, x=False, y=False) for p, f in pending.fighters.items()},
         nav={p: (0, 0) for p in PLAYERS},
         confirms=dict(none), backs=dict(none), pauses=dict(none),
         activity=any(f.dx or f.up or f.down for f in pending.fighters.values()) or pending.held,

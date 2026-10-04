@@ -1,7 +1,7 @@
 """Pads and the dev keyboard, polled once per display frame.
 
 Per pad: the analog stick (axes 0 and 1, deadzoned; the hat only as a fallback,
-which the cabinet never needs because it has none) and the A, B and X buttons
+which the cabinet never needs because it has none) and the A, B, X and Y buttons
 as edge-triggered presses. Start confirms, pauses and starts; Select only joins
 Start for the quit combo. The pure helpers are unit tested; reading real pads
 is verified on the cabinet with --input-test.
@@ -127,7 +127,8 @@ class Input:
     def update(self, dt: float) -> None:
         keys = read_keys()
         system = config.INPUT_CONFIG["system"]
-        a_btn, b_btn, x_btn = system["a_button"], system["b_button"], system["x_button"]
+        a_btn, b_btn, x_btn, y_btn = (system["a_button"], system["b_button"], system["x_button"],
+                                      system["y_button"])
         start = system["start_button"]
         self.keyboard_quit = keyboard_quit_held(keys)
         frame = FrameInput(activity=self.keyboard_quit)
@@ -148,6 +149,7 @@ class Input:
                 dx=dx, up=up, down=dn, a=a,
                 b=b_btn in pressed or "b" in new_keys,
                 x=x_btn in pressed or "x" in new_keys,
+                y=y_btn in pressed or "y" in new_keys,
             )
             frame.confirms[p] = a or start_pressed
             frame.backs[p] = b_btn in pressed or "b" in new_keys

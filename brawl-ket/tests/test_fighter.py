@@ -1,12 +1,12 @@
 from dataclasses import replace
 from types import MappingProxyType
 
-from brawl_ket import shor
+from brawl_ket import basis
+from brawl_ket.basis import X_BASIS, Z_BASIS
 from brawl_ket.config import (
     BUFFER_FRAMES,
     CHAIN_MAX,
     FLOOR_Y,
-    LOGICAL_DAMAGE,
     STAGE_LEFT,
     THROW_RANGE,
 )
@@ -110,10 +110,9 @@ def test_down_in_the_air_does_not_crouch():
     assert not f.crouching and f.stance == "air"
 
 
-def test_fighter_step_does_not_tick_the_code():
+def test_a_fighter_starts_green_with_no_switch_pending():
     f = make()
-    run(f, IDLE, 30)
-    assert f.code.timer == 0
+    assert f.basis == Z_BASIS and f.switch_lock == 0
 
 
 def test_a_press_starts_a_jab_and_it_runs_its_frames():
@@ -255,32 +254,30 @@ def test_ground_attacks_stand_still_and_lunge_only_when_active():
     assert f.x > x1
 
 
-def test_take_hit_chips_or_logical():
-    f = make()
-    h0 = f.health
-    assert f.take_hit(JAB, 1) == shor.FLIPPED
-    assert f.health == h0 - JAB.chip
-    assert f.code.x_cells == {(shor.HIGH, shor.A_COL)}
-    assert f.take_hit(JAB, 1) == shor.CANCEL          # XX = I: chip, no refund
-    assert f.health == h0 - 2 * JAB.chip
-    assert f.code.lights == 0
-    assert f.take_hit(JAB, 1) == shor.FLIPPED
-    assert f.take_hit(HEAVY, 1) == shor.LOGICAL       # A then B at one height
-    assert f.health == h0 - 3 * JAB.chip - LOGICAL_DAMAGE - HEAVY.bonus
-    assert f.code.lights == 0
+def test_take_hit_hurts_only_when_the_colour_matches():
+    f = make()                                       # green: the Z basis
+    assert f.take_hit(JAB, basis.X, 1) == "hit"      # green (an X) changes |0>, |1>
+    assert f.health == 100 - JAB.damage
     g = make()
-    assert g.take_hit(LOW_JAB, 1) == shor.FLIPPED     # any lone hit is correctable
-    assert g.health == g.char.health - LOW_JAB.chip
+    assert g.take_hit(JAB, basis.Z, 1) == "block"    # purple (a Z) leaves them alone
+    assert g.health == 100 and g.basis == Z_BASIS
+    h = make()
+    assert h.take_hit(JAB, basis.Y, 1) == "hit"      # a Y hurts either colour
+    h.basis = X_BASIS
+    assert h.take_hit(JAB, basis.Y, 1) == "hit"
 
 
-def test_logical_damage_includes_the_move_bonus_and_health_clamps():
-    heavy = TRIO.moves["stand.B"]
+def test_a_block_is_block_stun_and_a_push_but_never_a_knockdown():
     f = make()
-    f.take_hit(JAB, 1)                      # flipped
-    assert f.take_hit(heavy, 1) == shor.LOGICAL
-    assert f.health == 100 - JAB.chip - LOGICAL_DAMAGE - heavy.bonus
-    f.health = 1                            # the next hit is only chip, and still clamps
-    f.take_hit(heavy, 1)
+    assert f.take_hit(SWEEP, basis.Z, 1) == "block"
+    assert f.action == "hitstun" and f.stun == SWEEP.hitstun and f.health == 100
+    assert f.vx >= 2.0                               # pushed away from the attacker
+
+
+def test_damage_clamps_at_zero():
+    f = make()
+    f.health = 1
+    f.take_hit(HEAVY, basis.Y, 1)
     assert f.health == 0
 
 
@@ -289,7 +286,7 @@ def test_take_hit_interrupts_a_move_and_stuns():
     start_jab(f)
     run(f, tap("b"))                                # something sits in the buffer
     assert f.buffer
-    f.take_hit(JAB, -1)
+    f.take_hit(JAB, basis.Y, -1)
     assert f.move is None and f.slot is None and f.phase is None
     assert f.buffer == []
     assert f.action == "hitstun" and f.stun == JAB.hitstun
@@ -306,7 +303,7 @@ def test_take_hit_interrupts_a_move_and_stuns():
 
 def test_stun_is_inert_for_exactly_its_value_and_acts_on_the_next_step():
     f = make()
-    f.take_hit(JAB, 1)
+    f.take_hit(JAB, basis.Y, 1)
     n = JAB.hitstun
     held = FighterInput(dx=1)
     run(f, held, n)                                  # N inert steps
@@ -317,7 +314,7 @@ def test_stun_is_inert_for_exactly_its_value_and_acts_on_the_next_step():
 
 def test_knockdown_is_inert_for_forty_steps():
     f = make()
-    f.take_hit(SWEEP, 1)
+    f.take_hit(SWEEP, basis.Y, 1)
     assert f.action == "knockdown" and f.stun == 40
     run(f, IDLE, 39)
     assert f.action == "knockdown"
@@ -329,7 +326,7 @@ def test_knockdown_is_inert_for_forty_steps():
 
 def test_a_press_in_the_last_frames_of_stun_comes_out_on_the_first_free_frame():
     f = make()
-    f.take_hit(JAB, 1)
+    f.take_hit(JAB, basis.Y, 1)
     n = JAB.hitstun
     run(f, IDLE, n - 3)
     assert run(f, tap("a")) == []                    # step N-2, buffered during stun
@@ -341,7 +338,7 @@ def test_a_press_in_the_last_frames_of_stun_comes_out_on_the_first_free_frame():
 
 def test_an_early_press_in_stun_expires():
     f = make()
-    f.take_hit(JAB, 1)
+    f.take_hit(JAB, basis.Y, 1)
     run(f, tap("a"))                                 # step 1 of 16
     ev = run(f, IDLE, JAB.hitstun + 5)
     assert "attack" not in names(ev)
@@ -351,7 +348,7 @@ def test_an_early_press_in_stun_expires():
 def test_hit_while_crouched_recovers_to_crouch():
     f = make()
     run(f, FighterInput(down=True))
-    f.take_hit(SWEEP, 1)
+    f.take_hit(SWEEP, basis.Y, 1)
     run(f, FighterInput(down=True), 40)
     assert f.action == "crouch"
 
@@ -366,21 +363,6 @@ def test_photon_emits_a_projectile_on_its_first_active_frame():
         if ev:
             seen.append((i + 2, ev, f.phase))      # i+2 = step number
     assert seen == [(PHOTON.startup + 1, [("projectile", {"move": PHOTON})], "active")]
-
-
-def test_reencode_move_repairs_on_its_first_active_frame():
-    reencode = replace(
-        JAB, name="re-encode", kind="reencode", hitbox=None, startup=2, active=2, recovery=2,
-    )
-    char = replace(TRIO, moves=MappingProxyType({**TRIO.moves, "stand.X": reencode}))
-    f = Fighter(char, 300, 1)
-    f.code.apply_x(shor.HIGH, shor.A_COL)
-    ev = run(f, tap("x"))
-    assert ev == [("attack", {"slot": "stand.X"})]
-    ev = run(f, IDLE, 2)                           # steps 2, 3: step 3 is the first active frame
-    assert ev == [("reencode", {"repaired": True})]
-    assert f.code.lights == 0
-    assert run(f, IDLE, 3) == []                   # not again on the later active frame
 
 
 def test_world_box_mirrors_with_facing():
@@ -632,20 +614,29 @@ def test_the_sweep_is_fast_from_neutral_and_faster_in_a_chain():
     assert g.slot == "crouch.B" and g.startup == sweep.chain_startup == 7
 
 
-def test_a_logical_error_knocks_down():
+def test_a_knockdown_move_knocks_down_and_others_stun():
     f = Fighter(TRIO, 200, 1)
-    jab, heavy = TRIO.moves["stand.A"], TRIO.moves["stand.B"]
-    assert f.take_hit(jab, -1) == shor.FLIPPED and f.action == "hitstun"
-    assert f.take_hit(heavy, -1) == shor.LOGICAL and f.action == "knockdown"
-    assert f.health == 100 - 2 - (25 + 5)
+    assert f.take_hit(JAB, basis.X, -1) == "hit" and f.action == "hitstun"
+    assert f.take_hit(SWEEP, basis.X, -1) == "hit" and f.action == "knockdown"
+    assert f.health == 100 - JAB.damage - SWEEP.damage
+
+
+def test_switch_is_a_hadamard_on_yourself():
+    f = make()
+    events = run(f, FighterInput(y=True))
+    assert f.basis == X_BASIS and names(events) == ["switch"] and f.switch_lock == 10
+    run(f, IDLE, 10)
+    assert f.switch_lock == 0
+    run(f, FighterInput(y=True))
+    assert f.basis == Z_BASIS
 
 
 def test_a_hit_never_turns_a_knockdown_into_hitstun():
     f = Fighter(TRIO, 200, 1)
-    f.take_hit(SWEEP, -1)
+    f.take_hit(SWEEP, basis.Y, -1)
     assert f.action == "knockdown"
     run(f, IDLE, 30)                    # most of the way up
-    f.take_hit(JAB, -1)
+    f.take_hit(JAB, basis.Y, -1)
     assert f.action == "knockdown" and f.stun >= JAB.hitstun
 
 
@@ -671,5 +662,5 @@ def test_a_bounced_diver_hit_in_a_trade_stops_springing_up():
     assert f.phase == "active"
     f.bounce()
     assert f.vy > 0 and f.bounced
-    f.take_hit(JAB, -1)
+    f.take_hit(JAB, basis.Y, -1)
     assert f.vy <= 0 and not f.bounced

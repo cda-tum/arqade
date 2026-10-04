@@ -23,16 +23,21 @@ def test_every_fight_event_is_mapped() -> None:
     kinds |= set(re.findall(r'events\.append\(\("(\w+)"', inspect.getsource(fighter)))
     assert kinds <= set(audio.EVENT_SOUNDS), kinds - set(audio.EVENT_SOUNDS)
     assert {s for s in audio.EVENT_SOUNDS.values() if s} <= set(audio.build_sfx())
-    assert {"hit", "logical", "corrected"} <= {k for k, s in audio.EVENT_SOUNDS.items() if s}
+    assert {"hit", "block", "switch", "measure"} <= {k for k, s in audio.EVENT_SOUNDS.items() if s}
 
 
 def test_sounds_for_plays_each_sound_once_per_frame() -> None:
-    events = [Event("hit", "p2", "X"), Event("hit", "p1", "Z"), Cue("blip"), Event("switch", "p1")]
+    events = [Event("hit", "p2", "X"), Event("hit", "p1", "Z"), Cue("blip"), Event("land", "p1")]
     assert audio.sounds_for(events) == ["hit", "blip"]
 
 
-def test_a_logical_error_drowns_out_its_own_hit() -> None:
-    assert audio.sounds_for([Event("logical", "p2", "X"), Event("hit", "p2", "X")]) == ["logical"]
+def test_a_block_pings_and_a_switch_whooshes() -> None:
+    assert audio.sounds_for([Event("block", "p2", "Z")]) == ["ping"]
+    assert audio.sounds_for([Event("switch", "p1")]) == ["whoosh"]
+
+
+def test_measure_replaces_its_own_throws_thump() -> None:
+    assert audio.sounds_for([Event("hit", "p2", "Y"), Event("measure", "p2")]) == ["measure"]
 
 
 def test_the_music_follows_the_match() -> None:

@@ -2,7 +2,9 @@ import importlib.util
 
 import pytest
 
-from brawl_ket import config, shor
+from brawl_ket import config
+from brawl_ket.basis import BOTH, GREEN, OPPOSITE, OWN, PURPLE
+from brawl_ket.moves import HIGH, LOW, MID
 from brawl_ket.moves import CHARACTERS, QUINT, SLOTS, TRIO, Box
 
 
@@ -73,31 +75,28 @@ def test_poses_exist():
         assert set(m.poses) <= set(POSE_NAMES)
 
 
-def test_cycle_is_in_frames():
-    assert CHARACTERS["TRIO"].cycle_frames == config.frames(1.0) == 60
-    assert CHARACTERS["QUINT"].cycle_frames == config.frames(1.5) == 90
-
-
 def test_every_kind_is_known():
-    kinds = {"normal", "throw", "projectile", "special", "reencode"}
+    kinds = {"normal", "throw", "projectile", "special", "wave"}
     for _c, _slot, m in all_moves():
         assert m.kind in kinds
 
 
+DAMAGE = {"A": 4, "B": 8, "X": 10, "throw": 10}     # spec section 1; MEASURE 12, the WAVE 0
+
+
 def test_the_damage():
-    assert config.LOGICAL_DAMAGE == 25
-    for c in CHARACTERS.values():
-        for slot, m in c.moves.items():
-            if m.kind == "reencode":
-                continue
-            assert m.chip == 2, (c.name, slot)
-            heavy_or_special = slot.endswith(".B") or slot.endswith(".X")
-            assert m.bonus == (5 if heavy_or_special else 0), (c.name, slot)
+    for c, slot, m in all_moves():
+        if m.measure_rival:
+            assert m.damage == 12, (c.name, slot)
+        elif m.switch_rival:
+            assert m.damage == 0, (c.name, slot)
+        else:
+            key = "throw" if slot == "throw" else slot.split(".")[1]
+            assert m.damage == DAMAGE[key], (c.name, slot)
 
 
-def test_health_and_cycles():
-    assert (TRIO.health, TRIO.cycle_frames) == (100, config.frames(1.0))
-    assert (QUINT.health, QUINT.cycle_frames) == (115, config.frames(1.5))
+def test_health():
+    assert (TRIO.health, QUINT.health) == (100, 115)
 
 
 def test_photon_has_a_cooldown():
@@ -123,10 +122,10 @@ def test_a_projectile_move_and_only_one_has_a_projectile():
         assert (m.kind == "projectile") == (m.projectile is not None), (c.name, slot)
 
 
-def test_only_a_projectile_or_a_reencode_has_no_hitbox():
+def test_only_a_projectile_has_no_hitbox():
     for c, slot, m in all_moves():
         if m.hitbox is None:
-            assert m.kind in ("projectile", "reencode"), (c.name, slot)
+            assert m.kind == "projectile", (c.name, slot)
 
 
 def test_a_dive_is_only_ever_an_air_move():
@@ -135,9 +134,9 @@ def test_a_dive_is_only_ever_an_air_move():
             assert slot.startswith("air."), (c.name, slot)
 
 
-def test_a_landing_shockwave_always_has_its_error():
+def test_a_landing_shockwave_always_has_its_colour():
     for c, slot, m in all_moves():
-        assert (m.landing is None) == (m.landing_error is None), (c.name, slot)
+        assert (m.landing is None) == (m.landing_colour is None), (c.name, slot)
         if m.landing is not None:
             assert m.dive is not None, (c.name, slot)     # it is opened by a dive's landing
 
@@ -167,24 +166,23 @@ def apex(c):
 
 def test_quint_is_the_slower_heavier_fighter():
     trio, quint = CHARACTERS["TRIO"], CHARACTERS["QUINT"]
-    assert quint.cycle_frames > trio.cycle_frames
     assert quint.walk < trio.walk
     assert 95 <= apex(quint) <= 105 < apex(trio)        # about 100 px: lower and heavier
     assert quint.hurt_stand.w > trio.hurt_stand.w and quint.hurt_stand.h > trio.hurt_stand.h
 
 
 QUINT_FRAMES = {
-    # slot: (name, startup, active, recovery, hitbox, error, hitstun, knockback)
-    "stand.A": ("jab", 6, 3, 10, Box(16, 76, 46, 16), shor.X, 17, 1.0),
-    "stand.B": ("heavy", 13, 5, 20, Box(16, 70, 48, 22), shor.X, 22, 6.0),
-    "crouch.A": ("low jab", 6, 3, 11, Box(14, 22, 46, 14), shor.X, 16, 1.0),
-    "crouch.B": ("sweep", 13, 4, 22, Box(12, 6, 64, 14), shor.X, 24, 2.5),
-    "air.A": ("air jab", 5, 6, 5, Box(12, 54, 30, 20), shor.X, 15, 1.5),
-    "air.B": ("jump-in", 8, 6, 8, Box(10, 30, 40, 28), shor.X, 20, 3.0),
-    "throw": ("throw", 6, 2, 24, Box(0, 40, 44, 70), shor.Y, 30, 6.0),
-    "stand.X": ("SYNDROME GRAB", 16, 13, 30, Box(10, 40, 30, 70), shor.Z, 30, 6.0),
-    "crouch.X": ("RE-ENCODE", 6, 1, 18, None, shor.Z, 0, 0.0),
-    "air.X": ("COLLAPSE", 6, 60, 20, Box(-20, 0, 40, 30), shor.Z, 20, 3.0),
+    # slot: (name, startup, active, recovery, hitbox, hitstun, knockback)
+    "stand.A": ("jab", 6, 3, 10, Box(16, 76, 46, 16), 17, 1.0),
+    "stand.B": ("heavy", 13, 5, 20, Box(16, 70, 48, 22), 22, 6.0),
+    "crouch.A": ("low jab", 6, 3, 11, Box(14, 22, 46, 14), 16, 1.0),
+    "crouch.B": ("sweep", 13, 4, 22, Box(12, 6, 64, 14), 24, 2.5),
+    "air.A": ("air jab", 5, 6, 5, Box(12, 54, 30, 20), 15, 1.5),
+    "air.B": ("jump-in", 8, 6, 8, Box(10, 30, 40, 28), 20, 3.0),
+    "throw": ("throw", 6, 2, 24, Box(0, 40, 44, 70), 30, 6.0),
+    "stand.X": ("MEASURE", 16, 13, 30, Box(10, 40, 30, 70), 30, 6.0),
+    "crouch.X": ("HADAMARD WAVE", 8, 6, 16, Box(10, 0, 60, 18), 0, 0.0),
+    "air.X": ("COLLAPSE", 6, 60, 20, Box(-20, 0, 40, 30), 20, 3.0),
 }
 
 
@@ -193,7 +191,7 @@ def test_quint_frame_data():
     assert set(QUINT_FRAMES) == set(moves)
     for slot, row in QUINT_FRAMES.items():
         m = moves[slot]
-        got = (m.name, m.startup, m.active, m.recovery, m.hitbox, m.error, m.hitstun, m.knockback)
+        got = (m.name, m.startup, m.active, m.recovery, m.hitbox, m.hitstun, m.knockback)
         assert got == row, slot
 
 
@@ -204,11 +202,12 @@ def test_quint_specials():
     assert moves["crouch.B"].knockdown and moves["throw"].knockdown
     grab = moves["stand.X"]
     assert (grab.kind, grab.lunge, grab.knockdown) == ("throw", 6.0, True)
-    reencode = moves["crouch.X"]
-    assert (reencode.kind, reencode.cooldown) == ("reencode", config.frames(4.0))
+    assert grab.measure_rival and grab.colour == BOTH
+    wave = moves["crouch.X"]
+    assert (wave.kind, wave.cooldown, wave.switch_rival, wave.height) == ("wave", config.frames(3.0), True, LOW)
     collapse = moves["air.X"]
     assert collapse.dive == (2.0, 9.0)
-    assert (collapse.landing, collapse.landing_error) == (Box(-60, 0, 120, 14), shor.Z)
+    assert (collapse.landing, collapse.colour, collapse.landing_colour) == (Box(-60, 0, 120, 14), GREEN, PURPLE)
 
 
 def test_quint_light_reach_is_long():
@@ -217,36 +216,40 @@ def test_quint_light_reach_is_long():
     assert moves["crouch.A"].hitbox == Box(14, 22, 46, 14)
 
 
-HEIGHTS = {"stand.A": shor.HIGH, "stand.B": shor.HIGH, "crouch.A": shor.LOW, "crouch.B": shor.LOW,
-           "air.A": shor.MID, "air.B": shor.MID, "throw": shor.MID}
-COLUMNS = {"stand.A": shor.A_COL, "crouch.A": shor.A_COL, "air.A": shor.A_COL,
-           "stand.B": shor.B_COL, "crouch.B": shor.B_COL, "air.B": shor.B_COL, "throw": shor.THROW_COL}
+HEIGHTS = {"stand.A": HIGH, "stand.B": HIGH, "crouch.A": LOW, "crouch.B": LOW,
+           "air.A": MID, "air.B": MID, "throw": MID}
 
 
-def test_normals_deal_x_in_their_buttons_column_at_their_height():
+def test_a_is_your_colour_b_the_other_and_throws_both():
     for c in CHARACTERS.values():
         for slot, height in HEIGHTS.items():
             m = c.moves[slot]
-            want = shor.Y if slot == "throw" else shor.X
-            assert (m.error, m.height, m.column) == (want, height, COLUMNS[slot]), (c.name, slot)
+            want = BOTH if slot == "throw" else OWN if slot.endswith(".A") else OPPOSITE
+            assert (m.colour, m.height) == (want, height), (c.name, slot)
 
 
-def test_every_height_has_an_a_and_a_b():
-    for height in (shor.HIGH, shor.MID, shor.LOW):
-        cols = {COLUMNS[s] for s, h in HEIGHTS.items() if h == height and s != "throw"}
-        assert cols == {shor.A_COL, shor.B_COL}
-
-
-SPECIALS_ZH = {   # (character, slot): height of its Z
-    ("TRIO", "stand.X"): shor.HIGH, ("TRIO", "crouch.X"): shor.LOW, ("TRIO", "air.X"): shor.MID,
-    ("QUINT", "stand.X"): shor.MID, ("QUINT", "air.X"): shor.HIGH,
+SPECIALS = {   # (character, slot): (colour rule, height, twist)
+    ("TRIO", "stand.X"): (GREEN, HIGH, None),
+    ("TRIO", "crouch.X"): (PURPLE, LOW, None),
+    ("TRIO", "air.X"): (OWN, MID, "switch_self_on_hit"),
+    ("QUINT", "stand.X"): (BOTH, MID, "measure_rival"),
+    ("QUINT", "crouch.X"): (BOTH, LOW, "switch_rival"),
+    ("QUINT", "air.X"): (GREEN, HIGH, None),
 }
+TWISTS = ("switch_self_on_hit", "measure_rival", "switch_rival")
 
 
-def test_specials_deal_z_at_their_height():
-    for (name, slot), height in SPECIALS_ZH.items():
+def test_the_specials_colours_and_twists():
+    for (name, slot), (colour, height, twist) in SPECIALS.items():
         m = CHARACTERS[name].moves[slot]
-        assert (m.error, m.height) == (shor.Z, height), (name, slot)
-    collapse = CHARACTERS["QUINT"].moves["air.X"]
-    assert (collapse.landing_error, collapse.landing_height) == (shor.Z, shor.LOW)
-    assert CHARACTERS["QUINT"].moves["crouch.X"].kind == "reencode"
+        assert (m.colour, m.height) == (colour, height), (name, slot)
+        assert [t for t in TWISTS if getattr(m, t)] == ([twist] if twist else []), (name, slot)
+    names = {n: [CHARACTERS[n].moves[s].name for s in ("stand.X", "crouch.X", "air.X")] for n in CHARACTERS}
+    assert names == {"TRIO": ["PHOTON", "PHASE SLIDE", "HADAMARD DIVE"],
+                     "QUINT": ["MEASURE", "HADAMARD WAVE", "COLLAPSE"]}
+
+
+def test_only_specials_have_twists():
+    for c, slot, m in all_moves():
+        if any(getattr(m, t) for t in TWISTS):
+            assert slot.endswith(".X"), (c.name, slot)
