@@ -84,11 +84,11 @@ POSES: dict[str, Pose] = {
     "slide": Pose(-62, 125, 55, 150, 70, 70, 95, -45, -75, drop=6),
     # air.X DIVE: a steep diving kick, foot first
     "dive": Pose(-30, 30, 30, -10, 70, 120, 160, -60, -30),
-    # QUINT's stand.X SYNDROME GRAB: both arms drawn back low, then a lunging two-handed grab
+    # QUINT's stand.X MEASURE: both arms drawn back low, then a lunging two-handed grab
     # round the waist (the lunge carries it into the rival)
     "grab_wind": Pose(-8, 26, -6, -30, -16, -40, 30, -60, 20),
     "grab": Pose(18, 44, 2, -36, -20, 10, 100, 0, 95),
-    # QUINT's crouch.X RE-ENCODE: braced low, forearms crossed in front, a reset
+    # QUINT's crouch.X HADAMARD WAVE: braced low, forearms crossed in front, stamping out the wave
     "brace": Pose(10, 95, -4, 30, -86, 70, 150, 60, 170),
     # QUINT's air.X COLLAPSE: falling feet first, knees braced, arms flung up
     "slam": Pose(4, 30, -6, -30, 6, 150, 170, -150, -170),

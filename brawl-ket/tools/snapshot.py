@@ -8,29 +8,20 @@ Writes:
   right, in P1's colours;
 - moves_lean.png, moves_heavy.png: every TRIO / QUINT move as a strip of frames, as pose_for
   blends it;
-- code_tags.png, code_tags_quint.png: TRIO's / QUINT's grid tag close up (x4 on top of the
-  x2 save) in its states: clean, one X at (HIGH, A) (danger in HIGH, both beats of the
-  pulse), a Z on MID (the other rows in danger, both beats), a Y on (MID, THROW), an X
-  cancelled at (HIGH, A), a Y whose X half cancels (MID, THROW) and a Z cancelled on MID (the
-  white pop), the green flash after a correction (on the cells it cleared: an X at (HIGH, A) and a Z on LOW), the red
-  flash after a logical error;
-- fight_cancel.png: p1 jabs twice at 50 px: the second jab cancels the first's X, 2 frames on
-  (the white pop on the tag, the I pop-up);
-- fight_throw.png: p1 throws p2, 2 frames on (Y: the red THROW cell on a blue MID row);
-- fight_throw_half.png: the same throw onto a lit THROW cell: its X half cancels (the white pop
-  and an I under the Y!), its Z half flips MID;
-- fight_corrected.png: a correction tick wipes p2's lit X cell, 2 frames on (the green flash);
-- fight_danger.png: a bot fight at the moment a code is one hit from a logical error;
-- quint_collapse_*.png: QUINT's COLLAPSE next to a standing TRIO: the fall, the landing
-  shockwave just after it opens, and spread out;
-- quint_reencode_*.png: a crouching QUINT with an X and a Z on its grid wipes them with RE-ENCODE;
-- quint_grab.png: the SYNDROME GRAB connecting;
+- fight_block.png: p1 jabs a purple p2 at 50 px, 2 frames on (the green jab bounces: the ping);
+- fight_throw.png: p1 throws p2, 2 frames on (Y!: green and purple);
+- fight_switch.png: p1 presses Y (an H), 2 frames on (the white flash, the H pop-up, the badge);
+- fight_strike.png: p1's heavy late in its wind-up (the fist glows in its colour);
+- quint_collapse_*.png: QUINT's COLLAPSE next to a standing purple TRIO: the fall (the green
+  slam bounces), the landing shockwave just after it opens (purple: it hurts), and spread out;
+- quint_wave_*.png: QUINT's HADAMARD WAVE on a TRIO: the wave, and TRIO flashing purple;
+- quint_measure.png: MEASURE connecting on a purple TRIO, 3 frames on (the collapse into green);
 - vs_*.png: the same bot-fight moments as fight_*.png, TRIO (P1) against QUINT (P2), and
   vs_close.png, the two walked into each other;
 - screen_*.png: the match flow: the title, the attract demo, select (and with P1 ready),
   the ROUND 1 and FIGHT! calls, the pause menu, a K.O. with PERFECT, and the result;
-- fight_start.png (the fighters walking in), fight_hit.png, fight_logical.png, fight_crouch.png, fight_shot.png,
-  fight_knockdown.png: bot-against-bot frames at those moments (fight_boxes.png
+- fight_start.png (the fighters walking in), fight_hit.png, fight_bot_block.png, fight_bot_switch.png,
+  fight_crouch.png, fight_shot.png, fight_knockdown.png: bot-against-bot frames at those moments (fight_boxes.png
   is the hit frame again with the hurt- and hitboxes drawn).
 
 Everything is saved at x2 so the pixels are easy to see.
@@ -48,14 +39,15 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import pygame
 
-from brawl_ket import config, shor
+from brawl_ket import config
+from brawl_ket.basis import X_BASIS
 from brawl_ket import palette as P
 from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
 from brawl_ket.moves import QUINT, TRIO
 from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
-from brawl_ket.render import DANGER_BEAT, Renderer, draw_puppet, outlined
+from brawl_ket.render import Renderer, draw_puppet, outlined
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 CELL_W, CELL_H, COLS = 180, 230, 6
@@ -110,56 +102,15 @@ def move_sheet(char=TRIO) -> pygame.Surface:
     return sheet
 
 
-def tag_sheet(char=TRIO) -> pygame.Surface:
-    """The code tag in each of its states, cropped around p1's and p2's heads and magnified."""
-    surface = pygame.Surface((W, H))
-    zoom, crop = 4, pygame.Rect(0, 0, 90, 46)
-    cases = [
-        ("clean", lambda c, r, k: None),
-        ("X at HIGH A (bright)", lambda c, r, k: (c.apply_x(shor.HIGH, shor.A_COL), setattr(r, "t", 0))),
-        ("X at HIGH A (dim)",
-         lambda c, r, k: (c.apply_x(shor.HIGH, shor.A_COL), setattr(r, "t", DANGER_BEAT // 2))),
-        ("Z on MID (bright)", lambda c, r, k: (c.apply_z(shor.MID), setattr(r, "t", 0))),
-        ("Z on MID (dim)", lambda c, r, k: (c.apply_z(shor.MID), setattr(r, "t", DANGER_BEAT // 2))),
-        ("Y at MID THROW", lambda c, r, k: (c.apply_y(shor.MID, shor.THROW_COL), setattr(r, "t", 0))),
-        ("X cancel: pop", lambda c, r, k: r.pops.__setitem__(k, [(shor.HIGH, shor.A_COL, 9)])),
-        ("Y, X half cancels",
-         lambda c, r, k: (c.apply_z(shor.MID), r.pops.__setitem__(k, [(shor.MID, shor.THROW_COL, 9)]),
-                          setattr(r, "t", 0))),
-        ("Z cancel: pop", lambda c, r, k: r.pops.__setitem__(k, [(shor.MID, -1, 9)])),
-        ("corrected: X HIGH A, Z LOW",
-         lambda c, r, k: (r.flash.__setitem__(k, (P.GOOD, 21)),
-                          r.flash_cells.__setitem__(k, frozenset({(shor.HIGH, shor.A_COL)} |
-                                                                 {(shor.LOW, col) for col in range(3)})))),
-        ("logical: red flash", lambda c, r, k: r.flash.__setitem__(k, (P.BAD, 21))),
-    ]
-    sheet = pygame.Surface((len(cases) * crop.w * zoom, 2 * (crop.h * zoom + 16)))
-    sheet.fill(P.INK)
-    for col, (label, setup) in enumerate(cases):
-        for row, key in enumerate(("p1", "p2")):
-            fight = Fight({"p1": char, "p2": char})
-            fight.fighters["p1"].x, fight.fighters["p2"].x = 260, 380
-            r = Renderer(surface)
-            r.draw_fight(fight, [])
-            setup(fight.fighters[key].code, r, key)
-            r.draw_fight(fight, [])
-            f = fight.fighters[key]
-            crop.center = (round(f.x), round(r.tag_y[key]) + 3)     # the plate spans tag_y +-16, its tick +22
-            shot = pygame.transform.scale_by(surface.subsurface(crop.clip(surface.get_rect())), zoom)
-            x, y = col * crop.w * zoom, row * (crop.h * zoom + 16)
-            sheet.blit(shot, (x, y + 16))
-            sheet.blit(outlined(f"{key} {label}", 8, P.WHITE), (x + 4, y + 2))
-    return sheet
-
-
 def quint_frames(out_dir: str) -> None:
-    """QUINT's specials, scripted against a TRIO: COLLAPSE, RE-ENCODE and SYNDROME GRAB."""
+    """QUINT's specials, scripted against a TRIO: COLLAPSE, HADAMARD WAVE and MEASURE."""
     from brawl_ket.fighter import IDLE, FighterInput
 
     surface = pygame.Surface((W, H))
-    # COLLAPSE, landing 48 px from a standing TRIO
+    # COLLAPSE, landing 48 px from a standing purple TRIO: the slam bounces, the shockwave hurts
     fight = Fight({"p1": QUINT, "p2": TRIO})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 300, 348
+    fight.fighters["p2"].basis = X_BASIS
     quint, r, since = fight.fighters["p1"], Renderer(surface), None
     for i in range(80):
         inp = FighterInput(up=True) if i == 0 else \
@@ -174,66 +125,65 @@ def quint_frames(out_dir: str) -> None:
             since += 1
         if since in (1, 8):
             save(surface, out_dir, f"quint_collapse_wave{since}.png")
-    # RE-ENCODE: a crouching QUINT with an X and a Z on its grid
-    fight = Fight({"p1": TRIO, "p2": QUINT})
-    fight.fighters["p1"].x, fight.fighters["p2"].x = 240, 380
-    quint, r = fight.fighters["p2"], Renderer(surface)
-    down = FighterInput(down=True)
-    for i in range(4):
-        r.draw_fight(fight, fight.step({"p2": down}), {"p1": 0, "p2": 0})
-    quint.code.apply_x(shor.HIGH, shor.A_COL)
-    quint.code.apply_z(shor.LOW)
-    r.draw_fight(fight, fight.step({"p2": down}), {"p1": 0, "p2": 0})
-    save(surface, out_dir, "quint_reencode_0_before.png")
-    since = None
+    # HADAMARD WAVE on a TRIO 60 px away
+    fight = Fight({"p1": QUINT, "p2": TRIO})
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 290, 350
+    r, since = Renderer(surface), None
     for i in range(30):
-        events = fight.step({"p2": FighterInput(down=True, x=i == 0)})
+        events = fight.step({"p1": FighterInput(down=True, x=i == 0)})
         r.draw_fight(fight, events, {"p1": 0, "p2": 0})
-        if any(e.kind == "reencode" for e in events):
+        if fight.fighters["p1"].phase == "active" and since is None:
+            save(surface, out_dir, "quint_wave_0.png")
+        if any(e.kind == "switch" for e in events):
             since = 0
         elif since is not None:
             since += 1
-        if since in (1, 8):
-            save(surface, out_dir, f"quint_reencode_{since}.png")
-    # SYNDROME GRAB from 62 px
+        if since == 3:
+            save(surface, out_dir, "quint_wave_3.png")
+    # MEASURE from 62 px onto a purple TRIO
     fight = Fight({"p1": QUINT, "p2": TRIO})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 290, 352
-    r = Renderer(surface)
+    fight.fighters["p2"].basis = X_BASIS
+    r, since = Renderer(surface), None
     for i in range(40):
         events = fight.step({"p1": FighterInput(x=i == 0)})
         r.draw_fight(fight, events, {"p1": 0, "p2": 0})
-        if any(e.kind in ("hit", "logical") for e in events):
-            save(surface, out_dir, "quint_grab.png")
+        if any(e.kind == "measure" for e in events):
+            since = 0
+        elif since is not None:
+            since += 1
+        if since == 3:
+            save(surface, out_dir, "quint_measure.png")
             break
 
 
 def scripted_frames(out_dir: str) -> None:
-    """Moments of the grid, scripted at 50 px: a jab cancelling a jab, a throw (Y), a throw
-    whose X half cancels a lit THROW cell, and a correction tick wiping a lit cell. Each is
-    saved 2 frames after its event."""
+    """Moments of the colour rule, scripted at 50 px, each saved 2 frames after its event: a
+    green jab bouncing off a purple rival, a throw (Y), a switch (Y on the pad), and a heavy
+    late in its wind-up."""
     from brawl_ket.fighter import IDLE, FighterInput
 
     surface = pygame.Surface((W, H))
-    def lit_throw_cell(fight: Fight) -> None:
-        fight.fighters["p2"].code.apply_x(shor.MID, shor.THROW_COL)
+
+    def purple(fight: Fight) -> None:
+        fight.fighters["p2"].basis = X_BASIS
 
     scripts = (
-        ("fight_cancel", "cancel", lambda i: FighterInput(a=i in (0, 10)), None, None),
-        ("fight_throw", "hit", lambda i: FighterInput(dx=1, b=i == 0), None, None),
-        ("fight_throw_half", "hit", lambda i: FighterInput(dx=1, b=i == 0), None, lit_throw_cell),
-        ("fight_corrected", "corrected", lambda i: FighterInput(a=i == 0), "p2", None),
+        ("fight_block", "block", lambda i: FighterInput(a=i == 0), purple),
+        ("fight_throw", "hit", lambda i: FighterInput(dx=1, b=i == 0), None),
+        ("fight_switch", "switch", lambda i: FighterInput(y=i == 0), None),
     )
-    for name, kind, p1_input, who, setup in scripts:
+    for name, kind, p1_input, setup in scripts:
         fight = Fight({"p1": TRIO, "p2": TRIO})
         fight.fighters["p1"].x, fight.fighters["p2"].x = 295, 345
         if setup is not None:
             setup(fight)
         r = Renderer(surface)
         since = None
-        for i in range(2 * TRIO.cycle_frames + 30):
+        for i in range(90):
             events = fight.step({"p1": p1_input(i), "p2": IDLE})
             r.draw_fight(fight, events, {"p1": 0, "p2": 0})
-            if since is None and any(e.kind == kind and (who is None or e.player == who) for e in events):
+            if since is None and any(e.kind == kind for e in events):
                 since = 0
             elif since is not None:
                 since += 1
@@ -242,6 +192,12 @@ def scripted_frames(out_dir: str) -> None:
                 break
         else:
             print(f"never saw: {name}")
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 280, 360
+    r = Renderer(surface)
+    for i in range(TRIO.moves["stand.B"].startup - 1):
+        r.draw_fight(fight, fight.step({"p1": FighterInput(b=i == 0), "p2": IDLE}), {"p1": 0, "p2": 0})
+    save(surface, out_dir, "fight_strike.png")
 
 
 def close_frame(out_dir: str) -> None:
@@ -263,12 +219,10 @@ def find_frames(out_dir: str, chars=(TRIO, TRIO), prefix: str = "fight") -> None
     surface = pygame.Surface((W, H))
     wanted = {
         "hit": lambda f, ev, ago: ago.get("hit") == 2,
-        "logical": lambda f, ev, ago: ago.get("logical") == 8,
+        "bot_block": lambda f, ev, ago: ago.get("block") == 3,
+        "bot_switch": lambda f, ev, ago: ago.get("switch") == 2,
         "crouch": lambda f, ev, ago: sorted(x.action for x in f.fighters.values()) in (["crouch", "idle"], ["crouch", "walk"])
-        and all(ago.get(k, 99) > 80 for k in ("hit", "logical")),
-        "danger": lambda f, ev, ago: any(x.code.x_danger_rows() or x.code.z_danger_rows()
-                                         for x in f.fighters.values())
-        and ago.get("hit") == 6,
+        and all(ago.get(k, 99) > 80 for k in ("hit", "block")),
         "shot": lambda f, ev, ago: bool(f.shots) and abs(f.shots[0].x - f.fighters["p2"].x) > 120,
         "knockdown": lambda f, ev, ago: any(x.action == "knockdown" and x.frame == 14 for x in f.fighters.values()),
     }
@@ -359,8 +313,6 @@ def main(argv: list[str]) -> None:
         save(pose_sheet(build), out_dir, f"poses_{build}.png")
     save(move_sheet(TRIO), out_dir, "moves_lean.png")
     save(move_sheet(QUINT), out_dir, "moves_heavy.png")
-    save(tag_sheet(TRIO), out_dir, "code_tags.png")
-    save(tag_sheet(QUINT), out_dir, "code_tags_quint.png")
     quint_frames(out_dir)
     scripted_frames(out_dir)
     close_frame(out_dir)

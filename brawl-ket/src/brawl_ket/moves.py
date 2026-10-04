@@ -55,7 +55,7 @@ class Move:
     knockback: float                    # px per frame, decaying
     knockdown: bool = False
     cancels: tuple[str, ...] = ()       # slot keys this can be cancelled into on hit
-    kind: str = "normal"                # normal / throw / projectile / special / reencode
+    kind: str = "normal"                # normal / throw / projectile / special / wave
     lunge: float = 0.0                  # vx during active frames (slides, grabs)
     dive: tuple[float, float] | None = None   # (vx, vy) air dive until landing
     projectile: Projectile | None = None

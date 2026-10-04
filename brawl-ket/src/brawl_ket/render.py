@@ -50,7 +50,7 @@ PLATES = {"lean": False, "heavy": True}    # armour: the heavy's wedge torso, pl
 # the heavy's wedge torso: half its width (px) at the shoulders, the waist and the belt
 CHEST_HALF, WAIST_HALF, BELT_HALF = 21, 13, 14
 
-BAR_W, BAR_H, BAR_Y = 250, 12, 14
+BAR_W, BAR_H, BAR_Y = 236, 12, 14     # the bars leave room for the basis badges by the clock
 
 # The bases' colours: a body is drawn in its basis's, an attack in the colour of the basis it
 # changes (an X is green, a Z purple; a Y, a throw, both).
@@ -58,6 +58,14 @@ GREEN = (72, 200, 96)
 PURPLE = (160, 88, 232)
 BASIS_BODY = {basis.Z_BASIS: GREEN, basis.X_BASIS: PURPLE}
 ERROR_COLOUR = {basis.X: GREEN, basis.Z: PURPLE, basis.Y: P.WHITE}
+BADGE = {basis.Z_BASIS: "0/1", basis.X_BASIS: "+/-"}     # the basis's states, on the health bar
+# which joint lands each move's hit (its glow shows the attack's colour before contact)
+STRIKER = {
+    "jab": "hand_f", "heavy": "hand_f", "low jab": "hand_f", "sweep": "foot_f",
+    "air jab": "hand_f", "jump-in": "foot_f", "throw": "hand_f",
+    "PHOTON": "hand_f", "PHASE SLIDE": "foot_f", "HADAMARD DIVE": "foot_f",
+    "MEASURE": "hand_f", "HADAMARD WAVE": "foot_f", "COLLAPSE": "foot_f",
+}
 
 # effect lengths, in frames
 SPARK_FRAMES = 10
@@ -69,6 +77,9 @@ POPUP_ROOM = 40             # a new pop-up replaces any older one this close acr
 WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the floor
 WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
 HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
+SWITCH_FLASH_FRAMES = 8     # a switch (an H): the body flashes white as its colour changes
+MEASURE_FLASH_FRAMES = 12   # MEASURE: the rival flashes in QUINT's colour as it collapses
+COLLAPSE_FRAMES = 14        # ... with a ring closing in on it
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
 CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are centred here
@@ -357,6 +368,7 @@ class Renderer:
         self.pose_seen: dict[str, tuple] = {p: (None, 0) for p in PLAYERS}
         self.pose_start: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.pose_last: dict[str, Pose | None] = {p: None for p in PLAYERS}
+        self.body_flash: dict[str, tuple[tuple | None, int]] = {p: (None, 0) for p in PLAYERS}
         self.effects.clear()
         self.shake = 0
 
@@ -378,7 +390,7 @@ class Renderer:
 
         order = sorted(PLAYERS, key=lambda p: fight.fighters[p].action == "attack")
         for p in PLAYERS:
-            self._shadow(fight.fighters[p], ox, oy)
+            self._shadow(p, fight.fighters[p], ox, oy)
         heads = {}
         for p in order:
             heads[p] = self._fighter(p, fight.fighters[p], ox, oy)
@@ -408,6 +420,18 @@ class Renderer:
             elif e.kind == "block":
                 color = ERROR_COLOUR.get(e.error or basis.X, P.WHITE)
                 self.effects.append(Effect("ping", e.x, e.y, PING_FRAMES, PING_FRAMES, color))
+            elif e.kind == "switch" and e.player:
+                self.body_flash[e.player] = (P.WHITE, SWITCH_FLASH_FRAMES)
+                if self._fight is not None:
+                    f = self._fight.fighters[e.player]
+                    self.effects.append(Effect("popup", f.x, FLOOR_Y - f.y - 150, POPUP_FRAMES, POPUP_FRAMES,
+                                               P.WHITE, "H"))
+            elif e.kind == "measure" and e.player and self._fight is not None:
+                f = self._fight.fighters[e.player]
+                colour = P.lighten(BASIS_BODY[f.basis], 0.5)
+                self.body_flash[e.player] = (colour, MEASURE_FLASH_FRAMES)
+                self.effects.append(Effect("collapse", f.x, FLOOR_Y - f.y - 60, COLLAPSE_FRAMES,
+                                           COLLAPSE_FRAMES, BASIS_BODY[f.basis]))
             elif e.kind == "shockwave":
                 color = ERROR_COLOUR.get(e.error or basis.Z, P.WHITE)
                 self.effects.append(Effect("wave", e.x, e.y, WAVE_FRAMES, WAVE_FRAMES, color))
@@ -418,6 +442,9 @@ class Renderer:
             fx.left -= 1
         self.effects = [fx for fx in self.effects if fx.left > 0]
         self.shake = max(0, self.shake - 1)
+        for p in PLAYERS:
+            colour, left = self.body_flash[p]
+            self.body_flash[p] = (colour, left - 1) if left > 1 else (None, 0)
 
     def _shake_offset(self) -> tuple[int, int]:
         if self.shake <= 0:
@@ -452,11 +479,21 @@ class Renderer:
                 width = 3 if k < 0.5 else 2
                 pygame.draw.circle(surf, P.INK, _pt((fx.x + ox, fx.y + oy)), r + 1, width + 2)
                 pygame.draw.circle(surf, P.WHITE if age < 3 else fx.color, _pt((fx.x + ox, fx.y + oy)), r, width)
+            elif world and fx.kind == "collapse":
+                # MEASURE: a ring closing in on the rival, in the basis it collapsed into
+                k = age / fx.life
+                r = round(46 * (1 - k)) + 4
+                pygame.draw.circle(surf, P.INK, _pt((fx.x + ox, fx.y + oy)), r + 1, 4)
+                pygame.draw.circle(surf, fx.color, _pt((fx.x + ox, fx.y + oy)), r, 2)
             elif world and fx.kind == "popup":
                 if fx.left < 10 and fx.left % 4 < 2:
                     continue
                 rise = min(age, 12) * 1.2 + age * 0.15
-                blit_center(surf, outlined(fx.text, 16, fx.color, thick=2), (fx.x + ox, fx.y + oy - rise))
+                if fx.text == "Y!":         # a Y is both colours: green with a purple outline
+                    img = outlined(fx.text, 16, GREEN, outline=PURPLE, thick=2)
+                else:
+                    img = outlined(fx.text, 16, fx.color, thick=2)
+                blit_center(surf, img, (fx.x + ox, fx.y + oy - rise))
 
     def _wave(self, fx: Effect, age: int, ox: int, oy: int) -> None:
         """A landing shockwave: two flat rings racing out along the floor, with chips of
@@ -493,20 +530,50 @@ class Renderer:
             on = (self.t // 16 + i * 7 + (i * i) % 5) % 9 < 6
             self.surface.fill(color if on else P.shade(color, 0.45), rect.move(ox, oy))
 
-    def _shadow(self, f: Fighter, ox: int, oy: int) -> None:
+    def _shadow(self, key: str, f: Fighter, ox: int, oy: int) -> None:
+        """The shadow, ringed in the player's colour (P1 blue, P2 red, as the cabinet's sides):
+        who is who, now that the bodies are the colours of their bases."""
         w = max(18, 52 - f.y * 0.2)
-        rect = pygame.Rect(0, 0, round(w), 8)
+        rect = pygame.Rect(0, 0, round(w) + 8, 12)
         rect.center = (round(f.x) + ox, FLOOR_Y + 2 + oy)
         pygame.draw.ellipse(self.surface, SHADOW, rect)
+        pygame.draw.ellipse(self.surface, P.INK, rect.inflate(2, 2), 3)
+        pygame.draw.ellipse(self.surface, PLAYER_COLORS[key], rect, 2)
 
     def _fighter(self, key: str, f: Fighter, ox: int, oy: int) -> tuple[float, float]:
         body = BASIS_BODY[f.basis]
         accent = ACCENT.get(f.char.name, P.CREAM)
-        if f.action in ("hitstun", "knockdown") and f.frame < HIT_FLASH_FRAMES:
+        flash, left = self.body_flash[key]
+        if flash is not None and left % 4 >= 1:
+            body, accent = flash, P.WHITE
+        elif f.action in ("hitstun", "knockdown") and f.frame < HIT_FLASH_FRAMES:
             body, accent = P.lighten(body, 0.6), P.WHITE
         feet = (f.x + ox, FLOOR_Y - f.y + oy)
         j = draw_puppet(self.surface, self._pose(key, f), f.char.build, feet, f.facing, body, accent)
+        self._striker(f, j)
         return j["head"][0] - ox, j["head"][1] - oy
+
+    def _striker(self, f: Fighter, j: dict) -> None:
+        """The hand or foot an attack lands with glows in the attack's colour, from its wind-up
+        to the end of its active frames: you see before contact whether it will match. A throw
+        (both colours) is green ringed in purple; the WAVE (an H, no colour) white."""
+        m = f.move
+        if f.action != "attack" or m is None or f.phase not in ("startup", "active"):
+            return
+        joint = STRIKER.get(m.name)
+        if joint is None:
+            return
+        p = _pt(j[joint])
+        r = 5 if f.phase == "startup" else 7
+        if m.switch_rival:
+            inner, outer = P.WHITE, P.WHITE
+        else:
+            error = basis.error_for(m.colour, f.basis)
+            inner = GREEN if error == basis.Y else ERROR_COLOUR[error]
+            outer = PURPLE if error == basis.Y else P.lighten(inner, 0.5)
+        pygame.draw.circle(self.surface, P.INK, p, r + 3)
+        pygame.draw.circle(self.surface, outer, p, r + 2)
+        pygame.draw.circle(self.surface, inner, p, r)
 
     def _pose(self, key: str, f: Fighter) -> Pose:
         """pose_for, told which pose the fighter was drawn in when its action began,
@@ -565,7 +632,7 @@ class Renderer:
                 fill = pygame.Rect(rect.x, rect.y, width, BAR_H)
                 if side > 0:
                     fill.right = rect.right
-                col = color or (P.GOOD if frac > 0.5 else P.GOLD if frac > 0.25 else P.BAD)
+                col = color or (PLAYER_COLORS[key] if frac > 0.25 else P.lighten(PLAYER_COLORS[key], 0.4))
                 pygame.draw.rect(surf, col, fill, border_radius=2)
                 if color is None and fill.w > 4:
                     surf.fill(P.lighten(col, 0.5), (fill.x + 2, fill.y + 2, fill.w - 4, 2))
@@ -578,6 +645,7 @@ class Renderer:
             else:
                 surf.blit(name, (rect.right - name.get_width() - 2, y))
                 surf.blit(tag, (rect.right - name.get_width() - tag.get_width() - 8, y))
+            self._badge(f, rect.right + 4 if side < 0 else rect.left - 4, rect.centery, side)
         # the clock and the round pips
         cx = W // 2
         box = pygame.Rect(0, 0, 44, 30)
@@ -596,6 +664,20 @@ class Renderer:
                 pygame.draw.circle(surf, PLAYER_COLORS[key] if full else P.NIGHT, (x, y), 4)
                 if full:
                     surf.fill(P.lighten(PLAYER_COLORS[key], 0.6), (x - 2, y - 2, 2, 2))
+
+    def _badge(self, f: Fighter, x: int, cy: int, side: int) -> None:
+        """The basis on the health bar: 0/1 on green or +/- on purple, at the bar's inner end."""
+        colour = BASIS_BODY[f.basis]
+        label = outlined(BADGE[f.basis], 8, P.WHITE)
+        box = pygame.Rect(0, 0, label.get_width() + 8, 16)
+        box.centery = cy
+        if side < 0:
+            box.left = x
+        else:
+            box.right = x
+        pygame.draw.rect(self.surface, P.INK, box.inflate(4, 4), border_radius=4)
+        pygame.draw.rect(self.surface, colour, box, border_radius=3)
+        blit_center(self.surface, label, box.center)
 
     def _trail(self, key: str, health: float) -> None:
         """The white part of a bar: lost health, shown for a moment before it drains."""

@@ -209,3 +209,55 @@ def test_a_block_pings_in_the_attacks_colour(surface):
     for _ in range(30):
         r.draw_fight(fight, [])
     assert not r.effects
+
+
+def test_the_rings_under_the_feet_are_the_players_colours(surface):
+    from brawl_ket.config import PLAYER_COLORS
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [])
+    for key in ("p1", "p2"):
+        x = round(fight.fighters[key].x)
+        ring = {tuple(surface.get_at((i, j)))[:3] for i in range(x - 34, x + 35) for j in range(FLOOR_Y - 6, FLOOR_Y + 10)}
+        assert PLAYER_COLORS[key] in ring, key
+
+
+def test_the_badges_show_each_basis(surface):
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight.fighters["p2"].basis = X_BASIS
+    r.draw_fight(fight, [])
+    from brawl_ket.render import BAR_H, BAR_W, BAR_Y
+    y = BAR_Y + BAR_H // 2
+    left = {tuple(surface.get_at((x, y)))[:3] for x in range(20 + BAR_W + 4, 20 + BAR_W + 36)}
+    right = {tuple(surface.get_at((x, y)))[:3] for x in range(INTERNAL_WIDTH - 20 - BAR_W - 36, INTERNAL_WIDTH - 20 - BAR_W - 4)}
+    assert GREEN in left and PURPLE not in left
+    assert PURPLE in right and GREEN not in right
+
+
+def test_a_switch_flashes_the_body_white_with_an_h(surface):
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    r.draw_fight(fight, [])
+    r.draw_fight(fight, [Event("switch", "p1")])
+    assert [fx.text for fx in r.effects if fx.kind == "popup"] == ["H"]
+    assert r.body_flash["p1"][0] == P.WHITE
+    for _ in range(40):
+        r.draw_fight(fight, [])
+    assert r.body_flash["p1"] == (None, 0)
+
+
+def test_the_striking_limb_glows_in_the_attacks_colour(surface):
+    from brawl_ket.fighter import FighterInput
+    for button, colour in (("a", GREEN), ("b", PURPLE)):      # a green fighter: A green, B purple
+        r = Renderer(surface)
+        fight = Fight({"p1": TRIO, "p2": TRIO})
+        fight.fighters["p2"].x = 600
+        for i in range(3):
+            r.draw_fight(fight, fight.step({"p1": FighterInput(**{button: i == 0})}))
+        f = fight.fighters["p1"]
+        assert f.action == "attack" and f.phase == "startup"
+        from brawl_ket.poses import joints
+        j = joints(r.pose_last["p1"], TRIO.build, (f.x, FLOOR_Y - f.y), f.facing)
+        x, y = round(j["hand_f"][0]), round(j["hand_f"][1])
+        assert tuple(surface.get_at((x, y)))[:3] == colour, button
