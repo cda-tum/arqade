@@ -359,7 +359,12 @@ class View:
                            self.box_h / (self._span[0] + 2 * self.PAD), self.max_spacing)
 
     def xy(self, where) -> tuple[float, float]:
-        """Screen position of a node, or the middle of a tuple of nodes."""
+        """Screen position of a node, the middle of a tuple of nodes, or a
+        point (n0, n1, f) f of the way from n0 to n1 (a crash on a coupler)."""
+        if isinstance(where[-1], float):
+            (x0, y0), (x1, y1) = self.xy(where[0]), self.xy(where[1])
+            f = where[2]
+            return x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
         if isinstance(where[0], tuple):
             pts = [self.xy(n) for n in where]
             return sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
@@ -371,8 +376,7 @@ class View:
         n0, n1, f, jump = pair.segment()
         if jump:
             return self.xy(n0 if f < 0.5 else n1)
-        (x0, y0), (x1, y1) = self.xy(n0), self.xy(n1)
-        return x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
+        return self.xy((n0, n1, float(f)))
 
     def substrate_rect(self) -> pygame.Rect:
         w = (self._span[1] + 2 * self.PAD) * self.spacing
@@ -420,6 +424,8 @@ class View:
             elif e.kind == "routed":
                 for n in (pair.a, pair.b):
                     self.ring(n, col, 8, self.spacing * 0.4, 0.4)
+                # the superposition collapses onto the start: gone from the far end
+                self.ring(pair.route[-1], WHITE, self.spacing * 0.3 / U, self.spacing * 0.05, 0.3)
                 play("routed")
             elif e.kind == "gate":
                 for n in (pair.a, pair.b):
@@ -499,6 +505,12 @@ def draw_xmon(S, x, y, size, col, fill=True):
     pygame.draw.rect(S, col, (x - thick // 2, y - arm, thick, 2 * arm), 0 if fill else 2, px(2))
 
 
+def draw_qubit(S, x, y, r, col, presence=1.0):
+    """The pair's qubit: a light disc ringed in white, fainter as `presence` drops."""
+    pygame.draw.circle(S, mix(col, mix(col, WHITE, 0.5), presence), (int(x), int(y)), int(r))
+    pygame.draw.circle(S, mix(col, WHITE, presence), (int(x), int(y)), int(r), px(2))
+
+
 def draw_x(S, x, y, k, col, width):
     pygame.draw.line(S, col, (x - k, y - k), (x + k, y + k), width)
     pygame.draw.line(S, col, (x - k, y + k), (x + k, y - k), width)
@@ -529,16 +541,26 @@ def draw_board(S, v: View, t: float):
             pygame.draw.rect(S, (30, 38, 62), (bx - pad, by - pad, 2 * pad, 2 * pad), 0, px(2))
 
     # couplers
+    committed = b.route_edges()
     for e in lat.edges:
         n0, n1 = tuple(e)
         p0, p1 = xy(n0), xy(n1)
-        owner = b.edge_owner.get(e)
+        routes = committed.get(e)
         special = b.edge_special(e)
         blink = special is not None and special.life < 3 and int(t * 6) % 2 == 0
-        if owner is not None:
-            col = PAIR_COLORS[b.pairs[owner].color]
-            pygame.draw.line(S, mix(col, SUBSTRATE, 0.55), p0, p1, px(12))
-            pygame.draw.line(S, col, p0, p1, px(5))
+        if routes:
+            # routes sharing a coupler run side by side, so each color shows
+            dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+            length = math.hypot(dx, dy)
+            nx, ny = -dy / length, dx / length
+            shared = len(routes) > 1
+            for i, pair in enumerate(routes):
+                off = (i - (len(routes) - 1) / 2) * px(9)
+                q0 = (p0[0] + nx * off, p0[1] + ny * off)
+                q1 = (p1[0] + nx * off, p1[1] + ny * off)
+                col = PAIR_COLORS[pair.color]
+                pygame.draw.line(S, mix(col, SUBSTRATE, 0.55), q0, q1, px(8 if shared else 12))
+                pygame.draw.line(S, col, q0, q1, px(4 if shared else 5))
         elif special is not None and special.kind == "defect" and not blink:
             # broken in the middle, with an X over the gap
             mx, my = (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2
@@ -610,9 +632,15 @@ def draw_board(S, v: View, t: float):
             pygame.draw.arc(S, mix(SUBSTRATE, col, 0.25), arc_rect, 0, 2 * math.pi, px(2))
             if frac > 0.01:
                 pygame.draw.arc(S, arc_col, arc_rect, math.pi / 2, math.pi / 2 + 2 * math.pi * frac, px(4))
+            # The pair's qubit, in superposition: it is in both stations until
+            # the pair is routed, so it shows in both, swelling in one as it
+            # shrinks in the other. Running into either one crashes.
+            amp = 0.5 + 0.5 * math.sin(t * 3 + pair.id * 1.7 + (math.pi if n == pair.b else 0.0))
+            draw_qubit(S, x, y, sp * (0.105 + 0.035 * amp), col, 0.6 + 0.4 * amp)
             continue
         if pair is not None:
-            draw_xmon(S, x, y, sp * 1.05, PAIR_COLORS[pair.color])
+            # routed: the qubit has collapsed onto the route, the station is empty
+            draw_xmon(S, x, y, sp * 1.05, mix(PAIR_COLORS[pair.color], SUBSTRATE, 0.55))
         elif n in on_route:
             draw_xmon(S, x, y, sp * 0.95, mix(PAIR_COLORS[on_route[n].color], QUBIT_IDLE, 0.45))
         else:
@@ -639,8 +667,7 @@ def draw_board(S, v: View, t: float):
         x, y = v.qubit_xy(pair)
         x, y = x + ox, y + oy
         glow(S, x, y, sp * 0.6, col, 0.8)
-        pygame.draw.circle(S, mix(col, WHITE, 0.5), (int(x), int(y)), int(sp * 0.13))
-        pygame.draw.circle(S, WHITE, (int(x), int(y)), int(sp * 0.13), px(2))
+        draw_qubit(S, x, y, sp * 0.13, col)
         if pair.boost > 1:
             pygame.draw.circle(S, GOLD, (int(x), int(y)), int(sp * 0.19), px(2))
 

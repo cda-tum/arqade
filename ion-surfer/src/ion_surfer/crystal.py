@@ -59,6 +59,18 @@ def energy(pot: Sampled, xs: list[float], coulomb: float) -> float:
     return e
 
 
+def chain_energy(pot: Sampled, xs: list[float], coulomb: float) -> float:
+    """energy() for ions in their order along the chain, which they can't
+    leave in 1D: past MIN_DIST the Coulomb wall keeps rising (on the slope
+    it had there) rather than levelling off and letting an ion through."""
+    e = sum(pot(x) for x in xs)
+    for i in range(len(xs)):
+        for j in range(i + 1, len(xs)):
+            d = xs[j] - xs[i]
+            e += coulomb / d if d >= MIN_DIST else coulomb / MIN_DIST * (2 - d / MIN_DIST)
+    return e
+
+
 def gradient_hessian(pot: Sampled, xs: list[float], coulomb: float):
     n = len(xs)
     g = [pot.d1(x) for x in xs]
@@ -215,7 +227,7 @@ class Crystal:
     def _cut(self, m: int, q: float) -> float:
         v = self.vecs[m]
         dq = q - self.q_eq[m]
-        return energy(self.pot, [x + b * dq for x, b in zip(self.x_eq, v)], self.c)
+        return chain_energy(self.pot, [x + b * dq for x, b in zip(self.x_eq, v)], self.c)
 
     def _set_cuts(self):
         for m, wp in enumerate(self.packets):
@@ -248,11 +260,33 @@ class Crystal:
             if lost:
                 self._ground(m)
 
+    def ion_means(self, means: list[float] | None = None) -> list[float]:
+        """Every ion's mean position, from the modes' packets (or their
+        given mean coordinates)."""
+        if means is None:
+            means = [wp.mean_x() for wp in self.packets]
+        dq = [q - qe for q, qe in zip(means, self.q_eq)]
+        return [x + sum(v[i] * d for v, d in zip(self.vecs, dq)) for i, x in enumerate(self.x_eq)]
+
     def update_potential(self, pot: Sampled) -> None:
+        # Changing the potential moves the equilibrium and turns the modes,
+        # but not the ions. So the new equilibrium is searched from where
+        # the ions are, and every packet is moved to where they are in the
+        # new mode coordinates. Without that, a mode's coordinate b.x, which
+        # is measured from the screen's edge, shifted by hundreds of px
+        # whenever b turned slightly, and the packets were left there.
+        means = [wp.mean_x() for wp in self.packets]
+        ions = self.ion_means(means)
         self.pot = pot
-        self.x_eq = equilibrium(pot, self.x_eq, self.c, self.lo, self.hi, iters=12)
+        self.x_eq = equilibrium(pot, ions, self.c, self.lo, self.hi, iters=12)
         self._modes_from_hessian(self.vecs)
+        gone = []
+        for m, (v, wp) in enumerate(zip(self.vecs, self.packets)):
+            if wp.translate(sum(b * x for b, x in zip(v, ions)) - means[m]) < 0.5:
+                gone.append(m)
         self._set_cuts()
+        for m in gone:
+            self._ground(m)
 
     def cool_to_ground(self) -> None:
         for m in range(self.n):

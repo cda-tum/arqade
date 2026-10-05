@@ -87,3 +87,35 @@ def test_moving_the_trap_moves_the_crystal_and_its_grids():
     assert sum(cr.x_eq) / 2 == pytest.approx(900, abs=1)
     for m, wp in enumerate(cr.packets):
         assert wp.x_start < cr.q_eq[m] < wp.x_start + 800
+
+
+def test_changing_the_potential_leaves_the_ions_where_they_are():
+    # A mode's coordinate b.x is measured from the screen's edge, so when
+    # the modes turn, every packet has to move with them; that used to put
+    # the packets hundreds of px from the equilibrium.
+    cr = crystal([500, 600, 700])
+    xs = [i * 1.0 for i in range(0, 1201)]
+    before = cr.ion_means()
+    turned = 0.0
+    for step in range(1, 21):  # a bump rising between the 2nd and 3rd ion
+        a = 3.0 * step
+        bumped = Sampled(xs, [0.5 * K * (x - X0) ** 2 + a * math.exp(-(((x - 650) / 30) ** 2))
+                              for x in xs])
+        old = [v[:] for v in cr.vecs]
+        cr.update_potential(bumped)
+        turned = max(turned, max(1 - abs(sum(p * q for p, q in zip(o, n))) for o, n in zip(old, cr.vecs)))
+        for x0, x1 in zip(before, cr.ion_means()):
+            assert x1 == pytest.approx(x0, abs=2.0)  # half a cell of rounding at most
+    assert turned > 1e-4  # the modes really did turn
+
+
+def test_ions_cannot_pass_each_other_along_a_mode():
+    cr = crystal([550, 700])
+    stretch = 1
+    gap = cr.x_eq[1] - cr.x_eq[0]
+    q0 = cr.q_eq[stretch]
+    sign = 1 if cr.vecs[stretch][1] > 0 else -1  # +q pulls the ions apart
+    # squeeze the pair together, through contact and beyond
+    qs = [q0 - sign * gap / math.sqrt(2) * f for f in (0.5, 0.8, 0.95, 1.0, 1.2, 1.5, 2.0)]
+    cut = [cr._cut(stretch, q) for q in qs]
+    assert all(b > a for a, b in zip(cut, cut[1:]))

@@ -16,21 +16,25 @@ waiting to happen. Draw a route between them, one coupler at a time. When the ro
 reaches the partner, a qubit travels along it (a few seconds), and the gate fires on
 arrival.
 
-- **Couplers are exclusive, qubits are shared.** The couplers on a committed route are
-  reserved, so no other route can use them. Each coupler is released as soon as the
-  travelling qubit has passed it, so routes open up again from behind. Routes *may*
-  cross at a qubit, and may even run through other stations. Every qubit has a finite
-  size, though: two qubits inside the same one at the same time crash, both gates are
-  lost, and you lose a life.
-- **Stations are obstacles, not walls.** A station is occupied while its qubit is still
-  there: both ends of a waiting pair, a route's start until its qubit has left, and a
-  route's end until the gate fires. Running through a station is safe only if you route
-  that pair away from it in time, so planning ahead pays off. The game doesn't stop you.
+- **Nothing is reserved.** A route can go anywhere except over a defect coupler (or
+  across itself): through other stations, across other routes, even along the same
+  couplers another qubit is travelling. What stops you is crashing. Every qubit has a
+  finite size: two qubits inside the same one at the same time crash, and so do two
+  qubits that meet on a coupler, head-on or one catching up with the other. Following
+  another qubit down a coupler is fine. In a crash both gates are lost, and you lose a
+  life.
+- **A waiting pair is in superposition.** Until it is routed, its qubit is in *both*
+  stations at once, and you can see it: a light disc in each station, swelling in one as
+  it shrinks in the other. Run into either station and you crash. Routing the pair
+  collapses the qubit onto the start: from then on it is the qubit travelling along the
+  route, and both stations are empty (drawn dimmed) and safe to run through, the start
+  once the qubit has left it. So running through a waiting station is fine if you route
+  that pair, from either end, before you get there. The game doesn't stop you.
 - **Lookahead.** While you draw, a big blinking red X marks where your route would crash
-  if it went off right now. A small one on a station means a committed route is heading
-  into it, so route that pair away from there in time. Both use exactly the rules the
-  crash itself uses. A crash between two committed routes gets no warning: nothing can
-  change it any more.
+  if it went off right now, on a qubit or part way along a coupler. A small one on a
+  station means a committed route is heading into it, so route that pair before the qubit
+  gets there. Both use exactly the rules the crash itself uses. A crash between two
+  committed routes gets no warning: nothing can change it any more.
 - **Losing a life** flashes the whole chip red, the lost life icon swells and blinks, and
   "LIFE LOST" appears above the chip.
 - **Coherence timer.** The ring around a waiting pair is its coherence. At zero the pair
@@ -51,7 +55,7 @@ that is drawn or in progress, and never share a qubit with a station:
 | Miscalibrated coupler | orange wobbly coupler | 3× slower, and the gate's fidelity × 0.8 | 20 s, then "recalibrated" |
 | Defect coupler | broken red coupler with an X | can't be used at all | 15 s, then "restored" |
 | Speed qubit | gold chevrons | every qubit passing over it travels 2× faster (stacks up to 4×) | 25 s |
-| Bell pair | two ringed qubits linked by a bowed dashed line | a route entering one end continues from the other end, once | 30 s, or until used |
+| Bell pair | two ringed qubits linked by a bowed dashed line | a route entering one end continues from the other end, once. While a route has claimed it, both ends are plain qubits to every other route | 30 s, or until used |
 
 They unlock over time: miscalibrations from the start, speed qubits after 25 s, defects
 after 40 s and Bell pairs after 70 s. The values are in `config.py`.
@@ -73,8 +77,9 @@ chip joins grid neighbours, so the stick always works in four directions.
 - **Co-op:** both players route on the same chip, with shared score and lives. Pairs come
   25% more often than solo (`COOP_SPAWN_RATE`). A pair one player has selected can't be
   taken by the other. When a new pair appears and both players are free, it goes to
-  whoever did *not* route last, so it doesn't always land on P1. If one player commits a route through
-  the other's half-drawn route, the half-drawn one is cut back.
+  whoever did *not* route last, so it doesn't always land on P1. Routes don't block
+  each other here either: if one player commits a route through the other's half-drawn
+  one, the red X shows the second player where they would now crash.
 - **Versus:** two chips side by side, fed the identical sequence of pairs (same seed).
   Each player has their own lives. Once both chips have decohered, the higher score wins.
 

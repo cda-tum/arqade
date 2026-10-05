@@ -4,7 +4,7 @@ import pytest
 
 from superconductor import config, rules
 from superconductor.lattice import Lattice, edge
-from superconductor.rules import Board, Spawn
+from superconductor.rules import Board, Spawn, meet
 
 
 def scripted(*spawns):
@@ -40,12 +40,12 @@ def test_pair_spawns_and_cursor_autoselects_it(board_with):
     assert b.endpoint_owner[(0, 0)] == b.endpoint_owner[(0, 3)] == cur.pair_id
 
 
-def test_reaching_the_partner_commits_and_reserves_the_route(board_with):
+def test_reaching_the_partner_commits_the_route(board_with):
     b = board_with((0, (0, 0), (0, 2)))
     walk(b, "p1", "right", "right")
     pair = next(iter(b.pairs.values()))
     assert pair.route == [(0, 0), (0, 1), (0, 2)]
-    assert edge((0, 0), (0, 1)) in b.edge_owner
+    assert b.route_edges()[edge((0, 0), (0, 1))] == [pair]
     assert (0, 1) in b.busy_nodes()
     assert b.cursors["p1"].pair_id is None
 
@@ -65,23 +65,27 @@ def test_brick_lattice_blocks_missing_vertical(board_with):
     assert b.cursors["p1"].path == [(0, 1)]
 
 
-def test_routes_may_cross_at_a_qubit_but_not_share_couplers(board_with):
+def test_routes_may_go_anywhere_on_the_chip(board_with):
     b = board_with((0, (0, 0), (0, 2)), (0, (1, 1), (4, 1)))
     walk(b, "p1", "right", "right")  # commit pair 0 along row 0
     assert b.cursors["p1"].path[0] == (1, 1)
-    b.move("p1", "up")  # onto (0,1), the middle of the committed route: allowed
-    assert b.cursors["p1"].path == [(1, 1), (0, 1)]
-    b.move("p1", "left")  # but its coupler (0,0)-(0,1) is reserved
-    assert b.cursors["p1"].path == [(1, 1), (0, 1)]
-    b.move("p1", "right")
-    assert b.cursors["p1"].path == [(1, 1), (0, 1)]
+    b.move("p1", "up")  # onto (0,1), the middle of the committed route
+    b.move("p1", "right")  # and along its coupler (0,1)-(0,2): nothing is reserved
+    assert b.cursors["p1"].path == [(1, 1), (0, 1), (0, 2)]
+    b.move("p1", "down")
+    b.move("p1", "left")  # only crossing itself is refused
+    assert b.cursors["p1"].path == [(1, 1), (0, 1), (0, 2), (1, 2)]
+    assert b.events[-1].kind == "blocked"
 
 
-def test_routes_may_run_through_other_stations(board_with):
-    b = board_with((0, (0, 0), (0, 3)), (0, (0, 1), (4, 1)))
-    b.move("p1", "right")
+def test_a_waiting_pair_is_in_both_stations_at_once(board_with):
+    b = board_with((0, (0, 0), (0, 3)), (0, (0, 1), (1, 0)))
+    b.move("p1", "right")  # routes may run through other stations...
     assert b.cursors["p1"].path == [(0, 0), (0, 1)]
-    assert b.predict_collision("p1") == (0, 1)  # that qubit is still sitting there
+    assert b.predict_collision("p1") == (0, 1)  # ...but that pair's qubit is in there
+    b.undo("p1")
+    b.move("p1", "down")
+    assert b.predict_collision("p1") == (1, 0)  # and in its other station too
 
 
 def test_running_into_a_waiting_station_crashes_both_pairs(board_with):
@@ -104,15 +108,27 @@ def test_running_through_a_station_is_safe_once_its_qubit_left(board_with):
     assert b.gates == 2 and b.lives == config.LIVES
 
 
-def test_running_through_a_routes_destination_crashes(board_with):
-    # pair 1 is routed *towards* (0,1): its partner qubit sits there until the gate fires
+def test_routing_a_pair_collapses_it_out_of_its_destination(board_with):
+    # pair 1 is routed *towards* (0,1): its qubit is on the way, not in (0,1)
     b = board_with((0, (0, 0), (0, 3)), (0, (4, 1), (0, 1)))
-    walk(b, "p1", "right", "right", "right")
-    walk(b, "p1", "up", "up", "up", "up")
-    assert b.station_threats() == set()  # both routes committed: nothing left to avert
+    walk(b, "p1", "right", "right", "right")  # through (0,1) while pair 1 still waits
+    walk(b, "p1", "up", "up", "up")
+    assert b.station_threats() == {(0, 1)}
+    assert b.predict_collision("p1") is None  # committing would collapse it out of there
+    b.move("p1", "up")
+    assert b.station_threats() == set()
     for _ in range(200):  # frame-sized steps, as in the game
         b.update(0.05)
-    assert [e.node for e in b.events if e.kind == "crash"] == [(0, 1)]
+    assert b.gates == 2 and b.lives == config.LIVES
+
+
+def test_arriving_just_as_another_qubit_passes_crashes(board_with):
+    b = board_with((0, (2, 0), (2, 4)), (0, (0, 2), (2, 2)))
+    walk(b, "p1", "right", "right", "right", "right")
+    walk(b, "p1", "down", "down")  # gets to (2,2) at the same moment
+    for _ in range(100):
+        b.update(0.05)
+    assert [e.node for e in b.events if e.kind == "crash"] == [(2, 2)]
 
 
 def test_qubit_travels_and_releases_couplers_behind_it(board_with):
@@ -120,9 +136,9 @@ def test_qubit_travels_and_releases_couplers_behind_it(board_with):
     walk(b, "p1", "right", "right", "right")
     pair = next(iter(b.pairs.values()))
     b.update(1.0 / config.QUBIT_SPEED + 0.01)  # one coupler done
-    assert edge((0, 0), (0, 1)) not in b.edge_owner
+    assert edge((0, 0), (0, 1)) not in b.route_edges()
     assert (0, 0) not in b.endpoint_owner
-    assert edge((0, 1), (0, 2)) in b.edge_owner
+    assert edge((0, 1), (0, 2)) in b.route_edges()
     n0, n1, f, jump = pair.segment()
     assert (n0, n1, jump) == ((0, 1), (0, 2), False) and f == pytest.approx(0.0, abs=0.05)
 
@@ -133,7 +149,7 @@ def test_arrival_executes_the_gate_and_scores(board_with):
     b.update(3.0 / config.QUBIT_SPEED)
     assert b.pairs == {}
     assert b.gates == 1
-    assert not b.endpoint_owner and not b.edge_owner
+    assert not b.endpoint_owner and not b.route_edges()
     gate = [e for e in b.events if e.kind == "gate"][0]
     assert gate.fidelity == 1.0
     assert b.score == gate.points > config.GATE_BASE_POINTS
@@ -200,13 +216,14 @@ def test_coop_players_never_share_a_pair(board_with):
         assert b.cursors["p2"].pair_id != p1.pair_id
 
 
-def test_committing_cuts_the_other_players_draft_at_a_shared_coupler(board_with):
+def test_committing_leaves_the_other_players_draft_alone(board_with):
     b = board_with((0, (2, 0), (2, 4)), (0, (1, 1), (4, 4)), players=("p1", "p2"))
     assert b.cursors["p1"].path == [(2, 0)]
     assert b.cursors["p2"].path == [(1, 1)]
     walk(b, "p2", "down", "right", "right")  # P2 drafts along (2,1)-(2,2)-(2,3)
     walk(b, "p1", "right", "right", "right", "right")  # P1 commits row 2 first
-    assert b.cursors["p2"].path == [(1, 1), (2, 1)]  # crossing qubit kept, coupler cut
+    assert b.cursors["p2"].path == [(1, 1), (2, 1), (2, 2), (2, 3)]
+    assert b.predict_collision("p2") == (2, 1)  # side by side into the same qubit
 
 
 def test_spawn_waits_while_an_endpoint_is_busy(board_with):
@@ -271,7 +288,7 @@ def test_crossing_at_the_same_time_is_predicted_and_crashes(board_with):
     crash = [e for e in b.events if e.kind == "crash"]
     assert crash and crash[0].node == (2, 2)
     assert b.lives == config.LIVES - config.CRASH_LIFE_COST
-    assert b.pairs == {} and not b.edge_owner and not b.endpoint_owner
+    assert b.pairs == {} and not b.route_edges() and not b.endpoint_owner
 
 
 def test_crossing_with_enough_gap_is_safe(board_with):
@@ -288,6 +305,56 @@ def test_prediction_counts_the_head_of_a_draft(board_with):
     walk(b, "p2", "down", "down")  # head is the crossing qubit itself
     assert b.cursors["p2"].path[-1] == (2, 2)
     assert b.predict_collision("p2") == (2, 2)
+
+
+# ---------------------------------------------------------------- shared couplers
+
+
+def test_meeting_on_a_coupler():
+    a, b = (0, 0), (0, 1)
+    assert meet((a, b, 0.0, 1.0), (b, a, 0.0, 1.0)) == (0.5, (a, b, 0.5))  # head-on
+    t, (n0, n1, f) = meet((a, b, 0.0, 1.0), (a, b, 0.2, 0.6))  # caught up from behind
+    assert (n0, n1) == (a, b) and t == pytest.approx(1 / 3) and f == pytest.approx(1 / 3)
+    assert meet((b, a, 0.0, 1.0), (b, a, 0.5, 1.5)) is None  # just following
+    assert meet((a, b, 0.0, 1.0), (b, a, 1.0, 2.0)) is None  # one after the other
+    assert meet((a, b, 0.0, 1.0), ((1, 0), a, 0.0, 1.0)) is None  # different couplers
+    assert meet((b, a, -2.0, -1.0), (a, b, -2.0, -1.0)) is None  # long gone
+
+
+def test_head_on_on_a_shared_coupler_crashes_part_way(board_with):
+    b = board_with((0, (0, 0), (0, 4)), (0, (0, 2), (1, 1)))
+    walk(b, "p1", "right", "right", "right", "right")  # row 0, through (0,2)
+    assert b.cursors["p1"].path == [(0, 2)]
+    d = 1.0 / config.QUBIT_SPEED
+    b.update(d)  # the first qubit is at (0,1) now, heading for (0,2)
+    b.move("p1", "left")  # straight at it, along the same coupler
+    where = b.predict_collision("p1")
+    assert where[:2] == ((0, 1), (0, 2)) and where[2] == pytest.approx(0.5)
+    b.move("p1", "down")  # commit anyway
+    for _ in range(40):
+        b.update(0.05)
+    crash = [e for e in b.events if e.kind == "crash"]
+    assert len(crash) == 1
+    assert crash[0].node[:2] == where[:2] and crash[0].node[2] == pytest.approx(where[2])
+    assert b.pairs == {} and b.lives == config.LIVES - config.CRASH_LIFE_COST
+
+
+def test_following_along_a_shared_coupler_is_safe(board_with):
+    b = board_with((0, (0, 0), (0, 4)), (0, (1, 1), (1, 2)))
+    walk(b, "p1", "right", "right", "right", "right")
+    first = next(iter(b.pairs.values()))
+    d = 1.0 / config.QUBIT_SPEED
+    b.update(0.8 * d)
+    walk(b, "p1", "up", "right")  # in behind it, along (0,1)-(0,2)
+    assert b.cursors["p1"].path == [(1, 1), (0, 1), (0, 2)]
+    assert b.predict_collision("p1") is None
+    b.move("p1", "down")
+    second = b.pairs[max(b.pairs)]
+    b.update(1.1 * d)
+    assert b.route_edges()[edge((0, 1), (0, 2))] == [first, second]  # both on it at once
+    for _ in range(200):
+        b.update(0.05)
+    assert b.gates == 2 and b.lives == config.LIVES
 
 
 # ---------------------------------------------------------------- specials
@@ -343,6 +410,18 @@ def test_bell_pair_teleports_once(board_with):
     assert bell not in b.specials  # used up
     gate = [e for e in b.events if e.kind == "gate"][0]
     assert gate.fidelity == 1.0
+
+
+def test_a_claimed_bell_pair_is_a_plain_qubit_to_other_routes(board_with):
+    b = board_with((0, (0, 0), (4, 4)), (0, (1, 1), (1, 4)))
+    bell = b.place_special("bell", nodes=((0, 1), (4, 3)))
+    walk(b, "p1", "right", "right")  # pair 0 claims the link
+    assert bell.claimed_by is not None
+    walk(b, "p1", "up", "right")  # pair 1 runs over (0,1) without jumping
+    assert b.cursors["p1"].path == [(1, 1), (0, 1), (0, 2)]
+    bell.claimed_by = None  # as if pair 0 had crashed: entering (0,1) means jumping again
+    b.update(0.0)
+    assert b.cursors["p1"].path == [(1, 1)]
 
 
 def test_specials_never_land_on_busy_spots(board_with):

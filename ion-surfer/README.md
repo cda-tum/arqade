@@ -43,14 +43,19 @@ joysticks. Instead of the classical ball, the ion's motion is simulated quantum
 mechanically:
 
 - **1 ion:** the full wave packet is simulated on a 400-point grid by solving the 1D
-  Schrödinger equation (Crank–Nicolson). The packet is drawn on the potential, with
-  the colour showing its phase (colour stripes = momentum).
+  Schrödinger equation in the real potential, with no harmonic approximation. The
+  scheme is unitary and 4th order in both time and space (see `quantum.py`), so even
+  a packet kicked four times keeps its shape. The packet is drawn on the potential,
+  with the colour showing its phase (colour stripes = momentum).
 - **2–4 ions (Coulomb crystal):** the game finds the crystal's equilibrium and its
   normal modes (COM, stretch, egyptian, ...). Each mode gets its own simulated wave
   packet. It feels the exact potential along that mode's direction, including trap
-  anharmonicity and the Coulomb repulsion. Only the coupling between modes is left
-  out. A mode where one ion dominates, for example when the ions sit in separate
-  wells, is labelled `ION k`. Every ion is drawn as its position distribution.
+  anharmonicity and the Coulomb repulsion, which the ions can't pass through. Only
+  the coupling between modes is left out. When you reshape the potential, the
+  equilibrium and the modes move but the ions don't: the packets are carried over
+  into the new modes, so the ions stay where they physically are. A mode where one
+  ion dominates, for example when the ions sit in separate wells, is labelled
+  `ION k`. Every ion is drawn as its position distribution.
 
 The cockpit along the top shows this for every mode:
 
@@ -62,6 +67,21 @@ The cockpit along the top shows this for every mode:
   width oscillating at twice the mode frequency.
 - **READOUT:** frequency, ⟨n⟩ (computed exactly from the moments), |α|, phase and
   squeezing in dB.
+
+All of the cockpit is relative to a parabola fitted to the bottom of the well: the
+well the single ion is in, or the crystal's equilibrium for a mode. A parabola keeps
+a Gaussian packet Gaussian. Any other shape bends it, and then the ellipse no longer
+shows the whole state. The cockpit measures this as the packet's uncertainty area,
+which is exactly 1 (in vacuum units) for any Gaussian. When, for a second, any
+mode's area stays above 1.3, or a crystal mode's packet sits in a different well
+along its mode than the equilibrium, the phase-space panel gets a red edge and says
+**ANHARMONIC**. The motion itself is still simulated correctly then; only the
+harmonic picture of it fails. For a crystal, this is also where leaving out the mode
+coupling starts to matter.
+
+The start trap is exactly harmonic across the whole screen, so kicks alone don't set
+the warning off until the packet reaches the screen's walls (about 8 kicks). A narrow
+well, a barrier under the packet, or a kicked crystal's stretch mode do.
 
 How to produce the effects:
 - **Displacement:** a laser kick, or moving the well suddenly.
