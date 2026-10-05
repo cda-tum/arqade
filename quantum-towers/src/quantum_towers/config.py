@@ -40,6 +40,8 @@ hardware for paddle movement (`vertical_axis: 1`, `AXIS_DEADZONE = 0.25`);
 this cabinet does have one, but the axis is what actually works today.
 """
 
+from pathlib import Path
+
 # --- Internal render resolution (scaled + letterboxed onto the real screen) ---
 INTERNAL_WIDTH = 480
 INTERNAL_HEIGHT = 270
@@ -195,3 +197,13 @@ COLOR_HINT = (255, 235, 90)
 # --- Debug ---
 SHOW_FPS_DEFAULT = False
 FPS = 60
+
+# --- Solo time trial ---
+# Every solo tower has exactly this many minimum presses in total, so fastest-clear
+# times are comparable. Measured once: the median of minimum_total over 2000 fully
+# random towers (targets.generate_target_sequence(Random(seed), TOWER_HEIGHT), seeds
+# 0..1999). Observed range 19..33, mean 25.1, median 25.
+SOLO_TOTAL_PRESSES = 25
+SOLO_COUNTDOWN = 3.0  # seconds of 3, 2, 1 before GO
+TIMES_FILE = Path.home() / ".quantum_towers_times.json"  # outside the package: a redeploy keeps it
+TIMES_SLOTS = 10
