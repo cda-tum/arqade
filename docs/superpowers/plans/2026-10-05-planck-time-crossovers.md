@@ -68,12 +68,26 @@ and `microgames/surf.py`, plus optional `tests/test_crossovers_1.py`.
 
 Pauli Invaders lives in `error-invaders/`, and Qlimbers in `quantum-towers/`.
 
+### Task 5: TILE! (colour code) and MERGE! (lattice surgery)
+
+Spec: `docs/superpowers/specs/2026-10-05-planck-time-code-microgames-design.md`. The same
+steps as the crossovers apply, and these two are not crossovers.
+
+**Files:** create `microgames/tile.py` and `microgames/merge.py`, plus
+`tests/test_code_microgames.py`, which checks:
+
+- TILE!'s colourings are valid and every blank has a unique answer;
+- MERGE! has exactly one winning configuration.
+
+The commit is
+`feat: :joystick: Planck Time: TILE! and MERGE! (colour code, lattice surgery)`.
+
 ### Task 4: integration, README and deploy (the controller)
 
 - Merge the three tasks' commits onto the branch, then run the full suite.
 - README:
-  - the microgame table gains the nine rows;
-  - "all 12 microgames" becomes "all 21".
+  - the microgame table gains the eleven rows (the nine crossovers, TILE! and MERGE!);
+  - "all 12 microgames" becomes "all 23".
 - Run a snapshot pass over all 21.
 - Check performance: time `step` plus `draw` for each new microgame on a plain
   surface. The Pi budget is 16.7 ms per frame for two screens.
