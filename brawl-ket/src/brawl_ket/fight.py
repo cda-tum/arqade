@@ -161,6 +161,7 @@ class Fight:
             # Nothing moves in the freeze, but presses still count (chain cancels).
             for key, f in self.fighters.items():
                 f.buffer_presses(inputs.get(key, IDLE))
+                f.hold_switch(inputs.get(key, IDLE))
             return []
 
         events: list[Event] = []
@@ -249,7 +250,7 @@ class Fight:
         for s in self.shots:
             rival_key = _other(s.owner)
             target = self.fighters[rival_key]
-            if target.action == "knockdown":     # a downed fighter can't be hit; shots fly over
+            if target.action == "knockdown" or target.wakeup:   # downed or getting up: shots fly over
                 continue
             if not can_reach(s.move.height, target):
                 continue
@@ -286,9 +287,10 @@ class Fight:
             events.append(Event("switch", st.defender, None, x, y))
             self.hitstop = max(self.hitstop, BLOCK_HITSTOP)
             return
-        # The colour rule against the attacker's basis now: a DIVE's or an A's colour is
-        # whatever the attacker is in at the moment of the hit.
-        error = basis.error_for(m.colour, owner.basis)
+        # The colour rule against the basis the attack started in: a move's colour is fixed
+        # when it starts (a switch mid-swing doesn't recolour it), as its glow has shown.
+        attack_basis = owner.attack_basis if st.attacker is not None else owner.basis
+        error = basis.error_for(m.colour, attack_basis)
         if defender.take_hit(m, error, st.from_facing) == "block":
             events.append(Event("block", st.defender, error, x, y))
             self.hitstop = max(self.hitstop, BLOCK_HITSTOP)
@@ -316,7 +318,7 @@ class Fight:
         m = f.move
         if m is None or m.hitbox is None or f.move_hit or f.phase != "active":
             return
-        if rival.action == "knockdown":
+        if rival.action == "knockdown" or rival.wakeup:     # downed, or getting up
             return
         if not can_reach(m.height, rival):
             return
@@ -342,7 +344,8 @@ class Fight:
         # the shockwave hits any rival still on its feet, one reeling from the slam itself
         # too (slam and shockwave are opposite colours: a standing rival takes one). A jump
         # clears it.
-        if not win.hit and rival.action != "knockdown" and can_reach(move.landing_height, rival):
+        if not win.hit and rival.action != "knockdown" and not rival.wakeup \
+                and can_reach(move.landing_height, rival):
             where = _overlap(f.world_box(move.landing), rival.hurtbox)
             if where is not None:
                 win.hit = True

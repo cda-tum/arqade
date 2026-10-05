@@ -995,24 +995,51 @@ def test_a_hit_during_the_switch_recovery_is_judged_by_the_new_colour():
     assert p2.basis == X_BASIS and kinds(of(events, "hit", "block")) == ["block"]
 
 
-def test_switching_is_only_possible_when_free():
+def test_switching_is_always_possible():
+    # mid-attack, in hitstun, in a knockdown and in the air: Y always switches
     fight = new(gap=200.0)
     p1 = fight.fighters["p1"]
     script(fight, 1, p1=A)
     assert p1.action == "attack"
-    script(fight, 1, p1=Y)                          # mid-attack: no switch
-    assert p1.basis == Z_BASIS
+    script(fight, 1, p1=Y)
+    assert p1.basis == X_BASIS
     fight = new()
     p2 = fight.fighters["p2"]
     script(fight, JAB_HIT_STEP + 1, p1={0: A})
-    assert p2.action == "hitstun"
-    script(fight, 1, p2=Y)                          # in hitstun: no switch
+    assert p2.action == "hitstun" and fight.hitstop > 0
+    script(fight, 1, p2=Y)                  # pressed in the hit freeze: it lands as play resumes
+    script(fight, fight.hitstop + 1)
+    assert p2.basis == X_BASIS
+    p2.take_hit(TRIO.moves["crouch.B"], basis.Y, -1)
+    assert p2.action == "knockdown"
+    script(fight, 1, p2=Y)
     assert p2.basis == Z_BASIS
     fight = new(gap=200.0)
     p1 = fight.fighters["p1"]
     script(fight, 3, p1=FighterInput(up=True))
-    script(fight, 1, p1=Y)                          # in the air: a switch
+    script(fight, 1, p1=Y)
     assert p1.basis == X_BASIS
+
+
+def test_switching_in_hitstun_turns_the_rest_of_a_string_away():
+    # p2 switches after the first jab of an A, A string: the second (green) jab bounces
+    fight = new()
+    p2 = fight.fighters["p2"]
+    events = []
+    for i in range(60):
+        hit_before = len(of(events, "hit"))
+        p2_in = Y if hit_before == 1 and p2.basis == Z_BASIS else IDLE
+        events += fight.step({"p1": A if i in (0, JAB_HIT_STEP) else IDLE, "p2": p2_in})
+    assert kinds(of(events, "hit", "block")) == ["hit", "block"]
+
+
+def test_an_attacks_colour_is_fixed_when_it_starts():
+    # p1 starts a (green) jab, then switches before it lands: it still lands green
+    fight = new()
+    fight.fighters["p2"].basis = X_BASIS            # purple: a green jab bounces
+    events = script(fight, 20, p1={0: A, 1: Y})
+    assert fight.fighters["p1"].basis == X_BASIS
+    assert [(e.kind, e.error) for e in of(events, "hit", "block")] == [("block", basis.X)]
 
 
 def test_a_dive_that_lands_switches_the_diver_and_one_that_bounces_off_does_not():
@@ -1153,3 +1180,40 @@ def test_a_jump_clears_a_sweep_that_hits_a_standing_rival():
     assert 0 < p2.y < SWEEP.hitbox.y + SWEEP.hitbox.h
     events += script(fight, 40)
     assert of(events, "hit", "block") == [] and p2.health == 100
+
+
+# --- no infinites: mashing a normal leaves the defender free between strings -------------
+
+from brawl_ket.config import CHAIN_MAX  # noqa: E402
+
+
+def longest_string(c1, c2, button, crouch, every):
+    """p1 mashes `button` every `every` frames at a matching rival; the most hits p2 takes
+    in a row without one free frame (idle, walking, crouching) between them."""
+    fight = versus(c1, c2, 50.0)
+    p2 = fight.fighters["p2"]
+    if button == "b":
+        p2.basis = X_BASIS              # B is the other colour: make it match
+    held = FighterInput(down=crouch)
+    script(fight, 20, p1=held, p2=held)
+    run_, best = 0, 0
+    for i in range(600):
+        events = fight.step({"p1": replace(held, **{button: i % every == 0}), "p2": held})
+        if of(events, "hit"):
+            run_ += 1
+            best = max(best, run_)
+        if p2.action in ("idle", "walk", "crouch"):
+            run_ = 0
+        if fight.over:
+            break
+    return best
+
+
+@pytest.mark.parametrize("c1,c2", [(TRIO, TRIO), (TRIO, QUINT), (QUINT, TRIO), (QUINT, QUINT)],
+                         ids=["TRIO-TRIO", "TRIO-QUINT", "QUINT-TRIO", "QUINT-QUINT"])
+def test_mashing_a_normal_is_never_an_infinite(c1, c2):
+    for button in ("a", "b"):
+        for crouch in (False, True):
+            for every in (1, 2, 3, 5):
+                best = longest_string(c1, c2, button, crouch, every)
+                assert 1 <= best <= CHAIN_MAX, (button, crouch, every, best)

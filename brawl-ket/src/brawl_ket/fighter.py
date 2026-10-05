@@ -29,6 +29,9 @@ from .config import (
 from .moves import Box, Character, Move
 
 KNOCKDOWN_FRAMES = 40
+# GAME RULE: a fighter getting up can't be hit for this long, so a knockdown can't be repeated on
+# the first frame back up (a sweep that lands every time the rival stands is an infinite).
+WAKEUP_FRAMES = 8
 KO_STUN = 1 << 30          # a knocked-out fighter's knockdown never runs out
 STUN_DECAY = 0.85          # vx multiplier per frame of hitstun / knockdown
 
@@ -68,6 +71,9 @@ class Fighter:
         self.health = char.health
         self.basis = basis.Z_BASIS      # green: |0>, |1>
         self.switch_lock = 0            # frames left after a switch in which you can't attack
+        self.switch_pending = False     # Y pressed in a hitstop freeze: applied on the next step
+        self.wakeup = 0                 # frames left of the invulnerability after getting up
+        self.attack_basis = self.basis  # the basis the move in progress started in (its colour)
         self.crouching = False
         self.action = "idle"        # idle walk crouch jump attack hitstun knockdown
         self.frame = 0              # frames into the action (0 on its first frame)
@@ -146,8 +152,8 @@ class Fighter:
     def step(self, inp: FighterInput, rival_x: float) -> list[tuple[str, dict]]:
         """Advance one frame; returns local events.
 
-        A Y press switches basis at once if the fighter is free to act (idle, walking,
-        crouching or in the air); it isn't buffered.
+        A Y press switches basis at once, whatever the fighter is doing: walking, attacking,
+        reeling from a hit or knocked down.
         """
         events: list[tuple[str, dict]] = []
         for slot in self.cooldowns:
@@ -156,6 +162,13 @@ class Fighter:
         self.frame += 1
         if self.switch_lock > 0:
             self.switch_lock -= 1
+        if self.wakeup > 0:
+            self.wakeup -= 1
+        if inp.y or self.switch_pending:
+            self.switch_pending = False
+            self.switch()
+            self.switch_lock = SWITCH_RECOVERY
+            events.append(("switch", {}))
 
         # Presses are buffered even during hitstun, so one made in the last frames
         # of stun comes out on the first free frame.
@@ -181,6 +194,11 @@ class Fighter:
         for btn in ("a", "b", "x"):
             if getattr(inp, btn):
                 self.buffer.append(Press(btn, 0))
+
+    def hold_switch(self, inp: FighterInput) -> None:
+        """A Y pressed in a hitstop freeze (when step() isn't run) switches on the next step."""
+        if inp.y:
+            self.switch_pending = not self.switch_pending   # two presses in a freeze cancel out
 
     def take_hit(self, move: Move, error: str, from_facing: int) -> str:
         """An attack dealing `error` reaches this fighter. Returns "hit" if the error changes
@@ -279,6 +297,8 @@ class Fighter:
                 self.stun = 0
                 if self.y == 0:
                     self.vx = 0.0
+                if self.action == "knockdown":
+                    self.wakeup = WAKEUP_FRAMES
                 self._neutral()
         elif self.action == "attack":
             m = self.move
@@ -332,10 +352,6 @@ class Fighter:
             self.crouching = inp.down and not inp.up    # crouching is instant: it's ducking
 
         free = on_ground_free or self.action == "jump"
-        if inp.y and free:
-            self.switch()
-            self.switch_lock = SWITCH_RECOVERY
-            events.append(("switch", {}))
         if (free or self.action == "attack") and self.switch_lock == 0:
             self._try_buffer(inp.dx, rival_x, free, events)
 
@@ -368,6 +384,7 @@ class Fighter:
     def _start_move(self, slot: str, move: Move, cancel: bool, events: list) -> None:
         self.move = move
         self.slot = slot
+        self.attack_basis = self.basis  # the move's colour is fixed now, whatever comes next
         self.chained = cancel       # a cancel uses the move's chain_startup, if it has one
         self.move_hit = False
         self.bounced = False

@@ -664,3 +664,13 @@ def test_a_bounced_diver_hit_in_a_trade_stops_springing_up():
     assert f.vy > 0 and f.bounced
     f.take_hit(JAB, basis.Y, -1)
     assert f.vy <= 0 and not f.bounced
+
+
+def test_getting_up_from_a_knockdown_is_briefly_invulnerable():
+    from brawl_ket.fighter import KNOCKDOWN_FRAMES, WAKEUP_FRAMES
+    f = make()
+    f.take_hit(SWEEP, basis.Y, 1)
+    run(f, IDLE, KNOCKDOWN_FRAMES)
+    assert f.action == "idle" and f.wakeup == WAKEUP_FRAMES
+    run(f, IDLE, WAKEUP_FRAMES)
+    assert f.wakeup == 0

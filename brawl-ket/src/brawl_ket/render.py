@@ -577,7 +577,7 @@ class Renderer:
         if m.switch_rival:
             inner, outer = P.WHITE, P.WHITE
         else:
-            error = basis.error_for(m.colour, f.basis)
+            error = basis.error_for(m.colour, f.attack_basis)
             inner = GREEN if error == basis.Y else ERROR_COLOUR[error]
             outer = PURPLE if error == basis.Y else P.lighten(inner, 0.5)
         pygame.draw.circle(self.surface, P.INK, p, r + 3)

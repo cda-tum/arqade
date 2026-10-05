@@ -107,7 +107,7 @@ TRIO = Character(
     moves=MappingProxyType({
         "stand.A": Move(
             "jab", 4, 3, 8, Box(14, 70, 44, 14), OWN, HIGH,
-            damage=4, hitstun=16, knockback=0.8, lunge=1.5,
+            damage=4, hitstun=12, knockback=0.8, lunge=1.5,
             cancels=("stand.A", "stand.B", "crouch.A"),
             poses=("jab_wind", "jab_hit", "jab_wind"),
         ),
@@ -118,7 +118,7 @@ TRIO = Character(
         ),
         "crouch.A": Move(
             "low jab", 4, 3, 9, Box(12, 20, 44, 12), OWN, LOW,
-            damage=4, hitstun=15, knockback=0.8, lunge=1.5,
+            damage=4, hitstun=12, knockback=0.8, lunge=1.5,
             cancels=("crouch.A", "crouch.B", "stand.B"),
             poses=("low_wind", "low_hit", "low_wind"),
         ),
