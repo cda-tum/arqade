@@ -73,6 +73,39 @@ like the cabinet's 2x3 grid, with no printed button names: the layout alone maps
 hands, and letters like X and Y would read as gates. RESET doesn't fit a square, so it is drawn as a
 circular reset arrow.
 
+## Single player: time trial
+
+On the title, the stick picks **1 PLAYER** or **2 PLAYERS** and A or Start begins. Two
+players play the race above, unchanged. One player gets a time trial:
+
+- **One tower, centred.** It uses the same gates, legend and push-up-to-confirm, and either
+  pad can play.
+- **The timer.** After 3, 2, 1, GO, the clock runs (`m:ss.cc` at the top) until floor 16.
+  - A wrong confirm stuns for a second, as in versus, and that costs time.
+  - There are no charges or attacks. A minimum-press climb still shows PERFECT.
+  - Start pauses with RESUME and QUIT TO TITLE, and the clock stops while paused.
+- **Fair towers.** Every run is a fresh random tower, but its minimum number of presses
+  is always the same (`SOLO_TOTAL_PRESSES = 25`, the median over 2000 random towers). That
+  keeps times comparable without anyone memorising a tower.
+  - Floor *f*'s minimum is the breadth-first minimum from floor *f-1*'s target, so it
+    counts from where you really stand.
+  - `solo.equal_difficulty_tower` builds the tower floor by floor, redrawing when the
+    running total can't land on the constant. That takes well under a millisecond.
+- **Fastest clears.**
+  - A top-10 time asks for three initials: the stick up and down changes the letter, A goes
+    on and finishes on the last letter, and B steps back.
+  - Then the FASTEST CLEARS table shows, with the new entry blinking. It returns to the
+    title after 8 s, or on A after 1 s.
+  - The 60 s idle timeout works throughout, and an abandoned entry is saved as typed so
+    far.
+  - Times are kept in `~/.quantum_towers_times.json`, outside the package, so a redeploy
+    keeps them. A missing or broken file is an empty table, and saves are atomic.
+
+The rules are in `solo.py` (the tower generator and the pausable timer) and `times.py`
+(the table), both pure and tested. The loops are `run_solo`, `run_initials` and
+`run_times_table` in `main.py`, and `tests/test_solo_flow.py` drives them headlessly with
+scripted input.
+
 ## Notation
 
 The bundled pixel font is missing the Unicode ket bracket glyphs (`⟩`/`⟨` silently render as an
@@ -155,7 +188,8 @@ Covers `quantum.py` (gate matrices, global-phase normalization/equality), `searc
 minimum-steps search, including a case where the true shortest path is shorter than however the
 target was generated), `targets.py` (random-walk generation), `player.py` (floor-advance/charge
 logic and knockback), `notation.py` (ket rendering, including the general fallback form), and
-`sound.py` (tone-sample generation), and `pause.py` (the pause menu; `tests/test_pause.py` also
+`sound.py` (tone-sample generation), `solo.py` and `times.py` (the time trial's tower,
+timer and table), and `pause.py` (the pause menu; `tests/test_pause.py` also
 drives the real `run_game` loop headlessly with scripted input, to check that a pause really
 freezes play) — this is most of the game's actual complexity, and none of
 it depends on pygame. The pygame game
