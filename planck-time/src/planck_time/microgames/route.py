@@ -1,6 +1,7 @@
 """ROUTE!: a Superconductor crossover. A small chip of Xmon qubits joined by
 couplers. Your pair (yellow) waits at the chip's two sides, its coherence
-ring running down with the clock. A rival route (violet), already committed,
+ring running down with the clock. A rival route (red, so it reads as a wall;
+Superconductor's own is violet), already committed,
 cuts across the chip between them. Steer your route from the ringed station
 one coupler per stick push, as in Superconductor: pushing back the way you
 came takes a step back, and a push off the chip or into your own route just
@@ -42,8 +43,8 @@ SUBSTRATE_EDGE = (40, 48, 88)
 PAD = (32, 40, 64)
 COUPLER = (48, 64, 96)
 QUBIT = (88, 104, 144)
-YOURS = (248, 200, 64)  # Superconductor's yellow pair...
-RIVAL = (184, 112, 248)  # ...and its violet one
+YOURS = (248, 200, 64)  # Superconductor's yellow pair
+RIVAL = (224, 48, 48)  # the rival: red, a wall not to cross (violet in Superconductor)
 CRASH = (248, 72, 88)
 
 
