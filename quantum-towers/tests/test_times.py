@@ -101,3 +101,9 @@ def test_the_save_is_atomic(tmp_path, monkeypatch):
     t.add("BBB", 10.0)
     assert path.read_text() == before  # the old table is untouched
     assert sorted(p.name for p in tmp_path.iterdir()) == ["times.json"]  # no temp file left
+
+
+def test_the_saved_table_is_world_readable(tmp_path):
+    path = tmp_path / "times.json"
+    Times(path).add("AAA", 20.0)
+    assert path.stat().st_mode & 0o777 == 0o644

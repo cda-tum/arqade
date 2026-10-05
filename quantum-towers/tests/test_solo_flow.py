@@ -408,3 +408,11 @@ def test_a_run_that_did_not_finish_skips_both(flow, result):
     run, calls = flow
     assert run((result, 0.0), Times(None)) == result
     assert calls == []
+
+
+def test_initials_hint_says_done_on_the_last_letter():
+    entry = screens.NameEntry()
+    assert "A: NEXT" in screens.initials_hint(entry)
+    entry.update(0, 0, True, False)
+    entry.update(0, 0, True, False)
+    assert "A: DONE" in screens.initials_hint(entry)

@@ -821,8 +821,9 @@ def run_initials(
     time_text = solo.format_time(seconds)
     t = 0.0
     idle_seconds = 0.0
-    # The A that skipped the banner, or a stick still pushed, must be let go
-    # before it counts.
+    # A or B still held from the run (both are gates there: RESET and H),
+    # or a stick still pushed from the last climb, must be let go before it
+    # counts, or it would pick a letter on the first frame.
     prev_confirm = prev_back = True
     stick_free = False
 

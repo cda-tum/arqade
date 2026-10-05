@@ -56,6 +56,9 @@ class Times:
             ) as tmp:
                 tmp_name = tmp.name
                 tmp.write(json.dumps([asdict(e) for e in self.entries]))
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.chmod(tmp_name, 0o644)  # NamedTemporaryFile creates it 0600
             os.replace(tmp_name, self.path)
         except OSError:
             if tmp_name is not None:

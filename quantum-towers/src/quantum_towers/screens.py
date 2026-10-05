@@ -21,6 +21,10 @@ LEGEND_LINES = [
     "Match it in the minimum presses for a charge",
     "Push UP to confirm -- wrong state stuns you!",
 ]
+# 1 PLAYER has no charges, so its fourth line is about the clock instead.
+SOLO_LEGEND_LINES = [
+    *LEGEND_LINES[:3], f"Climb all {config.TOWER_HEIGHT} floors as fast as you can", *LEGEND_LINES[4:]
+]
 
 
 def button_grid() -> list[list[tuple[str, str | None]]]:
@@ -59,7 +63,7 @@ def draw_title_screen(
     surface.blit(title, title.get_rect(center=(config.INTERNAL_WIDTH // 2, 40)))
 
     y = 90
-    for line in LEGEND_LINES:
+    for line in SOLO_LEGEND_LINES if selected == "1p" else LEGEND_LINES:
         line_surf = legend_font.render(line, False, config.COLOR_TEXT)
         surface.blit(line_surf, line_surf.get_rect(center=(config.INTERNAL_WIDTH // 2, y)))
         y += 20
@@ -271,7 +275,16 @@ class AutoRepeat:
         return 0
 
 
-INITIALS_HINT = "STICK: LETTER   A: NEXT   B: BACK"
+def initials_hint(entry: NameEntry) -> str:
+    """The footer, saying what A does from where the cursor is."""
+    return f"STICK: LETTER   A: {'DONE' if entry.pos == 2 else 'NEXT'}   B: BACK"
+
+
+def _draw_arrow(surface: pygame.Surface, centerx: int, tip_y: int, pointing_up: bool) -> None:
+    """A small filled triangle, 9 px wide and 5 px tall, tip at tip_y."""
+    base_y = tip_y + 4 if pointing_up else tip_y - 4
+    points = [(centerx, tip_y), (centerx - 4, base_y), (centerx + 4, base_y)]
+    pygame.draw.polygon(surface, config.COLOR_HINT, points)
 
 
 def draw_initials(
@@ -303,12 +316,11 @@ def draw_initials(
             box.centery - letter_font.get_height() // 2,
         )
         if active and blink_visible(t, 0.5):
-            for y, glyph in ((box.y - 12, "^"), (box.bottom + 5, "v")):
-                visuals.blit_outlined_text_centered(
-                    surface, small_font, glyph, config.COLOR_HINT, box.centerx, y
-                )
+            _draw_arrow(surface, box.centerx, box.y - 9, pointing_up=True)
+            _draw_arrow(surface, box.centerx, box.bottom + 8, pointing_up=False)
     visuals.blit_outlined_text_centered(
-        surface, small_font, INITIALS_HINT, config.COLOR_TOWER, centerx, config.INTERNAL_HEIGHT - 22
+        surface, small_font, initials_hint(entry), config.COLOR_TOWER, centerx,
+        config.INTERNAL_HEIGHT - 22,
     )
 
 
@@ -322,7 +334,8 @@ def draw_times_table(
     t: float,
 ) -> None:
     """FASTEST CLEARS: rank, initials and time, with the new entry blinking.
-    `entries` are times.Entry (name, seconds), fastest first."""
+    `entries` are times.Entry (name, seconds), fastest first. `t` is the
+    seconds on this screen; the A: CONTINUE hint shows once it takes input."""
     surface.fill(config.COLOR_BACKGROUND)
     centerx = config.INTERNAL_WIDTH // 2
     visuals.blit_outlined_text_centered(
@@ -345,3 +358,7 @@ def draw_times_table(
             (box.x + 41, f"{i + 1:>2}."), (box.x + 95, entry.name), (box.x + 149, format_time(entry.seconds)),
         ):
             visuals.blit_outlined_text(surface, row_font, text, color, (x, y))
+    if t >= config.TIMES_TABLE_LOCK:
+        visuals.blit_outlined_text_centered(
+            surface, small_font, "A: CONTINUE", config.COLOR_TOWER, centerx, config.INTERNAL_HEIGHT - 22
+        )
