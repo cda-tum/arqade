@@ -4,7 +4,8 @@ This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
 `superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
-Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. This file
+Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. (`launcher/`
+runs them all from one menu on an ordinary PC instead.) This file
 collects hardware facts and hard-won quirks that apply **across games**, so a
 future session doesn't have to rediscover them from scratch. Per-game
 specifics (gameplay, architecture, tests) belong in each game's own
@@ -290,6 +291,29 @@ desk: it creates a uinput joystick with the cabinet encoders' exact
 bus/vendor/product/version, so SDL derives the same GUID and ES applies the
 same `es_input.cfg` entry to it. Real button presses, no cabinet required —
 that is how the lockdown above was verified rather than assumed.
+
+## Local PC launcher (`launcher/`, `./arqade.sh`)
+
+Off the cabinet, `./arqade.sh` puts every game behind one fullscreen menu on
+an ordinary PC (details in `launcher/README.md`). It plays EmulationStation's
+role and keeps Batocera's contract: each game runs in its own process via its
+`<package>.main.main(argv)`. A new game needs nothing extra to show up there,
+as long as it keeps to what the existing ones do:
+
+- **Folder and package names match** (`gate-drop/src/gate_drop/main.py`).
+  The launcher discovers games that way and takes the menu name and text from
+  `batocera/gamelist.xml`.
+- **`main(argv)` accepts the shared flags**: `--fullscreen`, `--window-size`,
+  `--no-keyboard` and `--fps`.
+- **New dependencies also go into `launcher/pyproject.toml`.** All games run
+  in the launcher's one interpreter, and a launcher test fails when one is
+  missing.
+- **Read input through `pygame.event.get()` and
+  `pygame.joystick.Joystick(i)`.** The launcher turns the keyboard into two
+  virtual cabinet pads (raw button numbers, analog stick axes) by wrapping
+  exactly those, and makes Esc quit. A game that polls with
+  `pygame.event.poll()` or `wait()` would not see the pads, and Esc would not
+  quit it.
 
 ## Button convention (all games must follow this)
 

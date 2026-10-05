@@ -41,7 +41,7 @@ def test_ground_state_is_stationary_vacuum():
     wp.set_gaussian(X0, trap.sigma0)
     evolve(wp, 1.0)
     m = wp.moments()
-    assert m.norm == pytest.approx(1.0, abs=1e-6)  # Crank-Nicolson is unitary
+    assert m.norm == pytest.approx(1.0, abs=1e-6)  # the steps are unitary
     ps = wp.phase_space(m, trap)
     assert ps.var_q == pytest.approx(1.0, abs=0.03)
     assert ps.var_p == pytest.approx(1.0, abs=0.03)
@@ -126,3 +126,58 @@ def test_mean_phonon_number_from_moments_matches_fock_sum():
     from_moments = (ps.var_q + ps.q ** 2 + ps.var_p + ps.p ** 2 - 2) / 4
     pops = wp.fock_populations(trap, 30)
     assert from_moments == pytest.approx(sum(k * p for k, p in enumerate(pops)), abs=0.02)
+
+
+def coherent(wp, trap, alpha_p):
+    """Vacuum kicked to alpha = i alpha_p, the way the sandbox's laser does it."""
+    wp.set_gaussian(trap.x0, trap.sigma0)
+    wp.kick(alpha_p / trap.sigma0)
+
+
+def test_a_fast_packet_reads_as_unsqueezed():
+    # finite differences see sin(k dx)/dx: before the moments divided out
+    # the packet's mean momentum, this read as ~2 dB of squeezing
+    wp = harmonic_packet()
+    trap = wp.fit_trap(X0)
+    coherent(wp, trap, 6.0)
+    ps = wp.phase_space(wp.moments(), trap)
+    assert ps.p == pytest.approx(12.0, rel=0.01)
+    assert ps.area() == pytest.approx(1.0, abs=0.01)
+    assert abs(ps.squeezing_db()) < 0.1
+
+
+def test_a_well_far_above_zero_still_oscillates_at_its_own_frequency():
+    # a constant offset is only a global phase, but the time steps compress
+    # level spacings unless energies are measured from near the packet's own
+    wp = WavePacket(400, 1200, D)
+    k = OMEGA * OMEGA / D
+    wp.set_potential([1000.0 + 0.5 * k * (x - X0) ** 2 for x in wp.xs])
+    trap = wp.fit_trap(X0)
+    wp.set_gaussian(X0 + 3 * trap.sigma0, trap.sigma0)
+    wp.set_reference(wp.moments().energy)
+    evolve(wp, math.pi / OMEGA, dt=1 / 120)  # half a period: mirrored
+    assert wp.moments().mean_x == pytest.approx(X0 - 3 * trap.sigma0, abs=0.1 * trap.sigma0)
+
+
+def test_a_hot_packet_stays_coherent_at_the_sandbox_time_step():
+    wp = harmonic_packet()
+    trap = wp.fit_trap(X0)
+    coherent(wp, trap, 6.0)  # four laser kicks' worth
+    for _ in range(5):  # ~5 s, with the reference following like measure() does
+        wp.set_reference(wp.moments().energy)
+        evolve(wp, 1.0, dt=1 / 120)
+    ps = wp.phase_space(wp.moments(), trap)
+    assert abs(ps.alpha) == pytest.approx(6.0, abs=0.1)
+    assert ps.area() == pytest.approx(1.0, abs=0.02)
+
+
+def test_area_is_one_for_gaussians_and_more_for_anything_else():
+    wp = harmonic_packet()
+    trap = wp.fit_trap(X0)
+    wp.set_gaussian(X0 + 40, trap.sigma0 / 2, k0=0.3 / trap.sigma0)  # displaced, squeezed
+    assert wp.phase_space(wp.moments(), trap).area() == pytest.approx(1.0, abs=0.01)
+    a = list(wp.psi)
+    wp.set_gaussian(X0 - 40, trap.sigma0 / 2)
+    wp.psi = [p + q for p, q in zip(a, wp.psi)]  # a cat state: two packets
+    wp.normalize()
+    assert wp.phase_space(wp.moments(), trap).area() > 2

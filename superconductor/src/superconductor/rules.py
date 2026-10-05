@@ -12,20 +12,24 @@ The model:
   route from there, one coupler at a time. A player can only ever start from
   stations, never roam the chip freely.
 - When the route reaches the partner station it is **committed** and the
-  qubit from the starting end travels along it at QUBIT_SPEED. Its couplers
-  are reserved (no other route may use them) and released one by one as soon
-  as the qubit has passed them.
-- **Qubits are shared, couplers are not.** Routes may cross each other at a
-  qubit, and may even run through other stations. Each qubit has a finite
-  extent (NODE_RADIUS, in coupler lengths): two qubits inside the same one at
-  the same time crash, both gates are lost and it costs a life. A station
-  counts as occupied while its qubit is still sitting there: both ends of a
-  waiting pair, the start of a route until its qubit has left, and the end of
-  a route until the gate has fired. So running through a station is only
-  safe if that pair gets routed away in time -- the player is free to plan
-  for that. Live collisions and the lookahead (`predict_collision`,
-  `station_threats`) use the same occupancy windows, so a warning on screen
-  means exactly what will happen unless the player acts.
+  qubit from the starting end travels along it at QUBIT_SPEED.
+- **Nothing is reserved.** A route may go anywhere but over a defect coupler
+  (or across itself): through other stations, across other routes, and along
+  the very couplers another qubit is travelling. What stops two qubits is
+  that they crash. Each qubit has a finite extent (NODE_RADIUS, in coupler
+  lengths): two qubits inside the same one at the same time crash, and so do
+  two qubits that meet on a coupler, head-on or one catching up with the
+  other. Both gates are lost and it costs a life.
+- **A waiting pair is in superposition.** Until it is routed, its qubit is
+  in both stations at once, so running into either one crashes. Committing
+  a route collapses it onto the start: from then on it is the travelling
+  qubit and nowhere else, and both stations are free to pass (the start once
+  the qubit has left it). So running through a waiting station is only safe
+  if that pair gets routed, from either end, before the other qubit gets
+  there -- the player is free to plan for that. Live collisions and the
+  lookahead (`predict_collision`, `station_threats`) use the same occupancy
+  windows, so a warning on screen means exactly what will happen unless the
+  player acts.
 - Arrival executes the gate: points for a short route (fidelity) and for the
   coherence that was left.
 
@@ -37,6 +41,8 @@ On top of that, **specials** appear on the chip for a while:
 - `speed`: a qubit that doubles the speed of every qubit travelling over it.
 - `bell`: two linked qubits. A route that enters one continues from the
   other, once; the link is used up when the qubit teleports through it.
+  While a committed route has claimed the link, its two qubits are plain
+  qubits to every other route.
 
 Specials never appear on anything a route (committed or half-drawn) still
 needs, and never share a qubit with a station.
@@ -51,12 +57,18 @@ import random
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from itertools import combinations
 
 from superconductor import config
 from superconductor.lattice import Edge, Lattice, Node, edge
 
 PALETTE_SIZE = 8  # number of distinct pair colors game.py provides
 SPECIAL_KINDS = ("miscal", "defect", "speed", "bell")
+
+# Where a crash happens: a qubit, or (a, b, f) -- f of the way along the
+# coupler from a to b, with a < b.
+Place = Node | tuple[Node, Node, float]
+Link = tuple[Node, Node, float, float]  # a qubit crossing a coupler: (from, to, enter, leave)
 
 
 @dataclass(frozen=True)
@@ -145,13 +157,52 @@ class Cursor:
 
 
 @dataclass
+class Occupancy:
+    """Where one pair's qubits will be, in seconds from now."""
+    nodes: dict[Node, tuple[float, float]] = field(default_factory=dict)  # qubit -> (from, until)
+    links: list[Link] = field(default_factory=list)  # couplers it still travels (not Bell jumps)
+
+
+def meet(p: Link, q: Link) -> tuple[float, Place] | None:
+    """When (from now) and where two qubits on the same coupler run into each other.
+
+    Each moves at a steady speed between entering and leaving it, so they meet
+    exactly when the gap between them changes sign: head-on, or one catching
+    up with the other. One just following the other never meets it (if it
+    follows too closely they still crash, inside the next qubit).
+    """
+    a, b, p0, p1 = p
+    c, d, q0, q1 = q
+    if {a, b} != {c, d}:
+        return None
+    lo, hi = max(p0, q0), min(p1, q1)
+    if lo >= hi or hi <= 0:
+        return None
+
+    def x(t: float) -> float:  # p's way from a to b
+        return (t - p0) / (p1 - p0)
+
+    def y(t: float) -> float:  # q's, measured the same way
+        f = (t - q0) / (q1 - q0)
+        return f if c == a else 1.0 - f
+
+    g0, g1 = x(lo) - y(lo), x(hi) - y(hi)
+    if g0 * g1 > 0:
+        return None
+    t = lo if g0 == g1 else lo + (hi - lo) * g0 / (g0 - g1)
+    f = x(t)
+    place = (a, b, f) if a < b else (b, a, 1.0 - f)
+    return max(t, 0.0), place
+
+
+@dataclass
 class Event:
     # spawn | select | step | back | blocked | routed | teleport | boost | gate
     # | decohere | crash | special_on | special_off
     kind: str
     pair: Pair | None = None
     player: str | None = None
-    node: Node | None = None
+    node: Place | None = None  # a crash may happen part way along a coupler
     points: int = 0
     fidelity: float = 1.0
     special: Special | None = None
@@ -168,7 +219,6 @@ class Board:
         self.cursors = {p: Cursor(p) for p in players}
         self.pairs: dict[int, Pair] = {}  # insertion order = age, oldest first
         self.endpoint_owner: dict[Node, int] = {}  # stations, exclusive
-        self.edge_owner: dict[Edge, int] = {}  # couplers on committed routes, exclusive
         self.specials: list[Special] = []
         self.queue: list[Spawn] = []
         # Two routers on one chip get pairs more often (CO-OP).
@@ -226,6 +276,23 @@ class Board:
             return None
         return s.nodes[1] if s.nodes[0] == n else s.nodes[0]
 
+    def open_bell(self, n: Node) -> Node | None:
+        """Where a route entering `n` jumps to: a Bell pair no route has claimed yet."""
+        s = self.node_special(n)
+        if s is None or s.claimed_by is not None:
+            return None
+        return self.bell_partner(n)
+
+    def route_edges(self) -> dict[Edge, list[Pair]]:
+        """Couplers committed routes still have to travel, with the pairs on them."""
+        out: dict[Edge, list[Pair]] = {}
+        for pair in self.travelling_pairs():
+            route = pair.route
+            for i in range(int(pair.progress), len(route) - 1):
+                if i not in pair.teleports:
+                    out.setdefault(edge(route[i], route[i + 1]), []).append(pair)
+        return out
+
     def busy_nodes(self) -> set[Node]:
         """Qubits that stations and specials must not appear on."""
         busy = set(self.endpoint_owner)
@@ -239,42 +306,34 @@ class Board:
 
     def busy_edges(self) -> set[Edge]:
         """Couplers that specials must not appear on."""
-        busy = set(self.edge_owner)
+        busy = set(self.route_edges())
         for cur in self.cursors.values():
             busy.update(edge(a, b) for a, b in zip(cur.path, cur.path[1:]))
         busy.update(s.edge for s in self.specials if s.edge is not None)
         return busy
 
-    def _can_enter(self, pair: Pair, frm: Node, to: Node, target: Node) -> bool:
-        """May `pair`'s route step over the coupler frm -> to?
+    def _can_enter(self, frm: Node, to: Node) -> bool:
+        """May a route step over the coupler frm -> to? Anything but a defect.
 
-        Other stations are deliberately allowed (see the module docstring).
+        Other stations and other routes are deliberately allowed (see the
+        module docstring): running into them is a crash, not a wall.
         """
-        e = edge(frm, to)
-        if e in self.edge_owner:
-            return False
-        s = self.edge_special(e)
-        if s is not None and s.kind == "defect":
-            return False
-        s = self.node_special(to)
-        if s is not None and s.kind == "bell" and s.claimed_by is not None:
-            return False
-        return True
+        s = self.edge_special(edge(frm, to))
+        return s is None or s.kind != "defect"
 
-    def _link_ok(self, pair: Pair, a: Node, b: Node, target: Node) -> bool:
+    def _link_ok(self, a: Node, b: Node) -> bool:
         if self.lattice.has_edge(a, b):
-            return self._can_enter(pair, a, b, target)
-        s = self.node_special(a)  # a Bell jump
-        return (s is not None and s.kind == "bell" and s.claimed_by is None
-                and self.bell_partner(a) == b)
+            return self._can_enter(a, b)
+        return self.open_bell(a) == b  # a Bell jump
 
     def free_route(self, pair: Pair, start: Node) -> list[Node] | None:
         """Shortest route from `start` to its partner over usable couplers.
 
-        Used by the title screen's demo bot; it keeps clear of Bell qubits and
-        other stations.
+        Used by the title screen's demo bot; it keeps clear of Bell qubits,
+        other stations and couplers other routes are still travelling.
         """
         target = pair.other(start)
+        in_use = self.route_edges()
         came_from: dict[Node, Node | None] = {start: None}
         queue = deque([start])
         while queue:
@@ -287,7 +346,7 @@ class Board:
             for m in self.lattice.neighbors(n):
                 if (m not in came_from and self.bell_partner(m) is None
                         and (m == target or m not in self.endpoint_owner)
-                        and self._can_enter(pair, n, m, target)):
+                        and edge(n, m) not in in_use and self._can_enter(n, m)):
                     came_from[m] = n
                     queue.append(m)
         return None
@@ -308,19 +367,22 @@ class Board:
         return boost
 
     def route_windows(self, route: list[Node], teleports: set[int], progress: float,
-                      boost: float, open_end: bool = False) -> dict[Node, tuple[float, float]]:
-        """When (seconds from now) a qubit on `route` occupies each qubit it still visits.
+                      boost: float, open_end: bool = False) -> Occupancy:
+        """When (seconds from now) a qubit on `route` is where it still goes.
 
-        The start counts as occupied from forever until the qubit has left
-        it, the end from forever until the gate fires on arrival (the partner
-        qubit sits there all along). With `open_end` (a half-drawn route) the
-        last node is just passed through, assuming normal speed from there.
+        Each qubit it visits gets a window. The start counts as occupied from
+        forever (the qubit was waiting there) until the qubit has left it. The
+        end is empty until the qubit arrives, since committing collapsed the
+        pair onto the start, and the gate fires on arrival. With `open_end` (a
+        half-drawn route) the last node is just passed through, assuming normal
+        speed from there. Each coupler it travels gets the times the qubit
+        enters and leaves it.
         """
         inf = float("inf")
         last = len(route) - 1
         i0 = int(progress)
         if i0 >= last:
-            return {}
+            return Occupancy()
         durs: dict[int, float] = {}
         times: dict[int, float] = {}
         b = boost
@@ -332,39 +394,50 @@ class Board:
             durs[k] = (self._link_time(route, teleports, k, b) if k < last
                        else 1.0 / (config.QUBIT_SPEED * b))
         r = config.NODE_RADIUS
-        out = {}
+        out = Occupancy()
         for k in range(i0, last + 1):
             if k == 0:
-                out[route[k]] = (-inf, times[0] + r * durs[0])
-            elif k == last and not open_end:
-                out[route[k]] = (-inf, times[k])
+                out.nodes[route[k]] = (-inf, times[0] + r * durs[0])
             else:
                 before = durs.get(k - 1, durs[k])
-                out[route[k]] = (times[k] - r * before, times[k] + r * durs[k])
+                leave = times[k] if k == last and not open_end else times[k] + r * durs[k]
+                out.nodes[route[k]] = (times[k] - r * before, leave)
+            if k < last and k not in teleports:
+                out.links.append((route[k], route[k + 1], times[k], times[k] + durs[k]))
         return out
 
-    def windows(self, pair: Pair) -> dict[Node, tuple[float, float]]:
+    def windows(self, pair: Pair) -> Occupancy:
         """Occupancy windows of a committed or waiting pair."""
         if pair.waiting:
             inf = float("inf")
-            return {pair.a: (-inf, inf), pair.b: (-inf, inf)}
+            return Occupancy({pair.a: (-inf, inf), pair.b: (-inf, inf)})
         return self.route_windows(pair.route, pair.teleports, pair.progress, pair.boost)
 
     @staticmethod
-    def _first_overlap(mine: dict, theirs: dict) -> tuple[float, Node] | None:
+    def _first_overlap(mine: Occupancy, theirs: Occupancy) -> tuple[float, Place] | None:
+        """When (from now) and where two pairs' qubits first run into each other."""
         best = None
-        for n, (a0, a1) in mine.items():
-            if n in theirs:
-                b0, b1 = theirs[n]
+        for n, (a0, a1) in mine.nodes.items():
+            if n in theirs.nodes:
+                b0, b1 = theirs.nodes[n]
                 start, end = max(a0, b0), min(a1, b1)
                 if start < end and end > 0:
                     start = max(start, 0.0)
                     if best is None or start < best[0]:
                         best = (start, n)
+        for p in mine.links:
+            for q in theirs.links:
+                hit = meet(p, q)
+                if hit is not None and (best is None or hit[0] < best[0]):
+                    best = hit
         return best
 
-    def predict_collision(self, player: str) -> Node | None:
-        """Where the half-drawn route would crash if committed right now."""
+    def predict_collision(self, player: str) -> Place | None:
+        """Where the half-drawn route would crash if committed right now.
+
+        Committing collapses the pair onto the start, so the partner station
+        no longer counts: only the route itself can crash.
+        """
         cur = self.cursors[player]
         if len(cur.path) < 2:
             return None
@@ -372,19 +445,18 @@ class Board:
         teleports = {i for i in range(len(cur.path) - 1)
                      if not self.lattice.has_edge(cur.path[i], cur.path[i + 1])}
         mine = self.route_windows(cur.path, teleports, 0.0, 1.0, open_end=True)
-        inf = float("inf")
-        mine[pair.other(cur.path[0])] = (-inf, inf)  # the partner keeps waiting
         hits = [h for other in self.pairs.values() if other.id != pair.id
                 if (h := self._first_overlap(mine, self.windows(other)))]
-        return min(hits)[1] if hits else None
+        return min(hits, key=lambda h: h[0])[1] if hits else None
 
     def station_threats(self) -> set[Node]:
-        """Stations a committed route will crash into unless that pair leaves in time.
+        """Stations a committed route will crash into unless that pair is routed in time.
 
         Only waiting stations count: those are the crashes a player can still
-        avert, by routing that pair away from the threatened end. Crashes
+        avert, by routing that pair (from either end) before the other qubit
+        gets there, which collapses it out of the threatened station. Crashes
         between two committed routes are not reported -- nothing can change
-        them any more.
+        them any more. (A waiting pair has no links, so every hit is a node.)
         """
         out = set()
         travelling = self.travelling_pairs()
@@ -421,8 +493,8 @@ class Board:
         cur.path.pop()
         head = cur.path[-1]
         # standing on a Bell entry without having jumped is not a valid state
-        if len(cur.path) > 1 and self.bell_partner(head) is not None \
-                and self.bell_partner(head) != cur.path[-2]:
+        partner = self.open_bell(head)
+        if len(cur.path) > 1 and partner is not None and partner != cur.path[-2]:
             cur.path.pop()
         self.events.append(Event("back", player=player, node=cur.path[-1]))
 
@@ -447,11 +519,11 @@ class Board:
             self.events.append(Event("blocked", pair, player, head))
         elif len(cur.path) >= 2 and nxt == cur.path[-2]:
             self.undo(player)
-        elif nxt in cur.path or not self._can_enter(pair, head, nxt, target):
+        elif nxt in cur.path or not self._can_enter(head, nxt):
             self.events.append(Event("blocked", pair, player, nxt))
         else:
             cur.path.append(nxt)
-            partner = self.bell_partner(nxt)
+            partner = self.open_bell(nxt)
             if partner is not None:
                 if partner in cur.path:
                     cur.path.pop()
@@ -586,9 +658,7 @@ class Board:
         pair.route = list(route)
         pair.routed_by = player
         for i, (n0, n1) in enumerate(zip(route, route[1:])):
-            if self.lattice.has_edge(n0, n1):
-                self.edge_owner[edge(n0, n1)] = pair.id
-            else:
+            if not self.lattice.has_edge(n0, n1):
                 pair.teleports.add(i)
                 self.node_special(n0).claimed_by = pair.id
         self.events.append(Event("routed", pair, player, pair.route[-1]))
@@ -596,18 +666,10 @@ class Board:
         self._prune_drafts()
         self._autoselect()
 
-    def _release(self, pair: Pair, nodes: list[Node], edges: list[Edge]) -> None:
+    def _release(self, pair: Pair, nodes: list[Node]) -> None:
         for n in nodes:
             if self.endpoint_owner.get(n) == pair.id:
                 del self.endpoint_owner[n]
-        for e in edges:
-            if self.edge_owner.get(e) == pair.id:
-                del self.edge_owner[e]
-
-    def _route_edges(self, pair: Pair, upto: int | None = None) -> list[Edge]:
-        route = pair.route
-        n = len(route) - 1 if upto is None else upto
-        return [edge(route[i], route[i + 1]) for i in range(n) if i not in pair.teleports]
 
     def _enter_link(self, pair: Pair, i: int) -> None:
         """The travelling qubit starts on link i of its route."""
@@ -644,8 +706,8 @@ class Board:
                 if i + 1 < last:
                     self._reach_node(pair, i + 1)
                     self._enter_link(pair, i + 1)
-        passed = int(pair.progress)
-        self._release(pair, route[:min(passed, 1)], self._route_edges(pair, passed))
+        if pair.progress >= 1:
+            self._release(pair, route[:1])
         if pair.progress >= last:
             self._complete(pair)
 
@@ -657,12 +719,12 @@ class Board:
                        + config.TIME_BONUS * max(0.0, pair.life) / pair.coherence)
         self.score += points
         self.gates += 1
-        self._release(pair, [pair.a, pair.b], self._route_edges(pair))
+        self._release(pair, [pair.a, pair.b])
         del self.pairs[pair.id]
         self.events.append(Event("gate", pair, pair.routed_by, pair.route[-1], points, fidelity))
 
     def _decohere(self, pair: Pair) -> None:
-        self._release(pair, [pair.a, pair.b], [])
+        self._release(pair, [pair.a, pair.b])
         del self.pairs[pair.id]
         self.lives -= 1
         self.events.append(Event("decohere", pair))
@@ -670,23 +732,24 @@ class Board:
     def _check_collisions(self) -> None:
         if not self.travelling_pairs():
             return
-        inside: dict[Node, list[Pair]] = {}
-        for pair in self.pairs.values():
-            for n, (t0, t1) in self.windows(pair).items():
-                if t0 <= 0 < t1:
-                    inside.setdefault(n, []).append(pair)
-        for n, pairs in inside.items():
-            pairs = [p for p in pairs if p.id in self.pairs]
+        occ = {p.id: self.windows(p) for p in self.pairs.values()}
+        crashes: dict[Place, set[int]] = {}  # everyone running into each other right now
+        for p, q in combinations(self.pairs.values(), 2):
+            hit = self._first_overlap(occ[p.id], occ[q.id])
+            if hit is not None and hit[0] <= 0:
+                crashes.setdefault(hit[1], set()).update((p.id, q.id))
+        for place, ids in crashes.items():
+            pairs = [p for p in self.pairs.values() if p.id in ids]
             if len(pairs) < 2:
                 continue
             for p in pairs:
-                self._release(p, [p.a, p.b], self._route_edges(p) if not p.waiting else [])
+                self._release(p, [p.a, p.b])
                 for s in self.specials:
                     if s.claimed_by == p.id:
                         s.claimed_by = None
                 del self.pairs[p.id]
             self.lives -= config.CRASH_LIFE_COST
-            self.events.append(Event("crash", node=n, pairs=tuple(pairs)))
+            self.events.append(Event("crash", node=place, pairs=tuple(pairs)))
             if self.over:
                 return
 
@@ -699,14 +762,17 @@ class Board:
             if pair is None or not pair.waiting:
                 cur.clear()
                 continue
-            target = pair.other(cur.path[0])
-            for i in range(1, len(cur.path)):
-                if not self._link_ok(pair, cur.path[i - 1], cur.path[i], target):
-                    cut = i
-                    # don't leave the route standing on a Bell entry
-                    if i >= 2 and not self.lattice.has_edge(cur.path[i - 1], cur.path[i]):
-                        cut = i - 1
-                    cur.path = cur.path[:cut]
+            path = cur.path
+            for i in range(1, len(path)):
+                if not self._link_ok(path[i - 1], path[i]):
+                    # a jump that's gone takes its Bell entry with it
+                    cur.path = path[:i if self.lattice.has_edge(path[i - 1], path[i]) else i - 1]
+                    break
+                # Stepped onto a Bell qubit while another route had claimed it,
+                # and that route has since crashed: entering it now means jumping.
+                partner = self.open_bell(path[i])
+                if partner is not None and partner != path[i - 1] and path[i + 1:i + 2] != [partner]:
+                    cur.path = path[:i]
                     break
 
     def _autoselect(self) -> None:

@@ -17,6 +17,10 @@ A cockpit along the top shows what the motion is doing, per mode:
   oscillating at twice the mode frequency
 - READOUT: frequency, <n>, |alpha|, phase, squeezing
 
+All of that is relative to the harmonic approximation of the well. When the
+packet stops being Gaussian for a while (what an anharmonic potential does
+to it), the phase-space panel gets a red edge and says ANHARMONIC.
+
 Rendering and input glue only; the physics lives in quantum.py / crystal.py.
 """
 
@@ -38,12 +42,15 @@ Q_HBAR_M = 3800.0         # hbar/m in px^2/s: sets the ground-state width (~22 p
 Q_COUPLING = 2.9          # potential in rad/s per px of curve height (sets the trap frequency)
 Q_COULOMB = 2000.0        # ion-ion repulsion in rad/s * px (~100 px spacing in the start trap)
 MAX_IONS = 4
-CRYSTAL_DT = 1 / 120      # s per Crank-Nicolson step for the crystal modes (half the single-ion rate)
+Q_DT = 1 / 120            # s per time step of the single ion's packet (4th order, see quantum.PADE)
+CRYSTAL_DT = 1 / 60       # ... and of each crystal mode's (several packets per frame)
 KICK = 1.5                # laser kick, in units of 1/sigma0 (moves alpha by 1.5 i)
 COOL_DAMPING = 0.6        # imaginary part of the time step while red holds L (strong cooling)
 PASSIVE_DAMPING = 0.04    # ... and with passive cooling toggled on (red R): a slow, steady drain
 SANDBOX_RATE = 300        # electrode voltage change per second (a bit slower than the game)
 FOCK_LEVELS = 16
+ANHARMONIC_AREA = 1.3     # uncertainty area (vacuum = 1) past which the ellipse leaves too much out
+ANHARMONIC_HOLD = 1.0     # s the area must stay past it (or back under it) before the warning flips
 SCOPE_SECONDS = 6.0
 DENSITY_SCALE = 4200      # px of packet height per unit probability density
 DENSITY_MAX = 230
@@ -64,6 +71,8 @@ GOLD = (255, 211, 107)
 CYAN = (110, 220, 255)
 PINK = (255, 120, 190)
 GREEN = (120, 255, 160)
+WARN_C = (226, 92, 108)
+WARN_EDGE = (176, 72, 92)  # muted, like PANEL_EDGE
 PURPLE = (199, 155, 255)
 MODE_COLORS = (GOLD, CYAN, PINK, GREEN)
 ION_COLORS = ((78, 168, 255), (255, 84, 112), (120, 255, 160), (255, 211, 107))
@@ -79,6 +88,7 @@ class ModeView:
     moments: Moments
     ps: PhaseSpace | None
     pops: list[float]
+    stray: bool = False  # a crystal mode's packet sits in another well than the equilibrium
 
     @property
     def mean_n(self) -> float:
@@ -113,6 +123,10 @@ def _dim(c, f):
     return (int(c[0] * f), int(c[1] * f), int(c[2] * f))
 
 
+def _mix(a, b, f):
+    return tuple(round(x + (y - x) * f) for x, y in zip(a, b))
+
+
 class Sandbox:
     """Owns the quantum state and draws the cockpit. `potential(x)` samples
     the shared curve in px of height."""
@@ -136,9 +150,12 @@ class Sandbox:
         self.t = 0.0
         self.frame = 0
         self.unit = 10.0
-        self._crystal_acc = 0.0
+        self._acc = 0.0
         self.cooling = False
         self.passive_cooling = False  # toggled by red R, off by default
+        self.anharmonic = False  # the phase-space warning, see measure()
+        self._flip_at = None
+        self.warn_fade = 0.0
         self.views: list[ModeView] = []
         self.trails: list[deque] = []
         self.scope: deque = deque(maxlen=int(SCOPE_SECONDS * 60))
@@ -164,6 +181,7 @@ class Sandbox:
     def _reset_history(self):
         self.trails = []
         self.scope.clear()
+        self.anharmonic, self._flip_at, self.warn_fade = False, None, 0.0
 
     def cool_to_ground(self):
         if self.crystal:
@@ -224,31 +242,39 @@ class Sandbox:
             self.sync_potential()
         gamma = COOL_DAMPING if cooling else (PASSIVE_DAMPING if self.passive_cooling else 0.0)
         damp = gamma > 0
-        if self.crystal:
-            # fixed, coarser steps: several mode packets per frame, and the
-            # coefficient cache only hits for a constant dt
-            self._crystal_acc += dt
-            while self._crystal_acc >= CRYSTAL_DT - 1e-9:
-                self._crystal_acc -= CRYSTAL_DT
-                h = CRYSTAL_DT
-                self.crystal.step(complex(h, -gamma * h) if damp else h, damp=damp)
-        else:
-            self.wp.step(complex(dt, -gamma * dt) if damp else dt)
-            if damp:
-                self.wp.normalize()
+        # fixed steps, coarser than the game's: the coefficient cache only
+        # hits for a constant dt, and the crystal has several packets to move
+        h = CRYSTAL_DT if self.crystal else Q_DT
+        self._acc += dt
+        while self._acc >= h - 1e-9:
+            self._acc -= h
+            q = complex(h, -gamma * h) if damp else h
+            if self.crystal:
+                self.crystal.step(q, damp=damp)
+            else:
+                self.wp.step(q)
+                if damp:
+                    self.wp.normalize()
 
-    def _view(self, name, color, wp, force_fock, old):
+    def _view(self, name, color, wp, force_fock, old, q_eq=None):
+        """A crystal mode (q_eq given) is measured against the crystal's
+        equilibrium, the single ion against the well it is in."""
         m = wp.moments()
-        trap = wp.fit_trap(m.mean_x)
+        wp.set_reference(m.energy)  # keeps the time steps' phases accurate
+        trap = wp.fit_trap(m.mean_x if q_eq is None else q_eq)
         if trap is None:
             return ModeView(name, color, None, m, None, [0.0] * FOCK_LEVELS)
+        stray = False
+        if q_eq is not None:
+            own = wp.fit_trap(m.mean_x)
+            stray = own is None or abs(own.x0 - trap.x0) > trap.sigma0
         ps = wp.phase_space(m, trap)
         every = 2 if not self.crystal else 3  # Fock projections are the costly part
         if force_fock or old is None or old.trap is None or self.frame % every == 0:
             pops = wp.fock_populations(trap, FOCK_LEVELS)
         else:
             pops = old.pops
-        return ModeView(name, color, trap, m, ps, pops)
+        return ModeView(name, color, trap, m, ps, pops, stray)
 
     def measure(self, force_fock=False):
         """Once per frame: moments, harmonic fit, phase space; Fock every other frame."""
@@ -258,7 +284,7 @@ class Sandbox:
             cr = self.crystal
             self.views = [
                 self._view(mode_name(k, cr.vecs[k]), MODE_COLORS[k % 4], wp,
-                           force_fock, old[k] if k < len(old) else None)
+                           force_fock, old[k] if k < len(old) else None, cr.q_eq[k])
                 for k, wp in enumerate(cr.packets)
             ]
         else:
@@ -274,6 +300,23 @@ class Sandbox:
             sample.append(((v.moments.mean_x - v.trap.x0) / v.trap.sigma0,
                            math.sqrt(v.moments.var_x) / v.trap.sigma0))
         self.scope.append(sample)
+        # The cockpit pictures every mode as a Gaussian in a parabola. A
+        # harmonic well keeps a Gaussian packet Gaussian, an anharmonic one
+        # bends it, and that shows as a growing uncertainty area. A crystal
+        # mode whose packet has settled in another well along its direction
+        # is outside the picture too, Gaussian or not. An oscillating packet
+        # only reaches the anharmonic part of the well now and then, so the
+        # warning waits for this to last (or to be over) for a while.
+        over = any(v.ps is not None and (v.ps.area() > ANHARMONIC_AREA or v.stray)
+                   for v in self.views)
+        if over == self.anharmonic:
+            self._flip_at = None
+        elif self._flip_at is None:
+            self._flip_at = self.t
+        elif self.t - self._flip_at >= ANHARMONIC_HOLD:
+            self.anharmonic, self._flip_at = over, None
+        fade = 0.1 if self.anharmonic else -0.1
+        self.warn_fade = min(1.0, max(0.0, self.warn_fade + fade))
 
     # ---------- drawing ----------
     def _make_cockpit_bg(self):
@@ -444,6 +487,11 @@ class Sandbox:
             x = r.x + 10
             for v in self.views:
                 x = _text(surf, v.name, self.f_tiny, v.color, (x, r.bottom - 8), "bottomleft").right + 8
+        if self.warn_fade > 0:
+            pygame.draw.rect(surf, _mix(PANEL_EDGE, WARN_EDGE, self.warn_fade), r, 2, border_radius=8)
+            img = self.f_tiny.render("ANHARMONIC", True, WARN_C)
+            img.set_alpha(round(255 * self.warn_fade))
+            surf.blit(img, img.get_rect(topright=(r.right - 10, r.y + 6)))
 
     def draw_scope(self, surf):
         r = self.panels["scope"]
