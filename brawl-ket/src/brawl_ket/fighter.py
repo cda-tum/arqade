@@ -81,6 +81,7 @@ class Fighter:
         self.slot: str | None = None
         self.chained = False        # the move in progress was started by a cancel
         self.move_hit = False       # the fight sets this when the move connects
+        self.hit_frame = 0          # ... and the frame it last connected on
         self.bounced = False        # a DIVE sprang back off a hit: its recovery waits for the floor
         self.chain = 0              # moves in the current string
         self.stun = 0

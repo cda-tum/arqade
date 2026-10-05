@@ -31,34 +31,36 @@ This is exact: X leaves \|+> and \|-> unchanged (up to a phase), and Z leaves
 \|0> and \|1> unchanged. An attack is drawn in the colour of the basis it
 changes, so the rule a player reads is: **colour must match to hurt.**
 
-- **A** is always in **your own** colour, **B** in the **other** one. Against a
-  rival of your colour A hurts; against the other colour B does. In an A then B
-  chain exactly one half matches.
+- **A and every special (X)** are in **your own** colour, **B** in the **other**
+  one; a move's colour is fixed when it starts. Against a rival of your colour A
+  and X hurt; against the other colour B does. In an A then B chain exactly one
+  half matches.
 - **Throws** are Y = iXZ, which flips both bases: they hurt either colour.
 - **A wrong-colour hit** does no damage (the state is unchanged), but the
   defender is still pushed back and held in block-stun, so the string goes on
   and its matching half can land (a game rule).
-- **Y switches basis:** an H on yourself, at once. For 10 frames after it you
-  can't attack (you can move, crouch and be hit, judged by your new colour).
-  Only when free to act: idle, walking, crouching or in the air.
+- **Y switches basis:** an H on yourself, at once, in any state, even mid-attack,
+  in hitstun or knocked down. For 10 frames after it you can't start an attack.
+  Switching mid-string makes the rest of the string bounce.
 - **Heights:** standing normals are HIGH (a crouch ducks them), crouching
   normals LOW (a jump clears them), air normals and throws MID.
-- **Damage:** light 4, heavy 8, special 10, throw 10, MEASURE 12. Health:
-  TRIO 100, QUINT 115.
+- **Damage:** light 4, heavy 8, special 10, throw 10, MEASURE 12, CHARGE NOISE
+  3 a shock. Health: TRIO 100, QUINT 115. Lights stun briefly enough that mashing
+  can't loop, and getting up from a knockdown is invulnerable for 8 frames.
 
 On screen: P1 has a blue ring under their feet and P2 a red one; each health
-bar has a basis badge (`0/1` green, `+/-` purple); an attack's hand or foot
-glows in its colour from the wind-up on, so you see before contact whether it
-will match. A wrong-colour hit pings, a switch flashes white with an `H`.
+bar has a basis badge (`0/1` green, `+/-` purple) and A / B chips in the colours
+that player's buttons hit right now; an attack's whole arm or leg is drawn in its
+colour from the wind-up on, so you see before contact whether it will match. A wrong-colour hit pings, a switch flashes white with an `H`.
 
 ## The fighters
 
 | | TRIO | QUINT |
 |---|---|---|
 | Build | lean and fast, high jump | heavy and slow, long reach, 115 health |
-| X (standing) | PHOTON: a projectile, always green (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into QUINT's basis |
-| Down + X | PHASE SLIDE: a low slide, always purple; it slides under photons | HADAMARD WAVE: a short ground wave (~70 px, LOW) that switches the rival's basis, no damage (3 s cooldown) |
-| Air X | HADAMARD DIVE: a steep dive in your colour; when it lands, you switch basis | COLLAPSE: a drifting body slam, green (HIGH), whose landing shockwave is purple (LOW) |
+| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into QUINT's basis |
+| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round QUINT (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) |
+| Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too |
 
 Both share the normals: A is a jab (standing, crouching, in the air), B a
 heavy, a sweep (knockdown) or a jump-in, and B up close while pushing towards

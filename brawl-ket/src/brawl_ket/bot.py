@@ -23,7 +23,7 @@ from .fighter import FighterInput
 STRIKE_RANGE = 66       # px between the fighters' x where a ground normal can reach (the jab: about 72)
 AIR_RANGE = 50          # the same for an air attack, whose boxes are shorter
 GRAB_RANGE = 120        # MEASURE (a dashing command throw) connects from about this far
-WAVE_RANGE = 66         # HADAMARD WAVE reaches about 70 px in front
+FIELD_RANGE = 70        # CHARGE NOISE shocks anything within about this far
 PRESS_GAP = 4           # frames between two presses, so every press is a fresh edge
 LONG_CROUCH = 40        # a rival crouched this long gets thrown
 SWITCH_MEMORY = 180     # frames over which the rival's switches are counted
@@ -68,6 +68,11 @@ class Bot:
             return FighterInput(down=self.down)
         toward = 1 if rival.x > me.x else -1
         dist = abs(rival.x - me.x)
+        m = rival.move
+        if m is not None and m.hit_every and rival.action == "attack" and dist <= FIELD_RANGE + 20 \
+                and self.would_hurt(rival, m, me) and me.action in ("idle", "walk", "crouch"):
+            self.down = False
+            return FighterInput(dx=-toward)                     # back out of a field that hurts
         if me.stance == "air":
             return self._in_air(me, rival, toward, dist)
         self.air_pressed = False
@@ -117,7 +122,7 @@ class Bot:
         m = rival.move
         if m is None or rival.action != "attack" or rival.phase != "startup" or rival.frame != self.react:
             return False
-        if m.switch_rival or m.colour == basis.BOTH or not self.would_hurt(rival, m, me):
+        if m.colour == basis.BOTH or not self.would_hurt(rival, m, me):
             return False
         return self.gap == 0 and self.rng.random() < self.skill * 0.5
 
@@ -142,14 +147,14 @@ class Bot:
         if self.chain:              # a buffered first press is about to come out
             return FighterInput(down=self.down)
         special = me.char.moves["stand.X"]
-        wave = me.char.moves["crouch.X"]
+        field = me.char.moves["crouch.X"]
         ready = self.gap == 0
         switcher = len(self.switches) >= SWITCHER
         if dist <= me.throw_range and ready and (switcher or self.rival_crouched > LONG_CROUCH) and roll < 0.1:
             return self._press("b", toward)                     # a throw hurts either colour
-        if wave.switch_rival and dist <= WAVE_RANGE and rival.basis != me.basis and ready \
+        if field.hit_every and dist <= FIELD_RANGE and self.would_hurt(me, field, rival) and ready \
                 and me.cooldowns.get("crouch.X", 0) == 0 and roll < 0.05:
-            self.down = True                                    # a WAVE: their colour flips to ours
+            self.down = True                                    # CHARGE NOISE on a rival it hurts
             return self._press("x", 0)
         if special.measure_rival and me.throw_range < dist <= GRAB_RANGE and not self.down and ready \
                 and roll < 0.01:

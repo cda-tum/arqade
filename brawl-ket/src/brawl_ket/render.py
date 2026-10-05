@@ -70,7 +70,7 @@ STRIKER = {
     "jab": "hand_f", "heavy": "hand_f", "low jab": "hand_f", "sweep": "foot_f",
     "air jab": "hand_f", "jump-in": "foot_f", "throw": "hand_f",
     "PHOTON": "hand_f", "PHASE SLIDE": "foot_f", "HADAMARD DIVE": "foot_f",
-    "MEASURE": "hand_f", "HADAMARD WAVE": "foot_f", "COLLAPSE": "foot_f",
+    "MEASURE": "hand_f", "COLLAPSE": "foot_f",
 }
 
 # effect lengths, in frames
@@ -94,7 +94,7 @@ BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 # the select screen: what each fighter is, in a line, and how its X moves are entered
 TRAITS = {"TRIO": "FAST AND LIGHT", "QUINT": "SLOW AND HEAVY"}
 X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
-RULE_LINES = ("A YOUR COLOUR, B THE OTHER", "Y SWITCHES YOUR COLOUR")
+RULE_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR")
 HINT = "MATCH THEIR COLOUR TO HURT - Y SWITCHES"
 # the title's COLOUR MUST MATCH card: three beats, each a line of (text, colour) parts
 CARD_LINES = (
@@ -578,22 +578,23 @@ class Renderer:
         """The whole arm or leg an attack lands with is drawn in the attack's colour, from its
         wind-up to the end of its active frames, so a player sees before contact whether it
         will match; while it is live, its hand or foot leaves a fading trail. A throw (both
-        colours) is green outlined in purple; the WAVE (an H, no colour) white."""
+        colours) is green outlined in purple. A repeating field (CHARGE NOISE) crackles instead."""
         m = f.move
         trail = self.trails[key]
         if f.action != "attack" or m is None or f.phase not in ("startup", "active"):
             trail.clear()
             return
+        if m.hit_every:
+            trail.clear()
+            self._charge_noise(f, m, j)
+            return
         joint = STRIKER.get(m.name)
         if joint is None:
             trail.clear()
             return
-        if m.switch_rival:
-            fill, edge = P.WHITE, P.INK
-        else:
-            error = basis.error_for(m.colour, f.attack_basis)
-            fill = GREEN if error == basis.Y else ERROR_COLOUR[error]
-            edge = PURPLE if error == basis.Y else P.INK
+        error = basis.error_for(m.colour, f.attack_basis)
+        fill = GREEN if error == basis.Y else ERROR_COLOUR[error]
+        edge = PURPLE if error == basis.Y else P.INK
         surf = self.surface
         w = LIMB_W[f.char.build]
         if f.phase == "active":         # the trail, oldest first, under the limb
@@ -614,6 +615,38 @@ class Renderer:
         pygame.draw.circle(surf, fill, tip, r)
         pygame.draw.circle(surf, P.lighten(fill, 0.5), (tip[0] - 2, tip[1] - 2), max(2, r // 3))
 
+    def _charge_noise(self, f: Fighter, m, j: dict) -> None:
+        """CHARGE NOISE: jagged arcs crackling out from the body to the edge of the field, in
+        the field's colour; in the wind-up only a few short sparks, then the field's full reach
+        (its hitbox) flickering, with a bright ring on each shock's frame."""
+        surf = self.surface
+        colour = ERROR_COLOUR[basis.error_for(m.colour, f.attack_basis)]
+        box = m.hitbox
+        cx = round(f.x)
+        cy = round(FLOOR_Y - f.y - box.h / 2)
+        reach = box.w / 2
+        active = f.phase == "active"
+        n = 7 if active else 3
+        seed = f.frame // 2                         # the arcs re-form every other frame
+        for i in range(n):
+            ang = (i * 2.4 + seed * 1.3 + (i * seed) % 3) % (2 * math.pi)
+            length = (reach if active else reach * 0.4) * (0.75 + 0.25 * ((i * 7 + seed) % 4) / 3)
+            pts = [(cx, cy)]
+            for k in range(1, 5):
+                r = length * k / 4
+                wob = ((i * 13 + k * 5 + seed * 3) % 9 - 4) * 2.2
+                pts.append((cx + math.cos(ang) * r - math.sin(ang) * wob,
+                            cy + math.sin(ang) * r * 0.8 + math.cos(ang) * wob))
+            pts = [_pt(p) for p in pts]
+            pygame.draw.lines(surf, P.INK, False, pts, 5)
+            pygame.draw.lines(surf, colour, False, pts, 3)
+            pygame.draw.lines(surf, P.lighten(colour, 0.6), False, pts, 1)
+        if active:
+            ring = pygame.Rect(0, 0, round(2 * reach), round(box.h))
+            ring.center = (cx, cy)
+            shock = (f.frame - f.startup) % m.hit_every == 0
+            pygame.draw.ellipse(surf, P.lighten(colour, 0.5) if shock else colour, ring, 3 if shock else 1)
+
     def _pose(self, key: str, f: Fighter) -> Pose:
         """pose_for, told which pose the fighter was drawn in when its action began,
         so a cancel, a landing or a recovery into the stance blends instead of popping."""
@@ -629,7 +662,7 @@ class Renderer:
     def _shot(self, s, ox: int, oy: int) -> None:
         left, top, w, h = s.box
         cx, cy = left + w / 2 + ox, top + h / 2 + oy
-        color = ERROR_COLOUR[basis.error_for(s.move.colour, basis.Z_BASIS)]
+        color = ERROR_COLOUR[basis.error_for(s.move.colour, s.basis)]
         back = -s.facing
         for i, r in ((3, 2), (2, 3), (1, 4)):       # the trail
             pygame.draw.circle(self.surface, P.shade(color, 0.5 + 0.12 * (3 - i)),
@@ -881,16 +914,12 @@ class Renderer:
             self._stamp("READY!", (panel.right - 58, panel.y + 20), P.GOOD)
 
     def _colour_chip(self, move, right_mid) -> None:
-        """The colour a move hits in, as a word: GREEN, PURPLE, YOURS (your basis's), BOTH (a Y),
-        or H (the WAVE, which switches instead)."""
-        if move.switch_rival:
-            text, fill, edge = "H", P.WHITE, P.INK
-        else:
-            text, fill, edge = {
-                basis.GREEN: ("GREEN", GREEN, P.INK), basis.PURPLE: ("PURPLE", PURPLE, P.INK),
-                basis.OWN: ("YOURS", P.WHITE, P.INK), basis.OPPOSITE: ("OTHER", P.WHITE, P.INK),
-                basis.BOTH: ("BOTH", GREEN, PURPLE),
-            }[move.colour]
+        """The colour a move hits in, as a word: YOURS (your basis's), OTHER, or BOTH (a Y)."""
+        text, fill, edge = {
+            basis.GREEN: ("GREEN", GREEN, P.INK), basis.PURPLE: ("PURPLE", PURPLE, P.INK),
+            basis.OWN: ("YOURS", P.WHITE, P.INK), basis.OPPOSITE: ("OTHER", P.WHITE, P.INK),
+            basis.BOTH: ("BOTH", GREEN, PURPLE),
+        }[move.colour]
         img = outlined(text, 8, fill, outline=edge)
         self.surface.blit(img, img.get_rect(midright=_pt(right_mid)))
 

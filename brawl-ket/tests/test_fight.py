@@ -692,37 +692,74 @@ def test_a_whiffed_measure_leaves_quint_open():
     assert (quint.slot, quint.phase) == ("stand.X", "recovery")    # stuck in its long recovery
 
 
-WAVE = QUINT.moves["crouch.X"]
+NOISE = QUINT.moves["crouch.X"]
 
 
-def wave_at(gap, trio_input=IDLE, frames=40):
+def noise_at(gap, trio_basis=Z_BASIS, frames=100, trio_input=IDLE):
     fight = versus(QUINT, TRIO, gap)
+    fight.fighters["p2"].basis = trio_basis
     hold = {i: DOWN for i in range(frames)}
     events = script(fight, frames, p1={**hold, 0: FighterInput(down=True, x=True)}, p2=trio_input)
     return fight, events
 
 
-def test_the_hadamard_wave_switches_the_rival_and_does_no_damage():
-    fight, events = wave_at(60.0)
-    trio = fight.fighters["p2"]
-    assert [(e.kind, e.player) for e in of(events, "hit", "block", "switch")] == [("switch", "p2")]
-    assert trio.basis == X_BASIS and trio.health == 100 and trio.action in ("idle", "walk")
-    # about 70 px of reach: further away it misses
-    fight, events = wave_at(140.0)
-    assert of(events, "switch") == [] and fight.fighters["p2"].basis == Z_BASIS
+def test_charge_noise_shocks_again_and_again_in_quints_colour():
+    # a rival standing still takes a couple of shocks, each pushing it back, until it is out
+    fight, events = noise_at(60.0)
+    hits = of(events, "hit", "block")
+    assert len(hits) >= 2 and {(e.kind, e.error) for e in hits} == {("hit", basis.X)}   # green
+    assert fight.fighters["p2"].health == 100 - NOISE.damage * len(hits)
+    assert fight.fighters["p2"].x - fight.fighters["p1"].x > 70
+    # cornered, it can't be pushed out: a shock every 12 frames for the field's whole second
+    fight = versus(QUINT, TRIO, 60.0)
+    quint, trio = fight.fighters["p1"], fight.fighters["p2"]
+    trio.x = STAGE_RIGHT
+    quint.x = STAGE_RIGHT - 60
+    hold = {i: DOWN for i in range(100)}
+    events = script(fight, 100, p1={**hold, 0: FighterInput(down=True, x=True)})
+    shocks = len(of(events, "hit"))
+    assert 4 <= shocks <= NOISE.active // NOISE.hit_every + 1
 
 
-def test_a_jump_clears_the_hadamard_wave():
+def test_charge_noise_bounces_off_the_other_colour():
+    fight, events = noise_at(60.0, trio_basis=X_BASIS)
+    assert {e.kind for e in of(events, "hit", "block")} == {"block"}
+    assert fight.fighters["p2"].health == 100
+
+
+def test_charge_noise_reaches_all_round_and_not_far():
+    fight, events = noise_at(140.0)
+    assert of(events, "hit", "block") == []
+    fight = versus(QUINT, TRIO, 60.0)
+    fight.fighters["p2"].x = fight.fighters["p1"].x - 55        # behind QUINT
+    hold = {i: DOWN for i in range(60)}
+    events = script(fight, 60, p1={**hold, 0: FighterInput(down=True, x=True)})
+    assert of(events, "hit")
+
+
+def test_charge_noise_cannot_be_ducked_or_jumped():
+    fight, events = noise_at(60.0, trio_input=DOWN)
+    assert of(events, "hit")
+    fight, events = noise_at(60.0, trio_input=FighterInput(up=True), frames=50)
+    assert of(events, "hit")
+
+
+def test_a_shocked_rival_can_walk_out_of_charge_noise():
+    # TRIO stands in the field until the first shock, then walks away: the 10-frame stun
+    # leaves free frames between shocks, so it gets out after a shock or two more at most
     fight = versus(QUINT, TRIO, 60.0)
     trio = fight.fighters["p2"]
-    hold = {i: DOWN for i in range(40)}
-    events = script(fight, 40, p1={**hold, 2: FighterInput(down=True, x=True)}, p2={0: FighterInput(up=True)})
-    assert of(events, "switch") == [] and trio.basis == Z_BASIS
+    events = []
+    for i in range(100):
+        away = FighterInput(dx=1) if of(events, "hit") else IDLE
+        events += fight.step({"p1": FighterInput(down=True, x=i == 0), "p2": away})
+    assert 1 <= len(of(events, "hit")) <= 3
+    assert trio.x - fight.fighters["p1"].x > 80          # out of the field's reach
 
 
-def test_the_hadamard_wave_has_a_3_s_cooldown():
-    fight, _ = wave_at(60.0)
-    assert WAVE.cooldown == 180 and fight.fighters["p1"].cooldowns["crouch.X"] > 0
+def test_charge_noise_has_a_3_s_cooldown():
+    fight, _ = noise_at(60.0)
+    assert NOISE.cooldown == 180 and fight.fighters["p1"].cooldowns["crouch.X"] > 0
     hold = {i: DOWN for i in range(30)}
     events = script(fight, 30, p1={**hold, 0: FighterInput(down=True, x=True)})
     assert of(events, "attack") == []
@@ -732,7 +769,7 @@ def collapse(trio_dx, crouching=False, press_at=60, trio_basis=Z_BASIS):
     """QUINT (p1) jumps straight up and presses X once it is higher than `press_at` px
     (on the way up), or, with a negative press_at, once it is falling and lower than
     -press_at. A TRIO stands (or crouches) trio_dx px to its right, in trio_basis. Returns
-    the hits and blocks as (kind, error, height), and the TRIO."""
+    the hits and blocks as (kind, error), and the TRIO."""
     fight = versus(QUINT, TRIO, trio_dx)
     trio = fight.fighters["p2"]
     trio.basis = trio_basis
@@ -745,28 +782,36 @@ def collapse(trio_dx, crouching=False, press_at=60, trio_basis=Z_BASIS):
             inp, pressed = X, True
         events += fight.step({"p1": inp, "p2": DOWN if crouching else IDLE})
     assert pressed
-    heights = {basis.X: HIGH, basis.Z: LOW}     # the slam is green, the shockwave purple
-    return [(e.kind, e.error, heights[e.error]) for e in of(events, "hit", "block")], trio
+    return [(e.kind, e.error) for e in of(events, "hit", "block")], trio
 
 
-def test_collapse_slam_is_green_and_its_shockwave_purple():
-    # onto a crouching TRIO: the slam (HIGH) whiffs over the crouch; the shockwave is a purple
-    # Z on LOW, so it bounces off a green TRIO and hurts a purple one
-    hits, trio = collapse(10.0, crouching=True)
-    assert hits == [("block", basis.Z, LOW)] and trio.health == 100
-    hits, trio = collapse(10.0, crouching=True, trio_basis=X_BASIS)
-    assert hits == [("hit", basis.Z, LOW)] and trio.health == 100 - QUINT.moves["air.X"].damage
+def test_collapse_slam_and_shockwave_are_both_quints_colour():
+    # onto a standing green TRIO: slam and shockwave both green, both hurt
+    hits, trio = collapse(48.0)
+    assert [h[0] for h in hits] == ["hit", "hit"] and {h[1] for h in hits} == {basis.X}
+    assert trio.health == 100 - 2 * QUINT.moves["air.X"].damage
+    # onto a purple TRIO: both bounce
+    hits, trio = collapse(48.0, trio_basis=X_BASIS)
+    assert [h[0] for h in hits] == ["block", "block"] and trio.health == 100
     # far away: nothing
     hits, trio = collapse(150.0)
     assert hits == [] and trio.health == 100
 
 
-def test_collapse_always_has_one_matching_half_for_a_standing_rival():
-    for colour in (Z_BASIS, X_BASIS):
-        hits, trio = collapse(48.0, trio_basis=colour)
-        assert [h[2] for h in hits] == [HIGH, LOW], colour          # slam, then shockwave
-        assert [h[0] for h in hits].count("hit") == 1, (colour, hits)
-        assert trio.health == 100 - QUINT.moves["air.X"].damage
+def test_the_collapse_slam_lands_on_a_crouching_rival():
+    # the slam is MID: a body falling on you can't be ducked (only the shockwave can be jumped)
+    hits, trio = collapse(10.0, crouching=True)
+    assert [h[0] for h in hits] == ["hit", "hit"]          # the slam, then the shockwave
+
+
+def test_a_collapse_whose_drawn_legs_land_on_the_rival_hits():
+    # the slam's hitbox is the legs as drawn (feet to hip, knees and limb width included)
+    from brawl_ket.poses import LIMB_W, POSES, joints
+    m = QUINT.moves["air.X"]
+    j = joints(POSES["slam"], "heavy", (0, 0), 1)
+    half = max(abs(j[k][0]) for k in ("foot_f", "foot_b", "knee_f", "knee_b")) + LIMB_W["heavy"] / 2
+    assert m.hitbox.x <= -half + 1 and m.hitbox.x + m.hitbox.w >= half - 1
+    assert m.hitbox.h >= -j["hip"][1] - 1 and m.height == MID
 
 
 def test_a_collapse_that_lands_before_it_dives_has_no_shockwave():
@@ -804,7 +849,7 @@ def test_a_collapse_landing_reports_its_shockwave():
         inp = FighterInput(up=True) if i == 0 else X if quint.action == "jump" and quint.y > 60 else IDLE
         events += fight.step({"p1": inp})
     (wave,) = of(events, "shockwave")
-    assert (wave.player, wave.error) == ("p1", basis.Z)       # purple
+    assert (wave.player, wave.error) == ("p1", basis.X)       # QUINT's colour: green
     assert wave.x == quint.x and wave.y == FLOOR_Y
     # a plain jump's landing has none
     fight = versus(QUINT, TRIO, 150.0)

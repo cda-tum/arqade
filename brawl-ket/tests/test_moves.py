@@ -3,7 +3,7 @@ import importlib.util
 import pytest
 
 from brawl_ket import config
-from brawl_ket.basis import BOTH, GREEN, OPPOSITE, OWN, PURPLE
+from brawl_ket.basis import BOTH, OPPOSITE, OWN
 from brawl_ket.moves import HIGH, LOW, MID
 from brawl_ket.moves import CHARACTERS, QUINT, SLOTS, TRIO, Box
 
@@ -76,20 +76,20 @@ def test_poses_exist():
 
 
 def test_every_kind_is_known():
-    kinds = {"normal", "throw", "projectile", "special", "wave"}
+    kinds = {"normal", "throw", "projectile", "special"}
     for _c, _slot, m in all_moves():
         assert m.kind in kinds
 
 
-DAMAGE = {"A": 4, "B": 8, "X": 10, "throw": 10}     # spec section 1; MEASURE 12, the WAVE 0
+DAMAGE = {"A": 4, "B": 8, "X": 10, "throw": 10}     # spec section 1; MEASURE 12, CHARGE NOISE 3 a shock
 
 
 def test_the_damage():
     for c, slot, m in all_moves():
         if m.measure_rival:
             assert m.damage == 12, (c.name, slot)
-        elif m.switch_rival:
-            assert m.damage == 0, (c.name, slot)
+        elif m.hit_every:
+            assert m.damage == 3, (c.name, slot)
         else:
             key = "throw" if slot == "throw" else slot.split(".")[1]
             assert m.damage == DAMAGE[key], (c.name, slot)
@@ -181,8 +181,8 @@ QUINT_FRAMES = {
     "air.B": ("jump-in", 8, 6, 8, Box(10, 30, 40, 28), 20, 3.0),
     "throw": ("throw", 6, 2, 24, Box(0, 40, 44, 70), 30, 6.0),
     "stand.X": ("MEASURE", 16, 13, 30, Box(10, 40, 30, 70), 30, 6.0),
-    "crouch.X": ("HADAMARD WAVE", 8, 6, 16, Box(10, 0, 60, 18), 0, 0.0),
-    "air.X": ("COLLAPSE", 6, 60, 20, Box(-20, 0, 40, 30), 20, 3.0),
+    "crouch.X": ("CHARGE NOISE", 8, 60, 16, Box(-60, 0, 120, 120), 8, 2.0),
+    "air.X": ("COLLAPSE", 6, 60, 20, Box(-28, 0, 56, 75), 20, 3.0),
 }
 
 
@@ -203,11 +203,11 @@ def test_quint_specials():
     grab = moves["stand.X"]
     assert (grab.kind, grab.lunge, grab.knockdown) == ("throw", 6.0, True)
     assert grab.measure_rival and grab.colour == BOTH
-    wave = moves["crouch.X"]
-    assert (wave.kind, wave.cooldown, wave.switch_rival, wave.height) == ("wave", config.frames(3.0), True, LOW)
+    noise = moves["crouch.X"]
+    assert (noise.cooldown, noise.hit_every, noise.height) == (config.frames(3.0), 12, MID)
     collapse = moves["air.X"]
     assert collapse.dive == (2.0, 9.0)
-    assert (collapse.landing, collapse.colour, collapse.landing_colour) == (Box(-60, 0, 120, 14), GREEN, PURPLE)
+    assert (collapse.landing, collapse.colour, collapse.landing_colour) == (Box(-60, 0, 120, 14), OWN, OWN)
 
 
 def test_quint_light_reach_is_long():
@@ -228,15 +228,15 @@ def test_a_is_your_colour_b_the_other_and_throws_both():
             assert (m.colour, m.height) == (want, height), (c.name, slot)
 
 
-SPECIALS = {   # (character, slot): (colour rule, height, twist)
-    ("TRIO", "stand.X"): (GREEN, HIGH, None),
-    ("TRIO", "crouch.X"): (PURPLE, LOW, None),
+SPECIALS = {   # (character, slot): (colour rule, height, twist): every special is your colour
+    ("TRIO", "stand.X"): (OWN, HIGH, None),
+    ("TRIO", "crouch.X"): (OWN, LOW, None),
     ("TRIO", "air.X"): (OWN, MID, "switch_self_on_hit"),
-    ("QUINT", "stand.X"): (BOTH, MID, "measure_rival"),
-    ("QUINT", "crouch.X"): (BOTH, LOW, "switch_rival"),
-    ("QUINT", "air.X"): (GREEN, HIGH, None),
+    ("QUINT", "stand.X"): (BOTH, MID, "measure_rival"),     # a throw: both, like every throw
+    ("QUINT", "crouch.X"): (OWN, MID, "hit_every"),
+    ("QUINT", "air.X"): (OWN, MID, None),
 }
-TWISTS = ("switch_self_on_hit", "measure_rival", "switch_rival")
+TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every")
 
 
 def test_the_specials_colours_and_twists():
@@ -246,7 +246,7 @@ def test_the_specials_colours_and_twists():
         assert [t for t in TWISTS if getattr(m, t)] == ([twist] if twist else []), (name, slot)
     names = {n: [CHARACTERS[n].moves[s].name for s in ("stand.X", "crouch.X", "air.X")] for n in CHARACTERS}
     assert names == {"TRIO": ["PHOTON", "PHASE SLIDE", "HADAMARD DIVE"],
-                     "QUINT": ["MEASURE", "HADAMARD WAVE", "COLLAPSE"]}
+                     "QUINT": ["MEASURE", "CHARGE NOISE", "COLLAPSE"]}
 
 
 def test_only_specials_have_twists():

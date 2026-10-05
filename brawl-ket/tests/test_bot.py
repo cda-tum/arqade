@@ -19,7 +19,7 @@ def play(seed, pairing=("TRIO", "TRIO")):
     fight = Fight({"p1": CHARACTERS[pairing[0]], "p2": CHARACTERS[pairing[1]]})
     bots = {"p1": Bot("p1", seed), "p2": Bot("p2", seed + 1000)}
     events = []
-    for _ in range(ROUND_FRAMES + 1):
+    for _ in range(2 * ROUND_FRAMES):      # hit freezes don't run the clock: room for them
         if fight.over:
             break
         events += fight.step({key: bot.input(fight) for key, bot in bots.items()})

@@ -226,6 +226,32 @@ Each step is its own commit, and the game stays playable throughout.
 5. Bots, the teaching screens, audio.
 6. Tuning from the playtest, docs and menu text, then deploy.
 
+## Changes after playtests (2026-10-05)
+
+These replace the matching parts of sections 1–3.
+
+- **One colour rule for specials.** Fixed and mixed special colours were impossible to keep in
+  mind. Every special is now in **your own colour**, like A: "A and X are your colour, B is
+  the other; throws hurt both." MEASURE stays a throw (both). COLLAPSE's slam and shockwave
+  are both QUINT's colour. A PHOTON keeps the colour it was fired in.
+- **A move's colour is fixed when it starts**, not when it hits, so a switch mid-swing doesn't
+  recolour it and the colour seen on the wind-up is always the colour that lands.
+- **Y switches in any state:** walking, attacking, in hitstun, knocked down (pressed in a hit
+  freeze, it applies as play resumes). A defender can switch mid-string so the rest bounces.
+- **No infinites:** lights stun for 12 frames (TRIO's jab was a true infinite), and getting up
+  from a knockdown is invulnerable for 8 frames. A test mashes every normal and checks the
+  defender is free again within CHAIN_MAX hits.
+- **CHARGE NOISE replaces the HADAMARD WAVE** (QUINT, down + X), whose effect nobody could
+  see. QUINT plants itself; for 1 s a field about 60 px all round it shocks anyone inside every
+  12 frames (3 damage, 8 frames of stun, a push back), in QUINT's colour, MID. Distance or the
+  other colour escapes it. Electric arcs show the field and its reach. 3 s cooldown.
+- **COLLAPSE hits what it visibly lands on:** its slam box is the legs as drawn (feet to hip,
+  56 px wide) instead of a 40x30 box at the feet, and the slam is MID (a falling body can't be
+  ducked). The shockwave stays LOW.
+- **Readability:** the whole striking arm or leg is drawn in the attack's colour from wind-up
+  to the end of its active frames, with a trail while it's live; each health bar has an A and
+  a B chip in the colours that player's buttons hit right now.
+
 ## Out of scope
 
 - Superposition states (\|+> as "half green"), measurement randomness, entanglement

@@ -41,8 +41,8 @@ Rect = tuple[float, float, float, float]    # (left, top, w, h), y down
 
 @dataclass(frozen=True)
 class Event:
-    # attack, hit, block (a wrong-colour hit bounced off), switch (a basis changed: Y, a DIVE
-    # that lands, a WAVE), measure (MEASURE collapsed the rival into its basis), projectile,
+    # attack, hit, block (a wrong-colour hit bounced off), switch (a basis changed: Y, or a
+    # DIVE that lands), measure (MEASURE collapsed the rival into its basis), projectile,
     # ko, timeout, land, shockwave (a landing shockwave opens: x/y where it spreads from)
     kind: str
     player: str | None = None       # who it happened TO (hit/block/switch/measure: the one hit)
@@ -59,6 +59,7 @@ class Shot:
     y: float            # height above the floor, like a fighter's
     vx: float
     life: int
+    basis: str = "Z"    # the basis its owner was in when it was fired: its colour, for good
 
     @property
     def facing(self) -> int:
@@ -186,7 +187,7 @@ class Fight:
                     assert move.projectile is not None
                     self.shots.append(Shot(
                         key, move, f.x + f.facing * SHOT_SPAWN_OFFSET, f.y,
-                        move.projectile.speed * f.facing, move.projectile.lifetime,
+                        move.projectile.speed * f.facing, move.projectile.lifetime, f.attack_basis,
                     ))
                     events.append(Event("projectile", key))
                 else:
@@ -194,7 +195,7 @@ class Fight:
                     if kind == "land" and data["dive"] and f.move is not None \
                             and f.move.landing is not None:
                         self._landings[key] = _Landing(f.move)
-                        error = basis.error_for(f.move.landing_colour, f.basis)
+                        error = basis.error_for(f.move.landing_colour, f.attack_basis)
                         events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
 
     def _push_apart(self) -> None:
@@ -262,7 +263,9 @@ class Fight:
         # so a trade (both fighters connecting on the same frame) applies both.
         for st in strikes:
             if st.attacker is not None:
-                self.fighters[st.attacker].move_hit = True
+                f = self.fighters[st.attacker]
+                f.move_hit = True
+                f.hit_frame = f.frame       # a repeating move (CHARGE NOISE) counts from here
 
         # A strike on a fighter already knocked down this frame (by a sweep, say) is dropped
         # whole, as if the fighter had been down from the start: no event, no damage, and a
@@ -282,14 +285,10 @@ class Fight:
         owner = self.fighters[st.owner]
         x, y = st.where
         m = st.move
-        if m.switch_rival:                  # HADAMARD WAVE: an H on the rival, nothing else
-            defender.switch()
-            events.append(Event("switch", st.defender, None, x, y))
-            self.hitstop = max(self.hitstop, BLOCK_HITSTOP)
-            return
         # The colour rule against the basis the attack started in: a move's colour is fixed
-        # when it starts (a switch mid-swing doesn't recolour it), as its glow has shown.
-        attack_basis = owner.attack_basis if st.attacker is not None else owner.basis
+        # when it starts (a switch mid-swing doesn't recolour it), as its limb has shown; a
+        # shot keeps the colour it was fired in, a shockwave its slam's.
+        attack_basis = st.shot.basis if st.shot is not None else owner.attack_basis
         error = basis.error_for(m.colour, attack_basis)
         if defender.take_hit(m, error, st.from_facing) == "block":
             events.append(Event("block", st.defender, error, x, y))
@@ -316,7 +315,10 @@ class Fight:
         self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],
     ) -> None:
         m = f.move
-        if m is None or m.hitbox is None or f.move_hit or f.phase != "active":
+        if m is None or m.hitbox is None or f.phase != "active":
+            return
+        # a move hits once, except one that repeats (hit_every frames after its last hit)
+        if f.move_hit and not (m.hit_every and f.frame - f.hit_frame >= m.hit_every):
             return
         if rival.action == "knockdown" or rival.wakeup:     # downed, or getting up
             return

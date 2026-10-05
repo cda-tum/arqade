@@ -13,8 +13,8 @@ Writes:
 - fight_switch.png: p1 presses Y (an H), 2 frames on (the white flash, the H pop-up, the badge);
 - fight_strike.png: p1's heavy late in its wind-up (the fist glows in its colour);
 - quint_collapse_*.png: QUINT's COLLAPSE next to a standing purple TRIO: the fall (the green
-  slam bounces), the landing shockwave just after it opens (purple: it hurts), and spread out;
-- quint_wave_*.png: QUINT's HADAMARD WAVE on a TRIO: the wave, and TRIO flashing purple;
+  slam bounces), the landing shockwave just after it opens (green too: it bounces), and spread out;
+- quint_noise_*.png: QUINT's CHARGE NOISE on a TRIO: the wind-up sparks, and the field crackling;
 - quint_measure.png: MEASURE connecting on a purple TRIO, 3 frames on (the collapse into green);
 - vs_*.png: the same bot-fight moments as fight_*.png, TRIO (P1) against QUINT (P2), and
   vs_close.png, the two walked into each other;
@@ -103,7 +103,7 @@ def move_sheet(char=TRIO) -> pygame.Surface:
 
 
 def quint_frames(out_dir: str) -> None:
-    """QUINT's specials, scripted against a TRIO: COLLAPSE, HADAMARD WAVE and MEASURE."""
+    """QUINT's specials, scripted against a TRIO: COLLAPSE, CHARGE NOISE and MEASURE."""
     from brawl_ket.fighter import IDLE, FighterInput
 
     surface = pygame.Surface((W, H))
@@ -125,21 +125,18 @@ def quint_frames(out_dir: str) -> None:
             since += 1
         if since in (1, 8):
             save(surface, out_dir, f"quint_collapse_wave{since}.png")
-    # HADAMARD WAVE on a TRIO 60 px away
+    # CHARGE NOISE on a TRIO 60 px away: the wind-up, and the field mid-shock
     fight = Fight({"p1": QUINT, "p2": TRIO})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 290, 350
-    r, since = Renderer(surface), None
-    for i in range(30):
+    r = Renderer(surface)
+    quint = fight.fighters["p1"]
+    for i in range(40):
         events = fight.step({"p1": FighterInput(down=True, x=i == 0)})
         r.draw_fight(fight, events, {"p1": 0, "p2": 0})
-        if fight.fighters["p1"].phase == "active" and since is None:
-            save(surface, out_dir, "quint_wave_0.png")
-        if any(e.kind == "switch" for e in events):
-            since = 0
-        elif since is not None:
-            since += 1
-        if since == 3:
-            save(surface, out_dir, "quint_wave_3.png")
+        if quint.phase == "startup" and quint.frame == 5:
+            save(surface, out_dir, "quint_noise_0.png")
+        if quint.phase == "active" and quint.frame - quint.startup == 14:
+            save(surface, out_dir, "quint_noise_1.png")
     # MEASURE from 62 px onto a purple TRIO
     fight = Fight({"p1": QUINT, "p2": TRIO})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 290, 352

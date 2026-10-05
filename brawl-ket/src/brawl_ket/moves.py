@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from . import config
-from .basis import BOTH, GREEN, OPPOSITE, OWN, PURPLE
+from .basis import BOTH, OPPOSITE, OWN
 
 HIGH, MID, LOW = 0, 1, 2     # a move's height: a crouch ducks HIGH, a jump clears LOW
 HEIGHTS = ("HIGH", "MID", "LOW")
@@ -46,8 +46,9 @@ class Move:
     active: int
     recovery: int                       # frames, all >= 1
     hitbox: Box | None                  # None: no hitbox here (PHOTON's box is the projectile's)
-    # The colour rule (basis.py): OWN is the attacker's basis colour at the moment of the hit,
-    # OPPOSITE the other one; GREEN (an X), PURPLE (a Z) and BOTH (a Y) are fixed.
+    # The colour rule (basis.py): OWN is the attacker's basis colour when the move started,
+    # OPPOSITE the other one; BOTH (a Y) is fixed. A and every special are OWN, B is OPPOSITE,
+    # throws are BOTH.
     colour: str
     height: int                         # HIGH / MID / LOW: who dodges it
     damage: int                         # on a hit whose colour matches the defender's
@@ -55,7 +56,7 @@ class Move:
     knockback: float                    # px per frame, decaying
     knockdown: bool = False
     cancels: tuple[str, ...] = ()       # slot keys this can be cancelled into on hit
-    kind: str = "normal"                # normal / throw / projectile / special / wave
+    kind: str = "normal"                # normal / throw / projectile / special
     lunge: float = 0.0                  # vx during active frames (slides, grabs)
     dive: tuple[float, float] | None = None   # (vx, vy) air dive until landing
     projectile: Projectile | None = None
@@ -72,7 +73,7 @@ class Move:
     # The specials' twists (fight.py applies them when the move lands):
     switch_self_on_hit: bool = False    # HADAMARD DIVE: H on the attacker
     measure_rival: bool = False         # MEASURE: the rival collapses into the attacker's basis
-    switch_rival: bool = False          # HADAMARD WAVE: H on the rival, and no damage
+    hit_every: int = 0                  # > 0: hits again this many frames after each hit (CHARGE NOISE)
 
 
 @dataclass(frozen=True)
@@ -146,19 +147,19 @@ TRIO = Character(
         # PHOTON has no hitbox of its own: the projectile carries the box, and
         # the fight applies error/chip/bonus/hitstun/knockback when the shot hits.
         "stand.X": Move(
-            "PHOTON", 14, 1, 20, None, GREEN, HIGH,
+            "PHOTON", 14, 1, 20, None, OWN, HIGH,
             damage=10, hitstun=18, knockback=3.0,
             kind="projectile", cooldown=config.frames(2.5),
             projectile=Projectile(4.0, Box(0, 56, 16, 14), 180),
             poses=("cast_wind", "cast", "cast"),
         ),
         "crouch.X": Move(
-            "PHASE SLIDE", 8, 14, 14, Box(6, 4, 40, 14), PURPLE, LOW,
+            "PHASE SLIDE", 8, 14, 14, Box(6, 4, 40, 14), OWN, LOW,
             damage=10, hitstun=20, knockback=3.0, knockdown=True,
             kind="special", lunge=5.0, hurt_active=Box(-74, 0, 130, 50),
             poses=("crouch", "slide", "crouch"),
         ),
-        # In TRIO's own colour; when it lands, TRIO switches basis (an H on itself, at once and
+        # When it lands, TRIO switches basis (an H on itself, at once and
         # with no recovery), so its follow-up's colours flip with it: TRIO's mix-up tool.
         "air.X": Move(
             "HADAMARD DIVE", 3, 40, 8, Box(6, 0, 26, 20), OWN, MID,
@@ -232,24 +233,26 @@ QUINT = Character(
             kind="throw", lunge=6.0,
             poses=("grab_wind", "grab", "throw_hold"),
         ),
-        # A short ground wave just in front of QUINT (about 70 px): an H on the rival. No
-        # damage and no stun; their colour flips, so QUINT's next attack can match. LOW, so a
-        # jump clears it. Its colour rule is unused: an H changes either basis.
+        # QUINT plants itself and crackles with charge noise (a real source of qubit errors): a
+        # field about 60 px all round its body that shocks whoever is inside every 12 frames, for
+        # 1 s, in QUINT's colour. MID: it can't be ducked or jumped; the way out is distance (each
+        # shock pushes the victim back, and its 8-frame stun leaves 4 free frames before the
+        # next) or being the other colour.
         "crouch.X": Move(
-            "HADAMARD WAVE", 8, 6, 16, Box(10, 0, 60, 18), BOTH, LOW,
-            damage=0, hitstun=0, knockback=0.0, switch_rival=True,
-            kind="wave", cooldown=config.frames(3.0),
+            "CHARGE NOISE", 8, 60, 16, Box(-60, 0, 120, 120), OWN, MID,
+            damage=3, hitstun=8, knockback=2.0, hit_every=12,
+            kind="special", cooldown=config.frames(3.0),
             poses=("crouch", "brace", "crouch"),
         ),
-        # A body slam that drifts towards the rival: the slam is green (an X, HIGH) and the
-        # landing shockwave purple (a Z, LOW, 60 px either side; fight.py, _Landing). A rival
-        # standing in either colour takes the half that matches, unless they crouch under the
-        # slam or jump the shockwave.
+        # A body slam that drifts towards the rival: the slam and the landing shockwave (60 px
+        # either side; fight.py, _Landing) are both QUINT's colour. The slam's box is the legs as
+        # drawn, feet to hip; it is MID (a body falling on you can't be ducked), the shockwave
+        # LOW (a jump clears it).
         "air.X": Move(
-            "COLLAPSE", 6, 60, 20, Box(-20, 0, 40, 30), GREEN, HIGH,
+            "COLLAPSE", 6, 60, 20, Box(-28, 0, 56, 75), OWN, MID,
             damage=10, hitstun=20, knockback=3.0,
             kind="special", dive=(2.0, 9.0),
-            landing=Box(-60, 0, 120, 14), landing_colour=PURPLE,
+            landing=Box(-60, 0, 120, 14), landing_colour=OWN,
             poses=("jump", "slam", "crouch"),
         ),
     }),
