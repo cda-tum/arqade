@@ -1,4 +1,6 @@
-from quantum_towers import config
+import json
+
+from quantum_towers import config, times
 from quantum_towers.times import Times
 
 
@@ -58,3 +60,44 @@ def test_a_save_then_load_round_trips(tmp_path):
 def test_format_time_matches_the_timer():
     assert Times.format_time(7.25) == "0:07.25"
     assert Times(None).format_time(63.0) == "1:03.00"
+
+
+def test_loading_drops_times_that_are_not_finite_and_positive(tmp_path):
+    path = tmp_path / "times.json"
+    path.write_text(
+        '[{"name": "NAN", "seconds": NaN}, {"name": "INF", "seconds": Infinity},'
+        ' {"name": "NEG", "seconds": -3.0}, {"name": "ZER", "seconds": 0},'
+        ' {"name": "OK!", "seconds": 12.5}]'
+    )
+    assert [(e.name, e.seconds) for e in Times(path).entries] == [("OK!", 12.5)]
+
+
+def test_loading_an_unsorted_oversized_file_sorts_and_truncates(tmp_path):
+    path = tmp_path / "times.json"
+    seconds = [float(s) for s in (14, 3, 9, 11, 1, 7, 13, 2, 12, 5, 8, 4, 10, 6)]
+    path.write_text(json.dumps([{"name": f"P{i:02d}", "seconds": s} for i, s in enumerate(seconds)]))
+    entries = Times(path).entries
+    assert [e.seconds for e in entries] == [float(s) for s in range(1, config.TIMES_SLOTS + 1)]
+
+
+def test_a_failing_save_is_ignored(tmp_path):
+    path = tmp_path / "missing-dir" / "times.json"  # the directory does not exist
+    t = Times(path)
+    assert t.add("AAA", 20.0) == 0
+    assert [e.name for e in t.entries] == ["AAA"]
+    assert not path.exists()
+
+
+def test_the_save_is_atomic(tmp_path, monkeypatch):
+    path = tmp_path / "times.json"
+    t = Times(path)
+    t.add("AAA", 20.0)
+    before = path.read_text()
+
+    def broken_replace(_src, _dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(times.os, "replace", broken_replace)
+    t.add("BBB", 10.0)
+    assert path.read_text() == before  # the old table is untouched
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["times.json"]  # no temp file left

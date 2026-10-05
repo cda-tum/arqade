@@ -72,6 +72,7 @@ INPUT_CONFIG = {
         "joystick_index": 0,
         "hat_index": 0,  # digital d-pad, if the stick has one -- most don't on this cabinet
         "vertical_axis": 1,  # confirmed on this cabinet via Quantum Pong's paddle input
+        "horizontal_axis": 0,  # initials entry only; Gate Drop reads axis 0 on this cabinet
         "buttons": {
             "X": 4,
             "Y": 0,
@@ -88,11 +89,14 @@ INPUT_CONFIG = {
         },
         "up_keyboard": "K_UP",
         "down_keyboard": "K_DOWN",  # pause menu only
+        "left_keyboard": "K_LEFT",  # initials entry only
+        "right_keyboard": "K_RIGHT",
     },
     "p2": {
         "joystick_index": 1,
         "hat_index": 0,
         "vertical_axis": 1,
+        "horizontal_axis": 0,
         "buttons": {
             "X": 4,
             "Y": 0,
@@ -109,6 +113,8 @@ INPUT_CONFIG = {
         },
         "up_keyboard": "K_KP8",  # numpad 8 -- already spatially "up"
         "down_keyboard": "K_KP2",  # pause menu only
+        "left_keyboard": "K_KP1",  # initials entry only (4 and 6 are gates)
+        "right_keyboard": "K_KP3",
     },
     "system": {
         # Quit combo: Start + Select held together, on either controller.
@@ -205,5 +211,12 @@ FPS = 60
 # 0..1999). Observed range 19..33, mean 25.1, median 25.
 SOLO_TOTAL_PRESSES = 25
 SOLO_COUNTDOWN = 3.0  # seconds of 3, 2, 1 before GO
+SOLO_GO_DURATION = 0.6  # seconds GO! stays up once the clock is running
+SOLO_FINISH_DURATION = 3.0  # seconds the finish banner shows the time
+SOLO_TOWER_TOP = 26  # px: the solo tower starts below the big timer
+NAME_REPEAT_DELAY = 0.3  # initials entry: a held stick repeats after this...
+NAME_REPEAT_INTERVAL = 0.1  # ...then every this many seconds
+TIMES_TABLE_DURATION = 8.0  # the table goes back to the title by itself after this
+TIMES_TABLE_LOCK = 1.0  # ...and takes A, B or Start only after this
 TIMES_FILE = Path.home() / ".quantum_towers_times.json"  # outside the package: a redeploy keeps it
 TIMES_SLOTS = 10
