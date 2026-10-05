@@ -60,15 +60,14 @@ class Bot:
         self._watch(rival.stance)
         self._count_switches(rival)
 
+        if self._wants_dodge(me, rival):     # a switch works in any state, hitstun included
+            self.gap = PRESS_GAP
+            return FighterInput(down=self.down, y=True)
         if me.action in _BUSY:
             self.chain.clear()
             return FighterInput(down=self.down)
         toward = 1 if rival.x > me.x else -1
         dist = abs(rival.x - me.x)
-
-        if self._wants_dodge(me, rival):
-            self.gap = PRESS_GAP
-            return FighterInput(down=self.down, y=True)
         if me.stance == "air":
             return self._in_air(me, rival, toward, dist)
         self.air_pressed = False
@@ -87,7 +86,10 @@ class Bot:
 
     @staticmethod
     def would_hurt(attacker, move, target) -> bool:
-        return basis.hurts(basis.error_for(move.colour, attacker.basis), target.basis)
+        """Would `move` hurt `target`? Its colour is fixed when it starts: an attack already
+        under way keeps the basis it started in."""
+        b = attacker.attack_basis if attacker.move is move else attacker.basis
+        return basis.hurts(basis.error_for(move.colour, b), target.basis)
 
     def _count_switches(self, rival) -> None:
         if self.rival_basis is not None and rival.basis != self.rival_basis:
@@ -110,14 +112,14 @@ class Bot:
                 self.down = old == "crouch"
 
     def _wants_dodge(self, me, rival) -> bool:
-        """Switch basis `react` frames into a rival attack whose colour would hurt, if free."""
+        """Switch basis `react` frames into a rival attack whose colour would hurt: from neutral
+        a dodge, mid-string (in hitstun) a way to turn the rest of it away."""
         m = rival.move
         if m is None or rival.action != "attack" or rival.phase != "startup" or rival.frame != self.react:
             return False
         if m.switch_rival or m.colour == basis.BOTH or not self.would_hurt(rival, m, me):
             return False
-        free = me.action in ("idle", "walk", "crouch", "jump")
-        return free and self.gap == 0 and self.rng.random() < self.skill * 0.5
+        return self.gap == 0 and self.rng.random() < self.skill * 0.5
 
     def _continue_chain(self, me, toward: int) -> FighterInput:
         # Press the next button of the string once the current move has connected.

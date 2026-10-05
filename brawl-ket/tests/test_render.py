@@ -247,22 +247,60 @@ def test_a_switch_flashes_the_body_white_with_an_h(surface):
     assert r.body_flash["p1"] == (None, 0)
 
 
-def test_the_striking_limb_glows_in_the_attacks_colour(surface):
+def limb_colours(surface, r, f, joints_, a, b, n=9):
+    """The colours along the middle third of the segment between two joints (clear of the
+    ink rings of the joints and the fist or foot at its end)."""
+    pa, pb = joints_[a], joints_[b]
+    pts = [(pa[0] + (pb[0] - pa[0]) * k / n, pa[1] + (pb[1] - pa[1]) * k / n) for k in range(3, n - 3)]
+    return {tuple(surface.get_at((round(x), round(y))))[:3] for x, y in pts}
+
+
+def test_the_whole_striking_limb_is_drawn_in_the_attacks_colour(surface):
     from brawl_ket.fighter import FighterInput
-    for button, colour in (("a", GREEN), ("b", PURPLE)):      # a green fighter: A green, B purple
+    from brawl_ket.poses import joints
+    # a green fighter: A green (its own colour), B purple (the other), and a crouching B
+    # (the sweep) strikes with the leg
+    for button, down, colour, a, b in (("a", False, GREEN, "elbow_f", "hand_f"),
+                                       ("b", False, PURPLE, "elbow_f", "hand_f"),
+                                       ("b", True, PURPLE, "knee_f", "foot_f")):
         r = Renderer(surface)
         fight = Fight({"p1": TRIO, "p2": TRIO})
         fight.fighters["p2"].x = 600
         for i in range(3):
-            r.draw_fight(fight, fight.step({"p1": FighterInput(**{button: i == 0})}))
+            r.draw_fight(fight, fight.step({"p1": FighterInput(down=down, **{button: i == 0})}))
         f = fight.fighters["p1"]
-        assert f.action == "attack" and f.phase == "startup"
-        from brawl_ket.poses import joints
+        assert f.action == "attack" and f.phase == "startup", button
         j = joints(r.pose_last["p1"], TRIO.build, (f.x, FLOOR_Y - f.y), f.facing)
-        x, y = round(j["hand_f"][0]), round(j["hand_f"][1])
-        assert tuple(surface.get_at((x, y)))[:3] == colour, button
+        seen = limb_colours(surface, r, f, j, a, b)
+        assert seen == {colour} or seen <= {colour, P.lighten(colour, 0.5)}, (button, down, seen)
 
 
+def test_each_hud_shows_its_players_a_and_b_colours(surface):
+    from brawl_ket.render import legend_colours
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight.fighters["p2"].basis = X_BASIS
+    assert legend_colours(fight.fighters["p1"]) == {"A": GREEN, "B": PURPLE}
+    assert legend_colours(fight.fighters["p2"]) == {"A": PURPLE, "B": GREEN}
+    r = Renderer(surface)
+    r.draw_fight(fight, [])
+    assert r.legend_rects["p1"]["A"].collidepoint(r.legend_rects["p1"]["A"].center)
+    for key, want in (("p1", {"A": GREEN, "B": PURPLE}), ("p2", {"A": PURPLE, "B": GREEN})):
+        for button, colour in want.items():
+            rect = r.legend_rects[key][button]
+            inside = {tuple(surface.get_at((x, y)))[:3] for x in range(rect.left, rect.right)
+                      for y in range(rect.top, rect.bottom)}
+            assert colour in inside, (key, button)
+
+
+def test_a_live_strike_leaves_a_trail(surface):
+    from brawl_ket.fighter import FighterInput
+    r = Renderer(surface)
+    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight.fighters["p2"].x = 600
+    for i in range(TRIO.moves["stand.B"].startup + 3):
+        r.draw_fight(fight, fight.step({"p1": FighterInput(b=i == 0)}))
+    assert fight.fighters["p1"].phase == "active"
+    assert len(r.trails["p1"]) >= 2
 def test_the_teaching_text_is_ascii_capitals():
     from brawl_ket.render import CARD_LINES, HINT, RULE_LINES
     for text in (HINT, *RULE_LINES, *("".join(t for t, _ in parts) for parts in CARD_LINES)):

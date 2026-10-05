@@ -60,6 +60,11 @@ PURPLE = (160, 88, 232)
 BASIS_BODY = {basis.Z_BASIS: GREEN, basis.X_BASIS: PURPLE}
 ERROR_COLOUR = {basis.X: GREEN, basis.Z: PURPLE, basis.Y: P.WHITE}
 BADGE = {basis.Z_BASIS: "0/1", basis.X_BASIS: "+/-"}     # the basis's states, on the health bar
+# the striking limb's joints, from the shoulder or hip out to the hand or foot that lands
+STRIKE_LIMB = {"hand_f": ("shoulder_f", "elbow_f", "hand_f"), "foot_f": ("hip", "knee_f", "foot_f")}
+TRAIL_LEN = 5               # a live strike's hand or foot leaves this many fading echoes
+LEGEND_CHIP = 14            # the A / B colour chips under each health bar, px
+LEGEND_W = 2 * LEGEND_CHIP + 4
 # which joint lands each move's hit (its glow shows the attack's colour before contact)
 STRIKER = {
     "jab": "hand_f", "heavy": "hand_f", "low jab": "hand_f", "sweep": "foot_f",
@@ -133,6 +138,11 @@ def outlined(text: str, size: int, color, outline=P.INK, thick: int = 1) -> pyga
             s.blit(ink, (t + dx, t + dy))
     s.blit(core, (t, t))
     return s
+
+
+def legend_colours(f) -> dict[str, tuple]:
+    """The colour each of a fighter's buttons hits in now: A its own basis's, B the other's."""
+    return {"A": BASIS_BODY[f.basis], "B": BASIS_BODY[basis.hadamard(f.basis)]}
 
 
 def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
@@ -378,6 +388,8 @@ class Renderer:
         self.pose_start: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.pose_last: dict[str, Pose | None] = {p: None for p in PLAYERS}
         self.body_flash: dict[str, tuple[tuple | None, int]] = {p: (None, 0) for p in PLAYERS}
+        self.trails: dict[str, list[tuple[tuple[int, int], tuple]]] = {p: [] for p in PLAYERS}
+        self.legend_rects: dict[str, dict[str, pygame.Rect]] = {p: {} for p in PLAYERS}
         self.effects.clear()
         self.shake = 0
 
@@ -559,30 +571,48 @@ class Renderer:
             body, accent = P.lighten(body, 0.6), P.WHITE
         feet = (f.x + ox, FLOOR_Y - f.y + oy)
         j = draw_puppet(self.surface, self._pose(key, f), f.char.build, feet, f.facing, body, accent)
-        self._striker(f, j)
+        self._striker(key, f, j)
         return j["head"][0] - ox, j["head"][1] - oy
 
-    def _striker(self, f: Fighter, j: dict) -> None:
-        """The hand or foot an attack lands with glows in the attack's colour, from its wind-up
-        to the end of its active frames: you see before contact whether it will match. A throw
-        (both colours) is green ringed in purple; the WAVE (an H, no colour) white."""
+    def _striker(self, key: str, f: Fighter, j: dict) -> None:
+        """The whole arm or leg an attack lands with is drawn in the attack's colour, from its
+        wind-up to the end of its active frames, so a player sees before contact whether it
+        will match; while it is live, its hand or foot leaves a fading trail. A throw (both
+        colours) is green outlined in purple; the WAVE (an H, no colour) white."""
         m = f.move
+        trail = self.trails[key]
         if f.action != "attack" or m is None or f.phase not in ("startup", "active"):
+            trail.clear()
             return
         joint = STRIKER.get(m.name)
         if joint is None:
+            trail.clear()
             return
-        p = _pt(j[joint])
-        r = 5 if f.phase == "startup" else 7
         if m.switch_rival:
-            inner, outer = P.WHITE, P.WHITE
+            fill, edge = P.WHITE, P.INK
         else:
             error = basis.error_for(m.colour, f.attack_basis)
-            inner = GREEN if error == basis.Y else ERROR_COLOUR[error]
-            outer = PURPLE if error == basis.Y else P.lighten(inner, 0.5)
-        pygame.draw.circle(self.surface, P.INK, p, r + 3)
-        pygame.draw.circle(self.surface, outer, p, r + 2)
-        pygame.draw.circle(self.surface, inner, p, r)
+            fill = GREEN if error == basis.Y else ERROR_COLOUR[error]
+            edge = PURPLE if error == basis.Y else P.INK
+        surf = self.surface
+        w = LIMB_W[f.char.build]
+        if f.phase == "active":         # the trail, oldest first, under the limb
+            trail.append((_pt(j[joint]), fill))
+            del trail[:-TRAIL_LEN]
+            for n, (p, c) in enumerate(trail[:-1]):
+                r = 3 + n * 2
+                pygame.draw.circle(surf, P.INK, p, r + 1)
+                pygame.draw.circle(surf, P.lighten(c, 0.5), p, r)
+        else:
+            trail.clear()
+        a, b, c = (j[name] for name in STRIKE_LIMB[joint])
+        limb(surf, a, b, w, fill, ink=edge)
+        limb(surf, b, c, w - 1, fill, ink=edge)
+        tip = _pt(c)
+        r = w // 2 + (4 if f.phase == "active" else 2)
+        pygame.draw.circle(surf, edge, tip, r + 2)
+        pygame.draw.circle(surf, fill, tip, r)
+        pygame.draw.circle(surf, P.lighten(fill, 0.5), (tip[0] - 2, tip[1] - 2), max(2, r // 3))
 
     def _pose(self, key: str, f: Fighter) -> Pose:
         """pose_for, told which pose the fighter was drawn in when its action began,
@@ -655,6 +685,11 @@ class Renderer:
                 surf.blit(name, (rect.right - name.get_width() - 2, y))
                 surf.blit(tag, (rect.right - name.get_width() - tag.get_width() - 8, y))
             self._badge(f, rect.right + 4 if side < 0 else rect.left - 4, rect.centery, side)
+            if side < 0:
+                lx = rect.left + name.get_width() + tag.get_width() + 20
+            else:
+                lx = rect.right - name.get_width() - tag.get_width() - 20 - LEGEND_W
+            self._legend(key, f, lx, y)
         # the clock and the round pips
         cx = W // 2
         box = pygame.Rect(0, 0, 44, 30)
@@ -673,6 +708,18 @@ class Renderer:
                 pygame.draw.circle(surf, PLAYER_COLORS[key] if full else P.NIGHT, (x, y), 4)
                 if full:
                     surf.fill(P.lighten(PLAYER_COLORS[key], 0.6), (x - 2, y - 2, 2, 2))
+
+    def _legend(self, key: str, f: Fighter, x: int, y: int) -> None:
+        """Which colour this player's buttons hit in right now: A their own, B the other."""
+        rects = {}
+        for i, (button, colour) in enumerate(legend_colours(f).items()):
+            label = outlined(button, 8, P.WHITE)
+            box = pygame.Rect(x + i * (LEGEND_CHIP + 4), y - 2, LEGEND_CHIP, 12)
+            pygame.draw.rect(self.surface, P.INK, box.inflate(2, 2), border_radius=3)
+            pygame.draw.rect(self.surface, colour, box, border_radius=2)
+            blit_center(self.surface, label, box.center)
+            rects[button] = box
+        self.legend_rects[key] = rects
 
     def _badge(self, f: Fighter, x: int, cy: int, side: int) -> None:
         """The basis on the health bar: 0/1 on green or +/- on purple, at the bar's inner end."""
