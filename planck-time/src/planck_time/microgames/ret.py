@@ -5,7 +5,9 @@ paddle to where the ball really arrives. The ball's path is not drawn ahead.
 
 Every round is built so the Z matters: where the ball would arrive without the gate
 is out of the paddle's reach, and so is where the paddle starts. Pong's catch grace
-applies. (The module is ret.py: `return` is a keyword.)
+applies. A caught ball flies back off the paddle at Pong's angle (further from the
+paddle's middle, steeper); a missed one flies on off the screen. (The module is
+ret.py: `return` is a keyword.)
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ GATE_X = 124
 START_X = 232
 VX = 66.0                               # px/s at level 0
 STEP = 1 / 240                          # the trajectory's integration step
+MAX_BOUNCE = 1.0                        # Quantum Pong's off-centre deflection, as vy / vx at the edge
 
 
 def q(c) -> tuple[int, int, int]:
@@ -104,6 +107,7 @@ class Return(Microgame):
         self.used = False
         self.paddle = PADDLE_START
         self.target = real              # the bot's aim: it reads the real trajectory
+        self.after: tuple[float, float, float, float] | None = None   # (x, y, vx, vy) at the end
 
     def step(self, dt: float, inp: PlayerInput) -> None:
         self.paddle += inp.stick[1] * PADDLE_SPEED * dt
@@ -116,11 +120,30 @@ class Return(Microgame):
             if x <= PADDLE_X + BALL_R:
                 self.ball = [PADDLE_X + BALL_R, y, vx, vy]
                 if abs(y - self.paddle) <= half + GRACE:
+                    # Pong's return: back to the right, steeper the further off-centre
+                    off = max(-1.0, min(1.0, (y - self.paddle) / half))
+                    back = abs(vx) * 1.1
+                    self.after = (PADDLE_X + BALL_R, y, back, back * MAX_BOUNCE * off)
                     self.win()
                 else:
+                    self.after = (x, y, vx, vy)
                     self.fail()
                 return
         self.ball = [x, y, vx, vy]
+
+    def ball_pos(self) -> tuple[float, float]:
+        """Where the ball is drawn: while the game runs, where it is; after the end, flying
+        back off the paddle (a catch) or on past it (a miss), bouncing off the walls."""
+        if self.after is None:
+            return self.ball[0], self.ball[1]
+        x, y, vx, vy = self.after
+        x += vx * self.since_end
+        y += vy * self.since_end
+        lo, hi = FIELD_TOP + BALL_R, FIELD_BOTTOM - BALL_R
+        span = hi - lo
+        k = (y - lo) % (2 * span)                  # fold the straight path between the walls
+        y = lo + (k if k <= span else 2 * span - k)
+        return x, y
 
     def bot(self) -> PlayerInput:
         diff = self.target - self.paddle
@@ -144,12 +167,13 @@ class Return(Microgame):
         # the paddle and the ball
         pygame.draw.rect(surf, WHITE, (PADDLE_X - PADDLE_W, round(self.paddle - PADDLE_H / 2), PADDLE_W, PADDLE_H),
                          border_radius=1)
-        bx, by = round(self.ball[0]), round(self.ball[1])
+        bx, by = (round(v) for v in self.ball_pos())
         pygame.draw.circle(surf, WHITE, (bx, by), BALL_R)
         pygame.draw.circle(surf, BACKGROUND, (bx, by), BALL_R, 1)
-        if self.result is True and self.since_end < 0.25:      # Pong's catch flash
+        if self.result is True and self.since_end < 0.25:      # Pong's catch flash, at the paddle
             r = BALL_R + round(self.since_end / 0.25 * 8)
-            pygame.draw.circle(surf, P.WHITE, (bx, by), r, 1)
+            fx, fy = round(self.after[0]), round(self.after[1])
+            pygame.draw.circle(surf, P.WHITE, (fx, fy), r, 1)
         if self.result is True:
             hint = "RETURNED!"
         elif self.result is False:

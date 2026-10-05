@@ -95,3 +95,13 @@ and A. With the 12 originals, a session draws from 21 microgames.
 
 - README: the microgame table gains the nine rows, and "all 12 microgames" becomes 21.
 - The intro card already shows each game's INPUT, so nothing else changes.
+
+## After the first playtest (2026-10-05)
+
+Four crossovers were cut: SERVE! (Overquqed) and MATCH! (Brawl-Ket) were too
+complex for five seconds, SPLIT! (Qurves) had too little to do with its game and
+was too hard, and SURF! (Ion Surfer) left players unsure what to do. RETURN!
+froze the ball on the catch (`update()` stops stepping once a result is set), so
+the return is now drawn from `since_end`: a caught ball flies back at Pong's
+angle, a missed one flies on. Five crossovers remain: RETURN!, CLIMB!, CORRECT!,
+ROUTE! and DROP!, each in its own game's look.

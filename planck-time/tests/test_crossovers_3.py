@@ -1,4 +1,4 @@
-"""The rules CORRECT!, ROUTE! and MATCH! need beyond the shared contract:
+"""The rules CORRECT! and ROUTE! need beyond the shared contract:
 fair timing for a first-time player, and ROUTE!'s rival route always standing
 in the way without ever cutting the pair off."""
 
@@ -8,7 +8,6 @@ from planck_time.microgames import PlayerInput
 from planck_time.microgames import correct as C
 from planck_time.microgames import route as R
 from planck_time.microgames.correct import Correct
-from planck_time.microgames.match import Match
 from planck_time.microgames.route import Route, bfs
 
 DT = 1 / 60
@@ -139,35 +138,3 @@ def test_route_pushing_back_the_way_it_came_undoes_a_step():
     assert len(game.path) == 2
     game.update(DT, PlayerInput(step=(-d[0], -d[1])))
     assert game.path == [game.start] and game.result is None
-
-
-# --- MATCH! ---------------------------------------------------------------------------------
-
-
-def test_match_level_0_never_switches_faster_than_0_4_s():
-    for seed in SEEDS:
-        game = Match(seed, 0, Match.duration_for(0))
-        times = [0.0] + game.switches
-        assert game.switches[0] >= 0.6  # the first matching moment
-        assert min(b - a for a, b in zip(times, times[1:])) >= 0.4, f"seed {seed}"
-        assert game.basis_at(0.0) != game.mine
-
-
-@pytest.mark.parametrize("level", (0, 3))
-def test_match_has_two_chances(level):
-    for seed in SEEDS:
-        game = Match(seed, level, Match.duration_for(level))
-        chances = game.switches[0::2]  # every other switch turns the rival into your colour
-        assert len(chances) >= 2, f"seed {seed}"
-
-
-def test_match_a_strike_is_judged_when_a_is_pressed():
-    for seed in range(20):
-        hit = Match(seed, 0, Match.duration_for(0))
-        while hit.basis_at(hit.t) != hit.mine:
-            hit.update(DT, PlayerInput())
-        hit.update(DT, PlayerInput(a=True))
-        assert hit.result is True
-        blocked = Match(seed, 0, Match.duration_for(0))
-        blocked.update(DT, PlayerInput(a=True))  # the rival starts in the other colour
-        assert blocked.result is False

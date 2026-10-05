@@ -75,3 +75,14 @@ microgames use the colour code and the surface code for something else: what the
 - MERGE!: exactly one winning configuration, the bot wins and idle loses, at
   appearances 0 and 2.
 - Snapshots of each, checked by eye.
+
+## MERGE!'s patches, redrawn (2026-10-05)
+
+The first patches didn't read as surface codes. They are now distance-5 rotated
+patches drawn as Litinski does ("A Game of Surface Codes", arXiv:1808.02892,
+App. A, Fig. 37 and 40a): a qubit on every vertex, a checkerboard of X and Z
+faces, half-moon boundary stabilisers, X edges dashed and Z edges solid. An X
+edge carries Z-type half-moons and a Z edge X-type ones, so the logical string
+along each edge commutes with every stabiliser; `tests/test_code_microgames.py`
+checks that, and that the checkerboard carries on across the merge seam, whose
+faces of the measured type are the new stabilisers (they glow gold).

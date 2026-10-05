@@ -158,3 +158,60 @@ def test_the_label_is_the_joint_measurement():
     for seed in range(10):
         game = Merge(seed, 0, Merge.duration_for(0))
         assert game.label() == game.fixed[0] * 2      # XX along X edges, ZZ along Z edges
+
+
+def drawn_stabilisers(rot, phase):
+    """The stabilisers as drawn: (type, set of qubits), qubits (column, row) on the vertices."""
+    out = []
+    for i in range(M.FACES):
+        for j in range(M.FACES):
+            out.append((M.face_type(i, j, rot, phase), {(i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)}))
+    for side, k, kind in M.moons(rot, phase):
+        if side == "left":
+            q = {(0, k), (0, k + 1)}
+        elif side == "right":
+            q = {(M.D - 1, k), (M.D - 1, k + 1)}
+        elif side == "top":
+            q = {(k, 0), (k + 1, 0)}
+        else:
+            q = {(k, M.D - 1), (k + 1, M.D - 1)}
+        out.append((kind, q))
+    return out
+
+
+def edge_qubits(side):
+    n = M.D - 1
+    return {"left": {(0, j) for j in range(M.D)}, "right": {(n, j) for j in range(M.D)},
+            "top": {(i, 0) for i in range(M.D)}, "bottom": {(i, n) for i in range(M.D)}}[side]
+
+
+@pytest.mark.parametrize("rot", (0, 1))
+@pytest.mark.parametrize("phase", (0, 1))
+def test_the_drawn_patch_is_a_surface_code_with_litinskis_edges(rot, phase):
+    stabs = drawn_stabilisers(rot, phase)
+    # the stabilisers commute: an X and a Z one overlap on an even number of qubits
+    for ka, qa in stabs:
+        for kb, qb in stabs:
+            if ka != kb:
+                assert len(qa & qb) % 2 == 0
+    # a distance-5 rotated code: 25 qubits, 24 stabilisers (12 of each type), so one logical qubit
+    assert len(stabs) == M.D * M.D - 1 and sum(k == "X" for k, _ in stabs) == 12
+    edges = M.edges(rot)
+    # Litinski: the product of X (Z) along a dashed X (solid Z) edge is the logical X (Z)
+    logical = {}
+    for side, kind in edges.items():
+        string = edge_qubits(side)
+        for k, q in stabs:
+            if k != kind:
+                assert len(q & string) % 2 == 0, (side, kind)   # commutes with every stabiliser
+        logical.setdefault(kind, string)
+    assert len(logical["X"] & logical["Z"]) % 2 == 1            # X_L and Z_L anticommute
+
+
+def test_merged_patches_continue_the_checkerboard_across_the_seam():
+    for kind in ("X", "Z"):
+        rot = 0 if kind == "X" else 1           # the fixed patch, and yours when the edges match
+        for j in range(M.FACES):
+            fixed = M.face_type(M.FACES - 1, j, rot, 0)
+            yours = M.face_type(0, j, rot, M.YOUR_PHASE)
+            assert fixed == yours                # so the seam face between them differs from both

@@ -1,4 +1,4 @@
-"""The rules of CLIMB! (Qlimbers), SERVE! (Overquqed) and DROP! (Gate Drop)
+"""The rules of CLIMB! (Qlimbers) and DROP! (Gate Drop)
 that the contract tests can't see: exactly one right answer, never a free
 win at the start, and the source games' own gate semantics."""
 
@@ -10,9 +10,6 @@ from planck_time.microgames import PlayerInput
 from planck_time.microgames.climb import GATES as CLIMB_GATES
 from planck_time.microgames.climb import PLAIN, Climb, ket, same, same_direction
 from planck_time.microgames.drop import INVERSE, Drop, sandwich
-from planck_time.microgames.serve import GATES as SERVE_GATES
-from planck_time.microgames.serve import KETS, ZERO, Serve
-from planck_time.microgames.serve import same as same_state
 
 DT = 1 / 60
 SEEDS = range(200)
@@ -92,44 +89,6 @@ def test_climb_pushing_up_on_the_wrong_state_stuns_and_two_stuns_still_fit():
     assert g.result is True
 
 
-# --- SERVE! -------------------------------------------------------------------------------
-
-def test_serve_exactly_one_appliance_makes_the_order():
-    for g in rounds(Serve):
-        hits = [gate for gate in g.stations if same_state(SERVE_GATES[gate](ZERO), KETS[g.order])]
-        assert hits == [g.right]
-        assert not same_state(ZERO, KETS[g.order])
-        assert len(set(g.stations.values())) == 2
-
-
-def test_serve_using_an_appliance_twice_undoes_it():
-    for gate, apply in SERVE_GATES.items():
-        assert same_state(apply(apply(ZERO)), ZERO), gate
-
-
-def walk_to(g, x, y):
-    while abs(g.x - x) > 1 or abs(g.y - y) > 1:
-        dx, dy = x - g.x, y - g.y
-        d = max(1.0, (dx * dx + dy * dy) ** 0.5)
-        g.update(DT, PlayerInput(stick=(dx / d, dy / d)))
-        assert g.t < g.duration
-
-
-def test_serve_a_wrong_state_fails_only_once_it_is_served():
-    from planck_time.microgames.serve import FEET_MAX, FEET_MIN, PASS_X
-
-    g = Serve(1, 0, 5.0)
-    while g.t < g.ready:
-        g.update(DT, PlayerInput())
-    wrong = next(gate for gate in g.stations if gate != g.right)
-    walk_to(g, g.stations[wrong], FEET_MIN)
-    g.update(DT, PlayerInput(a=True))
-    assert g.result is None and not same_state(g.state, KETS[g.order])
-    walk_to(g, PASS_X, FEET_MAX)
-    g.update(DT, PlayerInput(a=True))
-    assert g.result is False
-
-
 # --- DROP! --------------------------------------------------------------------------------
 
 def test_drop_exactly_one_wire_is_right_and_the_pill_never_starts_over_it():
@@ -168,17 +127,15 @@ def test_drop_landing_anywhere_else_fails():
     assert g.result is False and g.landed_on != g.right
 
 
-# --- all three ----------------------------------------------------------------------------
+# --- both ---------------------------------------------------------------------------------
 
 def snapshot(g):
     if isinstance(g, Climb):
         return g.cursor, ket(g.state), g.stunned
-    if isinstance(g, Serve):
-        return round(g.x, 3), round(g.y, 3), g.state
     return g.col, g.row, g.fast
 
 
-@pytest.mark.parametrize("cls", (Climb, Serve, Drop), ids=lambda c: c.__name__)
+@pytest.mark.parametrize("cls", (Climb, Drop), ids=lambda c: c.__name__)
 def test_nothing_counts_for_the_first_six_tenths_of_a_second(cls):
     for seed in range(20):
         rng = random.Random(seed)

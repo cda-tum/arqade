@@ -1,7 +1,7 @@
 # Planck Time
 
 A quantum microgame party in the style of WarioWare, for 1 or 2 players, for
-the ARQADE cabinet (Batocera, `pygame` system). Twenty-three tiny games come
+the ARQADE cabinet (Batocera, `pygame` system). Nineteen tiny games come
 one after another, each about five seconds long and faster and faster. The name:
 the Planck time is the shortest meaningful unit of time in physics.
 Design: `../docs/superpowers/specs/2026-10-01-planck-time-design.md`, with the
@@ -14,7 +14,7 @@ biggest hurdle, so every microgame uses **only the stick and A**, shows
 explains its concept in a one-line caption *afterwards*.
 
 **Status:**
-- **The game:** all 23 microgames (the 12 originals, 9 crossovers from the
+- **The game:** all 19 microgames (the 12 originals, 5 crossovers from the
   other arqade games, and TILE! and MERGE! on error-correcting codes), single
   player (endless, 4 lives, top-10 initials) and versus (both players on the
   same microgame, side by side).
@@ -61,28 +61,26 @@ explains its concept in a one-line caption *afterwards*.
 | 11 | STEER! | stick | Turn the mirror to keep the beam on the detector |
 | 12 | SORT! | stick | Slide each falling `|0>` / `|1>` into its bin |
 
-**The arqade crossovers:** one microgame per other game on the cabinet, each a
-single interaction of that game cut down to the stick and A, in its own look.
+**The arqade crossovers:** a microgame for five of the other games on the cabinet,
+each a single interaction of that game cut down to the stick and A, in its own look.
+Overquqed, Brawl-Ket, Qurves and Ion Surfer had one too (SERVE!, MATCH!, SPLIT! and
+SURF!), cut after a playtest: too complex or too hard to read in five seconds.
 
 | # | Verb | From | Input | What you do |
 |---|---|---|---|---|
 | 13 | RETURN! | Quantum Pong | stick | Catch the ball where it really arrives: a Z gate in midfield flips its vertical direction |
 | 14 | CLIMB! | Qlimbers | stick + A | Apply the one gate card that turns your state into the floor's target, then push up to climb |
 | 15 | CORRECT! | Pauli Invaders | stick + A | Fire at the descending error invader while your shot's colour matches it |
-| 16 | SURF! | Ion Surfer | stick | Raise the electrode under the loss hole so the ion rolls back, until time's up |
-| 17 | SERVE! | Overquqed | stick + A | Walk the bowl to the appliance that makes the guest's order (`|1>` or `|+>`), then serve it |
-| 18 | ROUTE! | Superconductor | stick | Route your coupler path to the qubit pair without crossing the rival route |
-| 19 | SPLIT! | Qurves | stick | Drive over the H and steer: one of your two mirrored copies always gets through the wall |
-| 20 | DROP! | Gate Drop | stick + A | Drop the gate pill on the wire whose top gate is its inverse |
-| 21 | MATCH! | Brawl-Ket | A | Strike while the rival's colour matches yours |
+| 16 | ROUTE! | Superconductor | stick | Route your coupler path to the qubit pair without crossing the rival route |
+| 17 | DROP! | Gate Drop | stick + A | Drop the gate pill on the wire whose top gate is its inverse |
 
 **The codes:** two microgames about what error-correcting codes look like and
 how they compute, rather than decoding.
 
 | # | Verb | Code | Input | What you do |
 |---|---|---|---|---|
-| 22 | TILE! | colour code | stick + A | Paint the blank honeycomb tile the one colour its neighbours lack (every corner touches all three colours) |
-| 23 | MERGE! | surface code | stick + A | Turn your patch so its facing edge matches the other patch's, then push in to merge: XX along X edges, ZZ along Z edges (lattice surgery) |
+| 18 | TILE! | colour code | stick + A | Paint the blank honeycomb tile the one colour its neighbours lack (every corner touches all three colours) |
+| 19 | MERGE! | surface code | stick + A | Turn your patch so its facing edge matches the other patch's, then push in to merge: XX along X edges, ZZ along Z edges (lattice surgery) |
 
 **Bosses:** after every 12 wins comes a BOSS! (worth 3 points, a life if
 lost). **SYNDROME!**: keep a logical qubit alive on a chip of 5 data qubits

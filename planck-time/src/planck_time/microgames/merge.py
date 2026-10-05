@@ -1,14 +1,21 @@
-"""MERGE! (lattice surgery on the surface code): two surface-code patches, drawn in
-the convention of Litinski's "A Game of Surface Codes". Each is a distance-3
-rotated surface code: a small square checkerboarded with X and Z plaquettes, and
-every edge is an X edge (dashed, red, an X beside it) or a Z edge (solid, blue, a
-Z beside it). Opposite edges have the same type, neighbouring edges differ.
+"""MERGE! (lattice surgery on the surface code): two surface-code patches, drawn as in
+Litinski's "A Game of Surface Codes" (arXiv:1808.02892, Fig. 37): a distance-5 patch
+with a physical qubit on every vertex, bright faces for Z stabilisers and dark faces
+for X stabilisers, and the weight-2 boundary stabilisers as half-moons. Every edge
+is an X edge (dashed, red, an X beside it) or a Z edge (solid, blue, a Z beside it):
+"each of the two dashed (solid) edges represent the qubit's X (Z) operator", the
+product of X (Z) along it. Opposite edges have the same type, neighbouring edges
+differ. For that, the half-moons on an X edge are Z stabilisers and those on a Z
+edge X stabilisers: the logical X string along an X edge ends on the Z edges, where
+it must commute with the boundary stabilisers.
 
 The left patch is fixed; the right one is yours. A turns it a quarter, which swaps
 which edge type faces left; pushing the stick left slides it in to merge. In this
 convention an edge's type is the logical operator running along it, and merging
 two patches along their X edges measures the joint operator XX, along their Z
-edges ZZ: that is how lattice surgery builds logical two-qubit operations. Merging
+edges ZZ: that is how lattice surgery builds logical two-qubit operations. The merge
+fills the seam with new faces, and the product of the new stabilisers of the measured
+type (they glow) is the measurement's outcome, as in Litinski's Fig. 40a. Merging
 along edges of different types isn't a merge at all: the patches bounce apart.
 
 From the second appearance on there are two fixed patches, upper and lower, with
@@ -27,14 +34,17 @@ from planck_time import palette as P
 from planck_time.microgames.base import IDLE, H, W, Microgame, PlayerInput, register
 from planck_time.pixel import backdrop, blit_center, outlined, result_overlay
 
-CELL = 22                       # a plaquette, px: a distance-3 patch is 2 x 2 of them
-SQUARE = 2 * CELL
-PAD = 10                        # room round the square for the edge letters
+D = 5                           # the code distance: D x D qubits, (D-1) x (D-1) faces
+FACES = D - 1
+CELL = 9                        # a face, px
+SQUARE = FACES * CELL
+MOON = CELL // 2                # a boundary half-moon's radius
+PAD = 14                        # room round the square for the half-moons and the edge letters
 FIXED_X = 64                    # the fixed patches' centres
 START_X = 186                   # where your patch floats
-GAP = 10                        # the gap a merge fills with new plaquettes
+GAP = CELL                      # the seam a merge fills with one column of new faces
 TARGET_X = FIXED_X + SQUARE + GAP     # your patch's centre once pushed in
-LANES = {1: (72,), 2: (42, 112)}
+LANES = {1: (72,), 2: (46, 112)}
 READY = 0.6                     # input counts from here (level 0): the first decision's moment
 SPIN = 0.25                     # a quarter turn, s (level 0)
 SLIDE = 0.3                     # pushing in, s (level 0)
@@ -42,6 +52,10 @@ LANE_MOVE = 0.12                # changing lane, s
 THINK = 0.25                    # the bot looks before it moves...
 BOT_STEP = 0.15                 # ...and waits this long between moves
 EDGE_COLOUR = {"X": P.GATE["X"], "Z": P.GATE["Z"]}
+# Your patch's checkerboard is shifted by one against the fixed ones', so that when the two
+# meet along matching edges the faces alternate right across the seam.
+YOUR_PHASE = (FACES - 1) % 2
+FACE = {"Z": P.CREAM, "X": (176, 160, 128)}    # Litinski's bright Z faces and dark X faces
 
 
 def edges(rot: int) -> dict[str, str]:
@@ -53,18 +67,52 @@ def edges(rot: int) -> dict[str, str]:
 _CACHE: dict = {}
 
 
-def patch_image(rot: int) -> pygame.Surface:
-    """A patch: the checkerboard of X (red) and Z (blue) plaquettes, the data qubits at the
-    lattice points, and the edges, X dashed and red, Z solid and blue, each with its letter."""
-    key = ("patch", rot % 2)
+def face_type(i: int, j: int, rot: int, phase: int) -> str:
+    """The stabiliser on face (column i, row j): a checkerboard. Turning a patch a quarter
+    flips the checkerboard, so rot and phase both shift it."""
+    return "X" if (i + j + rot + phase) % 2 == 0 else "Z"
+
+
+def moons(rot: int, phase: int):
+    """The boundary half-moons: (side, segment, type). An X edge carries Z half-moons and a
+    Z edge X half-moons, on the segments whose face inside is of the other type."""
+    e = edges(rot)
+    out = []
+    for k in range(FACES):
+        for side, (i, j) in (("left", (0, k)), ("right", (FACES - 1, k)),
+                             ("top", (k, 0)), ("bottom", (k, FACES - 1))):
+            moon = "Z" if e[side] == "X" else "X"
+            if face_type(i, j, rot, phase) != moon:
+                out.append((side, k, moon))
+    return out
+
+
+def patch_image(rot: int, phase: int = 0, letters: bool = True) -> pygame.Surface:
+    """A distance-5 patch as Litinski draws it: faces, half-moons, a qubit on every vertex,
+    and the edges, X dashed and red, Z solid and blue, each with its letter (a merged patch
+    is drawn without: its seam edges aren't edges any more)."""
+    key = ("patch", rot % 2, phase % 2, letters)
     if key not in _CACHE:
         size = SQUARE + 2 * PAD
         s = pygame.Surface((size, size), pygame.SRCALPHA)
         o = PAD
-        for i in range(2):
-            for j in range(2):
-                kind = "X" if (i + j + rot) % 2 == 0 else "Z"
-                s.fill(P.lighten(EDGE_COLOUR[kind], 0.55), (o + i * CELL, o + j * CELL, CELL, CELL))
+        for side, k, kind in moons(rot, phase):        # the half-moons, under the edge lines
+            if side in ("left", "right"):
+                c = (o if side == "left" else o + SQUARE, o + k * CELL + CELL // 2)
+                quads = {"draw_top_left": side == "left", "draw_bottom_left": side == "left",
+                         "draw_top_right": side == "right", "draw_bottom_right": side == "right"}
+            else:
+                c = (o + k * CELL + CELL // 2, o if side == "top" else o + SQUARE)
+                quads = {"draw_top_left": side == "top", "draw_top_right": side == "top",
+                         "draw_bottom_left": side == "bottom", "draw_bottom_right": side == "bottom"}
+            pygame.draw.circle(s, P.INK, c, MOON + 1, **quads)
+            pygame.draw.circle(s, FACE[kind], c, MOON, **quads)
+        for i in range(FACES):
+            for j in range(FACES):
+                s.fill(FACE[face_type(i, j, rot, phase)], (o + i * CELL, o + j * CELL, CELL, CELL))
+        for k in range(1, FACES):                       # faint face borders
+            s.fill(P.shade(FACE["X"], 0.8), (o + k * CELL, o, 1, SQUARE))
+            s.fill(P.shade(FACE["X"], 0.8), (o, o + k * CELL, SQUARE, 1))
         e = edges(rot)
         lines = {"top": ((o, o), (o + SQUARE, o)), "bottom": ((o, o + SQUARE), (o + SQUARE, o + SQUARE)),
                  "left": ((o, o), (o, o + SQUARE)), "right": ((o + SQUARE, o), (o + SQUARE, o + SQUARE))}
@@ -72,23 +120,23 @@ def patch_image(rot: int) -> pygame.Surface:
             kind = e[side]
             colour = EDGE_COLOUR[kind]
             if kind == "Z":                 # solid
-                pygame.draw.line(s, P.INK, a, b, 5)
-                pygame.draw.line(s, colour, a, b, 3)
+                pygame.draw.line(s, P.INK, a, b, 4)
+                pygame.draw.line(s, colour, a, b, 2)
             else:                           # dashed
-                n = 6
+                n = 8
                 for k in range(0, n, 2):
                     p = (a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n)
                     q = (a[0] + (b[0] - a[0]) * (k + 1) / n, a[1] + (b[1] - a[1]) * (k + 1) / n)
-                    pygame.draw.line(s, P.INK, p, q, 5)
-                    pygame.draw.line(s, colour, p, q, 3)
-            mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-            out = {"top": (0, -6), "bottom": (0, 6), "left": (-6, 0), "right": (6, 0)}[side]
-            blit_center(s, outlined(kind, 8, colour, shadow=False), (mid[0] + out[0], mid[1] + out[1]))
-        for i in range(3):                  # the data qubits
-            for j in range(3):
+                    pygame.draw.line(s, P.INK, p, q, 4)
+                    pygame.draw.line(s, colour, p, q, 2)
+            if letters:
+                mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+                out = {"top": (0, -10), "bottom": (0, 10), "left": (-10, 0), "right": (10, 0)}[side]
+                blit_center(s, outlined(kind, 8, colour, shadow=False), (mid[0] + out[0], mid[1] + out[1]))
+        for i in range(D):                  # the physical qubits, on the vertices
+            for j in range(D):
                 x, y = o + i * CELL, o + j * CELL
-                s.fill(P.INK, (x - 2, y - 2, 5, 5))
-                s.fill(P.WHITE, (x - 1, y - 1, 3, 3))
+                s.fill(P.INK, (x - 1, y - 1, 3, 3))
         _CACHE[key] = s
     return _CACHE[key]
 
@@ -201,12 +249,13 @@ class Merge(Microgame):
     def draw(self, surf: pygame.Surface) -> None:
         backdrop(surf, self.backdrop, self.t)
         lanes = LANES[len(self.fixed)]
+        won = self.result is True
         for lane, kind in enumerate(self.fixed):
             rot = 0 if kind == "X" else 1           # a fixed patch shows `kind` facing right
-            blit_center(surf, patch_image(rot), (FIXED_X, lanes[lane]))
-        won = self.result is True
+            merged = won and lane == self.lane
+            blit_center(surf, patch_image(rot, 0, letters=not merged), (FIXED_X, lanes[lane]))
         x, y = self.your_pos()
-        img = patch_image(self.rot)
+        img = patch_image(self.rot, YOUR_PHASE, letters=not won)
         if self.spinning:
             k = smooth((self.t - self.spin_at) / self.spin)
             img = pygame.transform.rotate(img, -90 * k)
@@ -237,16 +286,24 @@ class Merge(Microgame):
         result_overlay(surf, self.result, self.since_end, seed=31)
 
     def _bridge(self, surf: pygame.Surface, y: float) -> None:
-        """The merge: the gap fills with new plaquettes (hiding the two seam edges and their
-        letters, which aren't edges any more), and the joined patch glows."""
-        left = FIXED_X + SQUARE // 2 - 1
+        """The merge: one column of new faces fills the seam, continuing the checkerboard.
+        Where a half-moon was, it grows into a whole face; the faces in between are the new
+        stabilisers of the measured type, and they glow: their product is the outcome."""
+        kind = self.fixed[self.lane]
+        rot = 0 if kind == "X" else 1
+        left = FIXED_X + SQUARE // 2
         top = round(y - SQUARE / 2)
-        for j in range(2):
-            kind = "X" if j % 2 == 0 else "Z"
-            surf.fill(P.lighten(EDGE_COLOUR[kind], 0.55), (left, top + j * CELL, GAP + 3, CELL))
-        glow = pygame.Rect(FIXED_X - SQUARE // 2 - 4, top - 4, TARGET_X - FIXED_X + SQUARE + 8, SQUARE + 8)
-        k = 0.5 + 0.5 * math.sin(self.since_end * 12)
-        pygame.draw.rect(surf, P.lighten(P.GOLD, k * 0.5), glow, 2, border_radius=4)
+        glow = 0.3 + 0.3 * math.sin(self.since_end * 12)
+        for j in range(FACES):
+            seam = "Z" if face_type(FACES - 1, j, rot, 0) == "X" else "X"
+            colour = FACE[seam]
+            if seam == kind:                            # a new stabiliser of the measured type
+                colour = P.lighten(P.GOLD, glow)
+            surf.fill(colour, (left + 1, top + j * CELL, GAP - 1, CELL))
+        for j in range(D):
+            surf.fill(P.INK, (left + GAP - 1, top + j * CELL - 1, 3, 3))
+        outline = pygame.Rect(FIXED_X - SQUARE // 2 - 3, top - 3, TARGET_X - FIXED_X + SQUARE + 6, SQUARE + 6)
+        pygame.draw.rect(surf, P.lighten(P.GOLD, glow), outline, 1, border_radius=3)
 
     def _order(self, surf: pygame.Surface) -> None:
         parts = (("MEASURE ", P.WHITE), (self.order * 2, EDGE_COLOUR[self.order]))
