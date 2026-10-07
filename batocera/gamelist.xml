@@ -67,4 +67,19 @@
 		<marquee>./images/gate_drop-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./planck_time.pygame</path>
+		<name>Planck Time</name>
+		<desc>Quantum microgame party for 1 or 2 players: twelve five-second games, one verb each, faster and faster. Align a qubit, cancel a gate, measure, sort, shield, connect... before the fuse burns out.</desc>
+		<image>./images/planck_time-image.png</image>
+		<lang>en</lang>
+	</game>
+	<game>
+		<path>./brawl_ket.pygame</path>
+		<name>Brawl-Ket</name>
+		<desc>Two-player fighting game where every fighter is in a quantum basis, shown by their colour: green attacks (X) only hurt green fighters, purple attacks (Z) only purple ones, throws (Y) hurt both, and Y switches your colour (a Hadamard).</desc>
+		<image>./images/brawl_ket-logo.png</image>
+		<marquee>./images/brawl_ket-marquee.png</marquee>
+		<lang>en</lang>
+	</game>
 </gameList>

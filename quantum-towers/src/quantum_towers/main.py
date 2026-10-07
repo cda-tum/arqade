@@ -2,10 +2,13 @@
 
 Two players climbing side by side, each with their own tower, target chain,
 and charges; reaching CHARGES_TO_ATTACK fires an automatic knockback attack
-on the opponent. Start pauses (pause.py holds the menu's logic). Mostly not
-unit tested (no headless assertions on rendered output make sense); verify
-by running it and by the --input-test smoke path. tests/test_pause.py does
-drive run_game with scripted input, to check that pausing really freezes it.
+on the opponent. Or one player against the clock (run_solo): a fresh
+equal-difficulty tower, then initials for a top-10 time and the
+fastest-clears table. Start pauses (pause.py holds the menu's logic). The
+rendering isn't unit tested; verify it by running the game and by the
+--input-test smoke path. tests/test_pause.py and tests/test_solo_flow.py do
+drive the loops with scripted input, to check pausing, the timer and the
+screen flow.
 """
 
 from __future__ import annotations
@@ -13,14 +16,15 @@ from __future__ import annotations
 import argparse
 import random
 import sys
-from dataclasses import replace
+from dataclasses import fields, replace
 
 import pygame
 import pygame.gfxdraw
 
-from quantum_towers import config, fonts, screens, sound, visuals
+from quantum_towers import config, fonts, screens, solo, sound, visuals
 from quantum_towers.display import make_display, present
 from quantum_towers.input import (
+    PlayerRawInput,
     keyboard_quit_held,
     read_keys,
     pressed_edge,
@@ -33,6 +37,7 @@ from quantum_towers.pause import PAUSE_ITEMS, PauseButtons, PauseMenu
 from quantum_towers.player import PlayerState, apply_action, confirm_climb, knockback, new_player
 from quantum_towers.quantum import ACTIONS, states_equal
 from quantum_towers.targets import generate_target_sequence
+from quantum_towers.times import Times
 
 # Per-half vertical layout (px). The tower fills whatever's left between the
 # header and the info strip below it (state + charge bar, kept near the
@@ -107,19 +112,70 @@ def _pause_buttons(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> PauseBut
     )
 
 
-def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> str:
-    """Attract/title screen. Returns 'start' or 'quit'."""
+def _merged(p1_raw: PlayerRawInput, p2_raw: PlayerRawInput) -> PlayerRawInput:
+    """Both pads as one: in single player either pad plays."""
+    values = {}
+    for field in fields(PlayerRawInput):
+        a, b = getattr(p1_raw, field.name), getattr(p2_raw, field.name)
+        values[field.name] = {k: a[k] or b[k] for k in a} if isinstance(a, dict) else a or b
+    return PlayerRawInput(**values)
+
+
+def _menu_held(raw: PlayerRawInput, keys: pygame.key.ScancodeWrapper) -> tuple[int, int, bool, bool]:
+    """(dx, dy, A, B) held this frame, for the initials entry. dy = -1 is up."""
+    system = config.INPUT_CONFIG["system"]
+    return (
+        int(raw.right_held) - int(raw.left_held),
+        int(raw.down_held) - int(raw.up_held),
+        raw.confirm_held or bool(keys[getattr(pygame, system["keyboard_menu_confirm"])]),
+        raw.back_held or bool(keys[getattr(pygame, system["keyboard_menu_back"])]),
+    )
+
+
+def _camera_step(
+    anim: tuple[float, float, float] | None, visual_floor: float, floor: int, game_time: float
+) -> tuple[tuple[float, float, float] | None, float, float | None]:
+    """Eases one tower's camera toward its real (logical) floor whenever that
+    changes, rather than snapping, so the tower visibly scrolls and the
+    climber's pose has something to sync a "pulling up" motion to. `anim` is
+    (from_floor, to_floor, started_at) while a transition is in flight, else
+    None. Returns (anim, visual_floor, climb_progress or None)."""
+    actual_floor = float(floor)
+    if anim is None or anim[1] != actual_floor:
+        # Floor changed since the last frame (a climb or a knockback) --
+        # (re)start the camera animation from wherever it visually is right
+        # now toward the new floor, so an interruption (e.g. a knockback
+        # landing mid-climb) blends smoothly rather than snapping.
+        anim = (visual_floor, actual_floor, game_time)
+
+    start_v, target_v, started_at = anim
+    if start_v == target_v:
+        return None, visual_floor, None
+    progress = min(1.0, (game_time - started_at) / config.CLIMB_ANIM_DURATION)
+    eased = 1 - (1 - progress) ** 2  # ease-out
+    visual_floor = start_v + (target_v - start_v) * eased
+    return (None if progress >= 1.0 else anim), visual_floor, progress
+
+
+def run_title_screen(
+    surface: pygame.Surface, window: pygame.Surface | None, selected: str = "2p"
+) -> str:
+    """Attract/title screen. The stick picks 1 PLAYER or 2 PLAYERS (starting
+    on `selected`), and A or Start begins. Returns '1p', '2p' or 'quit'."""
     internal = surface
     clock = pygame.time.Clock()
     title_font = fonts.load_font(22)
     legend_font = fonts.load_font(9)
     prompt_font = fonts.load_font(12)
     grid_gate_font = fonts.load_font(8)
+    choice_font = fonts.load_font(10)
     t = 0.0
     # A button still held from the screen before (A picking QUIT TO TITLE,
     # Start skipping the winner screen) must be let go first, or this screen
-    # would start a new match on its very first frame.
+    # would start a new match on its very first frame. The stick likewise
+    # counts as held until it is let go.
     armed = False
+    prev_up = prev_down = True
 
     while True:
         dt = clock.tick(config.FPS) / 1000.0
@@ -134,15 +190,23 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
 
         if _wants_quit(p1_raw, p2_raw, keys):
             return "quit"
+        up = p1_raw.up_held or p2_raw.up_held
+        down = p1_raw.down_held or p2_raw.down_held
+        if pressed_edge(prev_up, up):
+            selected = "1p"
+        if pressed_edge(prev_down, down):
+            selected = "2p"
+        prev_up, prev_down = up, down
         wants_start = _wants_start(p1_raw, p2_raw, keys)
         if armed and wants_start:
-            return "start"
+            return selected
         armed = armed or not wants_start
 
         screens.draw_title_screen(
             internal, title_font, legend_font, prompt_font, grid_gate_font,
             screens.blink_visible(t, config.TITLE_BLINK_PERIOD),
             p1_pressed=p1_raw.button_held, p2_pressed=p2_raw.button_held,
+            selected=selected, choice_font=choice_font,
         )
         present(internal, window)
         pygame.display.flip()
@@ -306,11 +370,7 @@ def run_game(
     stun_until: dict[str, float] = {"p1": 0.0, "p2": 0.0}
     correct_since: dict[str, float | None] = {"p1": None, "p2": None}
 
-    # Animated camera position per player -- eases toward the real (logical)
-    # floor whenever it changes, rather than snapping, so the tower visibly
-    # scrolls and the climber's pose has something to sync a "pulling up"
-    # motion to. `climb_anim[pk]` is (from_floor, to_floor, started_at) while
-    # a transition is in flight, else None.
+    # Animated camera position per player (see _camera_step).
     visual_floor = {pk: float(players[pk].floor) for pk in ("p1", "p2")}
     climb_anim: dict[str, tuple[float, float, float] | None] = {"p1": None, "p2": None}
 
@@ -448,27 +508,9 @@ def run_game(
 
         climb_progress = {"p1": None, "p2": None}
         for pk in ("p1", "p2"):
-            actual_floor = float(players[pk].floor)
-            active = climb_anim[pk]
-            if active is None or active[1] != actual_floor:
-                # Floor changed since the last frame (a climb or a knockback)
-                # -- (re)start the camera animation from wherever it visually
-                # is right now toward the new floor, so an interruption (e.g.
-                # a knockback landing mid-climb) blends smoothly rather than
-                # snapping.
-                active = (visual_floor[pk], actual_floor, game_time)
-                climb_anim[pk] = active
-
-            start_v, target_v, started_at = active
-            if start_v == target_v:
-                climb_anim[pk] = None
-                continue
-            progress = min(1.0, (game_time - started_at) / config.CLIMB_ANIM_DURATION)
-            eased = 1 - (1 - progress) ** 2  # ease-out
-            visual_floor[pk] = start_v + (target_v - start_v) * eased
-            climb_progress[pk] = progress
-            if progress >= 1.0:
-                climb_anim[pk] = None
+            climb_anim[pk], visual_floor[pk], climb_progress[pk] = _camera_step(
+                climb_anim[pk], visual_floor[pk], players[pk].floor, game_time
+            )
 
         internal.blit(background, (0, 0))
         pygame.draw.line(
@@ -543,6 +585,350 @@ def run_game(
             return "p2", players
 
 
+def _solo_tower_region() -> pygame.Rect:
+    """The same size of tower region as one versus half, placed so the tower
+    body (not the region) is centred on screen. The climber hangs on its
+    right wall."""
+    width = config.INTERNAL_WIDTH // 2 - 32
+    tower_width = round(width * visuals.TOWER_WIDTH_RATIO)
+    return pygame.Rect(
+        config.INTERNAL_WIDTH // 2 - tower_width // 2, config.SOLO_TOWER_TOP, width,
+        config.INTERNAL_HEIGHT - config.SOLO_TOWER_TOP - INFO_HEIGHT - LEGEND_HEIGHT,
+    )
+
+
+def run_solo(
+    surface: pygame.Surface,
+    window: pygame.Surface | None,
+    sounds: sound.Sounds,
+    show_fps: bool,
+    times: Times,
+) -> tuple[str, float]:
+    """One time-trial climb: a fresh equal-difficulty tower, centred and
+    playable from either pad; 3, 2, 1, GO, then the clock runs until the top
+    floor. Wrong confirms stun as in versus; there are no charges or attacks.
+    Returns (result, seconds on the clock): result is 'done' (reached the top,
+    after the finish banner), 'quit', 'idle' or 'title' (picked in the pause
+    menu)."""
+    internal = surface
+    clock = pygame.time.Clock()
+    fps_font = fonts.load_font(10)
+    header_font = fonts.load_font(11)
+    state_font = fonts.load_font(9)
+    block_fonts = [fonts.load_font(11), fonts.load_font(9), fonts.load_font(7)]
+    grid_gate_font = fonts.load_font(8)
+    perfect_font = fonts.load_font(9)
+    timer_font = fonts.load_font(16)
+    countdown_font = fonts.load_font(32)
+    banner_note_font = fonts.load_font(8)
+    pause_title_font = fonts.load_font(16)
+    pause_item_font = fonts.load_font(10)
+    pause_hint_font = fonts.load_font(7)
+    background = visuals.make_background(config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)
+    button_grid_data = screens.button_grid()
+    tower_region = _solo_tower_region()
+
+    target_sequence = solo.equal_difficulty_tower(
+        random.Random(), config.TOWER_HEIGHT, config.SOLO_TOTAL_PRESSES
+    )
+    player = new_player(target_sequence)
+    prev_held = {name: False for name in ACTIONS}
+    prev_up_held = False
+    # game_time runs from the start of the countdown and, as in run_game,
+    # stands still while paused; the run's clock is `timer`, which only
+    # counts from GO until the top floor.
+    game_time = 0.0
+    timer = solo.Timer()
+    idle_seconds = 0.0
+    stun_until = 0.0
+    correct_since: float | None = None
+    perfect_at: float | None = None
+    finished_at: float | None = None
+    finish_note = ""
+    visual_floor = 0.0
+    climb_anim: tuple[float, float, float] | None = None
+    pause_menu = PauseMenu()
+    frozen_frame: pygame.Surface | None = None
+
+    while True:
+        dt = clock.tick(config.FPS) / 1000.0
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit", timer.seconds
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F3:
+                show_fps = not show_fps
+
+        keys = read_keys()
+        p1_raw, p2_raw = _poll_players(keys)
+        raw = _merged(p1_raw, p2_raw)
+
+        if _wants_quit(p1_raw, p2_raw, keys):
+            return "quit", timer.seconds
+
+        pause_buttons = _pause_buttons(p1_raw, p2_raw, keys)
+        any_input = any(raw.button_held.values()) or pause_buttons.any_held()
+        idle_seconds = 0.0 if any_input else idle_seconds + dt
+        if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
+            return "idle", timer.seconds
+
+        # Once the top is reached there is nothing left to pause.
+        pause_state = pause_menu.update(pause_buttons) if finished_at is None else "play"
+        if pause_state == "title":
+            return "title", timer.seconds
+        timer.paused = pause_state == "paused"
+        if timer.paused:
+            # As in run_game: keep the edge trackers current, so a button
+            # pressed in the menu doesn't fire as a gate on the first frame back.
+            for name in ACTIONS:
+                prev_held[name] = raw.button_held[name]
+            prev_up_held = raw.up_held
+            if frozen_frame is None:
+                frozen_frame = internal.copy()
+            internal.blit(frozen_frame, (0, 0))
+            if pause_menu.paused:
+                screens.draw_pause_menu(
+                    internal, pause_title_font, pause_item_font, pause_hint_font, PAUSE_ITEMS,
+                    pause_menu.selected,
+                    screens.blink_visible(pygame.time.get_ticks() / 1000.0, config.TITLE_BLINK_PERIOD),
+                )
+            present(internal, window)
+            pygame.display.flip()
+            continue
+        frozen_frame = None
+        previous_time, game_time = game_time, game_time + dt
+
+        playing = finished_at is None and game_time >= config.SOLO_COUNTDOWN
+        if playing:
+            # The clock starts exactly at GO, not at the frame boundary after it.
+            timer.update(game_time - max(previous_time, config.SOLO_COUNTDOWN))
+            if game_time >= stun_until:
+                for name in ACTIONS:
+                    if pressed_edge(prev_held[name], raw.button_held[name]):
+                        player = apply_action(player, name)
+                if pressed_edge(prev_up_held, raw.up_held):
+                    after, advanced = confirm_climb(player, target_sequence)
+                    if advanced:
+                        sounds.climb.play()
+                        # A minimum-press floor still earns its PERFECT, but
+                        # the charge it adds does nothing in a solo run.
+                        if after.charges > player.charges:
+                            perfect_at = game_time
+                            sounds.perfect.play()
+                        player = after
+                        if player.floor >= config.TOWER_HEIGHT:
+                            finished_at = game_time
+                            finish_note = (
+                                "A TOP 10 TIME!" if times.qualifies(timer.seconds)
+                                else f"BEST {solo.format_time(times.entries[0].seconds)}"
+                            )
+                    else:
+                        stun_until = game_time + config.STUN_DURATION
+        for name in ACTIONS:
+            prev_held[name] = raw.button_held[name]
+        prev_up_held = raw.up_held
+
+        if finished_at is not None and game_time - finished_at >= config.SOLO_FINISH_DURATION:
+            return "done", timer.seconds
+
+        if states_equal(player.state, player.current_target):
+            if correct_since is None:
+                correct_since = game_time
+        else:
+            correct_since = None
+        perfect_progress = None
+        if perfect_at is not None and game_time - perfect_at < config.PERFECT_FLASH_DURATION:
+            perfect_progress = (game_time - perfect_at) / config.PERFECT_FLASH_DURATION
+        stun_progress = None
+        if stun_until > game_time:
+            stun_progress = 1.0 - (stun_until - game_time) / config.STUN_DURATION
+        push_up_hint = (
+            correct_since is not None and finished_at is None
+            and game_time - correct_since >= config.PUSH_UP_HINT_DELAY
+        )
+        climb_anim, visual_floor, climb_progress = _camera_step(
+            climb_anim, visual_floor, player.floor, game_time
+        )
+
+        internal.blit(background, (0, 0))
+        climber_pos = visuals.draw_tower(
+            internal, tower_region, player.floor, visual_floor, player.current_target,
+            player.next_target, config.COLOR_PLAYER_1, block_fonts, game_time,
+            climber_side="right", climb_progress=climb_progress, stun_progress=stun_progress,
+        )
+        visuals.blit_outlined_text(
+            internal, header_font, f"FLOOR {player.floor}/{config.TOWER_HEIGHT}",
+            config.COLOR_TEXT, (8, 6),
+        )
+        visuals.blit_outlined_text_centered(
+            internal, timer_font, timer.format(), config.COLOR_TEXT, config.INTERNAL_WIDTH // 2, 4
+        )
+        info_y = tower_region.bottom + 8
+        you_rect = visuals.blit_outlined_text(
+            internal, state_font, "YOU:", config.COLOR_PLAYER_1,
+            (tower_region.x, info_y),
+        )
+        visuals.blit_outlined_text(
+            internal, state_font, render_state(player.state), config.COLOR_TEXT,
+            (you_rect.right + 4, info_y),
+        )
+        visuals.draw_button_grid(
+            internal, (config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT - LEGEND_HEIGHT // 2),
+            button_grid_data, grid_gate_font,
+            accent_color=config.COLOR_PLAYER_1, pressed=raw.button_held,
+        )
+
+        if perfect_progress is not None:
+            visuals.draw_perfect_flash(
+                internal, *climber_pos, config.COLOR_PLAYER_1, perfect_progress, perfect_font
+            )
+        if stun_progress is not None:
+            visuals.draw_stun_flash(internal, *climber_pos, stun_progress, perfect_font)
+        elif push_up_hint:
+            visuals.draw_push_up_hint(internal, *climber_pos, perfect_font)
+
+        if game_time < config.SOLO_COUNTDOWN:
+            screens.draw_countdown(internal, countdown_font, str(3 - int(game_time)))
+        elif game_time < config.SOLO_COUNTDOWN + config.SOLO_GO_DURATION:
+            screens.draw_countdown(internal, countdown_font, "GO!")
+        if finished_at is not None:
+            screens.draw_finish_banner(
+                internal, pause_title_font, timer_font, banner_note_font, timer.format(), finish_note
+            )
+
+        if show_fps:
+            fps_surf = fps_font.render(f"{clock.get_fps():.0f} fps", False, config.COLOR_FPS)
+            internal.blit(fps_surf, (4, config.INTERNAL_HEIGHT - 12))
+
+        present(internal, window)
+        pygame.display.flip()
+
+
+def run_initials(
+    surface: pygame.Surface, window: pygame.Surface | None, times: Times, seconds: float
+) -> tuple[str, int | None]:
+    """Three initials for a top-10 time, as in Gate Drop: the stick changes
+    the letter and moves, A goes on and finishes on the last letter, B steps
+    back. Saves the entry and returns (result, its rank): 'done', 'idle'
+    (abandoned; saved as typed so far) or 'quit' (not saved)."""
+    internal = surface
+    clock = pygame.time.Clock()
+    title_font = fonts.load_font(16)
+    letter_font = fonts.load_font(24)
+    small_font = fonts.load_font(8)
+    entry = screens.NameEntry()
+    repeat_x, repeat_y = screens.AutoRepeat(), screens.AutoRepeat()
+    time_text = solo.format_time(seconds)
+    t = 0.0
+    idle_seconds = 0.0
+    # A or B still held from the run (both are gates there: RESET and H),
+    # or a stick still pushed from the last climb, must be let go before it
+    # counts, or it would pick a letter on the first frame.
+    prev_confirm = prev_back = True
+    stick_free = False
+
+    def save() -> int | None:
+        rank = times.add(entry.name, seconds)
+        return rank if rank >= 0 else None
+
+    while True:
+        dt = clock.tick(config.FPS) / 1000.0
+        t += dt
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit", None
+
+        keys = read_keys()
+        p1_raw, p2_raw = _poll_players(keys)
+        if _wants_quit(p1_raw, p2_raw, keys):
+            return "quit", None
+
+        raw = _merged(p1_raw, p2_raw)
+        dx, dy, confirm, back = _menu_held(raw, keys)
+        any_input = dx or dy or confirm or back or raw.start_held or any(raw.button_held.values())
+        idle_seconds = 0.0 if any_input else idle_seconds + dt
+        if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
+            return "idle", save()
+
+        stick_free = stick_free or (dx == 0 and dy == 0)
+        if not stick_free:
+            dx = dy = 0
+        entry.update(
+            repeat_x.update(dt, dx), repeat_y.update(dt, dy),
+            pressed_edge(prev_confirm, confirm), pressed_edge(prev_back, back),
+        )
+        prev_confirm, prev_back = confirm, back
+        if entry.done:
+            return "done", save()
+
+        screens.draw_initials(internal, title_font, letter_font, small_font, entry, time_text, t)
+        present(internal, window)
+        pygame.display.flip()
+
+
+def run_times_table(
+    surface: pygame.Surface, window: pygame.Surface | None, times: Times, new_rank: int | None
+) -> str:
+    """FASTEST CLEARS, with `new_rank`'s entry blinking. Returns 'done' after
+    TIMES_TABLE_DURATION, or on A, B or Start after TIMES_TABLE_LOCK; or
+    'quit'."""
+    internal = surface
+    clock = pygame.time.Clock()
+    title_font = fonts.load_font(16)
+    row_font = fonts.load_font(10)
+    small_font = fonts.load_font(8)
+    t = 0.0
+    prev_pressed = True  # a button held from the screen before must be let go
+
+    while True:
+        dt = clock.tick(config.FPS) / 1000.0
+        t += dt
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+
+        keys = read_keys()
+        p1_raw, p2_raw = _poll_players(keys)
+        if _wants_quit(p1_raw, p2_raw, keys):
+            return "quit"
+
+        raw = _merged(p1_raw, p2_raw)
+        _dx, _dy, confirm, back = _menu_held(raw, keys)
+        pressed = confirm or back or _wants_start(p1_raw, p2_raw, keys)
+        if t >= config.TIMES_TABLE_DURATION:
+            return "done"
+        if t >= config.TIMES_TABLE_LOCK and pressed_edge(prev_pressed, pressed):
+            return "done"
+        prev_pressed = pressed
+
+        screens.draw_times_table(internal, title_font, row_font, small_font, times.entries, new_rank, t)
+        present(internal, window)
+        pygame.display.flip()
+
+
+def run_solo_flow(
+    surface: pygame.Surface,
+    window: pygame.Surface | None,
+    sounds: sound.Sounds,
+    show_fps: bool,
+    times: Times,
+) -> str:
+    """A solo run and what follows a finished one: initials for a top-10 time,
+    then the table. Returns 'quit' to leave the game; anything else means back
+    to the title."""
+    result, seconds = run_solo(surface, window, sounds, show_fps, times)
+    if result != "done":
+        return result
+    new_rank = None
+    if times.qualifies(seconds):
+        result, new_rank = run_initials(surface, window, times, seconds)
+        if result != "done":
+            return result
+    return run_times_table(surface, window, times, new_rank)
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     set_keyboard_enabled(not args.no_keyboard)
@@ -559,11 +945,19 @@ def main(argv: list[str] | None = None) -> None:
     else:
         sounds = sound.load_sounds()
         show_fps = args.fps or config.SHOW_FPS_DEFAULT
+        times = Times(config.TIMES_FILE)
+        mode = "2p"  # the title starts on whichever was played last
 
         while True:
-            action = run_title_screen(surface, window)
+            action = run_title_screen(surface, window, mode)
             if action == "quit":
                 break
+            mode = action
+
+            if action == "1p":
+                if run_solo_flow(surface, window, sounds, show_fps, times) == "quit":
+                    break
+                continue
 
             result, players = run_game(surface, window, sounds, show_fps)
             if result == "quit":

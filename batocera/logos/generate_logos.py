@@ -37,6 +37,7 @@ ROMS = [
     "overquqed",
     "qurves",
     "gate_drop",
+    "brawl_ket",
 ]
 SIZE = 1024
 

@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
-`superconductor/`, `qurves/`, `gate-drop/`, more later) built for the same
+`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
 Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. (`launcher/`
 runs them all from one menu on an ordinary PC instead.) This file
@@ -43,7 +43,7 @@ specifics (gameplay, architecture, tests) belong in each game's own
 The panel is 1920x1080 (confirmed by the user). Games render at a fixed
 internal size and let SDL's `SCALED` fullscreen upscale it, so a size whose
 height divides 1080 scales by a whole number and pixel art stays crisp:
-480x270 (x4) and 480x360 (x3, 4:3, used by Overquqed) do; 960x720 (x1.5) and
+480x270 (x4), 640x360 (x3, used by Planck Time for two GBA-sized screens side by side) and 480x360 (x3, 4:3, used by Overquqed) do; 960x720 (x1.5) and
 640x480 (x2.25) don't, and nearest-neighbour then doubles some pixel rows but
 not others. Overquqed also sets `SDL_RENDER_SCALE_QUALITY=nearest` before
 pygame starts, so the upscale is never blurred.
@@ -202,6 +202,11 @@ Those hints are theme `<text>` elements, deliberately **not** painted into
 `art/bg.png`: the theme draws that image through
 `<color>${backgroundColor}</color>` (`200000`, near-black), which would tint
 any baked-in text to invisibility.
+
+It patches `views/icons.xml` too: the game list is the theme's default
+"Icons" view, whose `<autoLayout>0 2</autoLayout>` (two rows, columns from
+the cell proportion) shows only 4 x 2 = 8 games on the 16:9 panel. It is set
+to `4 3`, so 12 fit on one screen.
 
 Every patch rebuilds from a `.bak` of the original, so `install.py` is safe
 to re-run; to see a theme change you must restart ES (or reboot).
@@ -435,8 +440,8 @@ Where the games stand (2026-10-01): every game follows it except
 Superconductor, whose pause screen goes to its menu with Select rather than
 through a menu item. That one is deliberately left as it is.
 
-- Gate Drop, Qurves, Quantum Pong, Qlimbers and Pauli Invaders: RESUME and
-  QUIT TO TITLE.
+- Gate Drop, Planck Time, Brawl-Ket, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
+  RESUME and QUIT TO TITLE.
 - Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
   from Start to Select, so that Start can pause there too.
 - A title screen reached from QUIT TO TITLE must wait for the buttons to be
@@ -489,6 +494,7 @@ worked out with the cabinet's owners over several rounds:
   - Qurves: neon tubes over a synthwave floor.
   - Gate Drop: an SNES puzzle-game box, a teal sunburst and bouncy
     candy-coloured letters.
+  - Brawl-Ket: a comic-book impact panel (halftone, speed lines, a POW burst).
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really
