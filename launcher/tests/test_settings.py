@@ -41,7 +41,7 @@ def test_rebinding_the_same_key_to_the_same_action_moves_nothing():
 
 def test_round_trip(tmp_path):
     path = tmp_path / "sub" / "settings.json"
-    s = Settings(fullscreen=False, pads=False, show_fps=True)
+    s = Settings(fullscreen=False, pads=False, show_fps=True, attract=False)
     s.bind("p2", "start", "space")
     settings.save(s, path)
     assert settings.load(path) == s

@@ -36,6 +36,7 @@ ROMS = [
     "superconductor",
     "overquqed",
     "qurves",
+    "gate_drop",
 ]
 SIZE = 1024
 

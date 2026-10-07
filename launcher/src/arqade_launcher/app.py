@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import copy
 import math
+import random
 import time
 from collections.abc import Callable
 from pathlib import Path
 
 import pygame
 
-from arqade_launcher import gfx, runner, settings as settings_mod
+from arqade_launcher import gfx, runner, settings as settings_mod, video
 from arqade_launcher.catalog import Game
 from arqade_launcher.gfx import DIM, ERROR, FAINT, PANEL, PANEL_EDGE, PLAYER_COLORS, TEXT, View
 from arqade_launcher.settings import ACTIONS, LABELS, PLAYERS, Settings
@@ -30,6 +31,11 @@ FPS = 60
 INPUT_GRACE = 0.4
 # How long the loading card (with the controls) shows before a game starts.
 LOADING_TIME = 1.6
+# Seconds on the game menu without input before the attract reels play, as
+# EmulationStation's screensaver does on the cabinet.
+ATTRACT_DELAY = 15.0
+# What counts as someone being there: it resets that timer, and ends the reel.
+INPUT_EVENTS = {pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN, pygame.MOUSEWHEEL, pygame.MOUSEMOTION}
 
 # Keys that always work in the menus, whatever the mapping.
 FIXED_KEYS = {
@@ -278,6 +284,7 @@ class MenuScreen(Screen):
         self.hits: list[tuple[pygame.Rect, int]] = []
         self.glows: dict[tuple[str, int], pygame.Surface] = {}
         self.clock = 0.0
+        self.idle = 0.0
 
     @property
     def selected(self) -> Game:
@@ -288,6 +295,8 @@ class MenuScreen(Screen):
         return (i - pos + n / 2) % n - n / 2
 
     def handle(self, event, intent):
+        if event.type in INPUT_EVENTS:
+            self.idle = 0.0
         if not self.app.games:
             if intent == "back" and not self.app.kiosk:
                 self.app.push(QuitScreen(self.app))
@@ -320,6 +329,11 @@ class MenuScreen(Screen):
         self.pos += (self.target - self.pos) * min(1.0, dt * 14)
         if abs(self.target - self.pos) < 0.002:
             self.pos = float(self.target)
+        self.idle += dt
+        if self.idle >= ATTRACT_DELAY:
+            self.idle = 0.0
+            if self.app.settings.attract and video.reels():
+                self.app.push(AttractScreen(self.app))
 
     def glow(self, game: Game, size: int) -> pygame.Surface:
         key = (game.package, size)
@@ -386,44 +400,111 @@ class MenuScreen(Screen):
 
 
 class LoadingScreen(Screen):
-    """Shown for a moment before a game starts: its logo, and the keys."""
+    """Shown for a moment before a game starts: the ARQADE logo turning, the
+    game's name, and the keys."""
 
     def __init__(self, app: App, game: Game):
         super().__init__(app)
         self.game = game
         self.t = 0.0
         self.frames = 0
+        self.spin: video.Player | None = None
 
     def handle(self, event, intent):
         if intent == "confirm":
             self.t = max(self.t, LOADING_TIME)
         elif intent == "back":
-            self.app.pop(self)
+            self.leave()
+
+    def leave(self) -> None:
+        if self.spin is not None:
+            self.spin.close()
+        self.app.pop(self)
 
     def update(self, dt):
         self.t += dt
         if self.t >= LOADING_TIME and self.frames >= 2:
-            self.app.pop(self)
+            self.leave()
             self.app.play(self.game)
+
+    def draw_spin(self, surf: pygame.Surface, view: View, center: tuple[float, float], width: float) -> bool:
+        """The logo turning, centred on `center` (units). False without video."""
+        if not video.available(video.SPIN):
+            return False
+        crop = video.SPIN_CROP
+        size = (view.s(width), view.s(width * crop.h / crop.w))
+        if self.spin is None or self.spin.size != size:
+            if self.spin is not None:
+                self.spin.close()
+            self.spin = video.Player(video.SPIN, size, crop=crop)
+        frame = self.spin.frame()
+        if frame is not None:
+            # The render is on black: MAX keeps the background glow around it.
+            surf.blit(frame, frame.get_rect(center=view.pt(*center)), special_flags=pygame.BLEND_RGB_MAX)
+        return True
 
     def draw(self, surf, view):
         self.frames += 1
         surf.blit(gfx.background(surf.get_size()), (0, 0))
         pads = self.app.settings.pads
-        top, size = (34, 150) if pads else (110, 200)
-        tile = self.app.art.tile(self.game, view.s(size))
-        surf.blit(tile, tile.get_rect(midtop=view.pt(480, top)))
-        gfx.text(surf, view, self.game.name.upper(), 16, TEXT, (480, top + size + 26))
+        if pads:
+            logo_y, name_y = 84, 190
+        else:
+            logo_y, name_y = 170, 310
+        if not self.draw_spin(surf, view, (480, logo_y), 380 if pads else 560):
+            size = 120 if pads else 200
+            tile = self.app.art.tile(self.game, view.s(size))
+            surf.blit(tile, tile.get_rect(midbottom=view.pt(480, name_y - 26)))
+        gfx.text(surf, view, self.game.name.upper(), 16, TEXT, (480, name_y))
         dots = "." * (1 + int(self.t * 4) % 3)
-        gfx.text(surf, view, f"LOADING{dots:<3}", 8, DIM, (480, top + size + 50))
+        gfx.text(surf, view, f"LOADING{dots:<3}", 8, DIM, (480, name_y + 26))
         if pads:
             for k, player in enumerate(PLAYERS):
                 x = 480 - 12 - gfx.PAD_W if k == 0 else 480 + 12
                 gfx.draw_pad(surf, view, (x, 278), player, self.app.settings.keys[player])
         else:
             gfx.text(surf, view, "EACH GAME USES ITS OWN KEYBOARD CONTROLS", 8, DIM,
-                     (480, top + size + 90))
+                     (480, name_y + 66))
         draw_hints(surf, view, [(["ESC"], "IN A GAME: BACK TO THE MENU")])
+
+
+class AttractScreen(Screen):
+    """The attract reels, full screen, until anyone touches anything: the
+    launcher's version of the cabinet's screensaver. Like ES, it plays one
+    reel at random to its end, then another (never the same one twice in a
+    row). The input that ends it does nothing else, so a passer-by can't
+    start a game by accident."""
+
+    def __init__(self, app: App):
+        super().__init__(app)
+        self.reels = video.reels()
+        self.reel: Path | None = None
+        self.player: video.Player | None = None
+
+    def handle(self, event, intent):
+        if event.type not in INPUT_EVENTS:
+            return
+        if event.type == pygame.MOUSEMOTION and abs(event.rel[0]) + abs(event.rel[1]) < 4:
+            return  # a nudged desk, not a person
+        if self.player is not None:
+            self.player.close()
+        self.app.pop(self)
+
+    def next_reel(self, size: tuple[int, int]) -> None:
+        if self.player is not None:
+            self.player.close()
+        others = [r for r in self.reels if r != self.reel] or self.reels
+        self.reel = random.choice(others)
+        self.player = video.Player(self.reel, size, loop=False)
+
+    def draw(self, surf, view):
+        surf.fill((0, 0, 0))
+        area = view.rect(0, 0, gfx.DESIGN_W, gfx.DESIGN_H)
+        if self.player is None or self.player.size != area.size or self.player.done:
+            self.next_reel(area.size)
+        frame = self.player.frame()
+        if frame is not None:
+            surf.blit(frame, area)
 
 
 # --- settings --------------------------------------------------------------
@@ -442,6 +523,9 @@ class SettingsScreen(Screen):
              self.toggle_pads, ""),
             ("FPS COUNTER IN GAMES", lambda: "ON" if s.show_fps else "OFF",
              self.toggle_fps, "Shows each game's frame rate in a corner."),
+            ("ATTRACT MODE", lambda: "ON" if s.attract else "OFF", self.toggle_attract,
+             f"After {ATTRACT_DELAY:.0f} s without input the menu plays the gameplay reels, "
+             "like the cabinet's screensaver. Any key brings the menu back."),
             ("PLAYER 1 KEYS", lambda: ">", lambda d: d == 0 and app.push(KeysScreen(app, "p1")),
              "Choose the keys for the left (blue) pad."),
             ("PLAYER 2 KEYS", lambda: ">", lambda d: d == 0 and app.push(KeysScreen(app, "p2")),
@@ -470,6 +554,10 @@ class SettingsScreen(Screen):
         self.app.settings.show_fps = not self.app.settings.show_fps
         self.app.save()
 
+    def toggle_attract(self, d: int) -> None:
+        self.app.settings.attract = not self.app.settings.attract
+        self.app.save()
+
     def reset_keys(self) -> None:
         self.app.settings.keys = settings_mod.default_keys()
         self.app.save()
@@ -491,7 +579,7 @@ class SettingsScreen(Screen):
     def draw(self, surf, view):
         surf.blit(gfx.background(surf.get_size()), (0, 0))
         gfx.text(surf, view, "SETTINGS", 16, TEXT, (480, 56))
-        row_h, top = 34, 96
+        row_h, top = 30, 92
         for k, (label, value, _, _) in enumerate(self.items):
             y = top + k * row_h
             selected = k == self.index

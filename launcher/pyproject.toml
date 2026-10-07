@@ -9,6 +9,7 @@ dependencies = [
     # games' own dependencies (tests/test_catalog.py checks it stays so).
     "pygame==2.5.2",
     "numpy==1.26.4",  # Qlinko's sandbox
+    "imageio-ffmpeg==0.6.0",  # the menu's own: attract reel and spinning logo (video.py)
 ]
 
 [project.scripts]

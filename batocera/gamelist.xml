@@ -4,7 +4,8 @@
 		<path>./quantum_pong.pygame</path>
 		<name>Quantum Pong</name>
 		<desc>Pong, but gates warp the ball: split it in two, bounce it off a wall, or teleport and reverse it.</desc>
-		<image>./images/quantum_pong-image.png</image>
+		<image>./images/quantum_pong-logo.png</image>
+		<marquee>./images/quantum_pong-marquee.png</marquee>
 		<playcount>6</playcount>
 		<lastplayed>20260929T175055</lastplayed>
 		<gametime>1598</gametime>
@@ -14,49 +15,56 @@
 		<path>./quantum_towers.pygame</path>
 		<name>Qlimbers</name>
 		<desc>Race a rival to the top of your tower by matching each floor's target qubit state before they do.</desc>
-		<image>./images/quantum_towers-image.png</image>
+		<image>./images/quantum_towers-logo.png</image>
+		<marquee>./images/quantum_towers-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
 	<game>
 		<path>./error_invaders.pygame</path>
 		<name>Pauli Invaders</name>
 		<desc>Retro meets quantum error correction: only the matching color code clears an invader.</desc>
-		<image>./images/error_invaders-image.png</image>
+		<image>./images/error_invaders-logo.png</image>
+		<marquee>./images/error_invaders-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
 	<game>
 		<path>./ion_surfer.pygame</path>
 		<name>Ion Surfer</name>
 		<desc>Shape the trap potential to keep your ion riding the wave.</desc>
-		<image>./images/ion_surfer-image.png</image>
+		<image>./images/ion_surfer-logo.png</image>
+		<marquee>./images/ion_surfer-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
 	<game>
 		<path>./superconductor.pygame</path>
 		<name>Superconductor</name>
 		<desc>Route two-qubit gates across a superconducting chip before they decohere. Solo, co-op or versus.</desc>
-		<image>./images/superconductor-image.png</image>
+		<image>./images/superconductor-logo.png</image>
+		<marquee>./images/superconductor-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
 	<game>
 		<path>./overquqed.pygame</path>
 		<name>Overquqed</name>
 		<desc>Co-op quantum kitchen: prepare |0&gt;, |+&gt;, Bell pairs and cat states with gate appliances, and serve them before they decohere.</desc>
-		<image>./images/overquqed-image.png</image>
+		<image>./images/overquqed-logo.png</image>
+		<marquee>./images/overquqed-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
 	<game>
 		<path>./qurves.pygame</path>
 		<name>Qurves</name>
 		<desc>Light cycles in superposition: split into mirrored copies and survive as long as one of them does. For 2 or 4 players.</desc>
-		<image>./images/qurves-image.png</image>
+		<image>./images/qurves-logo.png</image>
+		<marquee>./images/qurves-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
 	<game>
 		<path>./gate_drop.pygame</path>
 		<name>Gate Drop</name>
 		<desc>Quantum circuit puzzle for 1 or 2 players: drop gate pills onto the qubit wires, cancel each gate with its inverse, and clear every Pauli error.</desc>
-		<image>./images/gate_drop-image.png</image>
+		<image>./images/gate_drop-logo.png</image>
+		<marquee>./images/gate_drop-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
 </gameList>

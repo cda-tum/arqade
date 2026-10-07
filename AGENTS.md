@@ -30,6 +30,13 @@ specifics (gameplay, architecture, tests) belong in each game's own
   cabinet's actual address is if mDNS isn't resolving) reliably works once
   keys are set up. A benign `X11 forwarding request failed on channel 0`
   warning shows up on every connection — ignore it, the session still works.
+- **From WSL on a laptop with a direct LAN cable** (2026-10-06): there is no
+  DHCP on the cable, so both ends take a link-local 169.254.x.x address, and
+  WSL can't resolve `batocera.local` itself. Windows can:
+  `ping.exe -4 batocera.local` prints the address, and WSL's own `ssh` reaches
+  it. That laptop's key is not on the cabinet, so it logs in with Batocera's
+  default root password. The cabinet's clock is wrong without NTP (1980), so
+  file timestamps from it mean nothing.
 
 ### Display: pick an internal resolution that divides 1080
 
@@ -91,21 +98,25 @@ underscores and all. Display names, descriptions and icons all come from
   <path>./quantum_towers.pygame</path>   <!-- relative to the system's rom dir -->
   <name>Qlimbers</name>
   <desc>…</desc>
-  <image>./images/quantum_towers-image.png</image>
+  <image>./images/quantum_towers-logo.png</image>
 </game>
 ```
 
-The repo's copy lives in `batocera/gamelist.xml`, with the matching icons in
-`batocera/icons/` (regenerate them with `batocera/icons/generate_icons.py`;
-it's standalone and only needs pygame). Copy the icons to
-`/userdata/roms/pygame/images/` and the XML over the cabinet's own.
+The repo's copy lives in `batocera/gamelist.xml`. The icons are the game
+logos in `batocera/logos/<rom>-logo.png` (see "Game logos" below);
+`batocera/icons/` holds the older, title-less set they replaced.
+`batocera/deploy_ui.sh` puts both on the cabinet: it copies the logos to
+`/userdata/roms/pygame/images/` and has `install_ui.py` *merge* the XML into
+the cabinet's own, with ES stopped (see the first point below).
 
 Two things to be careful about:
 
 - **ES owns this file too.** It writes play statistics (`<playcount>`,
   `<lastplayed>`, `<gametime>`) back into it as games are played, so back it
   up and preserve those fields rather than clobbering the whole file — you'd
-  otherwise wipe the play history.
+  otherwise wipe the play history. `install_ui.py` only sets `<name>`,
+  `<desc>` and `<image>` (and adds missing games), and keeps the previous file
+  as `gamelist.xml.arqade-bak`.
 - The display name is *only* this `<name>` field. Renaming a game for the
   menu (e.g. Quantum Towers → **Qlimbers**) needs no change to the ROM
   filename, the Python package, or the deploy script.
@@ -119,7 +130,7 @@ There are three separate splashes, and they come from different places:
 | Boot (at power-on) | `/etc/init.d/S28splash` | a file in `/userdata/splash/` |
 | ES start-up (logo + progress bar) | sway wallpaper behind ES | `/etc/sway/config` → `/usr/share/emulationstation/resources/logo.png` |
 | Game start/exit (brief flash) | sway wallpaper, in the gap | same `logo.png` |
-| Menu start/reload | EmulationStation | theme's `_splash.xml` |
+| Menu start/reload | EmulationStation | theme's `splash.xml` (see below) |
 | Game launch ("loading…") | EmulationStation | theme's `gamesplash.xml` |
 
 **The sway wallpaper is the sneaky one.** `/etc/sway/config` has
@@ -164,6 +175,23 @@ The theme in use is `mqt` (`ThemeSet` in
 `/userdata/system/configs/emulationstation/es_settings.cfg`), and the two
 XML files are patched by `quantum-pong/batocera/arqade-theme/install.py` to
 point at `./art/mqt_splash.png`.
+
+Not yet checked on the cabinet: batocera-emulationstation's source
+(`es-core/src/Splash.cpp`, unchanged since 2020) loads the start-up splash
+from `<theme>/splash.xml` and the launch splash from `<theme>/gamesplash.xml`.
+Nothing reads `_splash.xml`, the file `install.py` patches, so that patch is
+probably a no-op. The start-up splash shows our logo anyway: its default image
+is `:/logo.png`, and that is the `/usr/share/emulationstation/resources/logo.png`
+the boot hook swaps.
+
+**None of these splashes can animate.** ES draws both of its splashes as
+single frames and never updates their components, so a `<video>` or animated
+GIF there shows one frame. The spinning logo plays where video does work:
+the boot splash and the screensaver (see "Attract reels" below). Every still
+(`splash/arqade_splash.png`, `art/mqt_splash.png`) is the spin's first frame,
+the logo face on, so all the loading screens show one picture.
+`batocera/attract/build_splash.py` makes the boot video and the stills from
+`logos/animation/arqade_loading_v3_1080p.webm`.
 
 `install.py` also patches `views/system.xml` (the main menu / system
 carousel): it blanks the three metadata labels top left — they come from
@@ -211,6 +239,46 @@ script would actually pick with the script's own matcher:
 find /userdata/splash -maxdepth 1 -regex '.*\.\(mp4\|MP4\)' -type f
 find /userdata/splash -maxdepth 1 -regex '.*\.\(jpg\|jpeg\|png\)' -type f
 ```
+
+### Attract reels (ES screensaver, `batocera/attract/`)
+
+After 15 s without input, on the main menu or in the game list, ES plays the
+reels in `batocera/attract/reels/` as its screensaver: the logo turning three
+times, then about 20 s of fast gameplay cuts on a CRT tube, with a PRESS ANY
+BUTTON badge. Then another reel at random. Any button brings back the screen
+you were on. The footage is recorded headless from the games' own code,
+driven by per-game bots, and `batocera/attract/README.md` explains how to
+re-cut it. `deploy_ui.sh` copies the reels to `/userdata/screensaver/` and runs
+`kiosk.py --screensaver`, which sets these ES settings with ES stopped. All of
+them were checked against batocera-emulationstation's source (v39 and master):
+
+- **The custom video folder** (`SlideshowScreenSaverCustomVideoSource`,
+  `…VideoDir`), not `<video>` tags in the gamelist. "random video" picks from
+  every system's games, *hidden systems included*, and Batocera's bundled
+  freeware ROMs have videos of their own. From the folder ES picks uniformly
+  at random, every time.
+- **`ScreenSaverControls=false`.** It defaults to true, and then stick-right
+  and Select skip to the next video instead of waking the screensaver.
+- **Any joystick button wakes it, mapped or not.** Buttons go to the
+  screensaver before any mapping lookup, so the kiosk lockdown's unmapped
+  Start still works, and the waking press is swallowed. The stick has to
+  cross ~70% deflection.
+- **Waking never navigates**, and the idle timer runs in every view. Nothing
+  extra is needed for "screensaver on both menus, back where you were".
+- **`ScreenSaverSwapVideoTimeout` is an hour.** A shorter timeout cuts a
+  reel off mid-play. At the end of a file ES shows ~0.5 s of black and fades
+  the next in, which is why every reel opens on the logo fading up from black.
+- **720p, not 1080p.** libVLC decodes in software on the Pi 4 and every frame
+  is uploaded as an RGBA texture.
+- **`StartupSystem=pygame`.** The default, `lastsystem`, reopens whatever ES
+  showed when it exited, and if that was SNES while unlocked, the next locked
+  boot starts on a hidden system. (`StartupOnGameList=true` would boot
+  straight into the game list; B still goes back to the carousel. There is
+  no setting that removes the carousel; `HideSystemView` does not exist.)
+- **Trap:** ES's menu shows `ScreenSaverTime` in whole minutes, so 15 s
+  reads as 0, and merely opening and closing Screensaver Settings saves that 0
+  and switches the screensaver off. The kiosk lockdown hides that menu; if it
+  happens anyway, re-run `kiosk.py --screensaver`.
 
 ### The black-screen incident (be careful with ES config)
 
@@ -300,6 +368,8 @@ as long as it keeps to what the existing ones do:
   `batocera/gamelist.xml`.
 - **`main(argv)` accepts the shared flags**: `--fullscreen`, `--window-size`,
   `--no-keyboard` and `--fps`.
+- **A bot in `batocera/attract/bots/<rom>.py`** gets the game into the attract
+  reels (the launcher plays the same reels after 15 s on its menu).
 - **New dependencies also go into `launcher/pyproject.toml`.** All games run
   in the launcher's one interpreter, and a launcher test fails when one is
   missing.
@@ -417,6 +487,8 @@ worked out with the cabinet's owners over several rounds:
   - Overquqed: the one light, warm pixel kitchen.
   - Qlimbers: the title carved into the tower.
   - Qurves: neon tubes over a synthwave floor.
+  - Gate Drop: an SNES puzzle-game box, a teal sunburst and bouncy
+    candy-coloured letters.
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really

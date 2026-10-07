@@ -10,6 +10,7 @@
 *.jpg binary
 *.jpeg binary
 *.mp4 binary
+*.webm binary
 *.ttf binary
 *.otf binary
 
