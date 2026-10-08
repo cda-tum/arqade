@@ -24,6 +24,10 @@ transversal gate (spread shot), magic state (bomb), noise bias (errors correlate
 chains you can pop in one hit) and, in 2-player mode, lattice surgery (both players
 merge into one ship: P1 steers, P2 aims).
 
+The two players share their lives. A ship lost with none left is out, and the other
+plays on alone until the next wave (or boss), which brings the lost ship back, still
+with no lives to spare. The game is over only when both are out at once.
+
 ### Bosses
 
 Every third wave is a boss fight instead of a formation. **BOSS RUSH** (the third mode

@@ -354,6 +354,13 @@ def new_game(two):
 def next_wave():
     g.wave += 1
     n = g.wave
+    # Out of lives, one ship lost: the next stage brings it back (still with no
+    # lives to spare), so a two-player game never turns into a solo one.
+    for p in g.players:
+        if p.out:
+            p.out = False; p.alive = True; p.x = p.homeX; p.y = 650; p.inv = 2.0
+            burst(p.x, p.y, COL[p.colors[p.ci]], 24, 200)
+            pop(p.x, p.y - 50, "%s IS BACK!" % p.id.upper(), WHITE, 12, 1.8)
     fight = bosses.boss_for_wave(n, g.mode)
     if fight:
         g.boss = bosses.make_boss(fight[0], fight[1], g.two)
