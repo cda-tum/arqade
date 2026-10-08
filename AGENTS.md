@@ -271,6 +271,10 @@ them were checked against batocera-emulationstation's source (v39 and master):
   at random, every time.
 - **`ScreenSaverControls=false`.** It defaults to true, and then stick-right
   and Select skip to the next video instead of waking the screensaver.
+- **`StopMusicOnScreenSaver=false`.** It defaults to true, which stops the
+  menu music for as long as the screensaver runs. Off, the song plays on
+  under the reels. The reels have no audio track, so ES doesn't turn the
+  music down for them either.
 - **Any joystick button wakes it, mapped or not.** Buttons go to the
   screensaver before any mapping lookup, so the kiosk lockdown's unmapped
   Start still works, and the waking press is swallowed. The stick has to

@@ -101,6 +101,10 @@ UNLOCKED_HIDDEN_SYSTEMS = ";".join(s for s in OTHER_SYSTEMS if s not in ADMIN_SY
 #     0, and merely opening and closing Screensaver Settings saves that 0 --
 #     which switches the screensaver off. Re-run --screensaver after doing so.
 #   - Waking never navigates: nothing on that code path touches the views.
+#   - StopMusicOnScreenSaver (on by default) shuts the menu music down while
+#     the screensaver runs. Off, the song carries on under the reels and after
+#     waking. The reels have no audio track, so they never duck it either
+#     (VideoVlcComponent only lowers the music for a video with sound).
 SCREENSAVER_DIR = "/userdata/screensaver"
 SCREENSAVER_SETTINGS = (
     ("int", "ScreenSaverTime", "15000"),
@@ -112,6 +116,7 @@ SCREENSAVER_SETTINGS = (
     ("int", "ScreenSaverSwapVideoTimeout", "3600000"),
     ("bool", "ScreenSaverControls", "false"),
     ("bool", "ScreenSaverVideoMute", "true"),
+    ("bool", "StopMusicOnScreenSaver", "false"),
     ("string", "ScreenSaverGameInfo", "never"),
 )
 
@@ -175,14 +180,36 @@ def es_running() -> bool:
     return bool(es_pids())
 
 
+def game_running() -> str | None:
+    """The ROM of the game ES has running, if any (ES starts every game through
+    emulatorlauncher, whatever the system)."""
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            args = (entry / "cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        if any(a.endswith(b"emulatorlauncher") for a in args[:2]) and b"-rom" in args[:-1]:
+            return args[args.index(b"-rom") + 1].decode("utf-8", "replace")
+    return None
+
+
 def stop_es() -> bool:
     """Stop ES and its wrapper; report whether anything had been running.
 
     ES rewrites es_settings.cfg from memory when it exits, so it has to be
     down *before* we touch that file or our edit is thrown away on quit.
+
+    Refuses while a game is running: the game outlives ES, and the new ES then
+    draws over it, with the game still running unseen and unreachable behind
+    it (that happened once, mid-round of Ion Surfer).
     """
     if not es_pids():
         return False
+    rom = game_running()
+    if rom:
+        raise SystemExit(f"a game is running ({rom}): quit it first, then run this again")
     for sig in (signal.SIGTERM, signal.SIGKILL):
         for pid in es_pids():
             try:
