@@ -214,9 +214,15 @@ class Tube:
         x0, y0 = np.floor(sx).astype(np.int32), np.floor(sy).astype(np.int32)
         fx, fy = sx - x0, sy - y0
         self.index = [(y0 + dy) * w + (x0 + dx) for dy in (0, 1) for dx in (0, 1)]
-        weights = [np.round(((1 - fx) if dx == 0 else fx) * ((1 - fy) if dy == 0 else fy) * 256)
-                   for dy in (0, 1) for dx in (0, 1)]
-        weights[-1] = 256 - weights[0] - weights[1] - weights[2]  # exactly 256 in all
+        weights = np.round(np.stack([((1 - fx) if dx == 0 else fx) * ((1 - fy) if dy == 0 else fy) * 256
+                                     for dy in (0, 1) for dx in (0, 1)])).astype(np.int32)
+        # Exactly 256 in all. The rounding error goes to the largest weight
+        # (at least 64), never the last: that one can be 0, and a -1 wraps to
+        # 65535 in uint16 and lights a dark pixel at full brightness in one
+        # channel -- the red and green specks on the end card's logo.
+        np.put_along_axis(weights, weights.argmax(0)[None],
+                          np.take_along_axis(weights, weights.argmax(0)[None], 0) + 256 - weights.sum(0), 0)
+        assert weights.min() >= 0 and (weights.sum(0) == 256).all()
         self.weight = [wt.astype(np.uint16)[..., None] for wt in weights]
 
         # The glass: a rounded rectangle around the bowed picture, soft-edged.
