@@ -36,6 +36,10 @@ CORNER_ASSIST = 9  # px: slide round a corner you are this close to clearing
 REFRESH_INTERVAL = 0.1  # noise + labels at 10 Hz, not every frame
 ANIM_TIME = 0.4  # gate rotation animation
 COSMIC_WARNING = 2.0
+# Seconds to the first cosmic ray, then between rays (drawn uniformly):
+# about five or six hits in the Cosmic Cafe's three minutes.
+COSMIC_FIRST = (18.0, 24.0)
+COSMIC_EVERY = (25.0, 33.0)
 WALKABLE = ".12"
 
 
@@ -159,7 +163,7 @@ class World:
         self.stats = Stats()
         self.events: list[tuple] = []
         self.pending_dirty: list[tuple[float, int, tuple[int, int]]] = []
-        self.cosmic = Cosmic(next_at=self.rng.uniform(22, 30)) if level.cosmic_rays else None
+        self.cosmic = Cosmic(next_at=self.rng.uniform(*COSMIC_FIRST)) if level.cosmic_rays else None
         self._refresh_timer = 0.0
         self.press_users: dict[int, set[int]] = {}  # id(control station) -> chef idxs
 
@@ -555,7 +559,7 @@ class World:
             self.events.append(("cosmic_hit", c.center))
             c.last_hit, c.last_center = self.t, c.center
             c.center = None
-            c.next_at = self.t + self.rng.uniform(35, 45)
+            c.next_at = self.t + self.rng.uniform(*COSMIC_EVERY)
 
     def _pick_impact(self) -> tuple[int, int]:
         """Usually near something that matters (a chef or a loaded station),
