@@ -82,20 +82,20 @@ def title(step: int = 9, bounce: int = 1) -> pygame.Surface:
     return kit.trim(out)
 
 
-def sunburst(size: int, center: tuple[float, float]) -> pygame.Surface:
+def sunburst(size: int | tuple[int, int], center: tuple[float, float]) -> pygame.Surface:
     """Two-tone rays from `center`, drawn at twice the size and smoothscaled
-    down so their edges are clean."""
-    ss = 2 * size
-    big = pygame.Surface((ss, ss))
+    down so their edges are clean. `size` is a side, or (width, height)."""
+    w, h = (size, size) if isinstance(size, int) else size
+    big = pygame.Surface((2 * w, 2 * h))
     big.fill(DARK)
     cx, cy = center[0] * 2, center[1] * 2
-    r = ss * 2
+    r = 4 * max(w, h)
     for i in range(RAYS):
         a0 = (i - 0.25) / RAYS * 2 * math.pi - math.pi / 2  # a light ray straight up and down
         a1 = (i + 0.25) / RAYS * 2 * math.pi - math.pi / 2
         pygame.draw.polygon(big, LIGHT, [(cx, cy), (cx + r * math.cos(a0), cy + r * math.sin(a0)),
                                          (cx + r * math.cos(a1), cy + r * math.sin(a1))])
-    return pygame.transform.smoothscale(big, (size, size))
+    return pygame.transform.smoothscale(big, (w, h))
 
 
 def art(size: int) -> pygame.Surface:
@@ -115,6 +115,33 @@ def art(size: int) -> pygame.Surface:
     surf.blit(figure, (x, top))
     kit.blit_center(surf, word, (S / 2, top + figure.get_height() + 64 + word.get_height() / 2))
     return surf if size == S else pygame.transform.smoothscale(surf, (size, size))
+
+
+def wide(width: int, height: int) -> pygame.Surface:
+    """The box art turned landscape: the pill falling onto its bug on the
+    left, the sunburst still radiating from the gap between them and so
+    fanning out across the whole tile, and the title beside them on the
+    right."""
+    W, H = 1024, 512
+    k = 7  # hero: one game pixel is k x k icon pixels, so the pill, its bug and speed lines fit the height
+    tk = 8  # title: one font pixel is tk x tk, a step bigger, to read on a small tile
+    figure = kit.nearest(hero(), k)
+    word = kit.nearest(title(), tk)
+    gap = 56  # between the pill and the title
+    left = (W - (CELL * k + gap + word.get_width())) // 2
+    lead = -min(dy for _, dy, _ in SPEED) * k  # the speed lines reach above the pill
+    top = (H - figure.get_height() + lead) // 2
+    impact = (left + CELL * k / 2, top + (2 * CELL + GAP / 2) * k)
+
+    surf = sunburst((W, H), impact)
+    surf.blit(kit.radial((W, H), impact, 300, kit.shade(LIGHT, 0.9), 0.7), (0, 0),
+              special_flags=pygame.BLEND_ADD)
+    surf = kit.finish(surf, vignette_strength=0.55)
+    for dx, dy, n in SPEED:
+        surf.fill(DOT, (left + dx * k, top + dy * k, k, n * k))
+    surf.blit(figure, (left, top))
+    surf.blit(word, (left + CELL * k + gap, round(H / 2 - word.get_height() / 2)))
+    return surf if (width, height) == (W, H) else pygame.transform.smoothscale(surf, (width, height))
 
 
 def marquee() -> pygame.Surface:

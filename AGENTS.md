@@ -98,16 +98,23 @@ underscores and all. Display names, descriptions and icons all come from
   <path>./quantum_towers.pygame</path>   <!-- relative to the system's rom dir -->
   <name>Qlimbers</name>
   <desc>…</desc>
-  <image>./images/quantum_towers-logo.png</image>
+  <image>./images/quantum_towers-wide.png</image>
 </game>
 ```
 
-The repo's copy lives in `batocera/gamelist.xml`. The icons are the game
-logos in `batocera/logos/<rom>-logo.png` (see "Game logos" below);
-`batocera/icons/` holds the older, title-less set they replaced.
-`batocera/deploy_ui.sh` puts both on the cabinet: it copies the logos to
+The repo's copy lives in `batocera/gamelist.xml`. The images are the game
+logos in `batocera/logos/` (see "Game logos" below); `batocera/icons/` holds
+the older, title-less set they replaced. `batocera/deploy_ui.sh` puts both on
+the cabinet: it copies every image the gamelist names to
 `/userdata/roms/pygame/images/` and has `install_ui.py` *merge* the XML into
 the cabinet's own, with ES stopped (see the first point below).
+
+**The game list's tiles are about 2:1, so `<image>` is the wide tile,
+`<rom>-wide.png` (1024x512), not the square logo.** The theme's "Icons" view
+draws `{game:image}` with `minSize` set to the whole tile, which scales an
+image to *cover* the tile. A square logo therefore lost its top and bottom,
+title included. The square `<rom>-logo.png` stays for everything else: the PC
+launcher's carousel, social posts, slides.
 
 Two things to be careful about:
 
@@ -115,8 +122,8 @@ Two things to be careful about:
   `<lastplayed>`, `<gametime>`) back into it as games are played, so back it
   up and preserve those fields rather than clobbering the whole file — you'd
   otherwise wipe the play history. `install_ui.py` only sets `<name>`,
-  `<desc>` and `<image>` (and adds missing games), and keeps the previous file
-  as `gamelist.xml.arqade-bak`.
+  `<desc>`, `<image>` and `<marquee>` (and adds missing games), and keeps the
+  previous file as `gamelist.xml.arqade-bak`.
 - The display name is *only* this `<name>` field. Renaming a game for the
   menu (e.g. Quantum Towers → **Qlimbers**) needs no change to the ROM
   filename, the Python package, or the deploy script.
@@ -471,7 +478,9 @@ like the button convention: new games follow it from the start.
 ## Game logos: app icons, each with its own look (a taste)
 
 `batocera/logos/` renders every game's logo with `generate_logos.py`: a
-1024x1024 `<rom>-logo.png` and a transparent `<rom>-marquee.png`. Each game
+1024x1024 `<rom>-logo.png`, a 1024x512 `<rom>-wide.png` for the cabinet's
+game list (the same identity re-laid out, not a crop) and a transparent
+`<rom>-marquee.png`. Each game
 has its own `logo_<rom>.py`, which imports the game's package and draws with
 the game's own sprite and draw functions. `kit.py` has the shared lettering
 and light effects. A new game gets a module there too. These preferences were
@@ -495,6 +504,9 @@ worked out with the cabinet's owners over several rounds:
   - Gate Drop: an SNES puzzle-game box, a teal sunburst and bouncy
     candy-coloured letters.
   - Brawl-Ket: a comic-book impact panel (halftone, speed lines, a POW burst).
+  - Planck Time: die-cut vinyl stickers on the title screen's purple checker:
+    a handheld mid-MEASURE!, its fuse lit, and the rainbow wordmark with its
+    stopwatch.
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really

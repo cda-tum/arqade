@@ -40,15 +40,18 @@ if ! compgen -G "$REELS/arqade_reel_*.mp4" > /dev/null; then
 fi
 mkdir -p "$UI/reels"
 cp "$REELS"/arqade_reel_*.mp4 "$UI/reels/"
-# A logo and a marquee for every game in the gamelist, or nothing at all.
-for rom in $(sed -n 's#.*<path>\./\(.*\)\.pygame</path>.*#\1#p' "$SCRIPT_DIR/gamelist.xml"); do
-    for art in "$SCRIPT_DIR/logos/${rom}-logo.png" "$SCRIPT_DIR/logos/${rom}-marquee.png"; do
-        if [[ ! -f "$art" ]]; then
-            echo "missing $art -- render it with batocera/logos/generate_logos.py" >&2
-            exit 1
-        fi
-        cp "$art" "$UI/images/"
-    done
+# Every image the gamelist names, or nothing at all. They are rendered into
+# logos/ (the wide tiles, the marquees) and, for a game without a logo yet,
+# icons/.
+for art in $(sed -n 's#.*<\(image\|marquee\)>\./images/\(.*\)</\(image\|marquee\)>.*#\2#p' "$SCRIPT_DIR/gamelist.xml"); do
+    if [[ -f "$SCRIPT_DIR/logos/$art" ]]; then
+        cp "$SCRIPT_DIR/logos/$art" "$UI/images/"
+    elif [[ -f "$SCRIPT_DIR/icons/$art" ]]; then
+        cp "$SCRIPT_DIR/icons/$art" "$UI/images/"
+    else
+        echo "missing $art -- render it with batocera/logos/generate_logos.py" >&2
+        exit 1
+    fi
 done
 
 echo "Copying to ${HOST} ..."
