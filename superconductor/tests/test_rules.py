@@ -267,6 +267,28 @@ def test_difficulty_ramps_up():
     assert s[-1].t - s[-2].t == pytest.approx(config.SPAWN_INTERVAL_MIN)
 
 
+def test_an_idle_chip_speeds_its_schedule_up_to_a_limit(board_with):
+    b = board_with()  # nothing ever arrives: the chip is idle throughout
+    start = b.pace
+    for _ in range(100):
+        b.update(0.1)
+    assert b.pace == pytest.approx(start + 10 * config.PACE_GAIN)
+    assert b.clock > b.time  # the schedule ran ahead of the real time
+    for _ in range(1000):
+        b.update(0.1)
+    assert b.pace == config.PACE_MAX
+
+
+def test_a_chip_with_a_pair_waiting_keeps_its_pace(board_with):
+    b = board_with((0.0, (0, 0), (0, 3)))
+    pace, clock, time = b.pace, b.clock, b.time
+    for _ in range(50):
+        b.update(0.1)
+    assert b.waiting_pairs()
+    assert b.pace == pace
+    assert b.clock - clock == pytest.approx((b.time - time) * pace)
+
+
 # ---------------------------------------------------------------- crossing
 
 

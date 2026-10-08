@@ -231,6 +231,7 @@ class Board:
         self._next_special = config.SPECIAL_FIRST if specials else float("inf")
         self.time = 0.0  # real play time on this board
         self.clock = 0.0  # schedule time (runs ahead when the board is idle)
+        self.pace = 1.0  # how fast the clock runs (PACE_GAIN)
         self.score = 0
         self.lives = lives
         self.gates = 0
@@ -578,10 +579,13 @@ class Board:
         if self.over:
             return
         self.time += dt
-        self.clock += dt
+        idle = not self.waiting_pairs() and not self.queue
+        if idle:
+            self.pace = min(config.PACE_MAX, self.pace + config.PACE_GAIN * dt)
+        self.clock += dt * self.pace
         # Never leave the player with nothing to do. (A spawn at t=inf, as
         # scripted test schedules end with, never arrives.)
-        if not self.waiting_pairs() and not self.queue and self._next.t != float("inf"):
+        if idle and self._next.t != float("inf"):
             self.clock = max(self.clock, self._next.t - config.IDLE_SPAWN_DELAY)
         while self._next.t <= self.clock:
             self.queue.append(self._next)
