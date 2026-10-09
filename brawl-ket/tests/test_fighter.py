@@ -11,20 +11,20 @@ from brawl_ket.config import (
     THROW_RANGE,
 )
 from brawl_ket.fighter import IDLE, Fighter, FighterInput
-from brawl_ket.moves import TRIO, Box
+from brawl_ket.moves import ROBERT, Box
 
-JAB = TRIO.moves["stand.A"]
-LOW_JAB = TRIO.moves["crouch.A"]
-SWEEP = TRIO.moves["crouch.B"]
-PHOTON = TRIO.moves["stand.X"]
-HEAVY = TRIO.moves["stand.B"]
+JAB = ROBERT.moves["stand.A"]
+LOW_JAB = ROBERT.moves["crouch.A"]
+SWEEP = ROBERT.moves["crouch.B"]
+PHOTON = ROBERT.moves["stand.X"]
+HEAVY = ROBERT.moves["stand.B"]
 JAB_TOTAL = JAB.startup + JAB.active + JAB.recovery
 
 FAR = 500.0   # a rival far to the right of a fighter at x=300
 
 
 def make(x=300.0, facing=1):
-    return Fighter(TRIO, x, facing)
+    return Fighter(ROBERT, x, facing)
 
 
 def run(f, inp=IDLE, n=1, rival_x=FAR):
@@ -97,7 +97,7 @@ def test_the_jump_is_high_and_still_short():
 def test_jump_keeps_horizontal_speed_from_dx():
     f = make()
     run(f, FighterInput(up=True, dx=1))
-    assert f.vx == TRIO.walk
+    assert f.vx == ROBERT.walk
     x0 = f.x
     run(f, FighterInput(), 5)
     assert f.x > x0
@@ -216,7 +216,7 @@ def test_b_up_close_towards_the_rival_is_a_throw():
     f = make(300, 1)
     ev = run(f, FighterInput(dx=1, b=True), rival_x=300 + THROW_RANGE)
     assert ev == [("attack", {"slot": "throw"})]
-    assert f.move is TRIO.moves["throw"]
+    assert f.move is ROBERT.moves["throw"]
 
 
 def test_b_far_from_the_rival_is_the_standing_heavy():
@@ -242,7 +242,7 @@ def test_ground_attacks_stand_still_and_lunge_only_when_active():
     f = make()
     run(f, FighterInput(down=True))         # now in crouch
     run(f, FighterInput(down=True, x=True))
-    assert f.move is TRIO.moves["crouch.X"]
+    assert f.move is ROBERT.moves["crouch.X"]
     x0 = f.x
     run(f, FighterInput(down=True), 3)      # startup: no lunge
     assert f.x == x0
@@ -309,7 +309,7 @@ def test_stun_is_inert_for_exactly_its_value_and_acts_on_the_next_step():
     run(f, held, n)                                  # N inert steps
     assert f.action == "idle" and f.vx == 0          # not walking yet
     run(f, held)                                     # step N+1 acts
-    assert f.action == "walk" and f.vx == TRIO.walk
+    assert f.action == "walk" and f.vx == ROBERT.walk
 
 
 def test_knockdown_is_inert_for_forty_steps():
@@ -377,15 +377,15 @@ def test_world_box_mirrors_with_facing():
 
 def test_hurtbox_follows_the_stance():
     f = make()
-    assert f.hurtbox == f.world_box(TRIO.hurt_stand)
+    assert f.hurtbox == f.world_box(ROBERT.hurt_stand)
     run(f, FighterInput(down=True))
-    assert f.hurtbox == f.world_box(TRIO.hurt_crouch)
+    assert f.hurtbox == f.world_box(ROBERT.hurt_crouch)
     assert f.hurtbox[1] > make().hurtbox[1]          # lower, so a larger screen y
 
 
 def test_cooldown_blocks_a_slot_until_it_expires():
     jab = replace(JAB, cooldown=30)
-    char = replace(TRIO, moves=MappingProxyType({**TRIO.moves, "stand.A": jab}))
+    char = replace(ROBERT, moves=MappingProxyType({**ROBERT.moves, "stand.A": jab}))
     f = Fighter(char, 300, 1)
     run(f, tap("a"))                                 # step 1
     assert f.cooldowns["stand.A"] == 30
@@ -404,7 +404,7 @@ def test_cooldown_blocks_a_slot_until_it_expires():
 
 def test_other_slots_are_not_blocked_by_a_cooldown():
     jab = replace(JAB, cooldown=30)
-    char = replace(TRIO, moves=MappingProxyType({**TRIO.moves, "stand.A": jab}))
+    char = replace(ROBERT, moves=MappingProxyType({**ROBERT.moves, "stand.A": jab}))
     f = Fighter(char, 300, 1)
     run(f, tap("a"))
     run(f, IDLE, JAB_TOTAL)
@@ -422,7 +422,7 @@ def jump_until(f, pred, limit=80, rival_x=FAR):
 
 def test_dive_dives_and_lands_into_its_recovery():
     f = make()
-    dive = TRIO.moves["air.X"]
+    dive = ROBERT.moves["air.X"]
     jump_until(f, lambda f: f.y > 40)
     ev = run(f, tap("x"))
     assert ev == [("attack", {"slot": "air.X"})]
@@ -451,8 +451,8 @@ def test_dive_keeps_its_speed_when_facing_left():
     f = make(300, -1)
     jump_until(f, lambda f: f.y > 40, rival_x=0)
     run(f, tap("x"), rival_x=0)
-    run(f, IDLE, TRIO.moves["air.X"].startup, rival_x=0)
-    assert f.facing == -1 and f.vx == -TRIO.moves["air.X"].dive[0]
+    run(f, IDLE, ROBERT.moves["air.X"].startup, rival_x=0)
+    assert f.facing == -1 and f.vx == -ROBERT.moves["air.X"].dive[0]
 
 
 def test_an_air_jab_is_cancelled_by_landing():
@@ -601,7 +601,7 @@ def test_the_chained_startup_is_forgotten_when_the_move_ends():
 
 
 def test_the_sweep_is_fast_from_neutral_and_faster_in_a_chain():
-    sweep = TRIO.moves["crouch.B"]
+    sweep = ROBERT.moves["crouch.B"]
     f = make()
     run(f, FighterInput(down=True, b=True))
     assert f.slot == "crouch.B" and f.startup == sweep.startup == 10
@@ -615,7 +615,7 @@ def test_the_sweep_is_fast_from_neutral_and_faster_in_a_chain():
 
 
 def test_a_knockdown_move_knocks_down_and_others_stun():
-    f = Fighter(TRIO, 200, 1)
+    f = Fighter(ROBERT, 200, 1)
     assert f.take_hit(JAB, basis.X, -1) == "hit" and f.action == "hitstun"
     assert f.take_hit(SWEEP, basis.X, -1) == "hit" and f.action == "knockdown"
     assert f.health == 100 - JAB.damage - SWEEP.damage
@@ -632,7 +632,7 @@ def test_switch_is_a_hadamard_on_yourself():
 
 
 def test_a_hit_never_turns_a_knockdown_into_hitstun():
-    f = Fighter(TRIO, 200, 1)
+    f = Fighter(ROBERT, 200, 1)
     f.take_hit(SWEEP, basis.Y, -1)
     assert f.action == "knockdown"
     run(f, IDLE, 30)                    # most of the way up
@@ -641,7 +641,7 @@ def test_a_hit_never_turns_a_knockdown_into_hitstun():
 
 
 def test_crouching_is_instant_and_has_no_switch():
-    f = Fighter(TRIO, 200, 1)
+    f = Fighter(ROBERT, 200, 1)
     f.step(FighterInput(down=True), 400)
     assert f.crouching and f.stance == "crouch" and f.action == "crouch"
     f.step(FighterInput(), 400)
@@ -649,7 +649,7 @@ def test_crouching_is_instant_and_has_no_switch():
 
 
 def test_down_a_from_standing_is_a_low_jab_at_once():
-    f = Fighter(TRIO, 200, 1)
+    f = Fighter(ROBERT, 200, 1)
     f.step(FighterInput(down=True, a=True), 400)
     assert f.slot == "crouch.A"
 
@@ -658,7 +658,7 @@ def test_a_bounced_diver_hit_in_a_trade_stops_springing_up():
     f = make()
     jump_until(f, lambda f: f.y > 40)
     run(f, tap("x"))
-    run(f, IDLE, TRIO.moves["air.X"].startup)
+    run(f, IDLE, ROBERT.moves["air.X"].startup)
     assert f.phase == "active"
     f.bounce()
     assert f.vy > 0 and f.bounced

@@ -82,7 +82,7 @@ All of these are starting numbers for tuning:
 | throw (Y) | 10 |
 | MEASURE (a throw) | 12 |
 
-- **Health:** TRIO 100, QUINT 115.
+- **Health:** ROBERT 100, BOHR 115.
 - **No chip on a blocked hit.**
 - **Knockdowns:** throws, sweeps and the knockdown specials knock down, as in v2.
 
@@ -95,7 +95,7 @@ the damage numbers above and the colour rule change.
 Unless the rival switches mid-chain, exactly one half of the chain matches them. The
 defender's colour decides which half lands.
 
-### TRIO: fast and lean, 100 health
+### ROBERT: fast and lean, 100 health
 
 - **PHOTON** (X): a projectile at head height, always **green**. A purple rival lets
   it bounce off; a green one must crouch or jump. 2.5 s cooldown, as in v2.
@@ -103,20 +103,20 @@ defender's colour decides which half lands.
   as in v2.
 - **HADAMARD DIVE** (air + X): v2's steep dive, in **your current colour**. When it
   hits, **you switch basis**: an H on yourself, applied at once and with no recovery.
-  Your follow-up's colours flip with it, which makes the DIVE TRIO's mix-up tool.
+  Your follow-up's colours flip with it, which makes the DIVE ROBERT's mix-up tool.
 
-### QUINT: slow and broad, 115 health
+### BOHR: slow and broad, 115 health
 
 - **MEASURE** (X): v2's dashing command grab, which connects from about a 125–130 px
   starting gap.
   - It is a throw, so it deals Y and hurts either colour.
-  - It also **collapses the rival into QUINT's basis**: measuring projects them onto
+  - It also **collapses the rival into BOHR's basis**: measuring projects them onto
     it. If they were already in it, nothing changes.
-  - QUINT's A, which is its own colour, then matches them until they switch.
-- **HADAMARD WAVE** (down + X): a short ground wave just in front of QUINT, about
+  - BOHR's A, which is its own colour, then matches them until they switch.
+- **HADAMARD WAVE** (down + X): a short ground wave just in front of BOHR, about
   70 px.
   - It does **no damage** and **switches the rival's basis**: an H applied to them.
-    Their colour flips, so the attack QUINT throws next can match.
+    Their colour flips, so the attack BOHR throws next can match.
   - It is a LOW move, so jumping clears it.
   - 3 s cooldown.
 - **COLLAPSE** (air + X): v2's drifting body slam. The **slam is green** (HIGH) and
@@ -150,7 +150,7 @@ defender's colour decides which half lands.
     with a short "ping" sound and the pushback;
   - a switch shows a white flash with an `H` pop-up as the body changes colour;
   - the specials' twists use the same `H` flash on whoever changes basis;
-  - MEASURE shows a brief "collapse" flash on the rival in QUINT's colour.
+  - MEASURE shows a brief "collapse" flash on the rival in BOHR's colour.
 - **No grid:** v2's grid tag and its effects are removed entirely.
 
 ### Teaching
@@ -205,7 +205,7 @@ The engine stays; the code underneath changes.
   - A then B on one rival lands exactly one half;
   - Y switches, has 10 frames of no attacking, and a hit during that time is judged by
     the new colour;
-  - a DIVE hit switches the diver, MEASURE collapses the rival into QUINT's basis, and
+  - a DIVE hit switches the diver, MEASURE collapses the rival into BOHR's basis, and
     the WAVE switches the rival, deals no damage and is cleared by a jump;
   - COLLAPSE always has one matching half for a standing rival;
   - the v2 height and knockdown tests keep passing.
@@ -233,17 +233,17 @@ These replace the matching parts of sections 1–3.
 - **One colour rule for specials.** Fixed and mixed special colours were impossible to keep in
   mind. Every special is now in **your own colour**, like A: "A and X are your colour, B is
   the other; throws hurt both." MEASURE stays a throw (both). COLLAPSE's slam and shockwave
-  are both QUINT's colour. A PHOTON keeps the colour it was fired in.
+  are both BOHR's colour. A PHOTON keeps the colour it was fired in.
 - **A move's colour is fixed when it starts**, not when it hits, so a switch mid-swing doesn't
   recolour it and the colour seen on the wind-up is always the colour that lands.
 - **Y switches in any state:** walking, attacking, in hitstun, knocked down (pressed in a hit
   freeze, it applies as play resumes). A defender can switch mid-string so the rest bounces.
-- **No infinites:** lights stun for 12 frames (TRIO's jab was a true infinite), and getting up
+- **No infinites:** lights stun for 12 frames (ROBERT's jab was a true infinite), and getting up
   from a knockdown is invulnerable for 8 frames. A test mashes every normal and checks the
   defender is free again within CHAIN_MAX hits.
-- **CHARGE NOISE replaces the HADAMARD WAVE** (QUINT, down + X), whose effect nobody could
-  see. QUINT plants itself; for 1 s a field about 60 px all round it shocks anyone inside every
-  12 frames (3 damage, 8 frames of stun, a push back), in QUINT's colour, MID. Distance or the
+- **CHARGE NOISE replaces the HADAMARD WAVE** (BOHR, down + X), whose effect nobody could
+  see. BOHR plants itself; for 1 s a field about 60 px all round it shocks anyone inside every
+  12 frames (3 damage, 8 frames of stun, a push back), in BOHR's colour, MID. Distance or the
   other colour escapes it. Electric arcs show the field and its reach. 3 s cooldown.
 - **COLLAPSE hits what it visibly lands on:** its slam box is the legs as drawn (feet to hip,
   56 px wide) instead of a 40x30 box at the feet, and the slam is MID (a falling body can't be

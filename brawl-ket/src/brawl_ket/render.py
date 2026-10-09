@@ -43,7 +43,7 @@ from .poses import HEAD_R, LIMB_W, POSES, Pose, joints, pose_for
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 MARGIN = 8                  # the stage is this much bigger on every side, for the shake
 PLAYERS = ("p1", "p2")
-ACCENT = {"TRIO": P.CREAM, "QUINT": P.GOLD}
+ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD}
 
 # how each build is drawn (the skeleton's proportions are in poses.py)
 TORSO_EXTRA = {"lean": 5, "heavy": 8}      # the lean torso is this much thicker than a limb
@@ -84,7 +84,7 @@ WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the fl
 WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
 HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
 SWITCH_FLASH_FRAMES = 8     # a switch (an H): the body flashes white as its colour changes
-MEASURE_FLASH_FRAMES = 12   # MEASURE: the rival flashes in QUINT's colour as it collapses
+MEASURE_FLASH_FRAMES = 12   # MEASURE: the rival flashes in BOHR's colour as it collapses
 COLLAPSE_FRAMES = 14        # ... with a ring closing in on it
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
@@ -92,7 +92,7 @@ CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are c
 BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 
 # the select screen: what each fighter is, in a line, and how its X moves are entered
-TRAITS = {"TRIO": "FAST AND LIGHT", "QUINT": "SLOW AND HEAVY"}
+TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY"}
 X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
 RULE_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR")
 HINT = "MATCH THEIR COLOUR TO HURT - Y SWITCHES"

@@ -39,9 +39,9 @@ BLOCK_HITSTOP = 3
 BUFFER_FRAMES = 6
 CHAIN_MAX = 3
 BODY_MARGIN = 8          # the push box reaches this far past each fighter's standing hurtbox, px
-                         # (fight.body_width: 44 between two TRIOs, 52 between two QUINTs)
+                         # (fight.body_width: 44 between two ROBERTs, 52 between two BOHRs)
 THROW_SLACK = 6          # a throw reaches this far past the push box (px between the fighters' x)
-THROW_RANGE = 50         # two TRIOs' push box plus THROW_SLACK: a lone Fighter's throw range
+THROW_RANGE = 50         # two ROBERTs' push box plus THROW_SLACK: a lone Fighter's throw range
 
 
 # --- Screen transitions and input timing -------------------------------------

@@ -301,7 +301,7 @@ class Fight:
             downed.add(st.defender)
         self.hitstop = max(self.hitstop, HITSTOP_KNOCKDOWN if knocked else HITSTOP)
         if m.measure_rival and defender.basis != owner.basis:
-            # MEASURE projects the rival onto QUINT's basis
+            # MEASURE projects the rival onto BOHR's basis
             defender.basis = owner.basis
             events.append(Event("measure", st.defender, None, x, y))
         if st.attacker is not None and owner.move is m:

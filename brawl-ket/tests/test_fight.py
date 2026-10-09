@@ -19,22 +19,22 @@ from brawl_ket.config import (
 )
 from brawl_ket.fight import KO_PUSH, Event, Fight, Shot, _overlap, body_width
 from brawl_ket.fighter import IDLE, FighterInput
-from brawl_ket.moves import CHARACTERS, HIGH, LOW, MID, QUINT, TRIO, Box
+from brawl_ket.moves import CHARACTERS, HIGH, LOW, MID, BOHR, ROBERT, Box
 
 A = FighterInput(a=True)
 B = FighterInput(b=True)
 X = FighterInput(x=True)
-JAB = TRIO.moves["stand.A"]
-HEAVY = TRIO.moves["stand.B"]
-PHOTON = TRIO.moves["stand.X"]
+JAB = ROBERT.moves["stand.A"]
+HEAVY = ROBERT.moves["stand.B"]
+PHOTON = ROBERT.moves["stand.X"]
 
-BODY_WIDTH = body_width(TRIO, TRIO)     # the push box between two TRIOs
+BODY_WIDTH = body_width(ROBERT, ROBERT)     # the push box between two ROBERTs
 JAB_HIT_STEP = JAB.startup     # 0-based step on which a jab pressed at step 0 first hits
 
 
 def new(gap=40.0):
     """A fresh fight with the fighters `gap` px apart (p1 stays at its start)."""
-    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight = Fight({"p1": ROBERT, "p2": ROBERT})
     fight.fighters["p2"].x = fight.fighters["p1"].x + gap
     return fight
 
@@ -78,13 +78,13 @@ def snapshot(fight):
 
 
 def with_move(slot, move):
-    return replace(TRIO, moves=MappingProxyType({**TRIO.moves, slot: move}))
+    return replace(ROBERT, moves=MappingProxyType({**ROBERT.moves, slot: move}))
 
 
 # --- construction ---------------------------------------------------------------------
 
 def test_a_new_round():
-    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight = Fight({"p1": ROBERT, "p2": ROBERT})
     assert fight.fighters["p1"].x == START_X["p1"] and fight.fighters["p1"].facing == 1
     assert fight.fighters["p2"].x == START_X["p2"] and fight.fighters["p2"].facing == -1
     assert fight.frames_left == ROUND_FRAMES and fight.hitstop == 0
@@ -167,7 +167,7 @@ def test_a_throw_hurts_either_colour_and_knocks_down():
         events = script(fight, 20, p1={0: FighterInput(dx=1, b=True)})
         assert [(e.kind, e.error) for e in of(events, "hit", "block")] == [("hit", basis.Y)]
         p2 = fight.fighters["p2"]
-        assert p2.health == 100 - TRIO.moves["throw"].damage and p2.action == "knockdown"
+        assert p2.health == 100 - ROBERT.moves["throw"].damage and p2.action == "knockdown"
 
 
 def test_a_throw_catches_an_airborne_rival():
@@ -199,7 +199,7 @@ def test_a_trade_applies_both_hits():
 
 
 def test_a_downed_fighter_cannot_be_hit():
-    SWEEP = TRIO.moves["crouch.B"]
+    SWEEP = ROBERT.moves["crouch.B"]
     fight = new()
     p2 = fight.fighters["p2"]
     p2.take_hit(replace(SWEEP, damage=0), basis.Y, 1)
@@ -217,7 +217,7 @@ def test_a_knockdown_survives_a_second_hit_in_the_same_frame():
     fight = new()
     p2 = fight.fighters["p2"]
     p2.basis = X_BASIS                      # the sweep (the other colour) matches
-    sweep = TRIO.moves["crouch.B"]
+    sweep = ROBERT.moves["crouch.B"]
     script(fight, 20, p1=FighterInput(down=True))
     p2.x = fight.fighters["p1"].x + 50
     events = []
@@ -233,10 +233,10 @@ def test_a_knockdown_survives_a_second_hit_in_the_same_frame():
 
 
 def test_the_landing_shockwave_skips_a_downed_rival():
-    fight = Fight({"p1": COLLAPSE, "p2": TRIO})
+    fight = Fight({"p1": COLLAPSE, "p2": ROBERT})
     fight.fighters["p2"].x = fight.fighters["p1"].x + 60
     p2 = fight.fighters["p2"]
-    p2.take_hit(replace(TRIO.moves["crouch.B"], damage=0), basis.Y, 1)
+    p2.take_hit(replace(ROBERT.moves["crouch.B"], damage=0), basis.Y, 1)
     p1 = fight.fighters["p1"]
     events = []
     for i in range(300):
@@ -402,14 +402,14 @@ def test_projectiles_are_too_slow_to_tunnel():
 # --- landing shockwave ----------------------------------------------------------------
 
 SHOCK_DIVE = replace(
-    TRIO.moves["air.X"], landing=Box(-70, 0, 140, 16), landing_colour=basis.PURPLE,
+    ROBERT.moves["air.X"], landing=Box(-70, 0, 140, 16), landing_colour=basis.PURPLE,
 )
 COLLAPSE = with_move("air.X", SHOCK_DIVE)
 
 
 def dive_and_land(rival_dx):
     """p1 jumps and dives; the rival stands rival_dx px to p1's right. Returns (fight, events)."""
-    fight = Fight({"p1": COLLAPSE, "p2": TRIO})
+    fight = Fight({"p1": COLLAPSE, "p2": ROBERT})
     fight.fighters["p2"].x = fight.fighters["p1"].x + rival_dx
     fight.fighters["p2"].basis = X_BASIS     # purple: the (purple) shockwave matches
     p1 = fight.fighters["p1"]
@@ -447,7 +447,7 @@ def test_the_landing_shockwave_hits_once():
 
 
 def test_an_ordinary_dive_has_no_shockwave():
-    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight = Fight({"p1": ROBERT, "p2": ROBERT})
     fight.fighters["p2"].x = fight.fighters["p1"].x + 60
     p1 = fight.fighters["p1"]
     events = []
@@ -594,7 +594,7 @@ def test_same_inputs_same_fight():
     results = []
     for _ in range(2):
         rng = random.Random(1)
-        fight = Fight({"p1": TRIO, "p2": TRIO})
+        fight = Fight({"p1": ROBERT, "p2": ROBERT})
         events = []
         for _ in range(600):
             events.extend(fight.step(random_inputs(rng)))
@@ -627,9 +627,9 @@ def test_a_jab_connects_at_the_closest_spacing():
                 c1.name, c2.name, attacker, crouching)
 
 
-# --- QUINT ------------------------------------------------------------------------------------
+# --- BOHR ------------------------------------------------------------------------------------
 
-GRAB = QUINT.moves["stand.X"]
+GRAB = BOHR.moves["stand.X"]
 DOWN = FighterInput(down=True)
 
 
@@ -638,23 +638,23 @@ def results(events):
 
 
 def grab_lands(gap, press, crouching=False):
-    """QUINT (p1) presses `press` once at `gap` px from a TRIO; returns the fight and its hits."""
-    fight = versus(QUINT, TRIO, gap)
+    """BOHR (p1) presses `press` once at `gap` px from a ROBERT; returns the fight and its hits."""
+    fight = versus(BOHR, ROBERT, gap)
     events = script(fight, 70, p1={0: press}, p2=DOWN if crouching else IDLE)
     return fight, results(events)
 
 
-def test_measure_lands_on_trio_in_either_stance_and_colour():
+def test_measure_lands_on_robert_in_either_stance_and_colour():
     for crouching in (False, True):
         for colour in (Z_BASIS, X_BASIS):
-            fight = versus(QUINT, TRIO, 64.0)                   # well outside a throw's reach
+            fight = versus(BOHR, ROBERT, 64.0)                   # well outside a throw's reach
             fight.fighters["p2"].basis = colour
             events = script(fight, 70, p1={0: X}, p2=DOWN if crouching else IDLE)
             assert results(events) == [("hit", basis.Y)], (crouching, colour)   # a throw: both
-            trio = fight.fighters["p2"]
-            assert trio.health == 100 - GRAB.damage
-    # the grab knocks down: a few frames after it lands, TRIO is on the floor
-    fight = versus(QUINT, TRIO, 64.0)
+            robert = fight.fighters["p2"]
+            assert robert.health == 100 - GRAB.damage
+    # the grab knocks down: a few frames after it lands, ROBERT is on the floor
+    fight = versus(BOHR, ROBERT, 64.0)
     for i in range(70):
         if of(fight.step({"p1": X if i == 0 else IDLE, "p2": IDLE}), "hit", "block"):
             break
@@ -662,16 +662,16 @@ def test_measure_lands_on_trio_in_either_stance_and_colour():
     assert fight.fighters["p2"].action == "knockdown"
 
 
-def test_measure_collapses_the_rival_into_quints_basis():
-    for quint_basis in (Z_BASIS, X_BASIS):
-        for trio_basis in (Z_BASIS, X_BASIS):
-            fight = versus(QUINT, TRIO, 64.0)
-            fight.fighters["p1"].basis = quint_basis
-            fight.fighters["p2"].basis = trio_basis
+def test_measure_collapses_the_rival_into_bohrs_basis():
+    for bohr_basis in (Z_BASIS, X_BASIS):
+        for robert_basis in (Z_BASIS, X_BASIS):
+            fight = versus(BOHR, ROBERT, 64.0)
+            fight.fighters["p1"].basis = bohr_basis
+            fight.fighters["p2"].basis = robert_basis
             events = script(fight, 70, p1={0: X})
-            assert fight.fighters["p2"].basis == quint_basis
+            assert fight.fighters["p2"].basis == bohr_basis
             # a measure event only when the rival really changed basis
-            assert len(of(events, "measure")) == (quint_basis != trio_basis)
+            assert len(of(events, "measure")) == (bohr_basis != robert_basis)
 
 
 def test_measure_reaches_further_than_a_throw():
@@ -680,30 +680,30 @@ def test_measure_reaches_further_than_a_throw():
                    if grab_lands(float(g), press)[1] == [("hit", basis.Y)])
 
     grab, throw = longest(X), longest(FighterInput(dx=1, b=True))
-    assert throw <= body_width(QUINT, TRIO) + THROW_SLACK
+    assert throw <= body_width(BOHR, ROBERT) + THROW_SLACK
     assert grab >= throw + 15, (grab, throw)
 
 
-def test_a_whiffed_measure_leaves_quint_open():
-    fight = versus(QUINT, TRIO, 150.0)      # beyond its reach (about 130 px)
+def test_a_whiffed_measure_leaves_bohr_open():
+    fight = versus(BOHR, ROBERT, 150.0)      # beyond its reach (about 130 px)
     events = script(fight, GRAB.startup + GRAB.active + 5, p1={0: X})
     assert results(events) == []
-    quint = fight.fighters["p1"]
-    assert (quint.slot, quint.phase) == ("stand.X", "recovery")    # stuck in its long recovery
+    bohr = fight.fighters["p1"]
+    assert (bohr.slot, bohr.phase) == ("stand.X", "recovery")    # stuck in its long recovery
 
 
-NOISE = QUINT.moves["crouch.X"]
+NOISE = BOHR.moves["crouch.X"]
 
 
-def noise_at(gap, trio_basis=Z_BASIS, frames=100, trio_input=IDLE):
-    fight = versus(QUINT, TRIO, gap)
-    fight.fighters["p2"].basis = trio_basis
+def noise_at(gap, robert_basis=Z_BASIS, frames=100, robert_input=IDLE):
+    fight = versus(BOHR, ROBERT, gap)
+    fight.fighters["p2"].basis = robert_basis
     hold = {i: DOWN for i in range(frames)}
-    events = script(fight, frames, p1={**hold, 0: FighterInput(down=True, x=True)}, p2=trio_input)
+    events = script(fight, frames, p1={**hold, 0: FighterInput(down=True, x=True)}, p2=robert_input)
     return fight, events
 
 
-def test_charge_noise_shocks_again_and_again_in_quints_colour():
+def test_charge_noise_shocks_again_and_again_in_bohrs_colour():
     # a rival standing still takes a couple of shocks, each pushing it back, until it is out
     fight, events = noise_at(60.0)
     hits = of(events, "hit", "block")
@@ -711,10 +711,10 @@ def test_charge_noise_shocks_again_and_again_in_quints_colour():
     assert fight.fighters["p2"].health == 100 - NOISE.damage * len(hits)
     assert fight.fighters["p2"].x - fight.fighters["p1"].x > 70
     # cornered, it can't be pushed out: a shock every 12 frames for the field's whole second
-    fight = versus(QUINT, TRIO, 60.0)
-    quint, trio = fight.fighters["p1"], fight.fighters["p2"]
-    trio.x = STAGE_RIGHT
-    quint.x = STAGE_RIGHT - 60
+    fight = versus(BOHR, ROBERT, 60.0)
+    bohr, robert = fight.fighters["p1"], fight.fighters["p2"]
+    robert.x = STAGE_RIGHT
+    bohr.x = STAGE_RIGHT - 60
     hold = {i: DOWN for i in range(100)}
     events = script(fight, 100, p1={**hold, 0: FighterInput(down=True, x=True)})
     shocks = len(of(events, "hit"))
@@ -722,7 +722,7 @@ def test_charge_noise_shocks_again_and_again_in_quints_colour():
 
 
 def test_charge_noise_bounces_off_the_other_colour():
-    fight, events = noise_at(60.0, trio_basis=X_BASIS)
+    fight, events = noise_at(60.0, robert_basis=X_BASIS)
     assert {e.kind for e in of(events, "hit", "block")} == {"block"}
     assert fight.fighters["p2"].health == 100
 
@@ -730,31 +730,31 @@ def test_charge_noise_bounces_off_the_other_colour():
 def test_charge_noise_reaches_all_round_and_not_far():
     fight, events = noise_at(140.0)
     assert of(events, "hit", "block") == []
-    fight = versus(QUINT, TRIO, 60.0)
-    fight.fighters["p2"].x = fight.fighters["p1"].x - 55        # behind QUINT
+    fight = versus(BOHR, ROBERT, 60.0)
+    fight.fighters["p2"].x = fight.fighters["p1"].x - 55        # behind BOHR
     hold = {i: DOWN for i in range(60)}
     events = script(fight, 60, p1={**hold, 0: FighterInput(down=True, x=True)})
     assert of(events, "hit")
 
 
 def test_charge_noise_cannot_be_ducked_or_jumped():
-    fight, events = noise_at(60.0, trio_input=DOWN)
+    fight, events = noise_at(60.0, robert_input=DOWN)
     assert of(events, "hit")
-    fight, events = noise_at(60.0, trio_input=FighterInput(up=True), frames=50)
+    fight, events = noise_at(60.0, robert_input=FighterInput(up=True), frames=50)
     assert of(events, "hit")
 
 
 def test_a_shocked_rival_can_walk_out_of_charge_noise():
-    # TRIO stands in the field until the first shock, then walks away: the 10-frame stun
+    # ROBERT stands in the field until the first shock, then walks away: the 10-frame stun
     # leaves free frames between shocks, so it gets out after a shock or two more at most
-    fight = versus(QUINT, TRIO, 60.0)
-    trio = fight.fighters["p2"]
+    fight = versus(BOHR, ROBERT, 60.0)
+    robert = fight.fighters["p2"]
     events = []
     for i in range(100):
         away = FighterInput(dx=1) if of(events, "hit") else IDLE
         events += fight.step({"p1": FighterInput(down=True, x=i == 0), "p2": away})
     assert 1 <= len(of(events, "hit")) <= 3
-    assert trio.x - fight.fighters["p1"].x > 80          # out of the field's reach
+    assert robert.x - fight.fighters["p1"].x > 80          # out of the field's reach
 
 
 def test_charge_noise_has_a_3_s_cooldown():
@@ -765,49 +765,49 @@ def test_charge_noise_has_a_3_s_cooldown():
     assert of(events, "attack") == []
 
 
-def collapse(trio_dx, crouching=False, press_at=60, trio_basis=Z_BASIS):
-    """QUINT (p1) jumps straight up and presses X once it is higher than `press_at` px
+def collapse(robert_dx, crouching=False, press_at=60, robert_basis=Z_BASIS):
+    """BOHR (p1) jumps straight up and presses X once it is higher than `press_at` px
     (on the way up), or, with a negative press_at, once it is falling and lower than
-    -press_at. A TRIO stands (or crouches) trio_dx px to its right, in trio_basis. Returns
-    the hits and blocks as (kind, error), and the TRIO."""
-    fight = versus(QUINT, TRIO, trio_dx)
-    trio = fight.fighters["p2"]
-    trio.basis = trio_basis
-    quint = fight.fighters["p1"]
+    -press_at. A ROBERT stands (or crouches) robert_dx px to its right, in robert_basis. Returns
+    the hits and blocks as (kind, error), and the ROBERT."""
+    fight = versus(BOHR, ROBERT, robert_dx)
+    robert = fight.fighters["p2"]
+    robert.basis = robert_basis
+    bohr = fight.fighters["p1"]
     events, pressed = [], False
     for i in range(200):
-        due = quint.y > press_at if press_at > 0 else 0 < quint.y < -press_at and quint.vy < 0
+        due = bohr.y > press_at if press_at > 0 else 0 < bohr.y < -press_at and bohr.vy < 0
         inp = FighterInput(up=True) if i == 0 else IDLE
-        if not pressed and quint.action == "jump" and due:
+        if not pressed and bohr.action == "jump" and due:
             inp, pressed = X, True
         events += fight.step({"p1": inp, "p2": DOWN if crouching else IDLE})
     assert pressed
-    return [(e.kind, e.error) for e in of(events, "hit", "block")], trio
+    return [(e.kind, e.error) for e in of(events, "hit", "block")], robert
 
 
-def test_collapse_slam_and_shockwave_are_both_quints_colour():
-    # onto a standing green TRIO: slam and shockwave both green, both hurt
-    hits, trio = collapse(48.0)
+def test_collapse_slam_and_shockwave_are_both_bohrs_colour():
+    # onto a standing green ROBERT: slam and shockwave both green, both hurt
+    hits, robert = collapse(48.0)
     assert [h[0] for h in hits] == ["hit", "hit"] and {h[1] for h in hits} == {basis.X}
-    assert trio.health == 100 - 2 * QUINT.moves["air.X"].damage
-    # onto a purple TRIO: both bounce
-    hits, trio = collapse(48.0, trio_basis=X_BASIS)
-    assert [h[0] for h in hits] == ["block", "block"] and trio.health == 100
+    assert robert.health == 100 - 2 * BOHR.moves["air.X"].damage
+    # onto a purple ROBERT: both bounce
+    hits, robert = collapse(48.0, robert_basis=X_BASIS)
+    assert [h[0] for h in hits] == ["block", "block"] and robert.health == 100
     # far away: nothing
-    hits, trio = collapse(150.0)
-    assert hits == [] and trio.health == 100
+    hits, robert = collapse(150.0)
+    assert hits == [] and robert.health == 100
 
 
 def test_the_collapse_slam_lands_on_a_crouching_rival():
     # the slam is MID: a body falling on you can't be ducked (only the shockwave can be jumped)
-    hits, trio = collapse(10.0, crouching=True)
+    hits, robert = collapse(10.0, crouching=True)
     assert [h[0] for h in hits] == ["hit", "hit"]          # the slam, then the shockwave
 
 
 def test_a_collapse_whose_drawn_legs_land_on_the_rival_hits():
     # the slam's hitbox is the legs as drawn (feet to hip, knees and limb width included)
     from brawl_ket.poses import LIMB_W, POSES, joints
-    m = QUINT.moves["air.X"]
+    m = BOHR.moves["air.X"]
     j = joints(POSES["slam"], "heavy", (0, 0), 1)
     half = max(abs(j[k][0]) for k in ("foot_f", "foot_b", "knee_f", "knee_b")) + LIMB_W["heavy"] / 2
     assert m.hitbox.x <= -half + 1 and m.hitbox.x + m.hitbox.w >= half - 1
@@ -815,8 +815,8 @@ def test_a_collapse_whose_drawn_legs_land_on_the_rival_hits():
 
 
 def test_a_collapse_that_lands_before_it_dives_has_no_shockwave():
-    hits, trio = collapse(48.0, press_at=-25)
-    assert hits == [] and trio.health == 100
+    hits, robert = collapse(48.0, press_at=-25)
+    assert hits == [] and robert.health == 100
 
 
 def chain_on(fight, attacker, buttons):
@@ -842,24 +842,24 @@ def test_a_then_b_lands_exactly_one_half_in_every_pairing():
 
 
 def test_a_collapse_landing_reports_its_shockwave():
-    fight = versus(QUINT, TRIO, 150.0)
-    quint = fight.fighters["p1"]
+    fight = versus(BOHR, ROBERT, 150.0)
+    bohr = fight.fighters["p1"]
     events = []
     for i in range(120):
-        inp = FighterInput(up=True) if i == 0 else X if quint.action == "jump" and quint.y > 60 else IDLE
+        inp = FighterInput(up=True) if i == 0 else X if bohr.action == "jump" and bohr.y > 60 else IDLE
         events += fight.step({"p1": inp})
     (wave,) = of(events, "shockwave")
-    assert (wave.player, wave.error) == ("p1", basis.X)       # QUINT's colour: green
-    assert wave.x == quint.x and wave.y == FLOOR_Y
+    assert (wave.player, wave.error) == ("p1", basis.X)       # BOHR's colour: green
+    assert wave.x == bohr.x and wave.y == FLOOR_Y
     # a plain jump's landing has none
-    fight = versus(QUINT, TRIO, 150.0)
+    fight = versus(BOHR, ROBERT, 150.0)
     assert of(script(fight, 80, p1={0: FighterInput(up=True)}), "shockwave") == []
 
 
 def test_the_push_box_fits_each_pairing():
     assert BODY_WIDTH == 44 and THROW_RANGE == BODY_WIDTH + THROW_SLACK
-    assert body_width(TRIO, QUINT) == body_width(QUINT, TRIO) > BODY_WIDTH
-    assert body_width(QUINT, QUINT) > body_width(TRIO, QUINT)
+    assert body_width(ROBERT, BOHR) == body_width(BOHR, ROBERT) > BODY_WIDTH
+    assert body_width(BOHR, BOHR) > body_width(ROBERT, BOHR)
     for c1, c2 in PAIRINGS:
         fight = versus(c1, c2, 200.0)
         for _ in range(150):
@@ -881,7 +881,7 @@ def test_a_throw_works_from_the_closest_spacing_to_the_end_of_its_range():
 
 # --- PHASE SLIDE passes under photons ---------------------------------------------------
 
-SLIDE = TRIO.moves["crouch.X"]
+SLIDE = ROBERT.moves["crouch.X"]
 DOWN_X = FighterInput(down=True, x=True)
 
 
@@ -997,8 +997,8 @@ def jab_reach(c1, c2, crouch=False):
     return max(g for g in range(20, 120) if run_chain(c1, c2, g, ["a"], crouch) == 1)
 
 
-@pytest.mark.parametrize("c1,c2", [(TRIO, TRIO), (TRIO, QUINT), (QUINT, TRIO), (QUINT, QUINT)],
-                         ids=["TRIO-TRIO", "TRIO-QUINT", "QUINT-TRIO", "QUINT-QUINT"])
+@pytest.mark.parametrize("c1,c2", [(ROBERT, ROBERT), (ROBERT, BOHR), (BOHR, ROBERT), (BOHR, BOHR)],
+                         ids=["ROBERT-ROBERT", "ROBERT-BOHR", "BOHR-ROBERT", "BOHR-BOHR"])
 @pytest.mark.parametrize("crouch", [False, True], ids=["stand", "crouch"])
 def test_a_chain_that_starts_with_a_hit_lands_every_hit(c1, c2, crouch):
     lo = round(body_width(c1, c2))
@@ -1055,7 +1055,7 @@ def test_switching_is_always_possible():
     script(fight, 1, p2=Y)                  # pressed in the hit freeze: it lands as play resumes
     script(fight, fight.hitstop + 1)
     assert p2.basis == X_BASIS
-    p2.take_hit(TRIO.moves["crouch.B"], basis.Y, -1)
+    p2.take_hit(ROBERT.moves["crouch.B"], basis.Y, -1)
     assert p2.action == "knockdown"
     script(fight, 1, p2=Y)
     assert p2.basis == Z_BASIS
@@ -1110,7 +1110,7 @@ from brawl_ket.fight import can_reach  # noqa: E402
 
 
 def test_high_whiffs_on_a_crouch_and_low_on_a_jump():
-    f = Fight({"p1": TRIO, "p2": TRIO}).fighters["p2"]
+    f = Fight({"p1": ROBERT, "p2": ROBERT}).fighters["p2"]
     assert can_reach(HIGH, f) and can_reach(MID, f) and can_reach(LOW, f)
     f.crouching = True
     assert not can_reach(HIGH, f) and can_reach(MID, f) and can_reach(LOW, f)
@@ -1136,11 +1136,11 @@ def test_a_crouching_rival_ducks_a_photon():
 def test_measure_reaches_130_px():
     # Reach is the largest starting gap (between the fighters' x, from a standing start)
     # at which the grab still connects: the measure the playtest's "about 75 px" used.
-    fight = versus(QUINT, TRIO, 125.0)
+    fight = versus(BOHR, ROBERT, 125.0)
     events = script(fight, 60, p1={0: X})
     assert [(e.kind, e.error) for e in of(events, "hit", "block")] == [("hit", basis.Y)]
     for gap in (140.0, 150.0):
-        fight = versus(QUINT, TRIO, gap)
+        fight = versus(BOHR, ROBERT, gap)
         assert of(script(fight, 60, p1={0: X}), "hit", "block") == [], gap
 
 
@@ -1178,7 +1178,7 @@ def test_a_dive_that_hits_bounces_back():
 
 
 def test_collapse_shockwave_reaches_60_px_either_side():
-    m = QUINT.moves["air.X"]
+    m = BOHR.moves["air.X"]
     assert m.landing == Box(-60, 0, 120, 14) and m.dive == (2.0, 9.0)
 
 
@@ -1195,20 +1195,20 @@ def test_a_bounced_dive_recovers_on_landing_and_cannot_attack_again_in_the_air()
     assert attacks[0] < hit_at                      # the DIVE itself
     assert not [i for i in attacks if hit_at < i <= land_at]     # no second air move
     later = [i for i in attacks if i > land_at]
-    assert later and later[0] - land_at >= TRIO.moves["air.X"].recovery
+    assert later and later[0] - land_at >= ROBERT.moves["air.X"].recovery
 
 
 def test_measure_catches_a_jumping_rival():
-    fight = versus(QUINT, TRIO, 64.0)
-    trio = fight.fighters["p2"]
-    events = script(fight, 40, p1={0: X}, p2={QUINT.moves["stand.X"].startup - 2: FighterInput(up=True)})
+    fight = versus(BOHR, ROBERT, 64.0)
+    robert = fight.fighters["p2"]
+    events = script(fight, 40, p1={0: X}, p2={BOHR.moves["stand.X"].startup - 2: FighterInput(up=True)})
     hits = of(events, "hit", "block")
     assert [(e.kind, e.error) for e in hits] == [("hit", basis.Y)]
-    assert trio.action == "knockdown"
+    assert robert.action == "knockdown"
 
 
 def test_a_jump_clears_a_sweep_that_hits_a_standing_rival():
-    SWEEP = TRIO.moves["crouch.B"]
+    SWEEP = ROBERT.moves["crouch.B"]
     sweep = {0: FighterInput(down=True, b=True)}
     # standing, the sweep (the other colour: it matches a purple rival) hits on its first
     # active frame
@@ -1254,8 +1254,8 @@ def longest_string(c1, c2, button, crouch, every):
     return best
 
 
-@pytest.mark.parametrize("c1,c2", [(TRIO, TRIO), (TRIO, QUINT), (QUINT, TRIO), (QUINT, QUINT)],
-                         ids=["TRIO-TRIO", "TRIO-QUINT", "QUINT-TRIO", "QUINT-QUINT"])
+@pytest.mark.parametrize("c1,c2", [(ROBERT, ROBERT), (ROBERT, BOHR), (BOHR, ROBERT), (BOHR, BOHR)],
+                         ids=["ROBERT-ROBERT", "ROBERT-BOHR", "BOHR-ROBERT", "BOHR-BOHR"])
 def test_mashing_a_normal_is_never_an_infinite(c1, c2):
     for button in ("a", "b"):
         for crouch in (False, True):

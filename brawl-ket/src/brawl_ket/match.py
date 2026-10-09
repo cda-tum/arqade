@@ -21,7 +21,7 @@ from .fighter import IDLE
 from .moves import CHARACTERS
 
 PLAYERS = ("p1", "p2")
-ROSTER = tuple(CHARACTERS.values())     # the select screen's order: TRIO, QUINT
+ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOHR
 
 TITLE = "title"
 SELECT = "select"

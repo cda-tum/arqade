@@ -5,7 +5,7 @@ import pytest
 from brawl_ket.config import FLOOR_Y
 from brawl_ket.fight import SHOT_SPAWN_OFFSET
 from brawl_ket.fighter import Fighter
-from brawl_ket.moves import CHARACTERS, QUINT, TRIO, Move
+from brawl_ket.moves import CHARACTERS, BOHR, ROBERT, Move
 from brawl_ket.poses import (
     EASE_FRAMES,
     HEAD_R,
@@ -71,8 +71,8 @@ def test_every_move_with_a_hitbox_names_its_striker():
             assert move.name in STRIKER, move.name
 
 
-def test_quints_specials_have_their_own_poses():
-    moves = QUINT.moves
+def test_bohrs_specials_have_their_own_poses():
+    moves = BOHR.moves
     assert moves["stand.X"].poses[:2] == ("grab_wind", "grab")
     assert moves["crouch.X"].poses[1] == "brace"
     assert moves["air.X"].poses[1] == "slam"
@@ -119,7 +119,7 @@ def test_lerp_midpoint():
 
 
 def fighter(action="idle", **kw):
-    f = Fighter(TRIO, 300, 1)
+    f = Fighter(ROBERT, 300, 1)
     f.action = action
     for k, v in kw.items():
         setattr(f, k, v)
@@ -130,7 +130,7 @@ def fighter(action="idle", **kw):
 def test_pose_for_every_action(action):
     f = fighter(action)
     if action == "attack":
-        f.move, f.slot = TRIO.moves["stand.A"], "stand.A"
+        f.move, f.slot = ROBERT.moves["stand.A"], "stand.A"
     if action in ("hitstun", "knockdown"):
         f.stun = 10
     for frame in range(40):
@@ -168,7 +168,7 @@ def test_startup_and_recovery_end_on_their_keyframes():
 
 
 def test_startup_eases_in_from_the_pose_reached():
-    move = TRIO.moves["stand.B"]
+    move = ROBERT.moves["stand.B"]
     f = fighter("attack", move=move, slot="stand.B", frame=0)
     start = POSES["jab_hit"]        # cancelled out of a jab's strike
     n = min(EASE_FRAMES, move.startup)
@@ -259,8 +259,8 @@ def test_the_striking_limb_reaches_the_hitbox_on_impact(char, slot):
 
 
 def test_photon_leaves_from_the_hand():
-    move = TRIO.moves["stand.X"]
-    j = joints(POSES[move.poses[1]], TRIO.build, FEET, 1)
+    move = ROBERT.moves["stand.X"]
+    j = joints(POSES[move.poses[1]], ROBERT.build, FEET, 1)
     box = move.projectile.box
     spawn = (FEET[0] + SHOT_SPAWN_OFFSET + box.x, FEET[1] - (box.y + box.h), box.w, box.h)
     assert distance_to_box(j["hand_f"], spawn) <= REACH
@@ -270,7 +270,7 @@ def test_photon_leaves_from_the_hand():
 
 
 def test_a_chained_move_eases_into_its_wind_up_over_its_own_short_startup():
-    heavy = TRIO.moves["stand.B"]
+    heavy = ROBERT.moves["stand.B"]
     f = fighter("attack", move=heavy, slot="stand.B", chained=True)
     f.frame = heavy.chain_startup - 1
     assert pose_for(f) == POSES[heavy.poses[0]]         # ends on the keyframe
@@ -279,7 +279,7 @@ def test_a_chained_move_eases_into_its_wind_up_over_its_own_short_startup():
 
 
 def test_a_neutral_heavy_holds_its_wind_up_until_its_startup_ends():
-    heavy = TRIO.moves["stand.B"]
+    heavy = ROBERT.moves["stand.B"]
     f = fighter("attack", move=heavy, slot="stand.B")
     for frame in range(EASE_FRAMES, heavy.startup):
         f.frame = frame
@@ -305,6 +305,6 @@ def test_the_slide_is_drawn_under_a_photon():
     j = joints(POSES["slide"], "lean", (0, 0), 1)
     top = max(-y for _, y in j.values())
     head_top = -j["head"][1] + HEAD_R["lean"] + 2      # the ink outline
-    photon_bottom = TRIO.moves["stand.X"].projectile.box.y
+    photon_bottom = ROBERT.moves["stand.X"].projectile.box.y
     assert head_top < photon_bottom and top < photon_bottom
-    assert TRIO.moves["crouch.X"].hurt_active.h < photon_bottom
+    assert ROBERT.moves["crouch.X"].hurt_active.h < photon_bottom

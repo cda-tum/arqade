@@ -96,8 +96,8 @@ SLOTS = (
     "throw",
 )
 
-TRIO = Character(
-    name="TRIO",
+ROBERT = Character(
+    name="ROBERT",
     build="lean",
     health=100,
     walk=2.2,
@@ -159,13 +159,13 @@ TRIO = Character(
             kind="special", lunge=5.0, hurt_active=Box(-74, 0, 130, 50),
             poses=("crouch", "slide", "crouch"),
         ),
-        # When it lands, TRIO switches basis (an H on itself, at once and
-        # with no recovery), so its follow-up's colours flip with it: TRIO's mix-up tool.
+        # When it lands, ROBERT switches basis (an H on itself, at once and
+        # with no recovery), so its follow-up's colours flip with it: ROBERT's mix-up tool.
         "air.X": Move(
             "HADAMARD DIVE", 3, 40, 8, Box(6, 0, 26, 20), OWN, MID,
             damage=10, hitstun=18, knockback=3.0, switch_self_on_hit=True,
             # Steep and fast: 13 px/frame lands about 14 frames after the apex, startup
-            # included. The spec's 10 px/frame can't make its ~12 frames: TRIO's jump peaks
+            # included. The spec's 10 px/frame can't make its ~12 frames: ROBERT's jump peaks
             # at about 138 px, so the fall alone would take 14 frames (17 with the startup).
             kind="special", dive=(3.0, 13.0),
             poses=("jump", "dive", "crouch"),
@@ -173,15 +173,15 @@ TRIO = Character(
     }),
 )
 
-QUINT = Character(
-    name="QUINT",
+BOHR = Character(
+    name="BOHR",
     build="heavy",
     health=115,                         # slower and broader, so a little sturdier
     walk=1.5,
     jump_vy=10.5,
-    gravity=0.55,                       # an apex of about 100 px: lower and heavier than TRIO's
+    gravity=0.55,                       # an apex of about 100 px: lower and heavier than ROBERT's
     hurt_stand=Box(-18, 0, 36, 132),
-    hurt_crouch=Box(-20, 0, 40, 104),   # to about the drawn head's centre, as TRIO's
+    hurt_crouch=Box(-20, 0, 40, 104),   # to about the drawn head's centre, as ROBERT's
     moves=MappingProxyType({
         "stand.A": Move(
             "jab", 6, 3, 10, Box(16, 76, 46, 16), OWN, HIGH,
@@ -222,7 +222,7 @@ QUINT = Character(
             poses=("throw_reach", "throw_hold", "idle"),
         ),
         # A dashing command throw: a Y like any throw (it hurts either colour), and it measures
-        # the rival into QUINT's basis, so QUINT's A (its own colour) matches them next. Much
+        # the rival into BOHR's basis, so BOHR's A (its own colour) matches them next. Much
         # further than a throw, but a whiff leaves a long recovery. Reach is measured as the largest starting gap (between the two
         # fighters' x, from a standing start) at which the grab still connects, as the
         # playtest measured "about 75 px": 13 active frames dashing at 6 px/frame, plus the
@@ -233,9 +233,9 @@ QUINT = Character(
             kind="throw", lunge=6.0,
             poses=("grab_wind", "grab", "throw_hold"),
         ),
-        # QUINT plants itself and crackles with charge noise (a real source of qubit errors): a
+        # BOHR plants itself and crackles with charge noise (a real source of qubit errors): a
         # field about 60 px all round its body that shocks whoever is inside every 12 frames, for
-        # 1 s, in QUINT's colour. MID: it can't be ducked or jumped; the way out is distance (each
+        # 1 s, in BOHR's colour. MID: it can't be ducked or jumped; the way out is distance (each
         # shock pushes the victim back, and its 8-frame stun leaves 4 free frames before the
         # next) or being the other colour.
         "crouch.X": Move(
@@ -245,7 +245,7 @@ QUINT = Character(
             poses=("crouch", "brace", "crouch"),
         ),
         # A body slam that drifts towards the rival: the slam and the landing shockwave (60 px
-        # either side; fight.py, _Landing) are both QUINT's colour. The slam's box is the legs as
+        # either side; fight.py, _Landing) are both BOHR's colour. The slam's box is the legs as
         # drawn, feet to hip; it is MID (a body falling on you can't be ducked), the shockwave
         # LOW (a jump clears it).
         "air.X": Move(
@@ -258,4 +258,4 @@ QUINT = Character(
     }),
 )
 
-CHARACTERS: dict[str, Character] = {"TRIO": TRIO, "QUINT": QUINT}
+CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR}

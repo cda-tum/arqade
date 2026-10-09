@@ -234,7 +234,7 @@ def build_sfx() -> dict[str, list[int]]:
         "ping": concat(tone(c("E6"), 0.03, 0.2, "triangle"), tone(c("B6"), 0.09, 0.16, "triangle", decay=18)),
         # a basis switch (an H): a quick rising whoosh
         "whoosh": mix(tone(400, 0.12, 0.14, "triangle", decay=8, slide=2.5), noise_wave(0.1, 0.1, decay=25, hold=2, seed=4)),
-        # MEASURE collapsing the rival into QUINT's basis: a falling zap
+        # MEASURE collapsing the rival into BOHR's basis: a falling zap
         "measure": tone(c("C6"), 0.18, 0.2, "square", decay=10, slide=0.35),
         "photon": tone(700, 0.16, 0.2, "pulse", decay=10, slide=2.2),
         "shockwave": mix(tone(70, 0.3, 0.45, "sine", decay=8, slide=0.5), noise_wave(0.25, 0.3, decay=12, hold=6)),

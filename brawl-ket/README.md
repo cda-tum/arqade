@@ -11,7 +11,7 @@ replaces the repetition-code v1 and the Shor-code v2, which playtests found
 too hard to read).
 
 **Status:**
-- **The game:** two fighters (TRIO and QUINT), versus only, best of 3
+- **The game:** two fighters (ROBERT and BOHR), versus only, best of 3
   rounds of 60 s.
 - **Screens:** chunky GBA-style puppets at 640x360 (x3 on the cabinet), the
   title with a bot demo, character select, round calls and pause.
@@ -45,7 +45,7 @@ changes, so the rule a player reads is: **colour must match to hurt.**
 - **Heights:** standing normals are HIGH (a crouch ducks them), crouching
   normals LOW (a jump clears them), air normals and throws MID.
 - **Damage:** light 4, heavy 8, special 10, throw 10, MEASURE 12, CHARGE NOISE
-  3 a shock. Health: TRIO 100, QUINT 115. Lights stun briefly enough that mashing
+  3 a shock. Health: ROBERT 100, BOHR 115. Lights stun briefly enough that mashing
   can't loop, and getting up from a knockdown is invulnerable for 8 frames.
 
 On screen: P1 has a blue ring under their feet and P2 a red one; each health
@@ -55,11 +55,11 @@ colour from the wind-up on, so you see before contact whether it will match. A w
 
 ## The fighters
 
-| | TRIO | QUINT |
+| | ROBERT | BOHR |
 |---|---|---|
 | Build | lean and fast, high jump | heavy and slow, long reach, 115 health |
-| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into QUINT's basis |
-| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round QUINT (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) |
+| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis |
+| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) |
 | Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too |
 
 Both share the normals: A is a jab (standing, crouching, in the air), B a
@@ -101,7 +101,7 @@ uv run python tools/benchmark.py                    # frame cost (on the cabinet
 | Module | Role |
 |---|---|
 | `basis.py` | The two bases, which errors change which, H, and each attack's error from its colour rule. Pure, exact, tested against 2x2 matrices. |
-| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, TRIO and QUINT. |
+| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT and BOHR. |
 | `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). Pure. |
 | `match.py` | Title, select, rounds, the result, pause, idle and the attract demo. Pure. |
 | `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens. |

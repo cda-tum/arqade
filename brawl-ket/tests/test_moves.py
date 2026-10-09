@@ -5,7 +5,7 @@ import pytest
 from brawl_ket import config
 from brawl_ket.basis import BOTH, OPPOSITE, OWN
 from brawl_ket.moves import HIGH, LOW, MID
-from brawl_ket.moves import CHARACTERS, QUINT, SLOTS, TRIO, Box
+from brawl_ket.moves import CHARACTERS, BOHR, SLOTS, ROBERT, Box
 
 
 def all_moves():
@@ -43,8 +43,8 @@ def test_a_chain_startup_is_never_slower_than_the_neutral_one():
 
 
 STARTUPS = {   # spec section 3: (A, B on its own, B cancelled from a hit A)
-    "TRIO": (4, 10, 7),
-    "QUINT": (6, 13, 9),
+    "ROBERT": (4, 10, 7),
+    "BOHR": (6, 13, 9),
 }
 
 
@@ -56,9 +56,9 @@ def test_heavies_are_fast():
             assert (c.moves[heavy].startup, c.moves[heavy].chain_startup) == (b, chained), (c.name, heavy)
 
 
-def test_quint_winds_up_slower_than_trio():
+def test_bohr_winds_up_slower_than_robert():
     for slot in ("stand.B", "crouch.B"):
-        assert CHARACTERS["QUINT"].moves[slot].startup > CHARACTERS["TRIO"].moves[slot].startup
+        assert CHARACTERS["BOHR"].moves[slot].startup > CHARACTERS["ROBERT"].moves[slot].startup
 
 
 def test_no_heavy_recovers_into_its_wind_up_pose():
@@ -96,22 +96,22 @@ def test_the_damage():
 
 
 def test_health():
-    assert (TRIO.health, QUINT.health) == (100, 115)
+    assert (ROBERT.health, BOHR.health) == (100, 115)
 
 
 def test_photon_has_a_cooldown():
-    assert TRIO.moves["stand.X"].cooldown == config.frames(2.5)
+    assert ROBERT.moves["stand.X"].cooldown == config.frames(2.5)
 
 
-def test_trio_jump_numbers():
-    trio = CHARACTERS["TRIO"]
-    assert (trio.jump_vy, trio.gravity) == (12.0, 0.5)
+def test_robert_jump_numbers():
+    robert = CHARACTERS["ROBERT"]
+    assert (robert.jump_vy, robert.gravity) == (12.0, 0.5)
 
 
 def test_the_jab_boxes_are_long():
-    trio = CHARACTERS["TRIO"].moves
-    assert trio["stand.A"].hitbox == Box(14, 70, 44, 14)
-    assert trio["crouch.A"].hitbox == Box(12, 20, 44, 12)
+    robert = CHARACTERS["ROBERT"].moves
+    assert robert["stand.A"].hitbox == Box(14, 70, 44, 14)
+    assert robert["crouch.A"].hitbox == Box(12, 20, 44, 12)
 
 
 # --- cross-field invariants -------------------------------------------------------------------
@@ -141,11 +141,11 @@ def test_a_landing_shockwave_always_has_its_colour():
             assert m.dive is not None, (c.name, slot)     # it is opened by a dive's landing
 
 
-# --- QUINT ------------------------------------------------------------------------------------
+# --- BOHR ------------------------------------------------------------------------------------
 
 
-def test_quint_stats():
-    q = CHARACTERS["QUINT"]
+def test_bohr_stats():
+    q = CHARACTERS["BOHR"]
     assert (q.build, q.health) == ("heavy", 115)
     assert (q.walk, q.jump_vy, q.gravity) == (1.5, 10.5, 0.55)
     assert q.hurt_stand == Box(-18, 0, 36, 132)
@@ -153,7 +153,7 @@ def test_quint_stats():
 
 
 def test_the_crouch_hurtbox_covers_the_drawn_crouch():
-    # up to about the head's centre, as TRIO's does: a hit on the drawn shoulders must land
+    # up to about the head's centre, as ROBERT's does: a hit on the drawn shoulders must land
     from brawl_ket.poses import POSES, joints
     for c in CHARACTERS.values():
         j = joints(POSES["crouch"], c.build, (0.0, 0.0), 1)
@@ -164,14 +164,14 @@ def apex(c):
     return c.jump_vy ** 2 / (2 * c.gravity)
 
 
-def test_quint_is_the_slower_heavier_fighter():
-    trio, quint = CHARACTERS["TRIO"], CHARACTERS["QUINT"]
-    assert quint.walk < trio.walk
-    assert 95 <= apex(quint) <= 105 < apex(trio)        # about 100 px: lower and heavier
-    assert quint.hurt_stand.w > trio.hurt_stand.w and quint.hurt_stand.h > trio.hurt_stand.h
+def test_bohr_is_the_slower_heavier_fighter():
+    robert, bohr = CHARACTERS["ROBERT"], CHARACTERS["BOHR"]
+    assert bohr.walk < robert.walk
+    assert 95 <= apex(bohr) <= 105 < apex(robert)        # about 100 px: lower and heavier
+    assert bohr.hurt_stand.w > robert.hurt_stand.w and bohr.hurt_stand.h > robert.hurt_stand.h
 
 
-QUINT_FRAMES = {
+BOHR_FRAMES = {
     # slot: (name, startup, active, recovery, hitbox, hitstun, knockback)
     "stand.A": ("jab", 6, 3, 10, Box(16, 76, 46, 16), 17, 1.0),
     "stand.B": ("heavy", 13, 5, 20, Box(16, 70, 48, 22), 22, 6.0),
@@ -186,17 +186,17 @@ QUINT_FRAMES = {
 }
 
 
-def test_quint_frame_data():
-    moves = CHARACTERS["QUINT"].moves
-    assert set(QUINT_FRAMES) == set(moves)
-    for slot, row in QUINT_FRAMES.items():
+def test_bohr_frame_data():
+    moves = CHARACTERS["BOHR"].moves
+    assert set(BOHR_FRAMES) == set(moves)
+    for slot, row in BOHR_FRAMES.items():
         m = moves[slot]
         got = (m.name, m.startup, m.active, m.recovery, m.hitbox, m.hitstun, m.knockback)
         assert got == row, slot
 
 
-def test_quint_specials():
-    moves = CHARACTERS["QUINT"].moves
+def test_bohr_specials():
+    moves = CHARACTERS["BOHR"].moves
     assert moves["stand.A"].cancels == ("stand.A", "stand.B")
     assert moves["crouch.A"].cancels == ("crouch.A", "crouch.B")
     assert moves["crouch.B"].knockdown and moves["throw"].knockdown
@@ -210,8 +210,8 @@ def test_quint_specials():
     assert (collapse.landing, collapse.colour, collapse.landing_colour) == (Box(-60, 0, 120, 14), OWN, OWN)
 
 
-def test_quint_light_reach_is_long():
-    moves = CHARACTERS["QUINT"].moves
+def test_bohr_light_reach_is_long():
+    moves = CHARACTERS["BOHR"].moves
     assert moves["stand.A"].hitbox == Box(16, 76, 46, 16)
     assert moves["crouch.A"].hitbox == Box(14, 22, 46, 14)
 
@@ -229,12 +229,12 @@ def test_a_is_your_colour_b_the_other_and_throws_both():
 
 
 SPECIALS = {   # (character, slot): (colour rule, height, twist): every special is your colour
-    ("TRIO", "stand.X"): (OWN, HIGH, None),
-    ("TRIO", "crouch.X"): (OWN, LOW, None),
-    ("TRIO", "air.X"): (OWN, MID, "switch_self_on_hit"),
-    ("QUINT", "stand.X"): (BOTH, MID, "measure_rival"),     # a throw: both, like every throw
-    ("QUINT", "crouch.X"): (OWN, MID, "hit_every"),
-    ("QUINT", "air.X"): (OWN, MID, None),
+    ("ROBERT", "stand.X"): (OWN, HIGH, None),
+    ("ROBERT", "crouch.X"): (OWN, LOW, None),
+    ("ROBERT", "air.X"): (OWN, MID, "switch_self_on_hit"),
+    ("BOHR", "stand.X"): (BOTH, MID, "measure_rival"),     # a throw: both, like every throw
+    ("BOHR", "crouch.X"): (OWN, MID, "hit_every"),
+    ("BOHR", "air.X"): (OWN, MID, None),
 }
 TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every")
 
@@ -245,8 +245,8 @@ def test_the_specials_colours_and_twists():
         assert (m.colour, m.height) == (colour, height), (name, slot)
         assert [t for t in TWISTS if getattr(m, t)] == ([twist] if twist else []), (name, slot)
     names = {n: [CHARACTERS[n].moves[s].name for s in ("stand.X", "crouch.X", "air.X")] for n in CHARACTERS}
-    assert names == {"TRIO": ["PHOTON", "PHASE SLIDE", "HADAMARD DIVE"],
-                     "QUINT": ["MEASURE", "CHARGE NOISE", "COLLAPSE"]}
+    assert names == {"ROBERT": ["PHOTON", "PHASE SLIDE", "HADAMARD DIVE"],
+                     "BOHR": ["MEASURE", "CHARGE NOISE", "COLLAPSE"]}
 
 
 def test_only_specials_have_twists():

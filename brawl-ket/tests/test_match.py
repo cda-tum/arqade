@@ -20,7 +20,7 @@ from brawl_ket.match import (
     FrameInput,
     Match,
 )
-from brawl_ket.moves import QUINT, TRIO
+from brawl_ket.moves import BOHR, ROBERT
 
 
 def press(kind: str, player: str = "p1", **extra) -> FrameInput:
@@ -88,8 +88,8 @@ def test_a_or_start_on_the_title_goes_to_select() -> None:
 def test_select_starts_the_fight_with_the_picked_fighters() -> None:
     m = Match(random.Random(1))
     to_fight(m, p1=1, p2=0)
-    assert m.fight.fighters["p1"].char is QUINT
-    assert m.fight.fighters["p2"].char is TRIO
+    assert m.fight.fighters["p1"].char is BOHR
+    assert m.fight.fighters["p2"].char is ROBERT
     assert m.round_no == 1 and m.wins == {"p1": 0, "p2": 0}
 
 
@@ -209,7 +209,7 @@ def test_the_result_waits_then_a_rematches_with_the_same_picks() -> None:
     run(m, config.MATCH_RESULT_LOCK)
     m.update(press("confirm", "p2"))
     assert m.state == ROUND_INTRO and m.wins == {"p1": 0, "p2": 0} and m.round_no == 1
-    assert m.fight.fighters["p1"].char is QUINT and m.fight.fighters["p2"].char is QUINT
+    assert m.fight.fighters["p1"].char is BOHR and m.fight.fighters["p2"].char is BOHR
 
 
 def test_b_on_the_result_goes_to_the_title() -> None:

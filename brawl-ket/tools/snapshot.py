@@ -6,17 +6,17 @@ without a cabinet.
 Writes:
 - poses_lean.png, poses_heavy.png: every pose in POSE_NAMES, labelled, facing
   right, in P1's colours;
-- moves_lean.png, moves_heavy.png: every TRIO / QUINT move as a strip of frames, as pose_for
+- moves_lean.png, moves_heavy.png: every ROBERT / BOHR move as a strip of frames, as pose_for
   blends it;
 - fight_block.png: p1 jabs a purple p2 at 50 px, 2 frames on (the green jab bounces: the ping);
 - fight_throw.png: p1 throws p2, 2 frames on (Y!: green and purple);
 - fight_switch.png: p1 presses Y (an H), 2 frames on (the white flash, the H pop-up, the badge);
 - fight_strike.png: p1's heavy late in its wind-up (the fist glows in its colour);
-- quint_collapse_*.png: QUINT's COLLAPSE next to a standing purple TRIO: the fall (the green
+- bohr_collapse_*.png: BOHR's COLLAPSE next to a standing purple ROBERT: the fall (the green
   slam bounces), the landing shockwave just after it opens (green too: it bounces), and spread out;
-- quint_noise_*.png: QUINT's CHARGE NOISE on a TRIO: the wind-up sparks, and the field crackling;
-- quint_measure.png: MEASURE connecting on a purple TRIO, 3 frames on (the collapse into green);
-- vs_*.png: the same bot-fight moments as fight_*.png, TRIO (P1) against QUINT (P2), and
+- bohr_noise_*.png: BOHR's CHARGE NOISE on a ROBERT: the wind-up sparks, and the field crackling;
+- bohr_measure.png: MEASURE connecting on a purple ROBERT, 3 frames on (the collapse into green);
+- vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
 - screen_*.png: the match flow: the title, the attract demo, select (and with P1 ready),
   the ROUND 1 and FIGHT! calls, the pause menu, a K.O. with PERFECT, and the result;
@@ -45,7 +45,7 @@ from brawl_ket import palette as P
 from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
-from brawl_ket.moves import QUINT, TRIO
+from brawl_ket.moves import BOHR, ROBERT
 from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
 from brawl_ket.render import Renderer, draw_puppet, outlined
 
@@ -80,7 +80,7 @@ def pose_sheet(build: str) -> pygame.Surface:
     return sheet
 
 
-def move_sheet(char=TRIO) -> pygame.Surface:
+def move_sheet(char=ROBERT) -> pygame.Surface:
     """Each of a character's moves, one row: every few frames of it, as the game blends them."""
     strip = 9
     sheet = pygame.Surface((strip * 130, len(char.moves) * 220))
@@ -102,43 +102,43 @@ def move_sheet(char=TRIO) -> pygame.Surface:
     return sheet
 
 
-def quint_frames(out_dir: str) -> None:
-    """QUINT's specials, scripted against a TRIO: COLLAPSE, CHARGE NOISE and MEASURE."""
+def bohr_frames(out_dir: str) -> None:
+    """BOHR's specials, scripted against a ROBERT: COLLAPSE, CHARGE NOISE and MEASURE."""
     from brawl_ket.fighter import IDLE, FighterInput
 
     surface = pygame.Surface((W, H))
-    # COLLAPSE, landing 48 px from a standing purple TRIO: the slam bounces, the shockwave hurts
-    fight = Fight({"p1": QUINT, "p2": TRIO})
+    # COLLAPSE, landing 48 px from a standing purple ROBERT: the slam bounces, the shockwave hurts
+    fight = Fight({"p1": BOHR, "p2": ROBERT})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 300, 348
     fight.fighters["p2"].basis = X_BASIS
-    quint, r, since = fight.fighters["p1"], Renderer(surface), None
+    bohr, r, since = fight.fighters["p1"], Renderer(surface), None
     for i in range(80):
         inp = FighterInput(up=True) if i == 0 else \
-            FighterInput(x=True) if quint.action == "jump" and quint.y > 60 else IDLE
+            FighterInput(x=True) if bohr.action == "jump" and bohr.y > 60 else IDLE
         events = fight.step({"p1": inp, "p2": IDLE})
         r.draw_fight(fight, events, {"p1": 0, "p2": 0})
-        if quint.action == "attack" and quint.phase == "active" and 30 < quint.y < 60:
-            save(surface, out_dir, "quint_collapse_fall.png")
+        if bohr.action == "attack" and bohr.phase == "active" and 30 < bohr.y < 60:
+            save(surface, out_dir, "bohr_collapse_fall.png")
         if any(e.kind == "shockwave" for e in events):
             since = 0
         elif since is not None:
             since += 1
         if since in (1, 8):
-            save(surface, out_dir, f"quint_collapse_wave{since}.png")
-    # CHARGE NOISE on a TRIO 60 px away: the wind-up, and the field mid-shock
-    fight = Fight({"p1": QUINT, "p2": TRIO})
+            save(surface, out_dir, f"bohr_collapse_wave{since}.png")
+    # CHARGE NOISE on a ROBERT 60 px away: the wind-up, and the field mid-shock
+    fight = Fight({"p1": BOHR, "p2": ROBERT})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 290, 350
     r = Renderer(surface)
-    quint = fight.fighters["p1"]
+    bohr = fight.fighters["p1"]
     for i in range(40):
         events = fight.step({"p1": FighterInput(down=True, x=i == 0)})
         r.draw_fight(fight, events, {"p1": 0, "p2": 0})
-        if quint.phase == "startup" and quint.frame == 5:
-            save(surface, out_dir, "quint_noise_0.png")
-        if quint.phase == "active" and quint.frame - quint.startup == 14:
-            save(surface, out_dir, "quint_noise_1.png")
-    # MEASURE from 62 px onto a purple TRIO
-    fight = Fight({"p1": QUINT, "p2": TRIO})
+        if bohr.phase == "startup" and bohr.frame == 5:
+            save(surface, out_dir, "bohr_noise_0.png")
+        if bohr.phase == "active" and bohr.frame - bohr.startup == 14:
+            save(surface, out_dir, "bohr_noise_1.png")
+    # MEASURE from 62 px onto a purple ROBERT
+    fight = Fight({"p1": BOHR, "p2": ROBERT})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 290, 352
     fight.fighters["p2"].basis = X_BASIS
     r, since = Renderer(surface), None
@@ -150,7 +150,7 @@ def quint_frames(out_dir: str) -> None:
         elif since is not None:
             since += 1
         if since == 3:
-            save(surface, out_dir, "quint_measure.png")
+            save(surface, out_dir, "bohr_measure.png")
             break
 
 
@@ -171,7 +171,7 @@ def scripted_frames(out_dir: str) -> None:
         ("fight_switch", "switch", lambda i: FighterInput(y=i == 0), None),
     )
     for name, kind, p1_input, setup in scripts:
-        fight = Fight({"p1": TRIO, "p2": TRIO})
+        fight = Fight({"p1": ROBERT, "p2": ROBERT})
         fight.fighters["p1"].x, fight.fighters["p2"].x = 295, 345
         if setup is not None:
             setup(fight)
@@ -189,20 +189,20 @@ def scripted_frames(out_dir: str) -> None:
                 break
         else:
             print(f"never saw: {name}")
-    fight = Fight({"p1": TRIO, "p2": TRIO})
+    fight = Fight({"p1": ROBERT, "p2": ROBERT})
     fight.fighters["p1"].x, fight.fighters["p2"].x = 280, 360
     r = Renderer(surface)
-    for i in range(TRIO.moves["stand.B"].startup - 1):
+    for i in range(ROBERT.moves["stand.B"].startup - 1):
         r.draw_fight(fight, fight.step({"p1": FighterInput(b=i == 0), "p2": IDLE}), {"p1": 0, "p2": 0})
     save(surface, out_dir, "fight_strike.png")
 
 
 def close_frame(out_dir: str) -> None:
-    """TRIO and QUINT walked all the way into each other (the push box), and two QUINTs."""
+    """ROBERT and BOHR walked all the way into each other (the push box), and two BOHRs."""
     from brawl_ket.fighter import FighterInput
 
     surface = pygame.Surface((W, H))
-    for name, chars in (("vs_close", (TRIO, QUINT)), ("quint_mirror_close", (QUINT, QUINT))):
+    for name, chars in (("vs_close", (ROBERT, BOHR)), ("bohr_mirror_close", (BOHR, BOHR))):
         fight = Fight({"p1": chars[0], "p2": chars[1]})
         r = Renderer(surface)
         for _ in range(120):
@@ -211,7 +211,7 @@ def close_frame(out_dir: str) -> None:
         save(surface, out_dir, f"{name}.png")
 
 
-def find_frames(out_dir: str, chars=(TRIO, TRIO), prefix: str = "fight") -> None:
+def find_frames(out_dir: str, chars=(ROBERT, ROBERT), prefix: str = "fight") -> None:
     """Play bot fights until each wanted moment has been seen, saving the frame."""
     surface = pygame.Surface((W, H))
     wanted = {
@@ -308,13 +308,13 @@ def main(argv: list[str]) -> None:
     pygame.init()
     for build in SCALE:
         save(pose_sheet(build), out_dir, f"poses_{build}.png")
-    save(move_sheet(TRIO), out_dir, "moves_lean.png")
-    save(move_sheet(QUINT), out_dir, "moves_heavy.png")
-    quint_frames(out_dir)
+    save(move_sheet(ROBERT), out_dir, "moves_lean.png")
+    save(move_sheet(BOHR), out_dir, "moves_heavy.png")
+    bohr_frames(out_dir)
     scripted_frames(out_dir)
     close_frame(out_dir)
     find_frames(out_dir)
-    find_frames(out_dir, (TRIO, QUINT), "vs")
+    find_frames(out_dir, (ROBERT, BOHR), "vs")
     screen_frames(out_dir)
 
 
