@@ -36,7 +36,7 @@ def make_stage(name: str = "lab") -> tuple[pygame.Surface, Lights]:
     (in screen coordinates, without the margin)."""
     surf = pygame.Surface((W + 2 * MARGIN, H + 2 * MARGIN))
     lights: Lights = []
-    dict(zip(STAGES, (_lab, _cryo, _optics, _office)))[name](surf, lights)
+    dict(zip(STAGES, (_lab, _cryo, _optics, _office, _toronto)))[name](surf, lights)
     return surf, [(r.move(-MARGIN, -MARGIN), c) for r, c in lights]
 
 
@@ -391,3 +391,15 @@ def _office(surf, lights: Lights) -> None:
         _chair(surf, x + 44 + facing * 30, floor, facing)
     # the floor: grey carpet tiles
     _tiled_floor(surf, (120, 120, 136), (96, 96, 112), (144, 144, 160))
+
+
+# --- QUANTUM WEEK: Toronto at dusk -----------------------------------------------------------------
+# IEEE Quantum Week 2026 (QCE26) is at the Metro Toronto Convention Centre, at the foot of the
+# CN Tower: the skyline and the tower against a dusk sky, the centre's glass front with the
+# conference's purple sign, and the plaza in front of it.
+
+
+def _toronto(surf, lights: Lights) -> None:
+    surf.fill((96, 48, 120))
+    _tiled_floor(surf, (152, 136, 128), (120, 104, 104), (184, 168, 152))
+
