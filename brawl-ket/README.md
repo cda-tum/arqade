@@ -14,9 +14,9 @@ too hard to read).
 - **The game:** three fighters (ROBERT, BOHR and PHOEBE), versus only, best of 3
   rounds of 60 s.
 - **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat) at 640x360 (x3 on the cabinet), the
-  title with a bot demo, character select, round calls and pause.
-- **Stages:** four backdrops, one picked at random for each match (and each title
-  demo), kept for all its rounds. Visual only: the lab with its qubit racks, a
+  title with a bot demo, character select, stage select, round calls and pause.
+- **Stages:** four backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
+  for each match; the title demo always rolls), kept for all its rounds. Visual only: the lab with its qubit racks, a
   cryostat room with a superconducting quantum computer's gold "chandelier", a white
   laser lab, and the open-plan TUM Quantum Space office with the MQT logo on its glass
   wall.

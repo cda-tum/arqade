@@ -149,6 +149,8 @@ def test_every_match_screen_draws(surface):
     step(confirms=("p1", True))
     step(nav=("p2", (1, 0)))
     step(confirms=("p2", True))
+    step(nav=("p1", (1, 0)))                        # stage select: LAB
+    step(confirms=("p1", True))
     step(config.ROUND_INTRO_FRAMES // 2)
     step(pauses=("p1", True), confirms=("p1", True))
     step(3)
@@ -159,7 +161,7 @@ def test_every_match_screen_draws(surface):
         step(config.ROUND_END_FRAMES + config.ROUND_INTRO_FRAMES)
     step(config.MATCH_RESULT_LOCK + 2)
     states = {s for s, _, _ in seen}
-    assert states == {M.TITLE, M.SELECT, M.ROUND_INTRO, M.FIGHT, M.ROUND_END, M.MATCH_RESULT}
+    assert states == {M.TITLE, M.SELECT, M.STAGE_SELECT, M.ROUND_INTRO, M.FIGHT, M.ROUND_END, M.MATCH_RESULT}
     assert (M.TITLE, False, True) in seen and (M.ROUND_INTRO, True, False) in seen
 
 
@@ -328,9 +330,30 @@ def test_the_first_round_intro_draws_its_hint(surface):
     from brawl_ket import match as M
     r = Renderer(surface)
     m = M.Match(random.Random(1))
-    for kind in ("p1", "p1", "p2"):
+    for kind in ("p1", "p1", "p2", "p1"):
         inp = M.FrameInput(activity=True)
         inp.confirms[kind] = True
         m.update(inp)
     assert m.state == M.ROUND_INTRO and m.hint
     r.draw(m, [])
+
+
+def test_the_stage_select_scales_each_preview_once(surface, monkeypatch):
+    import random
+
+    from brawl_ket import config
+    from brawl_ket import match as M
+    from brawl_ket import render
+
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    m.state = M.STAGE_SELECT
+    calls = []
+    real = render.pygame.transform.smoothscale
+    monkeypatch.setattr(render.pygame.transform, "smoothscale", lambda *a: calls.append(1) or real(*a))
+    for pick in range(len(M.STAGE_OPTIONS)):
+        m.stage_pick = pick
+        for _ in range(config.FPS * len(config.STAGES) + 5):    # RANDOM cycles through them all
+            m.t += 1
+            r.draw(m, [])
+    assert len(calls) == len(config.STAGES)

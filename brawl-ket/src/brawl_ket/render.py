@@ -33,6 +33,8 @@ from .config import (
     MATCH_RESULT_LOCK,
     PLAYER_COLORS,
     ROUNDS_TO_WIN,
+    STAGE_NAMES,
+    STAGES,
 )
 from .fight import Fight
 from .fighter import Fighter
@@ -96,6 +98,8 @@ MEASURE_FLASH_FRAMES = 12   # MEASURE: the rival flashes in BOHR's colour as it 
 COLLAPSE_FRAMES = 14        # ... with a ring closing in on it
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
+PREVIEW_W, PREVIEW_H = 320, 180     # CHOOSE YOUR STAGE's preview: the stage at half size
+PREVIEW_Y = 148                     # ... centred here
 CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are centred here
 BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 
@@ -440,6 +444,9 @@ class Renderer:
     def __init__(self, surface: pygame.Surface) -> None:
         self.surface = surface
         self._stages: dict[str, tuple[pygame.Surface, list]] = {}
+        self._previews: dict[str, pygame.Surface] = {}     # CHOOSE YOUR STAGE's, scaled once each
+        self.preview_dim = pygame.Surface((PREVIEW_W, PREVIEW_H), pygame.SRCALPHA)
+        self.preview_dim.fill((*P.INK, 110))                # under RANDOM's "?"
         self.stage_name = ""
         self.use_stage("lab")
         self.dim = pygame.Surface((W, H), pygame.SRCALPHA)     # darkens the game under a menu
@@ -460,6 +467,10 @@ class Renderer:
         """Fight in front of the named backdrop (stages.py). Each is drawn once, when first used."""
         if name == self.stage_name:
             return
+        self.stage, self.lights = self._stage(name)
+        self.stage_name = name
+
+    def _stage(self, name: str) -> tuple[pygame.Surface, list]:
         if name not in self._stages:
             stage, lights = make_stage(name)
             try:
@@ -467,8 +478,18 @@ class Renderer:
             except pygame.error:    # no display (a headless benchmark on the cabinet, whose SDL has
                 pass                # no dummy driver): both are plain surfaces in the default format
             self._stages[name] = (stage, lights)
-        self.stage, self.lights = self._stages[name]
-        self.stage_name = name
+        return self._stages[name]
+
+    def _preview(self, name: str) -> pygame.Surface:
+        """The stage as the screen shows it (without the shake margin), at half size."""
+        if name not in self._previews:
+            view = self._stage(name)[0].subsurface((MARGIN, MARGIN, W, H))
+            try:        # averaged, so the 1 px lines and windows don't drop out as they would
+                small = pygame.transform.smoothscale(view, (PREVIEW_W, PREVIEW_H))
+            except ValueError:      # smoothscale wants 24 or 32 bit pixels
+                small = pygame.transform.scale(view, (PREVIEW_W, PREVIEW_H))
+            self._previews[name] = small
+        return self._previews[name]
 
     def _reset(self) -> None:
         self.trail = {p: 0.0 for p in PLAYERS}          # the damage trail on each bar
@@ -1014,6 +1035,8 @@ class Renderer:
                 self._title()
         elif state == M.SELECT:
             self._select(match)
+        elif state == M.STAGE_SELECT:
+            self._stage_select(match)
         else:
             self.draw_fight(match.fight, fight_events, match.wins)
             if state == M.ROUND_INTRO:
@@ -1128,6 +1151,41 @@ class Renderer:
             self._colour_chip(move, (panel.right - 12, y + 4))
         if ready:
             self._stamp("READY!", (panel.right - 58, panel.y + 20), P.GOOD)
+
+    def _stage_select(self, match: M.Match) -> None:
+        """CHOOSE YOUR STAGE: a big preview of the backdrop, its name between arrows, and a
+        pip for each place in the list. RANDOM is a "?" over the stages, cycling once a second."""
+        self._backdrop()
+        surf = self.surface
+        self._call("CHOOSE YOUR STAGE", P.WHITE, y=24, size=16)
+        pick = M.STAGE_OPTIONS[match.stage_pick]
+        random_pick = pick == M.RANDOM_STAGE
+        shown = STAGES[(match.t // FPS) % len(STAGES)] if random_pick else pick
+        frame = pygame.Rect(0, 0, PREVIEW_W, PREVIEW_H)
+        frame.center = (W // 2, PREVIEW_Y)
+        pygame.draw.rect(surf, P.INK, frame.inflate(12, 12), border_radius=8)
+        pygame.draw.rect(surf, P.NIGHT, frame.inflate(8, 8), border_radius=7)
+        pygame.draw.rect(surf, P.GOLD, frame.inflate(8, 8), 2, border_radius=7)
+        surf.blit(self._preview(shown), frame)
+        if random_pick:
+            surf.blit(self.preview_dim, frame)
+            blit_center(surf, outlined("?", 64, P.GOLD, thick=3), frame.center)
+        # the name between arrows, as on CHOOSE YOUR FIGHTER
+        name_y = frame.bottom + 28
+        name = outlined("RANDOM" if random_pick else STAGE_NAMES[pick], 16, P.GOLD, thick=2)
+        blit_center(surf, name, (W / 2, name_y))
+        nudge = 2 if (self.t // 15) % 2 else 0
+        for d in (-1, 1):
+            arrow = outlined("<" if d < 0 else ">", 16, P.WHITE, thick=2)
+            blit_center(surf, arrow, (W / 2 + d * (name.get_width() / 2 + 18 + nudge), name_y))
+        # where in the list: a pip each, the picked one lit
+        n = len(M.STAGE_OPTIONS)
+        for i in range(n):
+            pip = pygame.Rect(0, 0, 8, 8)
+            pip.center = (round(W / 2 + (i - (n - 1) / 2) * 16), name_y + 24)
+            pygame.draw.rect(surf, P.INK, pip.inflate(2, 2))
+            pygame.draw.rect(surf, P.GOLD if i == match.stage_pick else P.SLATE, pip)
+        blit_center(surf, outlined("STICK: CHOOSE   A: FIGHT!   B: BACK", 8, P.MIST), (W / 2, H - 12))
 
     def _colour_chip(self, move, right_mid) -> None:
         """The colour a move hits in, as a word: YOURS (your basis's), OTHER, or BOTH (a Y)."""

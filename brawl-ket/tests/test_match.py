@@ -15,6 +15,8 @@ from brawl_ket.match import (
     ROUND_END,
     ROUND_INTRO,
     SELECT,
+    STAGE_OPTIONS,
+    STAGE_SELECT,
     TITLE,
     Cue,
     FrameInput,
@@ -52,14 +54,25 @@ def cues(events: list) -> list[str]:
     return [e.kind for e in events if isinstance(e, Cue)]
 
 
-def to_fight(m: Match, p1: int = 0, p2: int = 0) -> None:
-    """From the title, both players pick and ready up, then the intro runs out."""
+def to_stage_select(m: Match, p1: int = 0, p2: int = 0) -> None:
+    """From the title, both players pick and ready up: CHOOSE YOUR STAGE."""
     m.update(press("confirm"))
     assert m.state == SELECT
     for p, want in (("p1", p1), ("p2", p2)):
         while m.picks[p] != want:
             m.update(press("right", p))
         m.update(press("confirm", p))
+    assert m.state == STAGE_SELECT
+
+
+def to_fight(m: Match, p1: int = 0, p2: int = 0, stage: str | None = None) -> None:
+    """From the title, both players pick and ready up, a stage is picked (RANDOM unless
+    `stage` is named), then the intro runs out."""
+    to_stage_select(m, p1, p2)
+    want = STAGE_OPTIONS.index(stage) if stage else 0
+    while m.stage_pick != want:
+        m.update(press("right", "p2"))
+    m.update(press("confirm"))
     assert m.state == ROUND_INTRO
     run(m, config.ROUND_INTRO_FRAMES)
     assert m.state == FIGHT
@@ -125,14 +138,171 @@ def test_b_unreadies_then_goes_back_to_the_title() -> None:
 
 def test_the_round_intro_calls_the_round_then_fight() -> None:
     m = Match(random.Random(1))
-    m.update(press("confirm"))
-    m.update(press("confirm", "p1"))
+    to_stage_select(m)
     events = m.update(press("confirm", "p2"))
     assert m.state == ROUND_INTRO and "round" in cues(events)
     frames_left = m.fight.frames_left
     events = run(m, config.ROUND_INTRO_FRAMES)
     assert cues(events).count("fight") == 1
     assert m.fight.frames_left == frames_left       # nobody moves during the intro
+
+
+# --- CHOOSE YOUR STAGE ---------------------------------------------------------------------
+
+
+def test_the_stage_list_is_random_then_every_stage() -> None:
+    assert STAGE_OPTIONS == ("random", *config.STAGES)
+
+
+def test_both_ready_goes_to_the_stage_select_on_random() -> None:
+    m = Match(random.Random(1))
+    m.update(press("confirm"))
+    m.update(press("confirm", "p1"))
+    assert m.state == SELECT
+    events = m.update(press("confirm", "p2"))
+    assert m.state == STAGE_SELECT and m.stage_pick == 0 and "blip" in cues(events)
+    assert m.fight is None
+
+
+def test_either_stick_flips_through_the_stages_and_wraps() -> None:
+    m = Match(random.Random(1))
+    to_stage_select(m)
+    events = m.update(press("right", "p1"))
+    assert m.stage_pick == 1 and "blip" in cues(events)
+    m.update(press("right", "p2"))
+    assert m.stage_pick == 2
+    m.update(press("up", "p1"))             # only left and right move it
+    assert m.stage_pick == 2
+    for _ in range(2):
+        m.update(press("left", "p2"))
+    m.update(press("left", "p1"))
+    assert m.stage_pick == len(STAGE_OPTIONS) - 1
+
+
+@pytest.mark.parametrize("kind", ["confirm", "start"])
+def test_a_or_start_on_the_stage_select_starts_the_match(kind) -> None:
+    m = Match(random.Random(1))
+    to_stage_select(m)
+    events = m.update(press(kind, "p1"))
+    assert m.state == ROUND_INTRO and not m.paused and "round" in cues(events)
+    assert m.round_no == 1 and m.hint
+
+
+def test_a_held_a_from_the_fighter_screen_does_not_pick_the_stage() -> None:
+    # presses are edges: the A that readied the last player is spent, holding it does nothing
+    m = Match(random.Random(1))
+    to_stage_select(m)
+    run(m, 30, FrameInput(activity=True, held=True))
+    assert m.state == STAGE_SELECT
+
+
+def test_b_on_the_stage_select_goes_back_with_both_still_ready() -> None:
+    m = Match(random.Random(1))
+    to_stage_select(m, p1=1)
+    m.update(press("right"))
+    events = m.update(press("back", "p2"))
+    assert m.state == SELECT and m.ready == {"p1": True, "p2": True} and "blip" in cues(events)
+    run(m, 30)
+    assert m.state == SELECT                # both ready, but nobody pressed A
+    events = m.update(press("confirm", "p2"))   # one A goes on again, to the same stage
+    assert m.state == STAGE_SELECT and "blip" in cues(events) and m.stage_pick == 1 and m.picks["p1"] == 1
+
+
+def test_b_on_the_fighter_screen_with_both_ready_unreadies_as_before() -> None:
+    m = Match(random.Random(1))
+    to_stage_select(m)
+    m.update(press("back"))
+    m.update(press("back", "p1"))
+    assert m.state == SELECT and m.ready == {"p1": False, "p2": True}
+    m.update(press("confirm", "p2"))        # the ready one can't go on alone
+    assert m.state == SELECT
+    m.update(press("confirm", "p1"))
+    assert m.state == STAGE_SELECT
+
+
+@pytest.mark.parametrize("stage", config.STAGES)
+def test_a_picked_stage_is_used_for_every_round(stage) -> None:
+    m = Match(random.Random(1))
+    to_fight(m, stage=stage)
+    assert m.stage == stage
+    ko(m, "p2")
+    assert m.state == ROUND_INTRO and m.stage == stage
+
+
+def test_random_picks_from_the_stages_and_varies() -> None:
+    seen = set()
+    for seed in range(20):
+        m = Match(random.Random(seed))
+        to_fight(m)
+        assert m.stage_pick == 0 and m.stage in config.STAGES
+        seen.add(m.stage)
+    assert len(seen) >= 3
+
+
+def finish(m: Match) -> None:
+    """Win the match for p1 and wait out the result's lock."""
+    for _ in range(config.ROUNDS_TO_WIN):
+        ko(m, "p2")
+        if m.state == ROUND_INTRO:
+            run(m, config.ROUND_INTRO_FRAMES)
+    assert m.state == MATCH_RESULT
+    run(m, config.MATCH_RESULT_LOCK)
+
+
+def test_a_rematch_keeps_the_picked_stage() -> None:
+    m = Match(random.Random(1))
+    to_fight(m, stage="optics")
+    finish(m)
+    m.update(press("confirm"))
+    assert m.state == ROUND_INTRO and m.stage == "optics" and m.stage_pick == STAGE_OPTIONS.index("optics")
+
+
+def test_a_rematch_on_random_rolls_again() -> None:
+    seen = set()
+    m = Match(random.Random(5))
+    to_fight(m)
+    for _ in range(12):
+        finish(m)
+        m.update(press("confirm"))
+        assert m.stage_pick == 0 and m.stage in config.STAGES
+        seen.add(m.stage)
+        run(m, config.ROUND_INTRO_FRAMES)
+    assert len(seen) >= 2
+
+
+def test_the_pick_is_remembered_until_the_title() -> None:
+    m = Match(random.Random(1))
+    to_fight(m, stage="cryo")
+    finish(m)
+    m.update(press("back"))                 # the result's B: the title
+    assert m.state == TITLE and m.stage_pick == 0
+    to_stage_select(m)
+    assert m.stage_pick == 0
+
+
+def test_quit_to_title_and_the_idle_timeout_reset_the_pick() -> None:
+    m = Match(random.Random(1))
+    to_fight(m, stage="lab")
+    run(m, config.IDLE_TIMEOUT)
+    assert m.state == TITLE and m.stage_pick == 0
+    m = Match(random.Random(1))
+    to_stage_select(m)
+    m.update(press("right"))
+    run(m, config.IDLE_TIMEOUT)
+    assert m.state == TITLE and m.stage_pick == 0
+
+
+def test_the_demo_still_picks_a_random_stage() -> None:
+    m = Match(random.Random(1))
+    to_fight(m, stage="office")
+    run(m, config.IDLE_TIMEOUT)
+    seen = set()
+    for _ in range(8):
+        run(m, config.ATTRACT_DELAY + 2)
+        assert m.attract is not None
+        seen.add(m.stage)
+        m.update(press("confirm"))          # stops the demo
+    assert len(seen) >= 2 and m.stage_pick == 0
 
 
 # --- rounds and the match ----------------------------------------------------------------
@@ -394,8 +564,7 @@ def test_the_title_alternates_the_demo_and_the_rules_card() -> None:
 
 def test_only_a_matchs_first_round_intro_shows_the_hint() -> None:
     m = Match(random.Random(1))
-    m.update(press("confirm"))
-    m.update(press("confirm", "p1"))
+    to_stage_select(m)
     m.update(press("confirm", "p2"))
     assert m.state == ROUND_INTRO and m.hint
     run(m, config.ROUND_INTRO_FRAMES)

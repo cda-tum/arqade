@@ -1,6 +1,6 @@
 """The match flow. Pure (no pygame): one FrameInput per 60 Hz frame in, events out.
 
-  title -> select -> round intro -> fight -> round end -> (round intro ...)
+  title -> select -> stage select -> round intro -> fight -> round end -> (round intro ...)
         -> match result -> rematch (round intro) or title
 
 Rounds are first to ROUNDS_TO_WIN; a draw round counts for nobody. Start pauses
@@ -25,6 +25,7 @@ ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOH
 
 TITLE = "title"
 SELECT = "select"
+STAGE_SELECT = "stage_select"
 ROUND_INTRO = "round_intro"
 FIGHT = "fight"
 ROUND_END = "round_end"
@@ -32,6 +33,8 @@ MATCH_RESULT = "match_result"
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 PAUSABLE = (ROUND_INTRO, FIGHT, ROUND_END)
 FIGHT_CALL = config.ROUND_INTRO_FRAMES // 2     # "ROUND n" until here, then "FIGHT!"
+RANDOM_STAGE = "random"
+STAGE_OPTIONS = (RANDOM_STAGE, *config.STAGES)  # CHOOSE YOUR STAGE's list, in order
 
 
 @dataclass(frozen=True)
@@ -88,7 +91,8 @@ class Match:
         self.pause_index = 0
         self.wait_release = False   # the title ignores buttons until all are let go
         self.attract: Fight | None = None
-        self.stage = config.STAGES[0]   # the backdrop: picked afresh for each match and each demo
+        self.stage = config.STAGES[0]   # the backdrop: the match's pick, or rolled for each demo
+        self.stage_pick = 0         # index into STAGE_OPTIONS (0: RANDOM), kept until the title
         self.card = False           # the title shows the COLOUR MUST MATCH card (between demos)
         self.hint = False           # this round intro shows the rules hint (a match's first)
         self._title_phase = 0       # frames into the current demo or card
@@ -181,8 +185,27 @@ class Match:
             elif inp.nav[p][0]:
                 self.picks[p] = (self.picks[p] + inp.nav[p][0]) % len(ROSTER)
                 events.append(Cue("blip"))
-        if all(self.ready.values()):
+        # on once both are ready; back from the stage select both still are, and one A goes on
+        if all(self.ready.values()) and inp.confirm:
+            self._set_state(STAGE_SELECT)
+            if Cue("blip") not in events:
+                events.append(Cue("blip"))
+
+    def _on_stage_select(self, inp: FrameInput, events: list) -> None:
+        """Either stick flips through the stages, A or Start fights there, B goes back to
+        the fighters with both still READY."""
+        if inp.back:
+            self._set_state(SELECT)
+            events.append(Cue("blip"))
+            return
+        if inp.confirm:
+            events.append(Cue("blip"))
             self._start_match(events)
+            return
+        dx = next((d[0] for d in inp.nav.values() if d[0]), 0)
+        if dx:
+            self.stage_pick = (self.stage_pick + dx) % len(STAGE_OPTIONS)
+            events.append(Cue("blip"))
 
     def _on_round_intro(self, inp: FrameInput, events: list) -> None:
         if self.t == FIGHT_CALL:
@@ -275,6 +298,7 @@ class Match:
         self.paused = False
         self.card = False
         self._stop_attract()
+        self.stage_pick = 0
         self._set_state(TITLE)
 
     def _start_match(self, events: list) -> None:
@@ -282,7 +306,8 @@ class Match:
         self.winner = None
         self.round_no = 1
         self.hint = True            # a match's first round intro teaches the rule
-        self.stage = self.rng.choice(config.STAGES)     # every round of a match in the same room
+        pick = STAGE_OPTIONS[self.stage_pick]          # every round of a match in the same room
+        self.stage = self.rng.choice(config.STAGES) if pick == RANDOM_STAGE else pick
         self._start_round(events)
 
     def _start_round(self, events: list) -> None:
