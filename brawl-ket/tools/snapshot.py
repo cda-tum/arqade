@@ -53,7 +53,7 @@ from brawl_ket.render import Renderer, draw_puppet, outlined
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 CELL_W, CELL_H, COLS = 180, 230, 6
 CELL_FLOOR = 200
-ACCENTS = {"lean": P.CREAM, "heavy": P.GOLD}
+ACCENTS = {"lean": P.CREAM, "heavy": P.GOLD, "toy": P.TEAL}
 
 
 def save(surf: pygame.Surface, out_dir: str, name: str) -> None:
@@ -284,10 +284,10 @@ def screen_frames(out_dir: str) -> None:
     step(1, press(confirms=("p2", True)))
     step(config.FPS + 4)
     save(surface, out_dir, "screen_stage_select.png")
-    while M.STAGE_OPTIONS[m.stage_pick] != "office":
+    while M.STAGE_OPTIONS[m.stage_pick] != "toronto":
         step(1, press(nav=("p1", (1, 0))))
     step(4)
-    save(surface, out_dir, "screen_stage_select_office.png")
+    save(surface, out_dir, "screen_stage_select_toronto.png")
     step(1, press(confirms=("p1", True)))
     step(8)
     save(surface, out_dir, "screen_round.png")

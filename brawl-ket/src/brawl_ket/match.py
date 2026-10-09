@@ -33,6 +33,7 @@ MATCH_RESULT = "match_result"
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 PAUSABLE = (ROUND_INTRO, FIGHT, ROUND_END)
 FIGHT_CALL = config.ROUND_INTRO_FRAMES // 2     # "ROUND n" until here, then "FIGHT!"
+STAGE_LOCK = config.frames(0.3)                 # the stage screen ignores A this long: a mashed A from the fighters can't skip it
 RANDOM_STAGE = "random"
 STAGE_OPTIONS = (RANDOM_STAGE, *config.STAGES)  # CHOOSE YOUR STAGE's list, in order
 
@@ -198,7 +199,7 @@ class Match:
             self._set_state(SELECT)
             events.append(Cue("blip"))
             return
-        if inp.confirm:
+        if inp.confirm and self.t >= STAGE_LOCK:
             events.append(Cue("blip"))
             self._start_match(events)
             return

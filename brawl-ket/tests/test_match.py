@@ -16,6 +16,7 @@ from brawl_ket.match import (
     ROUND_INTRO,
     SELECT,
     STAGE_OPTIONS,
+    STAGE_LOCK,
     STAGE_SELECT,
     TITLE,
     Cue,
@@ -63,6 +64,7 @@ def to_stage_select(m: Match, p1: int = 0, p2: int = 0) -> None:
             m.update(press("right", p))
         m.update(press("confirm", p))
     assert m.state == STAGE_SELECT
+    run(m, STAGE_LOCK)
 
 
 def to_fight(m: Match, p1: int = 0, p2: int = 0, stage: str | None = None) -> None:
@@ -571,3 +573,16 @@ def test_only_a_matchs_first_round_intro_shows_the_hint() -> None:
     assert m.state == FIGHT
     ko(m, "p2")
     assert m.state == ROUND_INTRO and not m.hint
+
+
+def test_a_mashed_a_cannot_skip_the_stage_screen():
+    m = Match(random.Random(1))
+    m.update(press("confirm"))
+    for p in ("p1", "p2"):
+        m.update(press("confirm", p))
+    assert m.state == STAGE_SELECT
+    m.update(press("confirm"))                  # the very next frame: still choosing
+    assert m.state == STAGE_SELECT
+    run(m, STAGE_LOCK)
+    m.update(press("confirm"))
+    assert m.state == ROUND_INTRO

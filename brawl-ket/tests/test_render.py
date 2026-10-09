@@ -150,6 +150,7 @@ def test_every_match_screen_draws(surface):
     step(nav=("p2", (1, 0)))
     step(confirms=("p2", True))
     step(nav=("p1", (1, 0)))                        # stage select: LAB
+    step(M.STAGE_LOCK)
     step(confirms=("p1", True))
     step(config.ROUND_INTRO_FRAMES // 2)
     step(pauses=("p1", True), confirms=("p1", True))
@@ -331,6 +332,9 @@ def test_the_first_round_intro_draws_its_hint(surface):
     r = Renderer(surface)
     m = M.Match(random.Random(1))
     for kind in ("p1", "p1", "p2", "p1"):
+        if m.state == M.STAGE_SELECT:
+            for _ in range(M.STAGE_LOCK):
+                m.update(M.FrameInput())
         inp = M.FrameInput(activity=True)
         inp.confirms[kind] = True
         m.update(inp)
