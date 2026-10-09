@@ -271,7 +271,7 @@ def _optics(surf, lights: Lights) -> None:
 
 # --- the office: TUM Quantum Space --------------------------------------------------------------
 # After a photo of the real wall: a white wall over a glass partition with thin light frames, a
-# concrete room behind it (a ring lamp, a bright window), the QUANTUMSPACE decal on the glass
+# concrete room behind it (a ring lamp), the QUANTUMSPACE decal on the glass
 # (a big charcoal Q crossed by a blue orbit, the TUM logo above), whiteboards below the glass.
 
 OFFICE_WALL = (208, 208, 216)
@@ -323,23 +323,44 @@ def _desk(surf, x: int, floor: int) -> None:
         _box(surf, (lx, floor - 50, 5, 46), P.lighten(BOARD, 0.2), radius=1)
 
 
+def _bell_circuit(surf, cx: int, top: int) -> None:
+    """A Bell pair, as drawn on a whiteboard: two wires from |0>, an H on the first, a CNOT
+    from it onto the second, and the state it makes written underneath."""
+    f = load_font(8)
+    wires = (top, top + 20)
+    left, right = cx - 44, cx + 44
+    for y in wires:
+        img = f.render("|0>", False, MARKER)
+        surf.blit(img, img.get_rect(midright=(left - 3, y)))
+        pygame.draw.line(surf, MARKER, (left, y), (right, y), 1)
+    h = pygame.Rect(0, 0, 15, 15)                # the H gate: a box the wire stops at
+    h.center = (cx - 20, wires[0])
+    surf.fill(BOARD, h)
+    pygame.draw.rect(surf, MARKER, h, 1)
+    img = f.render("H", False, MARKER)
+    surf.blit(img, img.get_rect(center=(h.centerx + 1, h.centery + 1)))
+    x = cx + 16                                  # the CNOT: a control dot over a target
+    pygame.draw.line(surf, MARKER, (x, wires[0]), (x, wires[1] + 5), 1)
+    pygame.draw.circle(surf, MARKER, (x, wires[0]), 3)
+    pygame.draw.circle(surf, MARKER, (x, wires[1]), 5, 1)
+    pygame.draw.line(surf, MARKER, (x - 5, wires[1]), (x + 5, wires[1]), 1)
+    img = f.render("|00>+|11>", False, MARKER)
+    surf.blit(img, img.get_rect(center=(cx, wires[1] + 22)))
+
+
 def _office(surf, lights: Lights) -> None:
     m = MARGIN
     floor = FLOOR_Y + m
     width = W + 2 * m
     glass_top, glass_bottom = 38, 196
     surf.fill(OFFICE_WALL)
-    # behind the glass: a concrete room, a ring lamp, a bright window on the right
+    # behind the glass: a concrete room and a ring lamp
     room = pygame.Rect(0, glass_top, width, glass_bottom - glass_top)
     surf.fill(CONCRETE, room)
     for x in range(0, width, 70):
         surf.fill(CONCRETE_DARK, (x, glass_top, 2, room.h))
     for k in range(40):                         # the concrete's pores
         surf.fill(CONCRETE_DARK, ((k * 97) % width, glass_top + 6 + (k * 53) % (room.h - 12), 2, 2))
-    window = pygame.Rect(width - 150, glass_top + 40, 150, room.h - 40)
-    surf.fill((200, 216, 232), window)
-    for x in range(window.x, width, 30):
-        pygame.draw.line(surf, CONCRETE_DARK, (x, window.y), (x + 20, window.bottom), 3)
     surf.fill((176, 168, 160), (0, glass_bottom - 50, 190, 50))        # a cupboard beyond
     lamp = pygame.Rect(0, 0, 150, 32)          # the ring lamp, as wide as the wall's
     lamp.center = (222, glass_top + 18)          # so the decal below it is centred
@@ -352,20 +373,12 @@ def _office(surf, lights: Lights) -> None:
         surf.fill(MULLION, (x, glass_top, 3, room.h))
     surf.fill(MULLION, (0, glass_top - 4, width, 4))
     _quantum_space(surf, lamp.center)
-    # below the glass: whiteboards, with scribbles, magnets and a marker tray
+    # below the glass: whiteboards, with a Bell-state circuit, magnets and a marker tray
     boards = pygame.Rect(0, glass_bottom, width, floor - glass_bottom)
     surf.fill(BOARD, boards)
     for x in (0, 168, 418, width - 6):
         surf.fill(P.shade(BOARD, 0.85), (x, glass_bottom, 2, boards.h))
-    f = load_font(8)
-    for text, x, y in (("|0>", 272, 250), ("H|0>=|+>", 300, 270), ("<psi|", 380, 206)):
-        surf.blit(f.render(text, False, MARKER), (x, y))
-    for y in (218, 232):                        # a little circuit
-        pygame.draw.line(surf, MARKER, (300, y), (380, y), 1)
-    pygame.draw.rect(surf, MARKER, (318, 212, 12, 12), 1)
-    pygame.draw.line(surf, MARKER, (350, 218), (350, 232), 1)
-    pygame.draw.circle(surf, MARKER, (350, 218), 2)
-    pygame.draw.circle(surf, MARKER, (350, 232), 4, 1)
+    _bell_circuit(surf, 328, 214)
     for i, (x, y, c) in enumerate(((520, 206, P.BAD), (536, 210, P.GOLD), (528, 222, P.SKY), (104, 208, P.GOLD))):
         pygame.draw.circle(surf, P.INK, (x, y), 5)
         pygame.draw.circle(surf, c, (x, y), 4)
