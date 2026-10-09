@@ -255,7 +255,7 @@ def test_the_specials_colours_and_twists():
     names = {n: [CHARACTERS[n].moves[s].name for s in ("stand.X", "crouch.X", "air.X")] for n in CHARACTERS}
     assert names == {"ROBERT": ["PHOTON", "PHASE SLIDE", "HADAMARD DIVE"],
                      "BOHR": ["MEASURE", "CHARGE NOISE", "COLLAPSE"],
-                     "PHOEBE": ["OPTICAL TRAP", "TUNNEL", "LASER"]}
+                     "PHOEBE": ["LIGHT PILLAR", "TUNNEL", "LASER"]}
 
 
 def test_only_specials_have_twists():
@@ -280,8 +280,8 @@ def test_phoebe_has_the_longest_pokes():
         assert reach["PHOEBE"] >= reach["ROBERT"] + 6, (slot, reach)
 
 
-def test_optical_trap_only_reaches_the_air():
-    # its column starts above every standing hurtbox: a grounded rival walks under it
+def test_light_pillar_only_reaches_the_air():
+    # its beam starts above every standing hurtbox: a grounded rival walks under it
     trap = PHOEBE.moves["stand.X"]
     assert trap.knockdown and trap.cooldown == config.frames(1.5)
     for c in CHARACTERS.values():

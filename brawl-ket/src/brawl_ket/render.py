@@ -78,7 +78,7 @@ STRIKER = {
     "air jab": "hand_f", "jump-in": "foot_f", "throw": "hand_f",
     "PHOTON": "hand_f", "PHASE SLIDE": "foot_f", "HADAMARD DIVE": "foot_f",
     "MEASURE": "hand_f", "COLLAPSE": "foot_f",
-    "OPTICAL TRAP": "hand_f", "LASER": "hand_f",
+    "LIGHT PILLAR": "hand_f", "LASER": "hand_f",
 }
 
 # effect lengths, in frames
@@ -676,8 +676,8 @@ class Renderer:
                 return j["head"][0] - ox, j["head"][1] - oy
         j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare)
         self._striker(key, f, j)
-        if f.action == "attack" and m is not None and m.name == "OPTICAL TRAP":
-            self._trap(f, m, j, ox, oy)
+        if f.action == "attack" and m is not None and m.name == "LIGHT PILLAR":
+            self._pillar(f, m, j, ox, oy)
         if f.action == "attack" and m is not None and m.projectile is not None and m.projectile.vy \
                 and f.phase == "startup":
             self._laser_aim(f, j, oy)
@@ -720,52 +720,47 @@ class Renderer:
             self.surface.blit(ghost, (left + shift, top + row), (0, row, gw, 2))
         return {k: (x - local[0] + feet[0], y - local[1] + feet[1]) for k, (x, y) in j.items()}
 
-    def _trap(self, f: Fighter, m, j: dict, ox: int, oy: int) -> None:
-        """OPTICAL TRAP, as optical tweezers look: in the wind-up, light gathers between her
-        hands and a faint outline shows where the beam will focus; then a beam leaves her
-        raised palms, narrows to a bright focus above her (the trap, where it hits) and
-        spreads again beyond it, with rings pulsing round the focus."""
-        if f.phase not in ("startup", "active"):
-            return
+    def _pillar(self, f: Fighter, m, j: dict, ox: int, oy: int) -> None:
+        """LIGHT PILLAR: in the wind-up, light gathers at her palms and a thin guide line
+        flickers straight up; then a thick laser beam shoots up from her palms off the top of
+        the screen, a white-hot core in the attack's colour, and thins out as it ends."""
         surf = self.surface
         colour = ERROR_COLOUR[basis.error_for(m.colour, f.attack_basis)]
-        left, top, w, h = f.world_box(m.hitbox)
-        left, top = left + ox, top + oy
+        left, _, w, _ = f.world_box(m.hitbox)
+        x = round(left + ox + w / 2)
         hands = _towards(j["hand_f"], j["hand_b"], 0.5)
-        fx, fy = left + w / 2, top + h * 0.55          # the focus, about 40 px above her hands
-        spread = 26
+        base = round(hands[1])
         if f.phase == "startup":
             k = (f.frame + 1) / f.startup
-            r = round(3 + 6 * k)
+            if self.t % 3:
+                pygame.draw.line(surf, P.lighten(colour, 0.5), (x, base), (x, 0), 1)
+            r = round(3 + 7 * k)
             pygame.draw.circle(surf, P.INK, _pt(hands), r + 2)
             pygame.draw.circle(surf, P.lighten(colour, 0.3), _pt(hands), r)
             pygame.draw.circle(surf, P.WHITE, _pt(hands), max(1, r - 4))
-            for side in (-1, 1):                        # the tell: where it will focus
-                for a, b in (((hands[0] + side * spread, hands[1]), (fx, fy)), ((fx, fy), (fx + side * 24, top))):
-                    for t in range(0, 8, 2):
-                        pygame.draw.line(surf, P.lighten(colour, 0.5), _pt(_towards(a, b, t / 8)),
-                                         _pt(_towards(a, b, (t + 1) / 8)), 1)
             return
+        age = f.frame - f.startup
+        if f.phase == "active":
+            width = 22 if age else 30                   # a flash as it fires
+        else:                                           # thinning out in the recovery
+            width = 22 - 5 * (age - m.active)
+            if width <= 2:
+                return
+        reach = base if age else base // 2              # it shoots up off the screen
+        top = base - reach - 4
         flick = self.t % 2
-        below = [(hands[0] - spread, hands[1]), (fx, fy), (hands[0] + spread, hands[1])]
-        above = [(fx - 24, top), (fx, fy), (fx + 24, top)]
-        for cone in (below, above):     # light, outlined along its sides only (open ends)
-            pygame.draw.polygon(surf, P.lighten(colour, 0.35), [_pt(p) for p in cone])
-            for edge in ((cone[0], cone[1]), (cone[1], cone[2])):
-                pygame.draw.line(surf, P.INK, _pt(edge[0]), _pt(edge[1]), 3)
-            core = [_towards(cone[0], cone[2], 0.35), cone[1], _towards(cone[0], cone[2], 0.65)]
-            pygame.draw.polygon(surf, P.WHITE if flick else P.lighten(colour, 0.7), [_pt(p) for p in core])
-        # the trap: rings round the focus, and the focus itself
-        for i in range(2):
-            k = ((f.frame - f.startup) * 0.12 + i * 0.5) % 1.0
-            ring = pygame.Rect(0, 0, round(20 + 40 * k), round(8 + 14 * k))
-            ring.center = _pt((fx, fy))
-            pygame.draw.ellipse(surf, P.INK, ring.inflate(4, 4), 4)
-            pygame.draw.ellipse(surf, colour if k < 0.6 else P.shade(colour, 0.8), ring, 2)
-        r = 9 + flick
-        pygame.draw.circle(surf, P.INK, _pt((fx, fy)), r + 2)
-        pygame.draw.circle(surf, colour, _pt((fx, fy)), r)
-        pygame.draw.circle(surf, P.WHITE, _pt((fx, fy)), r - 3)
+        pygame.draw.line(surf, P.INK, (x, base), (x, top), width + 4)
+        pygame.draw.line(surf, P.lighten(colour, 0.3), (x, base), (x, top), width)
+        pygame.draw.line(surf, colour, (x, base), (x, top), max(2, width - 8))
+        pygame.draw.line(surf, P.WHITE if flick else P.lighten(colour, 0.8), (x, base), (x, top), max(1, width // 3))
+        for i in range(4):                              # light racing up the beam
+            y = base - ((age * 14 + i * 47) % max(1, base))
+            surf.fill(P.WHITE, (x - width // 2 + 2, y, 2, 6))
+            surf.fill(P.WHITE, (x + width // 2 - 4, y - 20, 2, 6))
+        r = width // 3 + 3                              # the flare at her palms
+        pygame.draw.circle(surf, P.INK, (x, base), r + 2)
+        pygame.draw.circle(surf, P.lighten(colour, 0.5), (x, base), r)
+        pygame.draw.circle(surf, P.WHITE, (x, base), r - 4)
 
     def _laser_aim(self, f: Fighter, j: dict, oy: int) -> None:
         """LASER: while she aims, a thin flickering line from her hand down and forward at 45

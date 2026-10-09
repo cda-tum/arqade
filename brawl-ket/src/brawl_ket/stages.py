@@ -284,45 +284,76 @@ TUM_BLUE = (48, 96, 176)        # the TUM blue, on the GBA grid
 MARKER = (40, 72, 160)
 
 
-def _tum_logo(surf, x: int, y: int, unit: int) -> None:
-    """The TUM logo's blocky letters: T, U and M joined by one top bar, in TUM blue."""
-    u = unit
+def _tum_logo(surf, x: int, y: int, u: int) -> None:
+    """The TUM logo, as on the wall, on a grid of u px strokes (10 wide, 6 tall): one top bar
+    over the T running into the U's left stem; the U open at the top; its right stem the M's
+    first, under the M's own top bar; every stem down to the baseline."""
     blue = TUM_BLUE
-    surf.fill(blue, (x, y, 14 * u, u))                  # the top bar over T and M
-    surf.fill(blue, (x + 2 * u, y, u, 5 * u))           # T's stem
-    surf.fill(blue, (x + 4 * u, y + 2 * u, u, 3 * u))   # U
-    surf.fill(blue, (x + 7 * u, y + 2 * u, u, 3 * u))
-    surf.fill(blue, (x + 4 * u, y + 4 * u, 4 * u, u))
-    for k in (9, 11, 13):                               # M's three stems
-        surf.fill(blue, (x + k * u, y, u, 5 * u))
+    for gx, gy, gw, gh in ((0, 0, 4, 1), (1, 0, 1, 6), (3, 0, 1, 6), (3, 5, 3, 1),      # T and U
+                           (5, 0, 5, 1), (5, 0, 1, 6), (7, 0, 1, 6), (9, 0, 1, 6)):   # M
+        surf.fill(blue, (x + gx * u, y + gy * u, gw * u, gh * u))
 
 
 def _quantum_space(surf, cx: int, cy: int, r: int) -> None:
-    """The decal: the Q (a charcoal ring open on the right, its tail sweeping under the text),
-    the blue orbit across it, UANTUM in charcoal, SPACE in blue, the TUM logo above."""
-    # the ring: solid, cut open on the right where the letters start
+    """The decal, measured off a photo of the wall: a thin charcoal Q ring, open on the right
+    where the U sits, its bottom sweeping out into a tail under the first letters; a blue orbit
+    inside its left half; UANTUM in charcoal and SPACE in blue; the TUM logo above."""
     q = pygame.Surface((2 * r + 8, 2 * r + 8), pygame.SRCALPHA)
     c = r + 4
     pygame.draw.circle(q, CHARCOAL, (c, c), r)
     pygame.draw.circle(q, (0, 0, 0, 0), (c, c), r - 5)
-    pygame.draw.polygon(q, (0, 0, 0, 0), [(c, c), (c + 2 * r, c - round(1.4 * r)), (c + 2 * r, c + round(0.45 * r))])
+    cut = [(c, c), (c + 2 * r, c - round(2 * r * math.tan(math.radians(32)))),
+           (c + 2 * r, c + 4 * r), (c + round(r * 0.1), c + 4 * r)]   # down to the tail's start
+    pygame.draw.polygon(q, (0, 0, 0, 0), cut)
     surf.blit(q, (cx - c, cy - c))
-    # the tail: the ring's bottom carried on to the right, under the first letters
-    pygame.draw.line(surf, CHARCOAL, (cx, cy + r - 3), (cx + round(r * 1.25), cy + r - 3), 5)
-    pygame.draw.line(surf, CHARCOAL, (cx + round(r * 1.25), cy + r - 3), (cx + round(r * 1.45), cy + r - 7), 5)
-    # the orbit: a flat blue ellipse across the ring's left half, on into the text
-    orbit = pygame.Rect(cx - r + 4, cy - round(r * 0.16), round(r * 2.3), round(r * 0.36))
-    pygame.draw.arc(surf, TUM_BLUE, orbit, 0.15, math.pi - 0.05, 4)
-    pygame.draw.arc(surf, TUM_BLUE, orbit, math.pi + 0.15, math.pi * 1.55, 3)
-    # the letters, flat like a decal: no outline
-    f = load_font(24)
+    tail = [(cx + r * 1.2 * t, cy + r - 2 - r * 0.24 * t * t) for t in (i / 8 for i in range(9))]
+    pygame.draw.lines(surf, CHARCOAL, False, [(round(x), round(y)) for x, y in tail], 5)
+    # the orbit: an ellipse in the ring's left half, open on the right, thickest on the left
+    ow, oh = round(r * 1.52), round(r * 0.72)
+    o = pygame.Surface((ow, oh), pygame.SRCALPHA)
+    pygame.draw.ellipse(o, TUM_BLUE, (0, 0, ow, oh))
+    pygame.draw.ellipse(o, (0, 0, 0, 0), (6, 4, ow - 7, oh - 8))      # a crescent: 6 px thick on the left
+    o.fill((0, 0, 0, 0), (round(ow * 0.86), 0, ow, oh))                # open on the right
+    surf.blit(o, (cx - round(r * 0.2) - ow // 2, cy - round(r * 0.04) - oh // 2))
+    # the letters: a wide, clean sans, flat like a decal
+    f = pygame.font.Font(None, 34)
     word = f.render("UANTUM", False, CHARCOAL)
     space = f.render("SPACE", False, TUM_BLUE)
-    left = cx + r - 8
-    top = cy - 6
+    h = round(r * 0.56)                         # the cap height, as on the wall
+    word = pygame.transform.scale(word, (round(r * 3.6), round(word.get_height() * h / 24)))
+    space = pygame.transform.scale(space, (round(r * 2.75), round(space.get_height() * h / 24)))
+    left, top = cx + round(r * 0.68), cy - round(r * 0.2) - round(word.get_height() * 0.16)
     surf.blit(word, (left, top))
-    surf.blit(space, (left + word.get_width(), top))
-    _tum_logo(surf, left + 6, cy - r + 10, 4)
+    surf.blit(space, (left + word.get_width() + round(r * 0.16), top))
+    _tum_logo(surf, cx + round(r * 0.88), cy - round(r * 1.12), max(2, round(r * 0.11)))
+
+
+def _chair(surf, x: int, floor: int, facing: int) -> None:
+    """An office chair, side on: a backrest, the seat, the gas lift and a five-star base."""
+    seat = pygame.Rect(0, 0, 26, 7)
+    seat.midbottom = (x, floor - 30)
+    _box(surf, (x - 3, floor - 30, 6, 18), P.shade(P.SLATE, 0.6), radius=1)          # the gas lift
+    _box(surf, (x - 15, floor - 12, 30, 4), P.shade(P.SLATE, 0.5), radius=1)         # the base
+    for dx in (-14, 0, 14):
+        pygame.draw.circle(surf, P.INK, (x + dx, floor - 5), 3)
+    _box(surf, seat, P.SLATE, radius=3)
+    back = pygame.Rect(0, 0, 8, 22)
+    back.bottomleft = (x - facing * 14 - 4, seat.top + 2)
+    _box(surf, back, P.SLATE, radius=3)
+
+
+def _desk(surf, x: int, floor: int) -> None:
+    """A desk: a light wooden top on white legs, two monitors, a keyboard."""
+    for k in (0, 1):
+        mon = pygame.Rect(x + 8 + k * 38, floor - 86, 34, 24)
+        _box(surf, mon, P.INK, radius=2, ink=1)
+        surf.fill(P.shade(TUM_BLUE, 0.7), mon.inflate(-4, -4))
+        surf.fill(P.lighten(TUM_BLUE, 0.3), (mon.x + 4, mon.y + 4, 14, 2))
+        surf.fill(P.INK, (mon.centerx - 1, mon.bottom, 3, 6))
+    _box(surf, (x + 20, floor - 59, 30, 3), P.MIST, radius=1)                         # the keyboard
+    _box(surf, (x, floor - 56, 88, 6), (208, 176, 128), radius=1)
+    for lx in (x + 4, x + 78):
+        _box(surf, (lx, floor - 50, 5, 46), P.lighten(BOARD, 0.2), radius=1)
 
 
 def _office(surf, lights: Lights) -> None:
@@ -360,7 +391,7 @@ def _office(surf, lights: Lights) -> None:
     for x in (0, 168, 418, width - 6):
         surf.fill(P.shade(BOARD, 0.85), (x, glass_bottom, 2, boards.h))
     f = load_font(8)
-    for text, x, y in (("|0>", 470, 214), ("H|0>=|+>", 450, 240), ("<psi|", 64, 226)):
+    for text, x, y in (("|0>", 272, 250), ("H|0>=|+>", 300, 270), ("<psi|", 380, 206)):
         surf.blit(f.render(text, False, MARKER), (x, y))
     for y in (218, 232):                        # a little circuit
         pygame.draw.line(surf, MARKER, (300, y), (380, y), 1)
@@ -371,8 +402,12 @@ def _office(surf, lights: Lights) -> None:
     for i, (x, y, c) in enumerate(((520, 206, P.BAD), (536, 210, P.GOLD), (528, 222, P.SKY), (104, 208, P.GOLD))):
         pygame.draw.circle(surf, P.INK, (x, y), 5)
         pygame.draw.circle(surf, c, (x, y), 4)
-    surf.fill(P.shade(BOARD, 0.8), (24, 250, 44, 4))                    # the marker tray
+    surf.fill(P.shade(BOARD, 0.8), (346, 292, 44, 4))                   # the marker tray
     for k, c in enumerate((MARKER, P.INK, P.BAD, MARKER)):
-        surf.fill(c, (28 + k * 9, 236, 5, 14))
+        surf.fill(c, (350 + k * 9, 278, 5, 14))
+    # the open-plan floor in front of them: desks and chairs
+    for x, facing in ((20, 1), (150, -1), (424, 1), (552, -1)):
+        _desk(surf, x, floor)
+        _chair(surf, x + 44 + facing * 30, floor, facing)
     # the floor: grey carpet tiles
     _tiled_floor(surf, (120, 120, 136), (96, 96, 112), (144, 144, 160))

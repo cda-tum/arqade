@@ -24,7 +24,7 @@ STRIKE_RANGE = 66       # px between the fighters' x where a ground normal can r
 AIR_RANGE = 50          # the same for an air attack, whose boxes are shorter
 GRAB_RANGE = 120        # MEASURE (a dashing command throw) connects from about this far
 FIELD_RANGE = 70        # CHARGE NOISE shocks anything within about this far
-TRAP_RANGE = 70         # OPTICAL TRAP catches a rival in the air within about this far across
+PILLAR_REACH = (-4, 56)     # LIGHT PILLAR: where a rival in the air is in the beam (ahead of her, px)
 SHOT_DANGER = 90        # a rival's shot this close and coming is worth TUNNELling through
 PRESS_GAP = 4           # frames between two presses, so every press is a fresh edge
 LONG_CROUCH = 40        # a rival crouched this long gets thrown
@@ -141,13 +141,14 @@ class Bot:
         return f"{'crouch' if me.stance == 'crouch' else 'stand'}.{self.chain[0].upper()}"
 
     def _phoebe(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
-        """PHOEBE's two ground specials: OPTICAL TRAP on a rival in the air above her, TUNNEL
+        """PHOEBE's two ground specials: LIGHT PILLAR on a rival in the air above her, TUNNEL
         through an incoming shot or, now and then, to cross the rival up."""
         if me.action not in ("idle", "walk", "crouch") or self.gap > 0:
             return None
-        trap, tunnel = me.char.moves["stand.X"], me.char.moves["crouch.X"]
-        if trap.name == "OPTICAL TRAP" and rival.y > 20 and dist <= TRAP_RANGE \
-                and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, trap, rival) \
+        pillar, tunnel = me.char.moves["stand.X"], me.char.moves["crouch.X"]
+        ahead = (rival.x - me.x) * me.facing
+        if pillar.name == "LIGHT PILLAR" and rival.y > 20 and PILLAR_REACH[0] <= ahead <= PILLAR_REACH[1] \
+                and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, pillar, rival) \
                 and self.rng.random() < self.skill * 0.6:
             self.down = False
             return self._press("x", 0)

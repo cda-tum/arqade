@@ -229,7 +229,7 @@ STRIKER = {
     "air jab": "hand_f", "jump-in": "foot_f", "throw": "hand_f",
     "PHASE SLIDE": "foot_f", "HADAMARD DIVE": "foot_f",
     "MEASURE": "hand_f", "CHARGE NOISE": "hand_f", "COLLAPSE": "foot_f",
-    "OPTICAL TRAP": "hand_f",
+    "LIGHT PILLAR": "hand_f",
 }
 REACH = 12      # px: a joint is drawn with a fist/foot about this big around it
 

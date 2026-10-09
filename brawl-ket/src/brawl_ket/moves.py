@@ -312,14 +312,13 @@ PHOEBE = Character(
             kind="throw",
             poses=("throw_reach", "throw_hold", "idle"),
         ),
-        # Optical tweezers: a laser beam from her raised palms, focused to a bright point above
-        # her, which traps whatever it catches. The box is the focus and the beam around it,
-        # from 150 px up: above every standing hurtbox (BOHR's is the tallest, 132), so it only
-        # ever catches someone in the air. The geometry alone makes it an anti-air.
+        # A thick laser beam straight up from her raised palms. Its box is the beam, from 150 px
+        # up: above every standing hurtbox (BOHR's is the tallest, 132), so it only ever catches
+        # someone in the air. The geometry alone makes it an anti-air.
         "stand.X": Move(
-            "OPTICAL TRAP", 7, 10, 18, Box(-8, 150, 64, 100), OWN, MID,
+            "LIGHT PILLAR", 7, 10, 18, Box(2, 150, 44, 210), OWN, MID,
             damage=10, hitstun=20, knockback=2.0, knockdown=True,
-            kind="special", cooldown=config.frames(1.5), cue="trap",
+            kind="special", cooldown=config.frames(1.5), cue="pillar",
             poses=("trap_wind", "trap", "trap_wind"),
         ),
         # She tunnels through the rival and re-forms on their far side (fighter.py, _tunnel_target).

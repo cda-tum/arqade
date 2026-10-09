@@ -77,24 +77,18 @@ She is the easiest fighter to hurt (95 health) and has no ground projectile.
 
 ## 3. Her specials
 
-### X: OPTICAL TRAP (anti-air)
+### X: LIGHT PILLAR (anti-air)
 
-Laser beams cross in a column above her and slightly in front. It is an optical
-trap: tweezers made of light.
+A thick laser beam straight up from her raised palms (photon-based, like her name). It
+began as an OPTICAL TRAP: first crossing beams, then a focused hourglass. Both looked
+wrong on the cabinet, and the user asked for a straight, thick beam (2026-10-09).
 
-- **Hitbox:** Box(-12, 136, 56, 150). It starts above the tallest standing hurtbox
-  (BOHR's, at 132), so a grounded rival walks under it: **it only ever hits someone
-  in the air.** This comes from the geometry alone; no new rule. Its height is MID.
-- **Frames:**
-  - startup 7, during which a thin aiming beam shows where the column will be;
-  - active 10;
-  - recovery 18.
-- **Effect:** 10 damage and a knockdown, so an anti-air brings them down.
-- **Cooldown:** 1.5 s.
-- **What it answers:**
-  - ROBERT's HADAMARD DIVE, BOHR's COLLAPSE and every jump-in. Only if her colour
-    matches, of course: that's the guess.
-  - The answer to the answer: stay on the ground.
+- **Hitbox:** Box(2, 150, 44, 210), the beam over her palms. It starts above the tallest
+  standing hurtbox (BOHR's, at 132), so a grounded rival walks under it: **it only ever
+  hits someone in the air.** This comes from the geometry alone; no new rule. MID.
+- **Frames:** startup 7 (light gathers at her palms, a thin guide line flickers straight
+  up), active 10 (the beam, off the top of the screen), recovery 18 (it thins out).
+- **Effect:** 10 damage and a knockdown. **Cooldown:** 1.5 s.
 
 ### Down + X: TUNNEL (teleport)
 
@@ -113,7 +107,7 @@ re-forms on their far side.
 - **Readability:** a dotted "tunnel" line along the floor from where she was to
   where she will be, shown from the first frame of the vanish. A rival who watches
   can turn around in time.
-- **Cooldown:** 2.5 s. It does no damage; it is a movement tool (escaping the
+- **Cooldown:** 1.8 s (2.5 s at first; lowered after the first look). It does no damage; it is a movement tool (escaping the
   corner, crossing up, slipping through a PHOTON).
 
 ### Air X: LASER (diagonal)
@@ -137,7 +131,7 @@ This needs one engine change: **shots get a vertical speed** (`Shot.vy`,
 ## 4. The CPU
 
 The attract demo and the tests rely on the bot, so it learns her three tools:
-- **OPTICAL TRAP** when the rival is in the air and within about 70 px across;
+- **LIGHT PILLAR** when the rival is in the air and within about 70 px across;
 - **TUNNEL** when a shot is coming and too close to jump, or now and then at mid
   range to cross up;
 - **LASER** from a jump at mid range, aimed so the diagonal meets the rival.
@@ -158,7 +152,7 @@ The attract demo and the tests rely on the bot, so it learns her three tools:
 
 New tests:
 - the frame data;
-- OPTICAL TRAP never touches a grounded standing rival of any build, and hits a
+- LIGHT PILLAR never touches a grounded standing rival of any build, and hits a
   jumping one;
 - TUNNEL lands on the far side, stays on the stage (the corner case included), turns
   her round, and makes her unhittable only in the gone frames;

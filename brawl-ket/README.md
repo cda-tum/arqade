@@ -63,8 +63,8 @@ colour from the wind-up on, so you see before contact whether it will match. A w
 | | ROBERT | BOHR | PHOEBE |
 |---|---|---|---|
 | Build | lean and fast, high jump | heavy and slow, long reach, 115 health | tall and tricky, the longest pokes, 95 health; controls angles, not the ground |
-| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis | OPTICAL TRAP: laser beams cross in a column above her: an anti-air that only ever catches someone in the air, and knocks them down (1.5 s cooldown) |
-| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) | TUNNEL: she dissolves and re-forms 50 px past the rival, facing them; a dotted line on the floor shows where. Untouchable only while gone, open while she re-forms (2.5 s cooldown) |
+| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis | LIGHT PILLAR: a thick laser beam straight up from her raised palms: an anti-air that only ever catches someone in the air, and knocks them down (1.5 s cooldown) |
+| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) | TUNNEL: she dissolves and re-forms 50 px past the rival, facing them; a dotted line on the floor shows where. Untouchable only while gone, open while she re-forms (1.8 s cooldown) |
 | Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too | LASER: she hangs in the air, aims (a dotted line) and fires down and forward at 45 degrees, once per jump |
 
 Her weakness: she has no ground projectile and the least health, so walking straight

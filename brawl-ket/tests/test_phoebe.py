@@ -1,5 +1,5 @@
 """PHOEBE's three specials (docs/superpowers/specs/2026-10-09-brawl-ket-phoebe-design.md):
-OPTICAL TRAP only ever catches someone in the air, TUNNEL re-forms her past the rival and makes
+LIGHT PILLAR only ever catches someone in the air, TUNNEL re-forms her past the rival and makes
 her untouchable only while she is gone, and the LASER hovers, flies at 45 degrees, fires once
 per jump and ends on the floor. And the CPU uses all three."""
 
@@ -30,10 +30,10 @@ def hits_on(events, player):
     return [e for e in events if e.kind in ("hit", "block") and e.player == player]
 
 
-# --- OPTICAL TRAP -----------------------------------------------------------------------------
+# --- LIGHT PILLAR -----------------------------------------------------------------------------
 
 
-def test_optical_trap_never_touches_a_rival_on_the_ground():
+def test_light_pillar_never_touches_a_rival_on_the_ground():
     for rival in CHARACTERS.values():
         for gap in range(20, 80, 10):
             for crouch in (False, True):
@@ -44,7 +44,7 @@ def test_optical_trap_never_touches_a_rival_on_the_ground():
                 assert not hits_on(events, "p2"), (rival.name, gap, crouch)
 
 
-def test_optical_trap_knocks_down_a_rival_jumping_in():
+def test_light_pillar_knocks_down_a_rival_jumping_in():
     fight = versus(PHOEBE, ROBERT, 120)
     me, rival = fight.fighters["p1"], fight.fighters["p2"]
     events = step(fight, IDLE, FighterInput(up=True, dx=-1))
@@ -168,7 +168,7 @@ def test_a_laser_and_a_photon_cancel_each_other():
 # --- the CPU ----------------------------------------------------------------------------------
 
 
-def test_the_bot_traps_a_rival_in_the_air_above_her():
+def test_the_bot_beams_a_rival_in_the_air_above_her():
     fight = versus(PHOEBE, ROBERT, 50)
     rival = fight.fighters["p2"]
     rival.y, rival.vy, rival.action = 90.0, 0.0, "jump"
