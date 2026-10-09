@@ -284,67 +284,15 @@ TUM_BLUE = (48, 96, 176)        # the TUM blue, on the GBA grid
 MARKER = (40, 72, 160)
 
 
-DECAL = load_image("quantum_space.png")     # the letters, cut from a photo (tools/make_decal.py)
-DECAL_Q = (51, 53)                          # where the Q's centre falls in it
-DECAL_R = 43                                # the Q ring's radius there
+DECAL = load_image("quantum_space.png")     # the whole decal, built by tools/make_decal.py
+DECAL_U = (95, 45)                          # its first U's centre, at the capitals' top
 
 
-def _spline(pts, n: int = 8) -> list[tuple[float, float]]:
-    """A smooth curve through the points (Catmull-Rom), n steps per span."""
-    pts = [pts[0], *pts, pts[-1]]
-    out = []
-    for i in range(1, len(pts) - 2):
-        p0, p1, p2, p3 = pts[i - 1], pts[i], pts[i + 1], pts[i + 2]
-        for k in range(n):
-            t = k / n
-            out.append(tuple(0.5 * (2 * p1[d] + (-p0[d] + p2[d]) * t + (2 * p0[d] - 5 * p1[d] + 4 * p2[d] - p3[d]) * t * t
-                                    + (-p0[d] + 3 * p1[d] - 3 * p2[d] + p3[d]) * t ** 3) for d in (0, 1)))
-    out.append(pts[-2])
-    return out
-
-
-def _tum_logo(surf, x: int, y: int, u: int) -> None:
-    """The TUM logo, as on the wall, on a grid of u px strokes (10 wide, 6 tall): one top bar
-    over the T running into the U's left stem; the U open at the top; its right stem the M's
-    first, under the M's own top bar; every stem down to the baseline."""
-    for gx, gy, gw, gh in ((0, 0, 4, 1), (1, 0, 1, 6), (3, 0, 1, 6), (3, 5, 3, 1),      # T and U
-                           (5, 0, 5, 1), (5, 0, 1, 6), (7, 0, 1, 6), (9, 0, 1, 6)):   # M
-        surf.fill(TUM_BLUE, (x + gx * u, y + gy * u, gw * u, gh * u))
-
-
-def _quantum_space(surf, x: int, y: int) -> None:
-    """The QUANTUMSPACE decal. The letters are cut from a photo of the wall; the Q is drawn,
-    fitted to the same photo (r is its ring's radius): a thick ring open on the right where the
-    U sits (from 18 degrees above the horizontal round to 20 below); inside it, a stroke from
-    the ring's top that bows a little to the left, then curves down and right into the tail,
-    out past the ring; and a thin blue orbit, an ellipse on the ring's centre, open on the right."""
-    cx, cy = x + DECAL_Q[0], y + DECAL_Q[1]
-    r = DECAL_R
-    w = round(r * 0.13)
-    size = 2 * r + 2 * w
-    q = pygame.Surface((size, size), pygame.SRCALPHA)
-    c = size // 2
-    pygame.draw.circle(q, CHARCOAL, (c, c), r + w // 2)
-    pygame.draw.circle(q, (0, 0, 0, 0), (c, c), r - w // 2)
-    far = 2 * size
-    pygame.draw.polygon(q, (0, 0, 0, 0), [(c, c), (c + far, c - round(far * math.tan(math.radians(18)))),
-                                          (c + far, c + round(far * math.tan(math.radians(20))))])
-    surf.blit(q, (cx - c, cy - c))
-    inner = [(0.02, -0.97), (-0.04, -0.78), (-0.09, -0.52), (-0.10, -0.30), (-0.07, -0.08), (0.02, 0.18),
-             (0.12, 0.38), (0.25, 0.55), (0.46, 0.71), (0.66, 0.82), (0.86, 0.88), (1.08, 0.91)]
-    pts = [(round(cx + px * r), round(cy + py * r)) for px, py in _spline(inner)]
-    pygame.draw.lines(surf, CHARCOAL, False, pts, w)
-    for p in pts:
-        pygame.draw.circle(surf, CHARCOAL, p, w // 2)
-    t = max(2, round(r * 0.07))
-    ow, oh = round(r * 1.92), round(r * 0.70)
-    o = pygame.Surface((ow + t, oh + t), pygame.SRCALPHA)
-    pygame.draw.ellipse(o, TUM_BLUE, (0, 0, ow + t, oh + t))
-    pygame.draw.ellipse(o, (0, 0, 0, 0), (t, t, ow - t, oh - t))
-    o.fill((0, 0, 0, 0), (round((ow + t) / 2 + r * 0.62), 0, ow, oh + t))
-    surf.blit(o, (cx - (ow + t) // 2, cy - (oh + t) // 2))
-    surf.blit(DECAL, (x, y))
-    _tum_logo(surf, x + 97, y + 4, 5)
+def _quantum_space(surf, lamp_center) -> None:
+    """The QUANTUMSPACE decal: the MQT logo's Q and lettering, laid out as on the wall
+    (tools/make_decal.py builds it). On the wall, the first U's centre is a little right of
+    the ring lamp's centre and about 51 game px below it."""
+    surf.blit(DECAL, (lamp_center[0] + 3 - DECAL_U[0], lamp_center[1] + 51 - DECAL_U[1]))
 
 
 def _chair(surf, x: int, floor: int, facing: int) -> None:
@@ -393,7 +341,8 @@ def _office(surf, lights: Lights) -> None:
     for x in range(window.x, width, 30):
         pygame.draw.line(surf, CONCRETE_DARK, (x, window.y), (x + 20, window.bottom), 3)
     surf.fill((176, 168, 160), (0, glass_bottom - 50, 190, 50))        # a cupboard beyond
-    lamp = pygame.Rect(206, glass_top + 4, 124, 22)
+    lamp = pygame.Rect(0, 0, 150, 32)          # the ring lamp, as wide as the wall's
+    lamp.center = (222, glass_top + 18)          # so the decal below it is centred
     pygame.draw.ellipse(surf, P.lighten(P.CREAM, 0.4), lamp.inflate(6, 4), 6)
     pygame.draw.ellipse(surf, P.WHITE, lamp, 3)
     # the glass: a faint sheen, thin light frames
@@ -402,7 +351,7 @@ def _office(surf, lights: Lights) -> None:
     for x in (0, 168, 418, width - 6):
         surf.fill(MULLION, (x, glass_top, 3, room.h))
     surf.fill(MULLION, (0, glass_top - 4, width, 4))
-    _quantum_space(surf, 129, 66)
+    _quantum_space(surf, lamp.center)
     # below the glass: whiteboards, with scribbles, magnets and a marker tray
     boards = pygame.Rect(0, glass_bottom, width, floor - glass_bottom)
     surf.fill(BOARD, boards)
