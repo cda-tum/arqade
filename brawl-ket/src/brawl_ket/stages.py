@@ -23,7 +23,7 @@ import pygame
 
 from . import palette as P
 from .config import FLOOR_Y, INTERNAL_HEIGHT, INTERNAL_WIDTH, STAGES
-from .fonts import load_font
+from .fonts import load_font, load_image
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 MARGIN = 8                  # the stage is this much bigger on every side, for the shake
@@ -284,48 +284,67 @@ TUM_BLUE = (48, 96, 176)        # the TUM blue, on the GBA grid
 MARKER = (40, 72, 160)
 
 
+DECAL = load_image("quantum_space.png")     # the letters, cut from a photo (tools/make_decal.py)
+DECAL_Q = (51, 53)                          # where the Q's centre falls in it
+DECAL_R = 43                                # the Q ring's radius there
+
+
+def _spline(pts, n: int = 8) -> list[tuple[float, float]]:
+    """A smooth curve through the points (Catmull-Rom), n steps per span."""
+    pts = [pts[0], *pts, pts[-1]]
+    out = []
+    for i in range(1, len(pts) - 2):
+        p0, p1, p2, p3 = pts[i - 1], pts[i], pts[i + 1], pts[i + 2]
+        for k in range(n):
+            t = k / n
+            out.append(tuple(0.5 * (2 * p1[d] + (-p0[d] + p2[d]) * t + (2 * p0[d] - 5 * p1[d] + 4 * p2[d] - p3[d]) * t * t
+                                    + (-p0[d] + 3 * p1[d] - 3 * p2[d] + p3[d]) * t ** 3) for d in (0, 1)))
+    out.append(pts[-2])
+    return out
+
+
 def _tum_logo(surf, x: int, y: int, u: int) -> None:
     """The TUM logo, as on the wall, on a grid of u px strokes (10 wide, 6 tall): one top bar
     over the T running into the U's left stem; the U open at the top; its right stem the M's
     first, under the M's own top bar; every stem down to the baseline."""
-    blue = TUM_BLUE
     for gx, gy, gw, gh in ((0, 0, 4, 1), (1, 0, 1, 6), (3, 0, 1, 6), (3, 5, 3, 1),      # T and U
                            (5, 0, 5, 1), (5, 0, 1, 6), (7, 0, 1, 6), (9, 0, 1, 6)):   # M
-        surf.fill(blue, (x + gx * u, y + gy * u, gw * u, gh * u))
+        surf.fill(TUM_BLUE, (x + gx * u, y + gy * u, gw * u, gh * u))
 
 
-def _quantum_space(surf, cx: int, cy: int, r: int) -> None:
-    """The decal, measured off a photo of the wall: a thin charcoal Q ring, open on the right
-    where the U sits, its bottom sweeping out into a tail under the first letters; a blue orbit
-    inside its left half; UANTUM in charcoal and SPACE in blue; the TUM logo above."""
-    q = pygame.Surface((2 * r + 8, 2 * r + 8), pygame.SRCALPHA)
-    c = r + 4
-    pygame.draw.circle(q, CHARCOAL, (c, c), r)
-    pygame.draw.circle(q, (0, 0, 0, 0), (c, c), r - 5)
-    cut = [(c, c), (c + 2 * r, c - round(2 * r * math.tan(math.radians(32)))),
-           (c + 2 * r, c + 4 * r), (c + round(r * 0.1), c + 4 * r)]   # down to the tail's start
-    pygame.draw.polygon(q, (0, 0, 0, 0), cut)
+def _quantum_space(surf, x: int, y: int) -> None:
+    """The QUANTUMSPACE decal. The letters are cut from a photo of the wall; the Q is drawn,
+    fitted to the same photo (r is its ring's radius): a thick ring open on the right where the
+    U sits (from 18 degrees above the horizontal round to 20 below); inside it, a stroke from
+    the ring's top that bows a little to the left, then curves down and right into the tail,
+    out past the ring; and a thin blue orbit, an ellipse on the ring's centre, open on the right."""
+    cx, cy = x + DECAL_Q[0], y + DECAL_Q[1]
+    r = DECAL_R
+    w = round(r * 0.13)
+    size = 2 * r + 2 * w
+    q = pygame.Surface((size, size), pygame.SRCALPHA)
+    c = size // 2
+    pygame.draw.circle(q, CHARCOAL, (c, c), r + w // 2)
+    pygame.draw.circle(q, (0, 0, 0, 0), (c, c), r - w // 2)
+    far = 2 * size
+    pygame.draw.polygon(q, (0, 0, 0, 0), [(c, c), (c + far, c - round(far * math.tan(math.radians(18)))),
+                                          (c + far, c + round(far * math.tan(math.radians(20))))])
     surf.blit(q, (cx - c, cy - c))
-    tail = [(cx + r * 1.2 * t, cy + r - 2 - r * 0.24 * t * t) for t in (i / 8 for i in range(9))]
-    pygame.draw.lines(surf, CHARCOAL, False, [(round(x), round(y)) for x, y in tail], 5)
-    # the orbit: an ellipse in the ring's left half, open on the right, thickest on the left
-    ow, oh = round(r * 1.52), round(r * 0.72)
-    o = pygame.Surface((ow, oh), pygame.SRCALPHA)
-    pygame.draw.ellipse(o, TUM_BLUE, (0, 0, ow, oh))
-    pygame.draw.ellipse(o, (0, 0, 0, 0), (6, 4, ow - 7, oh - 8))      # a crescent: 6 px thick on the left
-    o.fill((0, 0, 0, 0), (round(ow * 0.86), 0, ow, oh))                # open on the right
-    surf.blit(o, (cx - round(r * 0.2) - ow // 2, cy - round(r * 0.04) - oh // 2))
-    # the letters: a wide, clean sans, flat like a decal
-    f = pygame.font.Font(None, 34)
-    word = f.render("UANTUM", False, CHARCOAL)
-    space = f.render("SPACE", False, TUM_BLUE)
-    h = round(r * 0.56)                         # the cap height, as on the wall
-    word = pygame.transform.scale(word, (round(r * 3.6), round(word.get_height() * h / 24)))
-    space = pygame.transform.scale(space, (round(r * 2.75), round(space.get_height() * h / 24)))
-    left, top = cx + round(r * 0.68), cy - round(r * 0.2) - round(word.get_height() * 0.16)
-    surf.blit(word, (left, top))
-    surf.blit(space, (left + word.get_width() + round(r * 0.16), top))
-    _tum_logo(surf, cx + round(r * 0.88), cy - round(r * 1.12), max(2, round(r * 0.11)))
+    inner = [(0.02, -0.97), (-0.04, -0.78), (-0.09, -0.52), (-0.10, -0.30), (-0.07, -0.08), (0.02, 0.18),
+             (0.12, 0.38), (0.25, 0.55), (0.46, 0.71), (0.66, 0.82), (0.86, 0.88), (1.08, 0.91)]
+    pts = [(round(cx + px * r), round(cy + py * r)) for px, py in _spline(inner)]
+    pygame.draw.lines(surf, CHARCOAL, False, pts, w)
+    for p in pts:
+        pygame.draw.circle(surf, CHARCOAL, p, w // 2)
+    t = max(2, round(r * 0.07))
+    ow, oh = round(r * 1.92), round(r * 0.70)
+    o = pygame.Surface((ow + t, oh + t), pygame.SRCALPHA)
+    pygame.draw.ellipse(o, TUM_BLUE, (0, 0, ow + t, oh + t))
+    pygame.draw.ellipse(o, (0, 0, 0, 0), (t, t, ow - t, oh - t))
+    o.fill((0, 0, 0, 0), (round((ow + t) / 2 + r * 0.62), 0, ow, oh + t))
+    surf.blit(o, (cx - (ow + t) // 2, cy - (oh + t) // 2))
+    surf.blit(DECAL, (x, y))
+    _tum_logo(surf, x + 97, y + 4, 5)
 
 
 def _chair(surf, x: int, floor: int, facing: int) -> None:
@@ -377,14 +396,13 @@ def _office(surf, lights: Lights) -> None:
     lamp = pygame.Rect(206, glass_top + 4, 124, 22)
     pygame.draw.ellipse(surf, P.lighten(P.CREAM, 0.4), lamp.inflate(6, 4), 6)
     pygame.draw.ellipse(surf, P.WHITE, lamp, 3)
-    pygame.draw.line(surf, P.lighten(P.CREAM, 0.5), (40, glass_bottom - 64), (560, glass_bottom - 64), 1)
     # the glass: a faint sheen, thin light frames
     for x in range(30, width, 160):
         pygame.draw.line(surf, P.lighten(CONCRETE, 0.35), (x, glass_top + 4), (x + 40, glass_bottom - 4), 2)
     for x in (0, 168, 418, width - 6):
         surf.fill(MULLION, (x, glass_top, 3, room.h))
     surf.fill(MULLION, (0, glass_top - 4, width, 4))
-    _quantum_space(surf, 168 + 24, 120, 50)
+    _quantum_space(surf, 129, 66)
     # below the glass: whiteboards, with scribbles, magnets and a marker tray
     boards = pygame.Rect(0, glass_bottom, width, floor - glass_bottom)
     surf.fill(BOARD, boards)
