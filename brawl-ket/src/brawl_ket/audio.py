@@ -237,6 +237,13 @@ def build_sfx() -> dict[str, list[int]]:
         # MEASURE collapsing the rival into BOHR's basis: a falling zap
         "measure": tone(c("C6"), 0.18, 0.2, "square", decay=10, slide=0.35),
         "photon": tone(700, 0.16, 0.2, "pulse", decay=10, slide=2.2),
+        # PHOEBE: the OPTICAL TRAP's rising hum, the TUNNEL's falling-then-rising shimmer, the
+        # LASER's short zap, and the sizzle of a laser reaching the floor
+        "trap": mix(tone(220, 0.22, 0.18, "saw", decay=5, slide=2.5), tone(330, 0.22, 0.1, "triangle", decay=5, slide=2.5)),
+        "tunnel": concat(tone(1100, 0.09, 0.15, "triangle", decay=4, slide=0.35),
+                         tone(380, 0.12, 0.15, "triangle", decay=5, slide=2.8)),
+        "laser": tone(1500, 0.07, 0.18, "square", decay=22, slide=0.5),
+        "sizzle": noise_wave(0.07, 0.12, decay=35, hold=1, seed=9),
         "shockwave": mix(tone(70, 0.3, 0.45, "sine", decay=8, slide=0.5), noise_wave(0.25, 0.3, decay=12, hold=6)),
     }
 
@@ -246,8 +253,10 @@ CUE_SOUNDS = {"blip": "blip", "pause": "pause", "round": "round", "fight": "figh
 # the fight's events; None: deliberately silent (a landing would chatter)
 EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "whoosh", "measure": "measure",
                 "projectile": "photon", "shockwave": "shockwave",
+                "trap": "trap", "tunnel": "tunnel", "laser": "laser", "fizzle": "sizzle",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
-SUPERSEDES = {"measure": "hit"}     # MEASURE's zap replaces the thump of its own throw
+SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw
+              "laser": "photon"}    # a LASER is a projectile too: its zap, not the photon's
 
 
 def sounds_for(events: list) -> list[str]:

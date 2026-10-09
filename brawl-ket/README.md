@@ -11,9 +11,9 @@ replaces the repetition-code v1 and the Shor-code v2, which playtests found
 too hard to read).
 
 **Status:**
-- **The game:** two fighters (ROBERT and BOHR), versus only, best of 3
+- **The game:** three fighters (ROBERT, BOHR and PHOEBE), versus only, best of 3
   rounds of 60 s.
-- **Screens:** chunky GBA-style puppets at 640x360 (x3 on the cabinet), the
+- **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat) at 640x360 (x3 on the cabinet), the
   title with a bot demo, character select, round calls and pause.
 - **Extras:** chiptune (a title and a fight loop), `--input-test`, a
   snapshot tool and a Batocera deploy script.
@@ -45,7 +45,7 @@ changes, so the rule a player reads is: **colour must match to hurt.**
 - **Heights:** standing normals are HIGH (a crouch ducks them), crouching
   normals LOW (a jump clears them), air normals and throws MID.
 - **Damage:** light 4, heavy 8, special 10, throw 10, MEASURE 12, CHARGE NOISE
-  3 a shock. Health: ROBERT 100, BOHR 115. Lights stun briefly enough that mashing
+  3 a shock, LASER 8. Health: ROBERT 100, BOHR 115, PHOEBE 95. Lights stun briefly enough that mashing
   can't loop, and getting up from a knockdown is invulnerable for 8 frames.
 
 On screen: P1 has a blue ring under their feet and P2 a red one; each health
@@ -55,14 +55,18 @@ colour from the wind-up on, so you see before contact whether it will match. A w
 
 ## The fighters
 
-| | ROBERT | BOHR |
-|---|---|---|
-| Build | lean and fast, high jump | heavy and slow, long reach, 115 health |
-| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis |
-| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) |
-| Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too |
+| | ROBERT | BOHR | PHOEBE |
+|---|---|---|---|
+| Build | lean and fast, high jump | heavy and slow, long reach, 115 health | tall and tricky, the longest pokes, 95 health; controls angles, not the ground |
+| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis | OPTICAL TRAP: laser beams cross in a column above her: an anti-air that only ever catches someone in the air, and knocks them down (1.5 s cooldown) |
+| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) | TUNNEL: she dissolves and re-forms 50 px past the rival, facing them; a dotted line on the floor shows where. Untouchable only while gone, open while she re-forms (2.5 s cooldown) |
+| Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too | LASER: she hangs in the air, aims (a dotted line) and fires down and forward at 45 degrees, once per jump |
 
-Both share the normals: A is a jab (standing, crouching, in the air), B a
+Her weakness: she has no ground projectile and the least health, so walking straight
+in on the ground (BOHR's game) is how you beat her. Design:
+`../docs/superpowers/specs/2026-10-09-brawl-ket-phoebe-design.md`.
+
+All three share the normals: A is a jab (standing, crouching, in the air), B a
 heavy, a sweep (knockdown) or a jump-in, and B up close while pushing towards
 the rival is a throw. A chains A, A, B.
 
@@ -101,7 +105,7 @@ uv run python tools/benchmark.py                    # frame cost (on the cabinet
 | Module | Role |
 |---|---|
 | `basis.py` | The two bases, which errors change which, H, and each attack's error from its colour rule. Pure, exact, tested against 2x2 matrices. |
-| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT and BOHR. |
+| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR and PHOEBE. |
 | `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). Pure. |
 | `match.py` | Title, select, rounds, the result, pause, idle and the attract demo. Pure. |
 | `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens. |

@@ -38,16 +38,23 @@ from .fight import Fight
 from .fighter import Fighter
 from .fonts import load_font
 from .moves import Character
-from .poses import HEAD_R, LIMB_W, POSES, Pose, joints, pose_for
+from .poses import BASE_BONES, HEAD_R, LIMB_W, POSES, SCALE, Pose, joints, pose_for
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 MARGIN = 8                  # the stage is this much bigger on every side, for the shake
 PLAYERS = ("p1", "p2")
-ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD}
+ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL}
 
 # how each build is drawn (the skeleton's proportions are in poses.py)
-TORSO_EXTRA = {"lean": 5, "heavy": 8}      # the lean torso is this much thicker than a limb
-PLATES = {"lean": False, "heavy": True}    # armour: the heavy's wedge torso, plates, helm, gauntlets
+TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5}   # the lean torso is this much thicker than a limb
+PLATES = {"lean": False, "heavy": True, "toy": False}   # armour: the heavy's wedge torso, plates, helm
+# PHOEBE (the "toy" build): a scientist, not a puppet. Her neutral colours; the coat, the lining
+# and her trousers are shades of her basis colour (docs/.../2026-10-09-brawl-ket-phoebe-design.md)
+SKIN = (232, 176, 128)
+HAIR = (88, 48, 40)
+SHOE = (40, 32, 48)
+SHIRT = P.WHITE
+MAX_FLARE = 14              # px: how far her coat's hem can blow out behind her
 # the heavy's wedge torso: half its width (px) at the shoulders, the waist and the belt
 CHEST_HALF, WAIST_HALF, BELT_HALF = 21, 13, 14
 
@@ -71,6 +78,7 @@ STRIKER = {
     "air jab": "hand_f", "jump-in": "foot_f", "throw": "hand_f",
     "PHOTON": "hand_f", "PHASE SLIDE": "foot_f", "HADAMARD DIVE": "foot_f",
     "MEASURE": "hand_f", "COLLAPSE": "foot_f",
+    "OPTICAL TRAP": "hand_f", "LASER": "hand_f",
 }
 
 # effect lengths, in frames
@@ -92,7 +100,7 @@ CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are c
 BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 
 # the select screen: what each fighter is, in a line, and how its X moves are entered
-TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY"}
+TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY", "PHOEBE": "TALL AND TRICKY"}
 X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
 RULE_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR")
 HINT = "MATCH THEIR COLOUR TO HURT - Y SWITCHES"
@@ -171,9 +179,14 @@ def _ball(surf: pygame.Surface, p, r: int, color) -> None:
     pygame.draw.circle(surf, color, p, r)
 
 
-def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body, accent) -> dict:
-    """One fighter, back limbs first. Returns the joints (screen px)."""
+def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body, accent,
+                flare: float = 0.0) -> dict:
+    """One fighter, back limbs first. Returns the joints (screen px). `flare` (px) blows a
+    coat's hem out behind (PHOEBE's; the puppets ignore it)."""
     j = joints(pose, build, feet, facing)
+    if build == "toy":
+        _draw_scientist(surf, j, pose, facing, body, accent, flare)
+        return j
     if PLATES[build]:
         _draw_armoured(surf, j, build, facing, body, accent)
         return j
@@ -306,6 +319,113 @@ def _draw_armoured(surf: pygame.Surface, j: dict, build: str, facing: int, body,
     _block(surf, j["hand_f"], w // 2 + 2, accent)
 
 
+def _towards(a, b, k: float) -> tuple[float, float]:
+    return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)
+
+
+def _poly(surf: pygame.Surface, pts, color, ink: int = 2) -> None:
+    pts = [_pt(p) for p in pts]
+    pygame.draw.polygon(surf, color, pts)
+    pygame.draw.polygon(surf, P.INK, pts, ink)
+
+
+def _shoe(surf: pygame.Surface, foot, facing: int) -> None:
+    r = pygame.Rect(0, 0, 16, 7)
+    r.midbottom = _pt((foot[0] + 4 * facing, foot[1] + 6))
+    pygame.draw.rect(surf, P.INK, r.inflate(4, 4), border_radius=4)
+    pygame.draw.rect(surf, SHOE, r, border_radius=3)
+
+
+def _draw_scientist(surf: pygame.Surface, j: dict, pose, facing: int, coat, accent, flare: float) -> None:
+    """PHOEBE: a long lab coat, open over a white shirt, almost to her ankles, in her basis
+    colour; trousers a deep shade of it; white cuffs, a ponytail, round glasses. The coat is
+    one shape with a single outline (no seams), and hangs by gravity, never through the floor."""
+    lining = P.shade(coat, 0.5)
+    legs = P.shade(coat, 0.6)
+    w = LIMB_W["toy"]
+    hip, neck, sh = j["hip"], j["neck"], j["shoulder_f"]
+    tx, ty = neck[0] - hip[0], neck[1] - hip[1]
+    n = math.hypot(tx, ty) or 1.0
+    ux, uy = tx / n, ty / n                         # up the spine
+    fx, fy = -uy * facing, ux * facing              # towards the front
+
+    def at(base, up: float, front: float) -> tuple[float, float]:
+        return (base[0] + ux * up + fx * front, base[1] + uy * up + fy * front)
+
+    floor = max(j["foot_f"][1], j["foot_b"][1])
+    leg = (BASE_BONES["thigh"] + BASE_BONES["shin"]) * SCALE["toy"]
+    # the hem: just above the ankles; it spreads with the stride and flares out behind
+    hem_y = min(hip[1] + 0.86 * leg, floor - 7)
+    spread = abs(j["foot_f"][0] - j["foot_b"][0])
+    back_x = min(hip[0] * facing, j["knee_b"][0] * facing) * facing - facing * (20 + 0.25 * spread + flare)
+    front_x = hip[0] + facing * (8 + 0.2 * spread)
+    hb = (back_x, hem_y + 2)
+    hm = ((back_x + front_x) / 2, hem_y + 5)
+    hf = (front_x, hem_y)
+    # the inside of the coat, behind everything
+    _poly(surf, [at(sh, 0, -12), at(hip, 6, -15), hb, hm, hf, at(hip, 10, 10), at(sh, 0, 10)], lining)
+    # the back leg and arm, in shadow
+    limb(surf, hip, j["knee_b"], w, P.shade(legs, 0.8))
+    limb(surf, j["knee_b"], j["foot_b"], w - 1, P.shade(legs, 0.8))
+    _shoe(surf, j["foot_b"], facing)
+    dark = P.shade(coat, 0.7)
+    limb(surf, j["shoulder_b"], j["elbow_b"], w + 1, dark)
+    limb(surf, j["elbow_b"], j["hand_b"], w, dark)
+    _ball(surf, _towards(j["elbow_b"], j["hand_b"], 0.82), 7, P.shade(SHIRT, 0.75))
+    _ball(surf, j["hand_b"], 5, P.shade(SKIN, 0.8))
+    # the shirt, then the front leg: the coat goes over both
+    _poly(surf, [at(neck, 5, -7), at(neck, 5, 8), at(sh, 0, 12), at(hip, 6, 12), at(hip, 0, 10),
+                 at(hip, 0, -12), at(sh, 0, -12)], SHIRT)
+    limb(surf, hip, j["knee_f"], w, legs)
+    limb(surf, j["knee_f"], j["foot_f"], w - 1, legs)
+    _shoe(surf, j["foot_f"], facing)
+    # the coat: its back panel and the front panel hanging open. Both outlines first, then
+    # both fills, so only the silhouette keeps an ink line
+    panels = [
+        [at(neck, 3, -9), at(sh, 0, -14), at(hip, 6, -17), hb, hm,
+         _towards(hm, hf, 0.45), at(hip, 14, 2), at(sh, 0, 6)],
+        [at(neck, 2, -3), at(sh, 0, -2), at(hip, 12, 0), hf,
+         _towards(hf, hm, 0.75), at(hip, 4, -10), at(sh, -8, -6), at(neck, 2, -8)],
+    ]
+    panels = [[_pt(q) for q in pts] for pts in panels]
+    for pts in panels:
+        pygame.draw.polygon(surf, P.INK, pts, 4)
+    for pts in panels:
+        pygame.draw.polygon(surf, coat, pts)
+    # the head: hair and a ponytail swinging with her lean, the face, two round lenses
+    hx, hy = _pt(j["head"])
+    r = HEAD_R["toy"]
+    swing = max(-6.0, min(10.0, pose.lean * 0.3)) + flare * 0.3
+    tie = (hx - 9 * facing, hy - 9)
+    limb(surf, tie, (hx - (19 + swing) * facing, hy - 3), 10, HAIR)
+    limb(surf, (hx - (19 + swing) * facing, hy - 3), (hx - (21 + swing) * facing, hy + 9), 7, HAIR)
+    pygame.draw.circle(surf, P.INK, (hx, hy), r + 2)
+    pygame.draw.circle(surf, HAIR, (hx, hy), r)
+    pygame.draw.circle(surf, SKIN, (hx + 4 * facing, hy + 3), r - 4)
+    pygame.draw.circle(surf, P.lighten(HAIR, 0.45), (hx - 4 * facing, hy - 8), 3)
+    pygame.draw.line(surf, P.INK, (hx - 3 * facing, hy + 2), (hx - 9 * facing, hy), 2)  # the glasses' arm
+    for gx, rr in ((hx + 11 * facing, 4), (hx + 2 * facing, 5)):
+        pygame.draw.circle(surf, P.INK, (gx, hy + 2), rr + 1)
+        pygame.draw.circle(surf, P.lighten(accent, 0.6), (gx, hy + 2), rr - 1)
+    surf.fill(P.WHITE, (hx + facing - 1, hy, 2, 2))
+    # the front arm: sleeve, a big turned-back white cuff, hand
+    limb(surf, j["shoulder_f"], j["elbow_f"], w + 1, coat)
+    limb(surf, j["elbow_f"], j["hand_f"], w, coat)
+    _ball(surf, _towards(j["elbow_f"], j["hand_f"], 0.8), 7, SHIRT)
+    _ball(surf, j["hand_f"], 5, SKIN)
+
+
+def tunnel_visibility(f: Fighter) -> float:
+    """How much of a tunnelling fighter is drawn: 1 down to 0 as she dissolves, 0 while gone,
+    then back up to 1 over the first part of re-forming."""
+    m = f.move
+    if f.frame < f.startup:
+        return 1 - (f.frame + 1) / f.startup
+    if f.frame < f.startup + m.active:
+        return 0.0
+    return min(1.0, (f.frame - f.startup - m.active + 1) / max(1, round(m.recovery * 0.6)))
+
+
 # --- static art ----------------------------------------------------------------------------------
 
 
@@ -369,6 +489,7 @@ class Renderer:
             self.stage = stage  # no dummy driver): both are plain surfaces in the default format
         self.dim = pygame.Surface((W, H), pygame.SRCALPHA)     # darkens the game under a menu
         self.dim.fill((*P.INK, 150))
+        self.ghost = pygame.Surface((200, 220), pygame.SRCALPHA)    # TUNNEL: a body to dissolve
         self.bands: dict[int, pygame.Surface] = {}
         self.effects: list[Effect] = []
         self.shake = 0              # frames of shake left
@@ -453,6 +574,8 @@ class Renderer:
                 self.body_flash[e.player] = (colour, MEASURE_FLASH_FRAMES)
                 self.effects.append(Effect("collapse", f.x, FLOOR_Y - f.y - 60, COLLAPSE_FRAMES,
                                            COLLAPSE_FRAMES, BASIS_BODY[f.basis]))
+            elif e.kind == "fizzle":          # a LASER reaching the floor
+                self.effects.append(Effect("spark", e.x, e.y - 3, SPARK_FRAMES // 2, SPARK_FRAMES // 2, P.WHITE))
             elif e.kind == "shockwave":
                 color = ERROR_COLOUR.get(e.error or basis.Z, P.WHITE)
                 self.effects.append(Effect("wave", e.x, e.y, WAVE_FRAMES, WAVE_FRAMES, color))
@@ -553,7 +676,9 @@ class Renderer:
 
     def _shadow(self, key: str, f: Fighter, ox: int, oy: int) -> None:
         """The shadow, ringed in the player's colour (P1 blue, P2 red, as the cabinet's sides):
-        who is who, now that the bodies are the colours of their bases."""
+        who is who, now that the bodies are the colours of their bases. Gone in a TUNNEL."""
+        if f.action == "attack" and f.move is not None and f.move.tunnel and tunnel_visibility(f) <= 0:
+            return
         w = max(18, 52 - f.y * 0.2)
         rect = pygame.Rect(0, 0, round(w) + 8, 12)
         rect.center = (round(f.x) + ox, FLOOR_Y + 2 + oy)
@@ -570,9 +695,100 @@ class Renderer:
         elif f.action in ("hitstun", "knockdown") and f.frame < HIT_FLASH_FRAMES:
             body, accent = P.lighten(body, 0.6), P.WHITE
         feet = (f.x + ox, FLOOR_Y - f.y + oy)
-        j = draw_puppet(self.surface, self._pose(key, f), f.char.build, feet, f.facing, body, accent)
+        pose = self._pose(key, f)
+        # a long coat blows out behind her as she moves, and trails in a jump
+        flare = min(MAX_FLARE, abs(f.vx) * 2.5 + (6 if f.y > 0 else 0))
+        m = f.move
+        if f.action == "attack" and m is not None and m.tunnel:
+            self._tunnel_line(f, ox, oy)
+            seen = tunnel_visibility(f)
+            if seen < 1:
+                j = self._dissolved(pose, f, feet, body, accent, flare, seen)
+                return j["head"][0] - ox, j["head"][1] - oy
+        j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare)
         self._striker(key, f, j)
+        if f.action == "attack" and m is not None and m.name == "OPTICAL TRAP":
+            self._trap(f, m, j, ox, oy)
+        if f.action == "attack" and m is not None and m.projectile is not None and m.projectile.vy \
+                and f.phase == "startup":
+            self._laser_aim(f, j, oy)
         return j["head"][0] - ox, j["head"][1] - oy
+
+    # --- PHOEBE's specials ------------------------------------------------------------------
+
+    def _tunnel_line(self, f: Fighter, ox: int, oy: int) -> None:
+        """TUNNEL's tell: from the first frame, a dotted line along the floor from where she
+        dissolves to where she will re-form, and a ring on the floor there, in her colour."""
+        if f.frame >= f.startup + f.move.active:
+            return
+        colour = BASIS_BODY[f.basis]
+        y = FLOOR_Y + oy + 4
+        a, b = sorted((f.tunnel_from, f.tunnel_to))
+        march = (self.t // 2) % 8
+        for x in range(round(a) + march, round(b), 8):
+            self.surface.fill(P.INK, (x + ox - 1, y - 1, 6, 4))
+            self.surface.fill(P.lighten(colour, 0.3), (x + ox, y, 4, 2))
+        ring = pygame.Rect(0, 0, 40, 10)
+        ring.center = (round(f.tunnel_to) + ox, y)
+        pygame.draw.ellipse(self.surface, P.INK, ring.inflate(4, 4), 4)
+        pygame.draw.ellipse(self.surface, P.lighten(colour, 0.4) if self.t // 4 % 2 else colour, ring, 2)
+
+    def _dissolved(self, pose, f: Fighter, feet, body, accent, flare, seen: float) -> dict:
+        """Her body as horizontal scanlines, `seen` of them shown (0: gone), each shifted
+        sideways a little: dissolving into the tunnel, or re-forming out of it."""
+        ghost = self.ghost
+        ghost.fill((0, 0, 0, 0))
+        gw, gh = ghost.get_size()
+        local = (gw / 2, gh - 12)
+        j = draw_puppet(ghost, pose, f.char.build, local, f.facing, body, accent, flare)
+        if seen <= 0:
+            return {k: (x - local[0] + feet[0], y - local[1] + feet[1]) for k, (x, y) in j.items()}
+        left, top = round(feet[0] - local[0]), round(feet[1] - local[1])
+        for row in range(0, gh, 2):
+            if ((row // 2) * 7 + self.t) % 10 >= seen * 10:
+                continue
+            shift = round((1 - seen) * 10 * math.sin(row * 0.7 + self.t * 0.9))
+            self.surface.blit(ghost, (left + shift, top + row), (0, row, gw, 2))
+        return {k: (x - local[0] + feet[0], y - local[1] + feet[1]) for k, (x, y) in j.items()}
+
+    def _trap(self, f: Fighter, m, j: dict, ox: int, oy: int) -> None:
+        """OPTICAL TRAP: in the wind-up a faint aiming beam marks the column; then laser beams
+        cross in it, from her raised hands to its top, in the attack's colour."""
+        if f.phase not in ("startup", "active"):
+            return
+        colour = ERROR_COLOUR[basis.error_for(m.colour, f.attack_basis)]
+        left, top, w, h = f.world_box(m.hitbox)
+        left, top = left + ox, top + oy
+        hand = _pt(j["hand_f"])
+        corners = ((left, top), (left + w, top), (left + w / 2, top))
+        if f.phase == "startup":
+            for c in corners:                       # dotted aiming lines
+                for k in range(0, 10, 2):
+                    a = _towards(hand, c, k / 10)
+                    b = _towards(hand, c, (k + 1) / 10)
+                    pygame.draw.line(self.surface, P.lighten(colour, 0.5), _pt(a), _pt(b), 1)
+            return
+        flick = self.t % 2
+        glow = pygame.Rect(round(left), round(top), w, round(h))
+        pygame.draw.rect(self.surface, P.shade(colour, 0.6), glow, 1)
+        for i, c in enumerate(corners):
+            base = (hand[0] + (i - 1) * 6, hand[1])
+            pygame.draw.line(self.surface, P.INK, _pt(base), _pt(c), 6)
+            pygame.draw.line(self.surface, colour, _pt(base), _pt(c), 4)
+            pygame.draw.line(self.surface, P.WHITE if flick else P.lighten(colour, 0.6), _pt(base), _pt(c), 2)
+
+    def _laser_aim(self, f: Fighter, j: dict, oy: int) -> None:
+        """LASER: while she aims, a dotted line from her hand down and forward at 45 degrees
+        to the floor, where the shot will go."""
+        colour = ERROR_COLOUR[basis.error_for(f.move.colour, f.attack_basis)]
+        hx, hy = j["hand_f"]
+        floor = FLOOR_Y + oy
+        n = max(1, round((floor - hy) / 8))
+        for k in range(0, n, 2):
+            a = (hx + f.facing * k * 8, hy + k * 8)
+            b = (hx + f.facing * (k + 1) * 8, hy + (k + 1) * 8)
+            pygame.draw.line(self.surface, P.INK, _pt(a), _pt(b), 4)
+            pygame.draw.line(self.surface, P.lighten(colour, 0.4), _pt(a), _pt(b), 2)
 
     def _striker(self, key: str, f: Fighter, j: dict) -> None:
         """The whole arm or leg an attack lands with is drawn in the attack's colour, from its
@@ -663,6 +879,20 @@ class Renderer:
         left, top, w, h = s.box
         cx, cy = left + w / 2 + ox, top + h / 2 + oy
         color = ERROR_COLOUR[basis.error_for(s.move.colour, s.basis)]
+        if s.vy:            # a LASER: a short bright streak along its path, a fading trail
+            n = math.hypot(s.vx, s.vy) or 1.0
+            dx, dy = s.vx / n, -s.vy / n
+            tail = (cx - dx * 34, cy - dy * 34)
+            for i in range(1, 4):
+                p = (cx - dx * (34 + i * 9), cy - dy * (34 + i * 9))
+                pygame.draw.circle(self.surface, P.INK, _pt(p), 5 - i)
+                pygame.draw.circle(self.surface, P.lighten(color, 0.2 * i), _pt(p), 4 - i)
+            pygame.draw.line(self.surface, P.INK, _pt(tail), _pt((cx, cy)), 10)
+            pygame.draw.line(self.surface, color, _pt(tail), _pt((cx, cy)), 7)
+            pygame.draw.line(self.surface, P.WHITE, _pt(_towards(tail, (cx, cy), 0.3)), _pt((cx, cy)), 3)
+            pygame.draw.circle(self.surface, P.INK, _pt((cx, cy)), 7)
+            pygame.draw.circle(self.surface, P.WHITE, _pt((cx, cy)), 5)
+            return
         back = -s.facing
         for i, r in ((3, 2), (2, 3), (1, 4)):       # the trail
             pygame.draw.circle(self.surface, P.shade(color, 0.5 + 0.12 * (3 - i)),

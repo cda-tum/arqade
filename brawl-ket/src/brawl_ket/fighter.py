@@ -25,6 +25,8 @@ from .config import (
     STAGE_RIGHT,
     SWITCH_RECOVERY,
     THROW_RANGE,
+    TUNNEL_EXPOSED,
+    TUNNEL_PAST,
 )
 from .moves import Box, Character, Move
 
@@ -88,6 +90,11 @@ class Fighter:
         self.cooldowns: dict[str, int] = {}
         self.buffer: list[Press] = []   # oldest first
         self.throw_range: float = THROW_RANGE   # the fight sets it from the pairing's push box
+        self.body_width: float = THROW_RANGE    # ... and the push box itself (TUNNEL needs room)
+        self.rival_x = x                # where the rival stood at the start of this frame
+        self.tunnel_from = self.x       # TUNNEL: where she dissolved, and where she re-forms
+        self.tunnel_to = self.x
+        self.air_used: set[str] = set()     # once-per-jump moves used in this jump (LASER)
 
     # --- derived state ----------------------------------------------------------------
 
@@ -119,6 +126,21 @@ class Fighter:
         if self.frame < startup + m.active + m.recovery:
             return "recovery"
         return None
+
+    @property
+    def intangible(self) -> bool:
+        """TUNNEL: from the end of its exposed frames until it re-forms, she has no hurtbox:
+        nothing can touch her, shots and hits pass through."""
+        m = self.move
+        return (
+            self.action == "attack" and m is not None and m.tunnel
+            and TUNNEL_EXPOSED <= self.frame < self.startup + m.active
+        )
+
+    @property
+    def hovering(self) -> bool:
+        m = self.move
+        return self.action == "attack" and m is not None and m.hover and self.phase in ("startup", "active")
 
     @property
     def hurtbox(self) -> tuple[float, float, int, int]:
@@ -157,6 +179,7 @@ class Fighter:
         reeling from a hit or knocked down.
         """
         events: list[tuple[str, dict]] = []
+        self.rival_x = rival_x
         for slot in self.cooldowns:
             if self.cooldowns[slot] > 0:
                 self.cooldowns[slot] -= 1
@@ -326,6 +349,13 @@ class Fighter:
             if self.frame == self.startup:
                 if m.kind == "projectile":
                     events.append(("projectile", {"move": m}))
+                if m.cue is not None:
+                    events.append((m.cue, {}))
+                if m.tunnel:            # gone: she is already where she will re-form
+                    self.x = self.tunnel_to
+                    events.append(("tunnel", {}))
+            if m.tunnel and self.frame == self.startup + m.active - 1 and self.rival_x != self.x:
+                self.facing = 1 if self.rival_x > self.x else -1    # re-form facing the rival
             if m.dive is not None:
                 self.vx = m.dive[0] * self.facing
                 self.vy = -m.dive[1]
@@ -374,7 +404,7 @@ class Fighter:
         for entry in reversed(self.buffer):
             slot = self._slot_for(entry.button, dx, rival_x)
             move = self.char.moves.get(slot)
-            if move is None or self.cooldowns.get(slot, 0) > 0:
+            if move is None or self.cooldowns.get(slot, 0) > 0 or slot in self.air_used:
                 continue
             cancel = not free
             if cancel and not self.can_cancel(slot):
@@ -393,15 +423,31 @@ class Fighter:
         self.chain = self.chain + 1 if cancel else 1
         if move.cooldown > 0:
             self.cooldowns[slot] = move.cooldown
+        if move.once_per_jump:
+            self.air_used.add(slot)
+        if move.tunnel:
+            self.tunnel_from = self.x
+            self.tunnel_to = self._tunnel_target()
         if self.y == 0:
             self.vx = 0.0
         self.action = "attack"
         self.frame = 0
         events.append(("attack", {"slot": slot}))
 
+    def _tunnel_target(self) -> float:
+        """TUNNEL_PAST px past the rival, on their far side; if the stage has no room there
+        (the rival in a corner), TUNNEL_PAST px in front of them, on her own side."""
+        side = 1 if self.rival_x > self.x else -1 if self.rival_x < self.x else self.facing
+        far = min(max(self.rival_x + side * TUNNEL_PAST, STAGE_LEFT), STAGE_RIGHT)
+        if (far - self.rival_x) * side >= self.body_width:
+            return far
+        return min(max(self.rival_x - side * TUNNEL_PAST, STAGE_LEFT), STAGE_RIGHT)
+
     def _physics(self, events: list) -> None:
         landed = False
-        if self.y > 0 or self.vy > 0:
+        if self.hovering:               # LASER: she hangs in the air while she aims and fires
+            self.vx = self.vy = 0.0
+        elif self.y > 0 or self.vy > 0:
             if not self._diving():
                 self.vy -= self.char.gravity
             self.y += self.vy
@@ -414,6 +460,7 @@ class Fighter:
             self._land(events)
 
     def _land(self, events: list) -> None:
+        self.air_used.clear()
         # "dive": the fighter reached the floor in a dive's active frames (a landing
         # shockwave, like COLLAPSE's, needs the slam; pressed too late, it lands without one)
         events.append(("land", {"dive": self._diving()}))

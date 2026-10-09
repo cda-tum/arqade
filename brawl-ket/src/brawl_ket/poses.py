@@ -92,14 +92,27 @@ POSES: dict[str, Pose] = {
     "brace": Pose(10, 95, -4, 30, -86, 70, 150, 60, 170),
     # BOHR's air.X COLLAPSE: falling feet first, knees braced, arms flung up
     "slam": Pose(4, 30, -6, -30, 6, 150, 170, -150, -170),
+    # PHOEBE's long pokes: her jab and heavy reach further, the arm straight out (Dhalsim-style)
+    "poke_hit": Pose(18, 38, 2, -30, -16, 66, 70, 30, 150),
+    "lunge_hit": Pose(16, 54, 8, -44, -28, 64, 68, -30, -60),
+    # PHOEBE's stand.X OPTICAL TRAP: hands drawn down to the hips, then both thrown straight up
+    "trap_wind": Pose(-4, 24, -4, -22, -12, 20, 60, -10, 50),
+    "trap": Pose(-10, 26, -4, -24, -12, 172, 176, 160, 170),
+    # PHOEBE's crouch.X TUNNEL: arms wrapped round herself as she dissolves and re-forms
+    "tunnel": Pose(6, 20, -6, -20, -12, 70, 165, 60, 175),
+    # PHOEBE's air.X LASER: hanging in the air, the front arm pointing down and forward at 45
+    "laser": Pose(14, 100, 15, 40, -50, 45, 45, -40, 60),
 }
 POSE_NAMES = tuple(POSES)
 
 BASE_BONES = {"torso": 26, "neck": 9, "shoulder": 22, "upper_arm": 13, "forearm": 13, "thigh": 17, "shin": 17}
-BUILD_BONES = {"heavy": {"neck": 6}}        # the heavy's helmet sits down between its shoulders
-SCALE = {"lean": 2.0, "heavy": 2.3}         # the mockup's proportions: about 130 px tall
-HEAD_R = {"lean": 13, "heavy": 15}
-LIMB_W = {"lean": 12, "heavy": 16}
+BUILD_BONES = {
+    "heavy": {"neck": 6},                   # the heavy's helmet sits down between its shoulders
+    "toy": {"thigh": 18, "shin": 18, "forearm": 13, "upper_arm": 13, "neck": 8},   # PHOEBE: long limbs
+}
+SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1}     # the mockup's proportions: about 130 px tall
+HEAD_R = {"lean": 13, "heavy": 15, "toy": 14}
+LIMB_W = {"lean": 12, "heavy": 16, "toy": 12}
 
 
 def lerp(a: Pose, b: Pose, k: float) -> Pose:

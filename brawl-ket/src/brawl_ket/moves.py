@@ -34,9 +34,10 @@ class Box:
 
 @dataclass(frozen=True)
 class Projectile:
-    speed: float
+    speed: float                        # px per frame across, the way the owner faces
     box: Box
     lifetime: int
+    vy: float = 0.0                     # px per frame up (< 0: down, like PHOEBE's LASER)
 
 
 @dataclass(frozen=True)
@@ -74,12 +75,16 @@ class Move:
     switch_self_on_hit: bool = False    # HADAMARD DIVE: H on the attacker
     measure_rival: bool = False         # MEASURE: the rival collapses into the attacker's basis
     hit_every: int = 0                  # > 0: hits again this many frames after each hit (CHARGE NOISE)
+    tunnel: bool = False                # TUNNEL: vanish, re-form past the rival (fighter.py)
+    hover: bool = False                 # the fall stops through startup and active (LASER)
+    once_per_jump: bool = False         # usable once per jump (LASER)
+    cue: str | None = None              # a sound event fired on the first active frame
 
 
 @dataclass(frozen=True)
 class Character:
     name: str
-    build: str                          # "lean" / "heavy" (poses scale)
+    build: str                          # "lean" / "heavy" / "toy" (poses scale)
     health: int
     walk: float
     jump_vy: float
@@ -258,4 +263,82 @@ BOHR = Character(
     }),
 )
 
-CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR}
+PHOEBE = Character(
+    name="PHOEBE",
+    build="toy",
+    health=95,                          # the easiest to hurt: she wins by angles, not by trading
+    walk=1.9,
+    jump_vy=11.5,
+    gravity=0.5,                        # an apex of about 132 px
+    hurt_stand=Box(-14, 0, 28, 128),
+    hurt_crouch=Box(-16, 0, 32, 104),
+    moves=MappingProxyType({
+        # ROBERT's normals, a frame or two slower and longer: her jab and heavy are long pokes
+        "stand.A": Move(
+            "jab", 5, 3, 9, Box(14, 84, 60, 14), OWN, HIGH,
+            damage=4, hitstun=13, knockback=0.8, lunge=1.5,
+            cancels=("stand.A", "stand.B", "crouch.A"),
+            poses=("jab_wind", "poke_hit", "jab_wind"),
+        ),
+        "stand.B": Move(
+            "heavy", 11, 4, 18, Box(14, 74, 56, 18), OPPOSITE, HIGH,
+            damage=8, hitstun=21, knockback=4.0, chain_startup=8, lunge=3.0,
+            poses=("heavy_wind", "lunge_hit", "heavy_recover"),
+        ),
+        "crouch.A": Move(
+            "low jab", 5, 3, 10, Box(12, 22, 52, 12), OWN, LOW,
+            damage=4, hitstun=13, knockback=0.8, lunge=1.5,
+            cancels=("crouch.A", "crouch.B", "stand.B"),
+            poses=("low_wind", "low_hit", "low_wind"),
+        ),
+        "crouch.B": Move(
+            "sweep", 11, 4, 20, Box(10, 6, 66, 12), OPPOSITE, LOW,
+            damage=8, hitstun=23, knockback=2.0, knockdown=True, chain_startup=8, lunge=3.0,
+            poses=("sweep_wind", "sweep_hit", "crouch"),
+        ),
+        "air.A": Move(
+            "air jab", 5, 6, 5, Box(10, 52, 34, 18), OWN, MID,
+            damage=4, hitstun=14, knockback=1.0,
+            poses=("jump", "air_jab", "jump"),
+        ),
+        "air.B": Move(
+            "jump-in", 7, 6, 7, Box(8, 30, 40, 24), OPPOSITE, MID,
+            damage=8, hitstun=18, knockback=2.5,
+            poses=("jump", "air_kick", "jump"),
+        ),
+        "throw": Move(
+            "throw", 6, 2, 22, Box(0, 40, 44, 64), BOTH, MID,
+            damage=10, hitstun=30, knockback=5.0, knockdown=True,
+            kind="throw",
+            poses=("throw_reach", "throw_hold", "idle"),
+        ),
+        # Laser beams crossing in a column above her: an optical trap. The column starts at
+        # 136 px, above every standing hurtbox (BOHR's is the tallest, 132), so it only ever
+        # catches someone in the air: the geometry alone makes it an anti-air.
+        "stand.X": Move(
+            "OPTICAL TRAP", 7, 10, 18, Box(-12, 136, 56, 150), OWN, MID,
+            damage=10, hitstun=20, knockback=2.0, knockdown=True,
+            kind="special", cooldown=config.frames(1.5), cue="trap",
+            poses=("trap_wind", "trap", "trap_wind"),
+        ),
+        # She tunnels through the rival and re-forms on their far side (fighter.py, _tunnel_target).
+        # Startup: she dissolves, hittable for its first TUNNEL_EXPOSED frames; active: gone,
+        # with no hurtbox at all; recovery: she re-forms, hittable, the punish window.
+        "crouch.X": Move(
+            "TUNNEL", 10, 12, 16, None, OWN, MID,
+            damage=0, hitstun=1, knockback=0.0,
+            kind="special", tunnel=True, cooldown=config.frames(2.5),
+            poses=("tunnel", "tunnel", "tunnel"),
+        ),
+        # She hangs in the air and fires down and forward at 45 degrees, once per jump.
+        "air.X": Move(
+            "LASER", 8, 6, 10, None, OWN, MID,
+            damage=8, hitstun=16, knockback=2.0,
+            kind="projectile", hover=True, once_per_jump=True, cue="laser",
+            projectile=Projectile(7.0, Box(20, 53, 12, 12), 60, vy=-7.0),
+            poses=("jump", "laser", "jump"),
+        ),
+    }),
+)
+
+CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE}

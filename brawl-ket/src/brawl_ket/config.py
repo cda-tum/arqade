@@ -27,6 +27,8 @@ START_X = {"p1": 220, "p2": 420}
 
 # --- Round timing and rules ---------------------------------------------------
 ROUND_FRAMES = frames(60.0)
+TUNNEL_PAST = 50         # TUNNEL: PHOEBE re-forms this far past the rival's x
+TUNNEL_EXPOSED = 4       # ... and can still be hit for this many frames of her dissolve
 ROUNDS_TO_WIN = 2
 HITSTOP = 5
 HITSTOP_KNOCKDOWN = 10   # a hit that knocks down freezes the fight a little longer
