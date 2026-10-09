@@ -399,7 +399,166 @@ def _office(surf, lights: Lights) -> None:
 # conference's purple sign, and the plaza in front of it.
 
 
-def _toronto(surf, lights: Lights) -> None:
-    surf.fill((96, 48, 120))
-    _tiled_floor(surf, (152, 136, 128), (120, 104, 104), (184, 168, 152))
+DUSK = ((40, 32, 88), (64, 40, 112), (104, 48, 136), (152, 64, 144), (200, 88, 136),
+        (232, 120, 112), (248, 160, 88), (248, 192, 104))   # the sky, from the top down to the horizon
+SKYLINE = (48, 32, 80)
+SKYLINE_FAR = (88, 56, 112)
+TOWER = (184, 168, 184)             # the CN Tower's concrete, lit by the sunset...
+TOWER_SHADE = (120, 104, 144)       # ...and its shaded side
+MTCC_ROOF = (64, 56, 88)
+QW_PURPLE = (112, 56, 176)          # the conference's purple
+WARM = (248, 216, 152)              # lit windows and lamps
 
+
+def _dusk_sky(surf, bottom: int) -> None:
+    """The sky in bands, each seam dithered over 4 rows so it reads as a smooth GBA gradient."""
+    width = surf.get_width()
+    band = bottom / len(DUSK)
+    for i, colour in enumerate(DUSK):
+        surf.fill(colour, (0, round(i * band), width, round(band) + 1))
+    for i in range(1, len(DUSK)):
+        y0 = round(i * band) - 2
+        for dy in range(4):            # each colour sprinkled into the other's last two rows
+            other = DUSK[i - 1] if dy >= 2 else DUSK[i]
+            for x in range((dy % 2), width, 2):
+                surf.fill(other, (x, y0 + dy, 1, 1))
+
+
+def _cn_tower(surf, lights: Lights, cx: int, base: int, top: int) -> None:
+    """The CN Tower, from its foot (hidden behind the convention centre) to the antenna's tip:
+    a tapering shaft, the main pod about 62% of the way up, the small SkyPod at 81%, then the
+    antenna. Lit on its left by the sunset."""
+    height = base - top
+    pod_y = base - round(0.62 * height)
+    sky_y = base - round(0.81 * height)
+    # the shaft: 30 px at the foot, 12 at the pod, 8 up to the SkyPod
+    for y in range(sky_y, base):
+        k = (base - y) / (base - pod_y) if y > pod_y else 1.0
+        w = round(30 - 18 * min(1.0, k)) if y > pod_y else 8
+        surf.fill(P.INK, (cx - w // 2 - 1, y, w + 2, 1))
+        surf.fill(TOWER_SHADE, (cx - w // 2, y, w, 1))
+        surf.fill(TOWER, (cx - w // 2, y, max(1, w // 2), 1))
+    # the main pod: a wide disc with its observation deck's band of lit windows
+    pod = pygame.Rect(0, 0, 46, 18)
+    pod.center = (cx, pod_y)
+    _box(surf, pod, TOWER_SHADE, radius=8, ink=1)
+    surf.fill(TOWER, (pod.x + 3, pod.y + 2, pod.w - 6, 4))
+    surf.fill(P.INK, (pod.x + 2, pod.centery, pod.w - 4, 4))
+    for x in range(pod.x + 4, pod.right - 4, 4):
+        surf.fill(WARM, (x, pod.centery + 1, 2, 2))
+    _box(surf, (cx - 14, pod.bottom, 28, 5), TOWER_SHADE, radius=2, ink=1)          # the deck below it
+    # the SkyPod and the antenna, with its red light at the tip
+    _box(surf, (cx - 7, sky_y - 4, 14, 8), TOWER_SHADE, radius=3, ink=1)
+    surf.fill(WARM, (cx - 4, sky_y - 1, 8, 2))
+    for y in range(top, sky_y - 4):
+        w = 2 if y < top + (sky_y - top) // 2 else 4
+        surf.fill(P.INK, (cx - w // 2 - 1, y, w + 2, 1))
+        surf.fill(TOWER, (cx - w // 2, y, w, 1))
+    beacon = pygame.Rect(cx - 2, top - 2, 4, 3)
+    surf.fill(P.INK, beacon.inflate(2, 2))
+    lights.append((beacon, P.BAD))
+
+
+def _skyline(surf, lights: Lights, base: int) -> None:
+    """Downtown Toronto in silhouette, well below the CN Tower (its tallest towers are about half
+    the tower's height): a far row of pale towers, a near row of dark ones with a few windows
+    lit and some stepped or crowned tops, and the Rogers Centre's low white dome beside the
+    tower's foot."""
+    far = ((0, 70, 46), (64, 40, 70), (112, 56, 52), (300, 46, 50), (548, 60, 66), (600, 56, 44))
+    for x, w, h in far:
+        surf.fill(SKYLINE_FAR, (x, base - h, w, h))
+    # (x, width, height, top): a flat roof, a stepped crown, or a spire
+    near = ((-4, 48, 64, "flat"), (40, 36, 92, "spire"), (76, 52, 58, "flat"), (126, 30, 84, "step"),
+            (154, 44, 70, "flat"), (196, 58, 50, "flat"), (250, 34, 80, "step"), (282, 44, 60, "flat"),
+            (530, 40, 74, "step"), (568, 34, 90, "spire"), (600, 50, 62, "flat"), (640, 40, 76, "flat"))
+    for i, (x, w, h, top) in enumerate(near):
+        rect = pygame.Rect(x, base - h, w, h)
+        surf.fill(SKYLINE, rect)
+        if top == "step":
+            surf.fill(SKYLINE, (x + w // 4, rect.y - 8, w // 2, 8))
+        elif top == "spire":
+            surf.fill(SKYLINE, (rect.centerx - 1, rect.y - 16, 3, 16))
+            lights.append((pygame.Rect(rect.centerx - 1, rect.y - 19, 3, 3), P.BAD))
+        surf.fill(P.lighten(SKYLINE, 0.12), (rect.x, rect.y, 2, rect.h))   # the sunset on its edge
+        for wy in range(rect.y + 6, rect.bottom - 4, 8):
+            for wx in range(rect.x + 4, rect.right - 4, 6):
+                if (wx * 7 + wy * 13 + i * 5) % 17 < 2:
+                    surf.fill(P.shade(WARM, 0.85), (wx, wy, 2, 3))
+    dome = pygame.Rect(0, 0, 120, 52)            # the Rogers Centre
+    dome.midbottom = (404, base + 18)
+    pygame.draw.ellipse(surf, P.INK, dome.inflate(4, 4))
+    pygame.draw.ellipse(surf, (200, 184, 200), dome)
+    for k in range(1, 4):                      # its roof panels
+        pygame.draw.arc(surf, (160, 144, 176), dome.inflate(-k * 26, 0), 0.35, 2.8, 1)
+    surf.fill(P.lighten((200, 184, 200), 0.3), (dome.x + 30, dome.y + 6, 40, 2))
+
+
+def _convention_centre(surf, lights: Lights, top: int, floor: int) -> None:
+    """The Metro Toronto Convention Centre's long glass front, its panes catching the sunset,
+    with the conference's purple sign across it and QCE banners by the doors."""
+    width = surf.get_width()
+    surf.fill(P.INK, (0, top - 2, width, 2))
+    surf.fill(MTCC_ROOF, (0, top, width, 12))
+    surf.fill(P.lighten(MTCC_ROOF, 0.15), (0, top, width, 2))
+    glass = pygame.Rect(0, top + 12, width, floor - top - 12)
+    # the upper panes reflect the sunset; lower down, the lit lobby shows through (warm, so
+    # green and purple fighters both stand out against it)
+    rows = (P.shade(DUSK[6], 0.78), P.shade(DUSK[5], 0.78), (200, 152, 112), (184, 136, 104))
+    ph = glass.h / len(rows)
+    for i, c in enumerate(rows):
+        surf.fill(c, (0, round(glass.y + i * ph), width, round(ph) + 1))
+    for x in range(-10, width, 40):            # reflections: pale diagonal streaks
+        pygame.draw.line(surf, P.lighten(DUSK[6], 0.25), (x, glass.bottom), (x + 26, glass.y), 2)
+    doors = pygame.Rect(0, 0, 120, 58)
+    doors.midbottom = (width // 2, floor)
+    surf.fill(WARM, doors)                      # the lit lobby through the doors
+    for x in range(doors.x, doors.right, 30):
+        surf.fill(P.shade(WARM, 0.8), (x + 4, doors.y + 8, 22, 6))
+    for x in range(0, width, 40):              # the mullion grid
+        surf.fill(MTCC_ROOF, (x, glass.y, 3, glass.h))
+    for y in (glass.y + 22, glass.y + 50):
+        surf.fill(MTCC_ROOF, (0, y, width, 3))
+    canopy = pygame.Rect(doors.x - 16, doors.y - 8, doors.w + 32, 8)
+    _box(surf, canopy, P.shade(MTCC_ROOF, 1.3), radius=1, ink=1)
+    # the sign: QUANTUM WEEK, white on the conference's purple, lit
+    sign = pygame.Rect(0, 0, 228, 28)
+    sign.center = (width // 2, top + 30)
+    surf.fill(P.lighten(QW_PURPLE, 0.25), sign.inflate(8, 8))
+    _box(surf, sign, QW_PURPLE, radius=3, ink=2)
+    _text(surf, "QUANTUM WEEK", 16, P.WHITE, sign.center)
+    # the banners either side of the doors: QCE, a letter at a time
+    f = load_font(8)
+    for bx in (doors.x - 60, doors.right + 46):
+        banner = pygame.Rect(bx, doors.y - 4, 14, 50)
+        surf.fill(P.INK, (banner.centerx - 1, banner.y - 6, 2, banner.h + 6 + floor - banner.bottom))
+        _box(surf, banner, QW_PURPLE, radius=1, ink=1)
+        for k, ch in enumerate("QCE"):
+            img = f.render(ch, False, P.WHITE)
+            surf.blit(img, img.get_rect(center=(banner.centerx + 1, banner.y + 10 + 15 * k)))
+
+
+def _street_lamp(surf, lights: Lights, x: int, floor: int) -> None:
+    pole = pygame.Rect(x - 2, floor - 120, 4, 120)
+    surf.fill(P.INK, pole.inflate(2, 0))
+    surf.fill(P.SLATE, pole)
+    head = pygame.Rect(0, 0, 16, 8)
+    head.midbottom = (x, pole.y + 2)
+    _box(surf, head, P.SLATE, radius=2, ink=1)
+    glow = pygame.Rect(0, 0, 10, 4)
+    glow.midtop = (x, head.bottom - 1)
+    surf.fill(WARM, glow)
+    lights.append((glow, WARM))
+
+
+def _toronto(surf, lights: Lights) -> None:
+    m = MARGIN
+    floor = FLOOR_Y + m
+    centre_top = 196                            # the convention centre's roof line
+    _dusk_sky(surf, centre_top)
+    _skyline(surf, lights, centre_top)
+    _cn_tower(surf, lights, 476, centre_top, 18)
+    _convention_centre(surf, lights, centre_top, floor - 4)
+    for x in (70, W + 2 * m - 70):
+        _street_lamp(surf, lights, x, floor - 4)
+    # the plaza: warm paving stones
+    _tiled_floor(surf, (152, 136, 128), (120, 104, 104), (184, 168, 152))
