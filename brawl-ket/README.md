@@ -15,11 +15,15 @@ too hard to read).
   rounds of 60 s.
 - **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat) at 640x360 (x3 on the cabinet), the
   title with a bot demo, character select, stage select, round calls and pause.
-- **Stages:** four backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
-  for each match; the title demo always rolls), kept for all its rounds. Visual only: the lab with its qubit racks, a
-  cryostat room with a superconducting quantum computer's gold "chandelier", a white
-  laser lab, and the open-plan TUM Quantum Space office with the MQT logo on its glass
-  wall.
+- **Stages:** five backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
+  for each match; the title demo always rolls), kept for all its rounds. Visual only:
+  - SERVER RACK: the lab with its qubit racks;
+  - SUPERCONDUCTOR: a cryostat room with a superconducting quantum computer's gold
+    "chandelier";
+  - OPTICAL LAB: a white laser lab;
+  - QUANTUM SPACE: the open-plan TUM Quantum Space office, with the MQT logo on its glass wall;
+  - QUANTUM WEEK: Toronto at dusk, with the CN Tower and the Metro Toronto Convention Centre,
+    home of IEEE Quantum Week 2026.
 - **Extras:** chiptune (a title and a fight loop), `--input-test`, a
   snapshot tool and a Batocera deploy script.
 
