@@ -312,11 +312,12 @@ PHOEBE = Character(
             kind="throw",
             poses=("throw_reach", "throw_hold", "idle"),
         ),
-        # Laser beams crossing in a column above her: an optical trap. The column starts at
-        # 136 px, above every standing hurtbox (BOHR's is the tallest, 132), so it only ever
-        # catches someone in the air: the geometry alone makes it an anti-air.
+        # Optical tweezers: a laser beam from her raised palms, focused to a bright point above
+        # her, which traps whatever it catches. The box is the focus and the beam around it,
+        # from 150 px up: above every standing hurtbox (BOHR's is the tallest, 132), so it only
+        # ever catches someone in the air. The geometry alone makes it an anti-air.
         "stand.X": Move(
-            "OPTICAL TRAP", 7, 10, 18, Box(-12, 136, 56, 150), OWN, MID,
+            "OPTICAL TRAP", 7, 10, 18, Box(-8, 150, 64, 100), OWN, MID,
             damage=10, hitstun=20, knockback=2.0, knockdown=True,
             kind="special", cooldown=config.frames(1.5), cue="trap",
             poses=("trap_wind", "trap", "trap_wind"),
@@ -327,15 +328,16 @@ PHOEBE = Character(
         "crouch.X": Move(
             "TUNNEL", 10, 12, 16, None, OWN, MID,
             damage=0, hitstun=1, knockback=0.0,
-            kind="special", tunnel=True, cooldown=config.frames(2.5),
+            kind="special", tunnel=True, cooldown=config.frames(1.8),
             poses=("tunnel", "tunnel", "tunnel"),
         ),
-        # She hangs in the air and fires down and forward at 45 degrees, once per jump.
+        # She stops in the air for a moment and fires a fast laser down and forward at 45
+        # degrees, once per jump. Drawn as a beam from her hand to the shot's head.
         "air.X": Move(
-            "LASER", 8, 6, 10, None, OWN, MID,
+            "LASER", 5, 4, 12, None, OWN, MID,
             damage=8, hitstun=16, knockback=2.0,
             kind="projectile", hover=True, once_per_jump=True, cue="laser",
-            projectile=Projectile(7.0, Box(20, 53, 12, 12), 60, vy=-7.0),
+            projectile=Projectile(14.0, Box(16, 50, 20, 20), 30, vy=-14.0),
             poses=("jump", "laser", "jump"),
         ),
     }),

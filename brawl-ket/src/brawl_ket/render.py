@@ -721,43 +721,64 @@ class Renderer:
         return {k: (x - local[0] + feet[0], y - local[1] + feet[1]) for k, (x, y) in j.items()}
 
     def _trap(self, f: Fighter, m, j: dict, ox: int, oy: int) -> None:
-        """OPTICAL TRAP: in the wind-up a faint aiming beam marks the column; then laser beams
-        cross in it, from her raised hands to its top, in the attack's colour."""
+        """OPTICAL TRAP, as optical tweezers look: in the wind-up, light gathers between her
+        hands and a faint outline shows where the beam will focus; then a beam leaves her
+        raised palms, narrows to a bright focus above her (the trap, where it hits) and
+        spreads again beyond it, with rings pulsing round the focus."""
         if f.phase not in ("startup", "active"):
             return
+        surf = self.surface
         colour = ERROR_COLOUR[basis.error_for(m.colour, f.attack_basis)]
         left, top, w, h = f.world_box(m.hitbox)
         left, top = left + ox, top + oy
-        hand = _pt(j["hand_f"])
-        corners = ((left, top), (left + w, top), (left + w / 2, top))
+        hands = _towards(j["hand_f"], j["hand_b"], 0.5)
+        fx, fy = left + w / 2, top + h * 0.55          # the focus, about 40 px above her hands
+        spread = 26
         if f.phase == "startup":
-            for c in corners:                       # dotted aiming lines
-                for k in range(0, 10, 2):
-                    a = _towards(hand, c, k / 10)
-                    b = _towards(hand, c, (k + 1) / 10)
-                    pygame.draw.line(self.surface, P.lighten(colour, 0.5), _pt(a), _pt(b), 1)
+            k = (f.frame + 1) / f.startup
+            r = round(3 + 6 * k)
+            pygame.draw.circle(surf, P.INK, _pt(hands), r + 2)
+            pygame.draw.circle(surf, P.lighten(colour, 0.3), _pt(hands), r)
+            pygame.draw.circle(surf, P.WHITE, _pt(hands), max(1, r - 4))
+            for side in (-1, 1):                        # the tell: where it will focus
+                for a, b in (((hands[0] + side * spread, hands[1]), (fx, fy)), ((fx, fy), (fx + side * 24, top))):
+                    for t in range(0, 8, 2):
+                        pygame.draw.line(surf, P.lighten(colour, 0.5), _pt(_towards(a, b, t / 8)),
+                                         _pt(_towards(a, b, (t + 1) / 8)), 1)
             return
         flick = self.t % 2
-        glow = pygame.Rect(round(left), round(top), w, round(h))
-        pygame.draw.rect(self.surface, P.shade(colour, 0.6), glow, 1)
-        for i, c in enumerate(corners):
-            base = (hand[0] + (i - 1) * 6, hand[1])
-            pygame.draw.line(self.surface, P.INK, _pt(base), _pt(c), 6)
-            pygame.draw.line(self.surface, colour, _pt(base), _pt(c), 4)
-            pygame.draw.line(self.surface, P.WHITE if flick else P.lighten(colour, 0.6), _pt(base), _pt(c), 2)
+        below = [(hands[0] - spread, hands[1]), (fx, fy), (hands[0] + spread, hands[1])]
+        above = [(fx - 24, top), (fx, fy), (fx + 24, top)]
+        for cone in (below, above):     # light, outlined along its sides only (open ends)
+            pygame.draw.polygon(surf, P.lighten(colour, 0.35), [_pt(p) for p in cone])
+            for edge in ((cone[0], cone[1]), (cone[1], cone[2])):
+                pygame.draw.line(surf, P.INK, _pt(edge[0]), _pt(edge[1]), 3)
+            core = [_towards(cone[0], cone[2], 0.35), cone[1], _towards(cone[0], cone[2], 0.65)]
+            pygame.draw.polygon(surf, P.WHITE if flick else P.lighten(colour, 0.7), [_pt(p) for p in core])
+        # the trap: rings round the focus, and the focus itself
+        for i in range(2):
+            k = ((f.frame - f.startup) * 0.12 + i * 0.5) % 1.0
+            ring = pygame.Rect(0, 0, round(20 + 40 * k), round(8 + 14 * k))
+            ring.center = _pt((fx, fy))
+            pygame.draw.ellipse(surf, P.INK, ring.inflate(4, 4), 4)
+            pygame.draw.ellipse(surf, colour if k < 0.6 else P.shade(colour, 0.8), ring, 2)
+        r = 9 + flick
+        pygame.draw.circle(surf, P.INK, _pt((fx, fy)), r + 2)
+        pygame.draw.circle(surf, colour, _pt((fx, fy)), r)
+        pygame.draw.circle(surf, P.WHITE, _pt((fx, fy)), r - 3)
 
     def _laser_aim(self, f: Fighter, j: dict, oy: int) -> None:
-        """LASER: while she aims, a dotted line from her hand down and forward at 45 degrees
-        to the floor, where the shot will go."""
+        """LASER: while she aims, a thin flickering line from her hand down and forward at 45
+        degrees to the floor, where the beam will go, and light gathering at her hand."""
         colour = ERROR_COLOUR[basis.error_for(f.move.colour, f.attack_basis)]
         hx, hy = j["hand_f"]
-        floor = FLOOR_Y + oy
-        n = max(1, round((floor - hy) / 8))
-        for k in range(0, n, 2):
-            a = (hx + f.facing * k * 8, hy + k * 8)
-            b = (hx + f.facing * (k + 1) * 8, hy + (k + 1) * 8)
-            pygame.draw.line(self.surface, P.INK, _pt(a), _pt(b), 4)
-            pygame.draw.line(self.surface, P.lighten(colour, 0.4), _pt(a), _pt(b), 2)
+        n = max(0.0, FLOOR_Y + oy - hy)
+        end = (hx + f.facing * n, hy + n)
+        if self.t % 4 < 3:
+            pygame.draw.line(self.surface, P.lighten(colour, 0.5), _pt((hx, hy)), _pt(end), 1)
+        r = 2 + round(4 * (f.frame + 1) / f.startup)
+        pygame.draw.circle(self.surface, P.INK, _pt((hx, hy)), r + 2)
+        pygame.draw.circle(self.surface, P.lighten(colour, 0.4), _pt((hx, hy)), r)
 
     def _striker(self, key: str, f: Fighter, j: dict) -> None:
         """The whole arm or leg an attack lands with is drawn in the attack's colour, from its
@@ -848,19 +869,19 @@ class Renderer:
         left, top, w, h = s.box
         cx, cy = left + w / 2 + ox, top + h / 2 + oy
         color = ERROR_COLOUR[basis.error_for(s.move.colour, s.basis)]
-        if s.vy:            # a LASER: a short bright streak along its path, a fading trail
+        if s.vy:            # a LASER: a beam from where it left her hand to its head
             n = math.hypot(s.vx, s.vy) or 1.0
             dx, dy = s.vx / n, -s.vy / n
-            tail = (cx - dx * 34, cy - dy * 34)
-            for i in range(1, 4):
-                p = (cx - dx * (34 + i * 9), cy - dy * (34 + i * 9))
-                pygame.draw.circle(self.surface, P.INK, _pt(p), 5 - i)
-                pygame.draw.circle(self.surface, P.lighten(color, 0.2 * i), _pt(p), 4 - i)
-            pygame.draw.line(self.surface, P.INK, _pt(tail), _pt((cx, cy)), 10)
-            pygame.draw.line(self.surface, color, _pt(tail), _pt((cx, cy)), 7)
-            pygame.draw.line(self.surface, P.WHITE, _pt(_towards(tail, (cx, cy), 0.3)), _pt((cx, cy)), 3)
-            pygame.draw.circle(self.surface, P.INK, _pt((cx, cy)), 7)
-            pygame.draw.circle(self.surface, P.WHITE, _pt((cx, cy)), 5)
+            flown = (s.move.projectile.lifetime - s.life) * n
+            length = min(flown, 110.0)
+            tail = (cx - dx * length, cy - dy * length)
+            head = (cx + dx * 6, cy + dy * 6)
+            pygame.draw.line(self.surface, P.INK, _pt(tail), _pt(head), 9)
+            pygame.draw.line(self.surface, P.lighten(color, 0.3), _pt(tail), _pt(head), 7)
+            pygame.draw.line(self.surface, color, _pt(_towards(tail, head, 0.15)), _pt(head), 4)
+            pygame.draw.line(self.surface, P.WHITE, _pt(_towards(tail, head, 0.45)), _pt(head), 2)
+            pygame.draw.circle(self.surface, P.INK, _pt(head), 6)
+            pygame.draw.circle(self.surface, P.WHITE, _pt(head), 4)
             return
         back = -s.facing
         for i, r in ((3, 2), (2, 3), (1, 4)):       # the trail

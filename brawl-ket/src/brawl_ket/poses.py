@@ -95,9 +95,10 @@ POSES: dict[str, Pose] = {
     # PHOEBE's long pokes: her jab and heavy reach further, the arm straight out (Dhalsim-style)
     "poke_hit": Pose(18, 38, 2, -30, -16, 66, 70, 30, 150),
     "lunge_hit": Pose(16, 54, 8, -44, -28, 64, 68, -30, -60),
-    # PHOEBE's stand.X OPTICAL TRAP: hands drawn down to the hips, then both thrown straight up
-    "trap_wind": Pose(-4, 24, -4, -22, -12, 20, 60, -10, 50),
-    "trap": Pose(-10, 26, -4, -24, -12, 172, 176, 160, 170),
+    # PHOEBE's stand.X OPTICAL TRAP: hands together at the chest, gathering the light, then
+    # raised up and forward: the beam leaves her palms and focuses above her
+    "trap_wind": Pose(4, 24, -4, -22, -12, 50, 150, 40, 160),
+    "trap": Pose(-8, 26, -4, -24, -12, 140, 160, 130, 150),
     # PHOEBE's crouch.X TUNNEL: arms wrapped round herself as she dissolves and re-forms
     "tunnel": Pose(6, 20, -6, -20, -12, 70, 165, 60, 175),
     # PHOEBE's air.X LASER: hanging in the air, the front arm pointing down and forward at 45

@@ -135,7 +135,7 @@ def test_the_laser_hovers_and_flies_down_at_45_degrees():
     assert (shot.vx, shot.vy) == (LASER.projectile.speed, -LASER.projectile.speed)
     x, y = shot.x, shot.y
     step(fight)
-    assert (shot.x - x, shot.y - y) == (7.0, -7.0)
+    assert (shot.x - x, shot.y - y) == (14.0, -14.0)
 
 
 def test_the_laser_fires_once_per_jump_and_ends_on_the_floor():
@@ -158,9 +158,9 @@ def test_the_laser_fires_once_per_jump_and_ends_on_the_floor():
 def test_a_laser_and_a_photon_cancel_each_other():
     fight = versus(PHOEBE, ROBERT, 300)
     me = fight.fighters["p1"]
-    fight.shots.append(Shot("p1", LASER, me.x + 100, 40.0, 7.0, 60, vy=-7.0))
-    # after one step the laser's box spans x+127..139, 86..98 px up; the photon's x+125..141, 91..105
-    fight.shots.append(Shot("p2", PHOTON, me.x + 145, 35.0, -4.0, 200))
+    # after one step the laser's box spans x+130..150, 76..96 px up; the photon's x+128..144, 81..95
+    fight.shots.append(Shot("p1", LASER, me.x + 100, 40.0, 14.0, 30, vy=-14.0))
+    fight.shots.append(Shot("p2", PHOTON, me.x + 148, 25.0, -4.0, 200))
     step(fight)
     assert not fight.shots
 

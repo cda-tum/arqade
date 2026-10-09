@@ -291,6 +291,6 @@ def test_optical_trap_only_reaches_the_air():
 def test_tunnel_and_laser_numbers():
     tunnel, laser = PHOEBE.moves["crouch.X"], PHOEBE.moves["air.X"]
     assert (tunnel.startup, tunnel.active, tunnel.recovery) == (10, 12, 16)
-    assert tunnel.cooldown == config.frames(2.5)
-    assert laser.startup == 8 and laser.once_per_jump and laser.hover
+    assert tunnel.cooldown == config.frames(1.8)
+    assert laser.startup == 5 and laser.once_per_jump and laser.hover
     assert laser.projectile.vy == -laser.projectile.speed        # 45 degrees, down
