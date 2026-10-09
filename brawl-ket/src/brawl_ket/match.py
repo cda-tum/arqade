@@ -88,6 +88,7 @@ class Match:
         self.pause_index = 0
         self.wait_release = False   # the title ignores buttons until all are let go
         self.attract: Fight | None = None
+        self.stage = config.STAGES[0]   # the backdrop: picked afresh for each match and each demo
         self.card = False           # the title shows the COLOUR MUST MATCH card (between demos)
         self.hint = False           # this round intro shows the rules hint (a match's first)
         self._title_phase = 0       # frames into the current demo or card
@@ -241,6 +242,7 @@ class Match:
     def _start_attract(self) -> None:
         chars = {p: self.rng.choice(ROSTER) for p in PLAYERS}
         self.attract = Fight(chars)
+        self.stage = self.rng.choice(config.STAGES)
         self._title_phase = 0
         seed = self.rng.randrange(1 << 30)
         self.bots = {p: Bot(p, seed + i) for i, p in enumerate(PLAYERS)}
@@ -280,6 +282,7 @@ class Match:
         self.winner = None
         self.round_no = 1
         self.hint = True            # a match's first round intro teaches the rule
+        self.stage = self.rng.choice(config.STAGES)     # every round of a match in the same room
         self._start_round(events)
 
     def _start_round(self, events: list) -> None:

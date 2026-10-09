@@ -27,6 +27,7 @@ START_X = {"p1": 220, "p2": 420}
 
 # --- Round timing and rules ---------------------------------------------------
 ROUND_FRAMES = frames(60.0)
+STAGES = ("lab", "cryo", "optics", "office")   # the backdrops a match is fought in (stages.py)
 TUNNEL_PAST = 50         # TUNNEL: PHOEBE re-forms this far past the rival's x
 TUNNEL_EXPOSED = 4       # ... and can still be hit for this many frames of her dissolve
 ROUNDS_TO_WIN = 2

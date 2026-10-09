@@ -38,10 +38,10 @@ from .fight import Fight
 from .fighter import Fighter
 from .fonts import load_font
 from .moves import Character
+from .stages import MARGIN, make_stage
 from .poses import BASE_BONES, HEAD_R, LIMB_W, POSES, SCALE, Pose, joints, pose_for
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
-MARGIN = 8                  # the stage is this much bigger on every side, for the shake
 PLAYERS = ("p1", "p2")
 ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL}
 
@@ -111,13 +111,6 @@ CARD_LINES = (
     (("Y", P.GOLD), (" SWITCHES YOUR COLOUR", P.WHITE)),
 )
 
-WALL = (40, 32, 80)
-WALL_TILE = (48, 40, 96)
-RACK = (56, 48, 112)
-RACK_SLOT = (88, 80, 152)
-FLOOR_TOP = (72, 64, 128)
-FLOOR_TILE = (56, 48, 104)
-FLOOR_SHINE = (96, 88, 160)
 SHADOW = (32, 24, 64)
 
 
@@ -429,42 +422,6 @@ def tunnel_visibility(f: Fighter) -> float:
 # --- static art ----------------------------------------------------------------------------------
 
 
-def make_stage() -> tuple[pygame.Surface, list[tuple[pygame.Rect, tuple]]]:
-    """The lab, MARGIN px bigger than the screen on every side. Also returns the racks'
-    status lights, which blink on top of it."""
-    m = MARGIN
-    surf = pygame.Surface((W + 2 * m, H + 2 * m))
-    surf.fill(WALL)
-    floor = FLOOR_Y + m
-    for y in range(0, floor, 16):              # the tiled wall
-        for x in range(-(y // 16 % 2) * 16, W + 2 * m, 32):
-            surf.fill(WALL_TILE, (x, y, 30, 14))
-    lights: list[tuple[pygame.Rect, tuple]] = []
-    for i, x in enumerate(range(40 + m, W + m, 120)):     # racks of qubit chips
-        rack = pygame.Rect(x, 82 + m, 60, 172)
-        pygame.draw.rect(surf, P.INK, rack.inflate(4, 4), border_radius=5)
-        pygame.draw.rect(surf, RACK, rack, border_radius=4)
-        surf.fill(P.lighten(RACK, 0.15), (rack.x + 4, rack.y + 2, rack.w - 8, 2))
-        for k in range(5):
-            slot = pygame.Rect(rack.x + 8, rack.y + 14 + k * 30, 44, 8)
-            surf.fill(P.INK, slot.inflate(2, 2))
-            surf.fill(P.GOLD if (i + k) % 3 == 0 else RACK_SLOT, slot)
-            for q in range(3):                  # status lights under each chip
-                spot = pygame.Rect(slot.x + 4 + q * 7, slot.bottom + 5, 4, 3)
-                surf.fill(P.INK, spot.inflate(2, 2))
-                lights.append((spot.move(-m, -m), (P.GOOD, P.SKY, P.GOLD)[(i + k + q) % 3]))
-        # a cable down to the floor
-        pygame.draw.line(surf, P.INK, (rack.centerx, rack.bottom), (rack.centerx, floor), 3)
-    pygame.draw.line(surf, P.shade(WALL, 0.8), (0, floor - 18), (W + 2 * m, floor - 18), 2)
-    surf.fill(P.INK, (0, floor - 4, W + 2 * m, H + 2 * m - floor + 4))
-    for x in range(-16, W + 2 * m, 32):     # the chip-tile floor
-        pygame.draw.rect(surf, FLOOR_TOP, (x + 1, floor - 2, 30, 14))
-        surf.fill(FLOOR_SHINE, (x + 3, floor, 26, 2))
-        pygame.draw.rect(surf, FLOOR_TILE, (x + 1, floor + 14, 30, H + 2 * m - floor - 14))
-        surf.fill(P.shade(FLOOR_TILE, 0.8), (x + 13, floor + 22, 6, 6))
-    return surf, lights
-
-
 # --- effects -------------------------------------------------------------------------------------
 
 
@@ -482,11 +439,9 @@ class Effect:
 class Renderer:
     def __init__(self, surface: pygame.Surface) -> None:
         self.surface = surface
-        stage, self.lights = make_stage()
-        try:
-            self.stage = stage.convert(surface)     # the same pixel format: the cheapest blit
-        except pygame.error:    # no display (a headless benchmark on the cabinet, whose SDL has
-            self.stage = stage  # no dummy driver): both are plain surfaces in the default format
+        self._stages: dict[str, tuple[pygame.Surface, list]] = {}
+        self.stage_name = ""
+        self.use_stage("lab")
         self.dim = pygame.Surface((W, H), pygame.SRCALPHA)     # darkens the game under a menu
         self.dim.fill((*P.INK, 150))
         self.ghost = pygame.Surface((200, 220), pygame.SRCALPHA)    # TUNNEL: a body to dissolve
@@ -500,6 +455,20 @@ class Renderer:
         # render the effects' text now, so the first hit doesn't stall a frame
         for e in (basis.X, basis.Y, basis.Z):
             outlined(f"{e}!", 16, ERROR_COLOUR[e], thick=2)
+
+    def use_stage(self, name: str) -> None:
+        """Fight in front of the named backdrop (stages.py). Each is drawn once, when first used."""
+        if name == self.stage_name:
+            return
+        if name not in self._stages:
+            stage, lights = make_stage(name)
+            try:
+                stage = stage.convert(self.surface)     # the same pixel format: the cheapest blit
+            except pygame.error:    # no display (a headless benchmark on the cabinet, whose SDL has
+                pass                # no dummy driver): both are plain surfaces in the default format
+            self._stages[name] = (stage, lights)
+        self.stage, self.lights = self._stages[name]
+        self.stage_name = name
 
     def _reset(self) -> None:
         self.trail = {p: 0.0 for p in PLAYERS}          # the damage trail on each bar
@@ -1017,6 +986,7 @@ class Renderer:
         """The whole frame for the match's state. Cues are the match's own; the fight's
         events (hits, blocks, switches, ...) start the effects."""
         fight_events = [e for e in events if not isinstance(e, M.Cue)]
+        self.use_stage(match.stage)
         state = match.state
         if state == M.TITLE:
             if match.card:

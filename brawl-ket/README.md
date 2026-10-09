@@ -15,6 +15,11 @@ too hard to read).
   rounds of 60 s.
 - **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat) at 640x360 (x3 on the cabinet), the
   title with a bot demo, character select, round calls and pause.
+- **Stages:** four backdrops, one picked at random for each match (and each title
+  demo), kept for all its rounds. Visual only: the lab with its qubit racks, a
+  cryostat room with a superconducting quantum computer's gold "chandelier", a white
+  laser lab, and the open-plan TUM Quantum Space office with the MQT logo on its glass
+  wall.
 - **Extras:** chiptune (a title and a fight loop), `--input-test`, a
   snapshot tool and a Batocera deploy script.
 
@@ -108,6 +113,7 @@ uv run python tools/benchmark.py                    # frame cost (on the cabinet
 | `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR and PHOEBE. |
 | `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). Pure. |
 | `match.py` | Title, select, rounds, the result, pause, idle and the attract demo. Pure. |
+| `stages.py` | The backdrops, each drawn once (with its blinking lights); no green or purple in a large area, so the fighters stay readable. |
 | `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens. |
 | `bot.py` | The CPU for the attract demo and the tests. |
 | `audio.py` | Chiptune effects and music, adapted from Planck Time's. |
