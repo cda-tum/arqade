@@ -43,6 +43,8 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
             break
 
         events = match.update(dt, inp.frame_input())
+        if match.quit_requested:  # QUIT on the title: the same clean exit as Start + Select
+            break
         audio.music("title" if match.state == TITLE else "game")
         audio.tempo(match.danger)
         audio.update()

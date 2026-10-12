@@ -43,3 +43,53 @@ def test_with_no_pads_and_no_keys_the_frame_is_idle():
     assert all(p.move == 0 and not p.cw and not p.soft for p in fi.players.values())
     assert all(d == (0, 0) for d in fi.nav.values())
     assert not fi.confirm and not fi.back and not fi.activity
+
+
+class FakePad:
+    """A cabinet pad with nothing held but the given raw buttons."""
+
+    def __init__(self, held=()):
+        self.held = set(held)
+
+    def get_numbuttons(self):
+        return 12
+
+    def get_button(self, b):
+        return b in self.held
+
+    def get_numaxes(self):
+        return 2
+
+    def get_axis(self, i):
+        return 0.0
+
+    def get_numhats(self):
+        return 0
+
+
+def test_any_new_pad_button_counts_once_for_how_to_play():
+    pygame.init()
+    inp = Input()
+    inp.joysticks = [FakePad(), FakePad()]
+    inp.update(1 / 60)
+    assert not inp.frame_input().any_button
+    inp.joysticks[1].held = {4}  # L: not used in the game, but it still skips the card
+    inp.update(1 / 60)
+    assert inp.frame_input().any_button
+    inp.update(1 / 60)  # held, not pressed again
+    assert not inp.frame_input().any_button
+
+
+def test_a_key_counts_as_any_button_only_with_the_keyboard_on():
+    pygame.init()
+    inp = Input()
+    inp.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_z))
+    inp.update(1 / 60)
+    assert inp.frame_input().any_button
+    ginput.set_keyboard_enabled(False)
+    try:
+        inp.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_z))
+        inp.update(1 / 60)
+        assert not inp.frame_input().any_button
+    finally:
+        ginput.set_keyboard_enabled(True)

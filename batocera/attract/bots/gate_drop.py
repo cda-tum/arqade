@@ -10,24 +10,35 @@ that don't cancel them. Chains, and the T gates they send across, come
 naturally from that; chasing them on purpose flooded both boards with T's.
 Then it turns the pill, steers it over and soft-drops it, a beat after it
 appears, like a quick human.
+
+On the title it keeps the cursor on 2 PLAYERS (never on QUIT) and presses A.
+It skips the HOW TO PLAY card exactly TUTORIAL_FRAMES after it opens. That
+is an even number of frames and a multiple of 3 (the simulated clock's
+16/17/17 ms pattern), so the footage from before the card was added comes
+out shifted by exactly 0.5 s, and SKIP and HIGHLIGHTS include that shift.
+Checked against the old run's sound log: identical for the first ~16 s,
+after which THINK's float comparison lands a frame differently and the play
+drifts apart. So the HIGHLIGHTS past 16 s want re-picking at the next reel
+rebuild.
 """
 
 from gate_drop import board as gd
 from gate_drop import config
-from gate_drop.match import MATCH_RESULT, ROUND, SETUP, TITLE
+from gate_drop.match import MATCH_RESULT, ROUND, SETUP, TITLE, TUTORIAL
 
 SECONDS = 85.0
-SKIP = 3.1
-# 2 s windows, best first: chains, FIXED!s and a CNOT on both boards (4.3),
-# 2-chains both ways (55.1), both boards clearing (15.0), the full layouts of
-# round 3 being worked (49.0), round 2 clears (36.0), T gates traded (63.8),
-# an H pair chaining (7.6), round 2 clears on both sides (33.1).
-HIGHLIGHTS = [4.3, 55.1, 15.0, 49.0, 36.0, 63.8, 7.6, 33.1]
+SKIP = 3.6
+# 2 s windows, best first: chains, FIXED!s and a CNOT on both boards (4.8),
+# 2-chains both ways (55.6), both boards clearing (15.5), the full layouts of
+# round 3 being worked (49.5), round 2 clears (36.5), T gates traded (64.3),
+# an H pair chaining (8.1), round 2 clears on both sides (33.6).
+HIGHLIGHTS = [4.8, 55.6, 15.5, 49.5, 36.5, 64.3, 8.1, 33.6]
 
 LEVELS = {"p1": 3, "p2": 4}  # different levels: different error layouts
 SPEED = "MED"
 PLAYERS = ("p1", "p2")
 THINK = 0.15  # seconds before a new pill starts moving
+TUTORIAL_FRAMES = 30  # the card is up this long, counted from the frame that opened it
 
 
 def copy_grid(grid):
@@ -125,6 +136,7 @@ class Bot:
         self.pads, self.rng = pads, rng
         self.last_press = -10.0
         self.plans = {}  # player -> (pill id, target rot, target x, when it appeared)
+        self.tutorial_seen = None  # the frame the bot first saw the HOW TO PLAY card
 
     def update(self, t):
         match = self.pads.loop.get("match")
@@ -137,14 +149,22 @@ class Bot:
         for i in (0, 1):
             self.pads.stick(i, 0.0, 0.0)
         self.plans = {}
+        if match.state != TUTORIAL:
+            self.tutorial_seen = None
         even = self.pads.frame % 2 == 0
         if match.paused:  # never meant to happen; B resumes
             self.press(0, "b", t)
         elif match.state == TITLE:
-            if match.mode != 2:
-                self.pads.stick(0, 1.0 if even else 0.0, 0.0)
+            if match.title_index != 1:  # 2 PLAYERS; A on QUIT would leave the game
+                self.pads.stick(0, 0.0, (1.0 if match.title_index < 1 else -1.0) if even else 0.0)
             else:
                 self.press(0, "a", t)
+        elif match.state == TUTORIAL:
+            if self.tutorial_seen is None:
+                self.tutorial_seen = self.pads.frame
+            # it opened the frame before the bot saw it, so this is TUTORIAL_FRAMES after that
+            if self.pads.frame - self.tutorial_seen == TUTORIAL_FRAMES - 1:
+                self.pads.tap(0, "a", 1)
         elif match.state == SETUP and even:
             for i, p in enumerate(PLAYERS):
                 s = match.setups[p]

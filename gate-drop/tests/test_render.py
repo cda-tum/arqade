@@ -37,6 +37,12 @@ def random_play(rng):
     return fi
 
 
+def any_button():
+    fi = FrameInput(activity=True)
+    fi.any_button = True
+    return fi
+
+
 def press(*players, back=False, nav=None):
     fi = FrameInput(activity=True)
     for p in players:
@@ -77,6 +83,8 @@ def test_every_versus_screen_renders_without_errors():
     h.frame(press("p1"))  # to the setup screen
     h.frame(press("p1", nav={"p2": (1, 0)}))  # p1 ready, p2 changes its level
     h.frame(press("p2"))
+    h.play(300)  # five seconds of HOW TO PLAY: more than one loop of its demo
+    h.frame(any_button())
     h.play(200)  # the countdown, into the round
     h.mt.boards["p2"].noise_queue += [config.NOISE_KIND] * 3
     h.play(1200)  # twenty seconds of random play on both boards
@@ -92,14 +100,16 @@ def test_every_versus_screen_renders_without_errors():
     h.mt.match_winner = "p1"
     h.mt.state, h.mt.t = m.MATCH_RESULT, 2.0
     h.frame()
-    assert h.seen >= {m.TITLE, m.SETUP, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
+    assert h.seen >= {m.TITLE, m.SETUP, m.TUTORIAL, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
 
 
 def test_every_single_player_screen_renders_without_errors():
     h = Harness()
-    h.frame(press(nav={"p1": (0, 1)}))  # 1 player
+    h.frame(press(nav={"p1": (0, -1)}))  # 1 player
     h.frame(press("p1"))
     h.frame(press("p1"))  # ready
+    h.play(30)  # HOW TO PLAY
+    h.frame(any_button())
     h.play(200)  # the countdown, into the round
     h.clear_errors()
     h.play(300)  # level clear, then the next level's countdown
@@ -112,4 +122,29 @@ def test_every_single_player_screen_renders_without_errors():
     for _ in range(3):
         h.frame(press("p1"))
     h.play(30)  # the high-score table
-    assert h.seen >= {m.SETUP, m.COUNTDOWN, m.ROUND, m.LEVEL_CLEAR, m.GAME_OVER, m.NAME_ENTRY, m.HISCORES}
+    assert h.seen >= {m.SETUP, m.TUTORIAL, m.COUNTDOWN, m.ROUND, m.LEVEL_CLEAR, m.GAME_OVER, m.NAME_ENTRY, m.HISCORES}
+
+
+def test_the_title_lights_the_picked_row_and_quit_draws():
+    h = Harness()
+    h.frame(press(nav={"p1": (0, 1)}))
+    assert m.TITLE_ITEMS[h.mt.title_index] == "QUIT"
+    h.frame()
+    assert h.mt.state == m.TITLE
+
+
+def test_the_how_to_play_demo_restarts_each_time_the_card_opens():
+    h = Harness()
+    h.frame(press("p1"))
+    h.frame(press("p1", "p2"))
+    h.frame()
+    assert h.mt.state == m.TUTORIAL
+    for _ in range(100):
+        h.frame()
+    assert h.renderer.demo.t > 1.0
+    h.mt._to_title()
+    h.frame()
+    h.frame(press("p1"))
+    h.frame(press("p1", "p2"))
+    h.frame()
+    assert h.renderer.demo.t < 0.1

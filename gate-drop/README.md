@@ -13,10 +13,20 @@ deploy script. Button numbers follow the ones confirmed on the cabinet.
 
 ## How to play
 
-- **Title:** the stick picks 1 or 2 players.
+- **Title:** a menu of 1 PLAYER, 2 PLAYERS and QUIT. The stick moves the
+  cursor, A picks the row, and A on QUIT leaves the game, back to the
+  cabinet's game list. Start always plays, whatever row is lit (with the
+  mode last picked).
 - **Setup:** each player picks a **level** (1-10; level n has 2n + 2 errors)
   and a **speed** (LOW, MED, HI), then presses A. With 2 players this is a
   handicap: each sets their own, and the round starts when both are ready.
+- **How to play:** before every match started from the setup screen, a card
+  shows the goal, a looping demo on a small 4-wire board (a pill slides
+  over, turns twice, drops onto an X and a Z bug, and both pairs cancel; it
+  runs on the real board rules) and the controls on a drawing of the
+  cabinet's buttons, each lit while the demo uses it. Any button starts the
+  match, but only after 0.3 s, so the A that readied up can't skip it; the
+  stick doesn't. A rematch or the next round skips the card.
 - **Pills:**
   - A gate pill carries two single-qubit gates (H, X, Y, Z, and the rare T
     and T-dagger, 1 half in 26 each). Once it lands, the halves are independent gates.
@@ -54,8 +64,9 @@ deploy script. Button numbers follow the ones confirmed on the cabinet.
 | Rotate clockwise / anti-clockwise | A / B | Q / E | . / , |
 | Confirm, ready (menus) | A or Start | 1, Enter | 2, keypad Enter |
 | Back, un-ready (menus) | B | Backspace | Delete |
+| Skip HOW TO PLAY | any button | any key | any key |
 | Pause (resume or quit to the title) | Start | P | End |
-| Quit | Start + Select, or hold Select 2 s on the title | Esc | Esc |
+| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Esc | Esc |
 
 In single player, either pad plays. The keyboard is a dev fallback only; on
 the cabinet the loader passes `--no-keyboard`. High scores are kept in
@@ -80,9 +91,10 @@ uv run python tools/snapshot.py /tmp/gate-drop-snaps   # render a scripted match
 |---|---|
 | `board.py` | One board: pills, rotation, settling, the cancellation scan, chains, noise. Pure, fully tested. |
 | `levels.py`, `hiscores.py` | Seeded error layouts (same level, same layout); the top-10 table. Pure, tested. |
-| `match.py` | Title, setup, countdown, rounds, levels, results, initials, the attack exchange. Pure, tested. |
+| `match.py` | Title, setup, how to play, countdown, rounds, levels, results, initials, the attack exchange. Pure, tested. |
+| `tutorial.py` | The HOW TO PLAY card's words and its scripted demo round. Pure, tested. |
 | `sprites.py`, `render.py` | Procedural SNES-style pixel art at 480x270 (x4 on the cabinet). |
-| `audio.py` | Chiptune effects and music, adapted from Overquqed's `audio.py`. |
+| `audio.py` | Chiptune effects (menu move, confirm and back too) and music, adapted from Overquqed's `audio.py`. |
 | `input.py`, `config.py` | Pads and dev keyboard; every tuning number, colour and button. |
 
 ## Deploying to the cabinet
