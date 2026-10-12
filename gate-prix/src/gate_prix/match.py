@@ -9,8 +9,9 @@ the HUD use both).
       |                                                      A/Start rematches  |
       +----------------- B, QUIT TO TITLE, or 60 s untouched ------------------+
 
-- **The title:** the stick picks 1 or 2 PLAYERS by direction (up or left: 1, down or
-  right: 2), so a held stick stays on its choice; A or Start begins. After ATTRACT_DELAY
+- **The title:** the stick's up/down picks 1 or 2 PLAYERS (as the menu stands), from the
+  direction it is held in, not its repeated steps: a held stick, a diagonal too, stays on
+  its choice. Sideways does nothing. When the pads disagree P1's wins. A or Start begins. After ATTRACT_DELAY
   seconds untouched an attract race plays behind it: `Race(seed, 2, finish_all=True)`, all
   six cars driven by bots, silently. Any input stops it (and that frame's stick changes
   nothing); A or Start still begins at once.
@@ -65,6 +66,7 @@ class PlayerInput:
     steer: float = 0.0  # -1 (left) to 1, deadzoned
     brake: float = 0.0  # 0 to 1: the stick pulled back
     nav: tuple[int, int] = (0, 0)  # menu steps, auto-repeated: (x, y), y positive is down
+    stick: tuple[int, int] = (0, 0)  # the direction held now (past half way), not repeated
     a: bool = False  # pressed this frame
     b: bool = False
     start: bool = False
@@ -195,12 +197,10 @@ class Match:
         stopped = inp.activity and self.attract
         if stopped:
             self.race, self.bots, self.attract = None, {}, False
-        dx, dy = inp.nav()
-        if (dx or dy) and not stopped:
-            mode = 1 if (dy or dx) < 0 else 2  # up/left: 1 PLAYER, down/right: 2
-            if mode != self.mode:
-                self.mode = mode
-                events.append(Cue("blip"))
+        choice = self._title_choice(inp)
+        if choice is not None and not stopped and choice != self.mode:
+            self.mode = choice
+            events.append(Cue("blip"))
         if inp.any("a") or inp.any("start"):
             events.append(Cue("select"))
             self._new_race(events)
@@ -212,6 +212,18 @@ class Match:
                 self.race.update(dt, bot.drive(self.race, self.bots))  # silent
         elif self.idle >= config.ATTRACT_DELAY:
             self._attract()
+
+    @staticmethod
+    def _title_choice(inp: FrameInput) -> int | None:
+        """1 or 2 PLAYERS from the first pad (P1 first) whose stick is up or down: the
+        direction held (or a tap's step), never the sideways axis, whose repeats run on
+        their own timer and would make a diagonal flicker."""
+        for p in PLAYERS:
+            i = inp.players[p]
+            dy = i.stick[1] or i.nav[1]
+            if dy:
+                return 1 if dy < 0 else 2
+        return None
 
     def _attract(self) -> None:
         self.seed = self.rng.randrange(1 << 30)

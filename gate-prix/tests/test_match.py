@@ -61,18 +61,50 @@ def finish(m: Match, car_id: str) -> None:
 # --- The title -------------------------------------------------------------------------------
 
 
-def test_the_title_starts_at_one_player_and_the_stick_picks_by_direction():
+def test_the_title_starts_at_one_player_and_the_stick_picks_up_or_down():
     m = Match(random.Random(1))
     assert m.state == TITLE and m.mode == 1
     events = m.update(DT, DOWN)
     assert m.mode == 2 and cues(events, "blip")
-    events = m.update(DT, frame(p2={"nav": (1, 0)}))  # right, on either pad: still 2
+    events = m.update(DT, frame(p2={"nav": (0, 1), "stick": (0, 1)}))  # down again: still 2
     assert m.mode == 2 and not cues(events, "blip")
-    events = m.update(DT, frame(p2={"nav": (0, -1)}))  # up: 1 PLAYER
+    events = m.update(DT, frame(p2={"nav": (0, -1)}))  # up, on either pad: 1 PLAYER
     assert m.mode == 1 and cues(events, "blip")
-    m.update(DT, frame(p1={"nav": (1, 0)}))
-    m.update(DT, frame(p1={"nav": (-1, 0)}))  # left: 1 PLAYER
+    m.update(DT, frame(p1={"nav": (1, 0), "stick": (1, 0)}))  # sideways: no choice
     assert m.mode == 1
+
+
+def held_diagonal(dx: int, dy: int, lag: int, seconds: float = 2.0):
+    """Frames of a stick held on a diagonal through the real auto-repeat, the y axis
+    crossing its threshold `lag` frames after x (as a real stick's two axes do)."""
+    from gate_prix.input import AutoRepeat
+
+    rx, ry = AutoRepeat(), AutoRepeat()
+    for k in range(round(seconds / DT)):
+        x, y = dx, dy if k >= lag else 0
+        yield frame(p1={"nav": (rx.update(DT, x), ry.update(DT, y)), "stick": (x, y),
+                        "steer": float(x)})
+
+
+@pytest.mark.parametrize("dx, dy, want", [(1, -1, 1), (-1, 1, 2), (1, 1, 2), (-1, -1, 1)])
+@pytest.mark.parametrize("lag", [0, 2, 5])
+def test_a_held_diagonal_picks_one_mode(dx, dy, want, lag):
+    m = Match(random.Random(1))
+    modes, blips = [], 0
+    for inp in held_diagonal(dx, dy, lag):
+        blips += len(cues(m.update(DT, inp), "blip"))
+        modes.append(m.mode)
+    changes = sum(1 for a, b in zip(modes, modes[1:]) if a != b)
+    assert modes[-1] == want and changes <= 1 and blips <= 1, (modes[:12], blips)
+
+
+def test_two_pads_held_opposite_ways_settle_on_p1s_choice():
+    m = Match(random.Random(1))
+    modes = []
+    for _ in range(120):
+        m.update(DT, frame(p1={"stick": (0, 1)}, p2={"stick": (0, -1), "nav": (0, -1)}))
+        modes.append(m.mode)
+    assert set(modes) == {2}
 
 
 def test_a_held_stick_stays_on_its_choice():

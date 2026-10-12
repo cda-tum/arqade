@@ -141,3 +141,17 @@ def test_cpu_colours_are_clear_of_the_players_the_gates_and_each_other():
     for i, (a, va) in enumerate(greys):
         for b, vb in greys[i + 1:]:
             assert abs(va - vb) >= 0.25, (a, b)  # greys apart by brightness
+
+
+def test_idle_timeout_is_a_minute():
+    assert config.IDLE_TIMEOUT == 60.0
+
+
+@pytest.mark.parametrize("distance, clamped", [(-3, 0), (17, 16), (99, 16)])
+def test_circuit_check_boost_clamps_the_distance(distance, clamped):
+    assert config.check_boost(distance) == config.check_boost(clamped)
+
+
+def test_the_black_cpu_stands_out_from_the_road():
+    r, g, b = config.CPU_COLORS["black"]
+    assert min(r, g, b) >= 55  # the road is (40, 42, 62) and (34, 36, 54)

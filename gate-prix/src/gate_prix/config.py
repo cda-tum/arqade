@@ -186,7 +186,7 @@ CPU_COLORS = {
     "white": (236, 238, 246),
     "lime": (150, 220, 40),
     "steel": (120, 124, 138),
-    "black": (34, 34, 40),  # only in 1P races (the fifth CPU)
+    "black": (60, 60, 72),  # only in 1P races (the fifth CPU); lighter than the road
 }
 CAR_COLORS = {**PLAYER_COLORS, **CPU_COLORS}
 GATE_COLORS = {  # shared with the other games

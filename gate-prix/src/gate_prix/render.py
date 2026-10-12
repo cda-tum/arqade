@@ -352,7 +352,7 @@ class Renderer:
         if (self.frame // 30) % 2 == 0:
             self.put("PRESS START", 24, (255, 230, 120), center=(cx, 410))
         self.surface.blit(self.panel(640, 58, None, 190), (cx - 320, 443))  # over the car
-        self.put("STICK: CHOOSE   A OR START: RACE", 14, SOFT, center=(cx, 458))
+        self.put("STICK UP / DOWN: CHOOSE   A OR START: RACE", 14, SOFT, center=(cx, 458))
         self.put("IN THE RACE   STICK: STEER   PULL BACK: BRAKE   A: USE ITEM   START: PAUSE",
                  12, LABEL, center=(cx, 486))
         if match.attract:

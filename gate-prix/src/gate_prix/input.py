@@ -208,8 +208,9 @@ class Input:
                       if any(k in self._key_taps for k in codes)}
             new_keys = (held_keys - self._keys_prev[p]) | tapped
             self._keys_prev[p] = held_keys
-            nav_x = self.repeat_x[p].update(dt, step_sign(steer))
-            nav_y = self.repeat_y[p].update(dt, step_sign(pull))
+            stick = (step_sign(steer), step_sign(pull))
+            nav_x = self.repeat_x[p].update(dt, stick[0])
+            nav_y = self.repeat_y[p].update(dt, stick[1])
             nav = (nav_x or ("right" in tapped) - ("left" in tapped),
                    nav_y or ("down" in tapped) - ("up" in tapped))
             buttons = {"a", "back", "start", "select"}
@@ -218,6 +219,7 @@ class Input:
                 steer=steer,
                 brake=max(0.0, pull),
                 nav=nav,
+                stick=stick,
                 a=a in pressed or "a" in new_keys,
                 b=b in pressed or "back" in new_keys,
                 start=start in pressed or "start" in new_keys,

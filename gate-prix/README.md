@@ -51,9 +51,8 @@ the ones confirmed on the cabinet.
 | Select (only for the quit) | Select | 3 | 4 |
 | Quit | Start + Select on one pad | 1 + 3, or Esc | 2 + 4, or Esc |
 
-- **Title:** the stick picks 1 PLAYER (up or left) or 2 PLAYERS (down or right), A or
-  Start begins. Untouched for 3 s, an
-  attract race of 6 CPU-driven cars plays behind it.
+- **Title:** the stick picks 1 PLAYER (up) or 2 PLAYERS (down), A or Start begins.
+  Untouched for 3 s, an attract race of 6 CPU-driven cars plays behind it.
 - **Pause:** Start, on either pad. The stick moves, A picks, B or Start resumes.
 - **Idle:** 60 s untouched anywhere (paused too) returns to the title, at 1 PLAYER.
 - With 1 PLAYER either pad drives. The accelerator is automatic.

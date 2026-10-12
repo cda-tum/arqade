@@ -301,3 +301,14 @@ def test_p1_keys_avoid_the_letters_the_pad_types():
     for names in config.KEYMAP["p1"].values():
         for name in names:
             assert name not in {"K_l", "K_x", "K_r", "K_b", "K_y", "K_a"}
+
+
+def test_stick_is_the_held_direction_without_repeats(rig):
+    pads, _ = rig
+    pads.append(FakePad())
+    inp = Input()
+    pads[0].axis = [0.9, -0.9]  # held up-right
+    sticks = [step(inp).players["p1"].stick for _ in range(30)]
+    assert set(sticks) == {(1, -1)}
+    pads[0].axis = [0.3, 0.0]  # past the deadzone, not half way: no direction
+    assert step(inp).players["p1"].stick == (0, 0)

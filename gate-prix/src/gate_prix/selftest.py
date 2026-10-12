@@ -164,8 +164,12 @@ class Script:
         for k in range(40):  # the stick held down, auto-repeating: 2 PLAYERS, no flicker
             yield self._press(nav=(0, 1) if k == 0 or self.rng.random() < 0.2 else (0, 0))
             check(m.mode == 2, "a held stick stays on 2 PLAYERS")
-        yield from self.tap(nav=(-1, 0))
-        check(m.mode == 1, "left: back to 1 PLAYER")
+        for k in range(60):  # held up-right, the y axis two frames late: 1 PLAYER, steady
+            yield self._press(nav=(1 if k % 9 == 0 else 0, -1 if k == 2 else 0),
+                              stick=(1, -1 if k >= 2 else 0))
+            check(m.mode == (2 if k < 2 else 1), "a held diagonal picks one mode")
+        yield from self.idle(0.1)
+        check(m.mode == 1, "up: back to 1 PLAYER")
         yield from self.tap("p2", start=True)
         check(m.state == COUNTDOWN and m.race.players == 1, "Start begins a 1P countdown")
         yield from self.idle(1.4)
@@ -210,7 +214,7 @@ class Script:
         yield from self.idle(0.2)
 
         # 2 PLAYERS
-        yield from self.tap("p2", nav=(1, 0))
+        yield from self.tap("p2", nav=(0, 1))
         check(m.mode == 2, "2 PLAYERS")
         yield from self.tap(a=True)
         check(m.state == COUNTDOWN and m.race.players == 2, "A begins a 2P countdown")
