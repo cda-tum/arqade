@@ -188,3 +188,40 @@ are not part of v1.
 - **`bot`:** over seeds, a CPU finishes every race, the best CPU's streak rate is about 85%,
   and a perfect human (a scripted bot hitting every right gate) beats the field.
 - **Snapshots and a benchmark,** checked by eye against the mockup and measured on the Pi.
+
+## Changes after the first playtest (2026-10-12)
+
+The user played the first playable build. It "still feels a bit clunky": the speed and
+boosts didn't feel like much, and there was too much to read. They didn't know how to use
+items, the "next gate / incorrect gate" idea was confusing, and they didn't notice the
+CIRCUIT CHECK boost.
+
+- **No gates on the final lap.** Gate rows run on laps 1–2 only, 8 per lap, so the target
+  has **16 gates**. The CIRCUIT CHECK covers all 16 as a car starts lap 3, and lap 3 is a
+  gate-free sprint powered by the check boost. Item boxes stay on every lap.
+- **The right arch is unmissable.** It glows brightly, with a bouncing ▼ marker above it.
+  Decoys are drawn dimmer and smaller.
+- **A simpler overlay.**
+  - One big **NEXT GATE** badge replaces the TARGET and YOU wires.
+  - Under it, a row of your gates so far as ✓ green and ✗ red dots, 16 in all.
+  - Each row you pass flashes **RIGHT GATE +BOOST** (blue) or **WRONG GATE** (red) near your
+    car, and a missed row flashes **MISSED**.
+- **Items explain themselves.**
+  - While you hold an item, the slot pulses and shows its name, a big **A**, and one line:
+    "SPLIT: a clone takes a second gate" or "QEC: fixes your last wrong gate".
+  - The first pickup of each item in a session shows a banner: "PRESS A TO USE SPLIT".
+- **The CIRCUIT CHECK is an event.**
+  - As a car crosses into lap 3, that player's view freezes for about 1 s. A panel compares
+    the circuits ("14/16 GATES CORRECT", with the wrong ones marked).
+  - Then comes the **LIGHT SPEED!** warp: a star-streak tunnel, the field of view widening, a
+    tint at the edges of the screen, and a whoosh.
+  - The check boost is strong and long enough that you visibly pass cars. The CPUs get the
+    same check by their own accuracy.
+  - The freeze applies only to that player's view and clock. The race keeps running for the
+    others, but that player loses no distance: their car keeps moving during the freeze.
+- **Speed you can feel.**
+  - A higher sense of speed: roadside objects closer to the road, speed lines at top speed,
+    and a slight camera shake.
+  - Boosts widen the field of view and show exhaust flames, with a boost whoosh.
+  - Top speed rises about 10–15% if the lap stays readable, and the boost tables are retuned
+    so a streak boost is clearly felt.
