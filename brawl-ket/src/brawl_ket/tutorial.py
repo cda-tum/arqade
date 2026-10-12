@@ -1,26 +1,26 @@
 """The HOW TO PLAY card's scene: a real Fight, played from a script. Pure (no pygame).
 
 Before every match from the select screen (not a rematch) the card shows the colour
-rule in action, looping every LOOP frames, P1 TRIO (green) against P2 QUINT:
+rule in action, looping every LOOP frames, P1 ROBERT (green) against P2 BOHR:
 
-  1. A: TRIO's jab is green, QUINT is green: it hurts (X!).
-  2. Y: QUINT switches basis and turns purple (the white flash, the H).
+  1. A: ROBERT's jab is green, BOHR is green: it hurts (X!).
+  2. Y: BOHR switches basis and turns purple (the white flash, the H).
   3. A again: the green jab bounces off purple (the ping).
-  4. B: TRIO's heavy is the other colour, purple: it hurts (Z!).
+  4. B: ROBERT's heavy is the other colour, purple: it hurts (Z!).
 
 Everything on screen is the game's own: the fight's rules decide hit or bounce, and
-the renderer draws its puppets and effects. Between presses TRIO walks back into reach.
+the renderer draws its puppets and effects. Between presses ROBERT walks back into reach.
 """
 
 from __future__ import annotations
 
 from .fight import Event, Fight
 from .fighter import IDLE, FighterInput
-from .moves import QUINT, TRIO
+from .moves import BOHR, ROBERT
 
 LOOP = 280                  # frames: the scene restarts (4.7 s)
 START_X = {"p1": 266, "p2": 336}
-REACH = 66                  # px between the two: TRIO walks in until it is this close
+REACH = 66                  # px between the two: ROBERT walks in until it is this close
 CAPTION_LEAD = 20           # a step's caption shows this many frames before its press
 
 # (frame, who, button, caption index): the scene's presses
@@ -41,7 +41,7 @@ class Lesson:
 
     @staticmethod
     def _new_fight() -> Fight:
-        fight = Fight({"p1": TRIO, "p2": QUINT})
+        fight = Fight({"p1": ROBERT, "p2": BOHR})
         for key, x in START_X.items():
             fight.fighters[key].x = float(x)
         return fight
@@ -56,7 +56,7 @@ class Lesson:
         return lit
 
     def inputs(self) -> dict[str, FighterInput]:
-        """This frame's presses, or TRIO walking back into reach between them."""
+        """This frame's presses, or ROBERT walking back into reach between them."""
         inp = {"p1": IDLE, "p2": IDLE}
         for frame, who, button, _index in SCRIPT:
             if self.t == frame:

@@ -1,11 +1,11 @@
 """The match flow. Pure (no pygame): one FrameInput per 60 Hz frame in, events out.
 
-  title -> select -> tutorial -> round intro -> fight -> round end -> (round intro ...)
-        -> match result -> rematch (round intro) or title
+  title -> select -> stage select -> tutorial -> round intro -> fight -> round end
+        -> (round intro ...) -> match result -> rematch (round intro) or title
 
 The title is a menu, PLAY / QUIT: the stick picks, A takes it, and Start always plays.
 QUIT ends the game (`quit` is set and the main loop exits, as Start + Select does).
-The tutorial is the HOW TO PLAY card, before every match from the select screen (not
+The tutorial is the HOW TO PLAY card, before every match from the stage select (not
 a rematch); any button pressed after its first TUTORIAL_LOCK frames goes on.
 
 Rounds are first to ROUNDS_TO_WIN; a draw round counts for nobody. Start pauses
@@ -27,10 +27,11 @@ from .moves import CHARACTERS
 from .tutorial import Lesson
 
 PLAYERS = ("p1", "p2")
-ROSTER = tuple(CHARACTERS.values())     # the select screen's order: TRIO, QUINT
+ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOHR
 
 TITLE = "title"
 SELECT = "select"
+STAGE_SELECT = "stage_select"
 TUTORIAL = "tutorial"
 ROUND_INTRO = "round_intro"
 FIGHT = "fight"
@@ -40,6 +41,9 @@ TITLE_ITEMS = ("PLAY", "QUIT")
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 PAUSABLE = (ROUND_INTRO, FIGHT, ROUND_END)
 FIGHT_CALL = config.ROUND_INTRO_FRAMES // 2     # "ROUND n" until here, then "FIGHT!"
+STAGE_LOCK = config.frames(0.3)                 # the stage screen ignores A this long: a mashed A from the fighters can't skip it
+RANDOM_STAGE = "random"
+STAGE_OPTIONS = (RANDOM_STAGE, *config.STAGES)  # CHOOSE YOUR STAGE's list, in order
 
 
 @dataclass(frozen=True)
@@ -100,6 +104,8 @@ class Match:
         self.quit = False           # QUIT was picked: the main loop ends the game
         self.lesson: Lesson | None = None   # the tutorial's scene
         self.attract: Fight | None = None
+        self.stage = config.STAGES[0]   # the backdrop: the match's pick, or rolled for each demo
+        self.stage_pick = 0         # index into STAGE_OPTIONS (0: RANDOM), kept until the title
         self.card = False           # the title shows the COLOUR MUST MATCH card (between demos)
         self.hint = False           # this round intro shows the rules hint (a match's first)
         self._title_phase = 0       # frames into the current demo or card
@@ -194,18 +200,38 @@ class Match:
                 continue
             elif inp.confirms[p]:
                 self.ready[p] = True
-                events.append(Cue("confirm"))
+                events.append(Cue("blip"))
             elif inp.nav[p][0]:
                 self.picks[p] = (self.picks[p] + inp.nav[p][0]) % len(ROSTER)
                 events.append(Cue("blip"))
-        if all(self.ready.values()):
+        # on once both are ready; back from the stage select both still are, and one A goes on
+        if all(self.ready.values()) and inp.confirm:
+            self._set_state(STAGE_SELECT)
+            if Cue("blip") not in events:
+                events.append(Cue("blip"))
+
+    def _on_stage_select(self, inp: FrameInput, events: list) -> None:
+        """Either stick flips through the stages, A or Start fights there, B goes back to
+        the fighters with both still READY."""
+        if inp.back:
+            self._set_state(SELECT)
+            events.append(Cue("blip"))
+            return
+        if inp.confirm and self.t >= STAGE_LOCK:
+            events.append(Cue("confirm"))
+            self._pick_stage()      # now, so HOW TO PLAY is shown in the room the match is in
             self.lesson = Lesson()
             self._set_state(TUTORIAL)
+            return
+        dx = next((d[0] for d in inp.nav.values() if d[0]), 0)
+        if dx:
+            self.stage_pick = (self.stage_pick + dx) % len(STAGE_OPTIONS)
+            events.append(Cue("blip"))
 
     def _on_tutorial(self, inp: FrameInput, events: list) -> None:
         """HOW TO PLAY: its scene plays until any button, pressed once the card has been up
-        TUTORIAL_LOCK frames (the A that readied, or its bounce, must not skip it unseen).
-        Only edges count, so the press that goes on does nothing in the round."""
+        TUTORIAL_LOCK frames (the A that picked the stage, or its bounce, must not skip it
+        unseen). Only edges count, so the press that goes on does nothing in the round."""
         if self.t > config.TUTORIAL_LOCK and inp.any_button:
             self.lesson = None
             events.append(Cue("confirm"))
@@ -261,6 +287,7 @@ class Match:
             return
         if inp.confirm:
             events.append(Cue("blip"))
+            self._pick_stage()
             self._start_match(events)
         elif inp.back:
             events.append(Cue("blip"))
@@ -272,6 +299,7 @@ class Match:
         self.title_index = 0    # whoever stops the demo finds PLAY, never QUIT, under A
         chars = {p: self.rng.choice(ROSTER) for p in PLAYERS}
         self.attract = Fight(chars)
+        self.stage = self.rng.choice(config.STAGES)
         self._title_phase = 0
         seed = self.rng.randrange(1 << 30)
         self.bots = {p: Bot(p, seed + i) for i, p in enumerate(PLAYERS)}
@@ -304,9 +332,15 @@ class Match:
         self.lesson = None
         self.paused = False
         self.card = False
-        self.title_index = 0
         self._stop_attract()
+        self.stage_pick = 0
+        self.title_index = 0
         self._set_state(TITLE)
+
+    def _pick_stage(self) -> None:
+        """The match's room, from the stage select's pick (RANDOM rolls, again on a rematch)."""
+        pick = STAGE_OPTIONS[self.stage_pick]          # every round of a match in the same room
+        self.stage = self.rng.choice(config.STAGES) if pick == RANDOM_STAGE else pick
 
     def _start_match(self, events: list) -> None:
         self.wins = {p: 0 for p in PLAYERS}

@@ -1,20 +1,20 @@
 """Brawl-Ket: the clash, as a comic-book impact panel.
 
 The hero is the game's one rule, colour must match to hurt, in one hit: P1's
-QUINT (on the left, its blue player ring under it), the big armoured fighter,
+BOHR (on the left, its blue player ring under it), the big armoured fighter,
 is green, in the Z basis, and lands a heavy, its other colour, square on the
-upper chest of P2's TRIO (on the right, its red ring under it). TRIO is
-purple, in the X basis, so the purple hit matches and TRIO reels back. The
-two stand a fighter's reach apart: only the fist meets. (It is QUINT that
-hits because it is the taller: TRIO's strikes can only reach QUINT's middle,
+upper chest of P2's ROBERT (on the right, its red ring under it). ROBERT is
+purple, in the X basis, so the purple hit matches and ROBERT reels back. The
+two stand a fighter's reach apart: only the fist meets. (It is BOHR that
+hits because it is the taller: ROBERT's strikes can only reach BOHR's middle,
 which reads wrong.) Both are the game's own puppets, drawn by its own
 draw_puppet from its own poses at the game's pixel size and scaled up
 nearest-neighbour, with the game's striker glow and hit spark in purple.
 Behind them is the look none of the other icons has: a comic panel split on
 the diagonal into each player's side, with halftone dots and speed lines
 bursting out of the impact. BRAWL-KET sits below in the game's thick ink
-outline, in the fighters' own colours as they stand: BRAWL in QUINT's green,
-KET in TRIO's purple, and the hyphen white, belonging to neither.
+outline, in the fighters' own colours as they stand: BRAWL in BOHR's green,
+KET in ROBERT's purple, and the hyphen white, belonging to neither.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ import pygame
 sys.path.insert(0, str(kit.ROOT / "brawl-ket/src"))
 from brawl_ket import palette as P  # noqa: E402
 from brawl_ket.config import PLAYER_COLORS  # noqa: E402
-from brawl_ket.moves import QUINT, TRIO  # noqa: E402
+from brawl_ket.moves import BOHR, ROBERT  # noqa: E402
 from brawl_ket.poses import POSES, joints  # noqa: E402
 from brawl_ket.render import ACCENT, GREEN, PURPLE, draw_puppet  # noqa: E402
 
@@ -37,30 +37,30 @@ BLUE, RED = PLAYER_COLORS["p1"], PLAYER_COLORS["p2"]
 ZOOM = 4                    # game px -> icon px
 NATIVE = (260, 200)         # the hero's canvas, in game px (cropped to the puppets)
 FLOOR = 196
-CHEST = 0.62                # where on TRIO the fist lands: 0 hip .. 1 neck
-REACH = 18                  # game px from the fist to TRIO's spine: they stand apart
+CHEST = 0.62                # where on ROBERT the fist lands: 0 hip .. 1 neck
+REACH = 18                  # game px from the fist to ROBERT's spine: they stand apart
 
 
 def hero() -> tuple[pygame.Surface, tuple[int, int]]:
     """The two puppets at game resolution on transparency, cropped to them, and
     where the fist lands."""
     s = pygame.Surface(NATIVE, pygame.SRCALPHA)
-    quint_at = (60, FLOOR)
-    # TRIO stands where QUINT's fist meets its chest, a little in from its front
-    fist0 = joints(POSES["heavy_hit"], QUINT.build, quint_at, 1)["hand_f"]
-    t = joints(POSES["hitstun"], TRIO.build, (0, FLOOR), -1)
+    bohr_at = (60, FLOOR)
+    # ROBERT stands where BOHR's fist meets its chest, a little in from its front
+    fist0 = joints(POSES["heavy_hit"], BOHR.build, bohr_at, 1)["hand_f"]
+    t = joints(POSES["hitstun"], ROBERT.build, (0, FLOOR), -1)
     chest_x = t["hip"][0] + (t["neck"][0] - t["hip"][0]) * CHEST
-    trio_at = (round(fist0[0] - chest_x + REACH), FLOOR)
+    robert_at = (round(fist0[0] - chest_x + REACH), FLOOR)
     # the players' rings under their feet (Renderer._shadow): P1 blue, P2 red
-    for x, colour in ((quint_at[0], BLUE), (trio_at[0], RED)):
+    for x, colour in ((bohr_at[0], BLUE), (robert_at[0], RED)):
         ring = pygame.Rect(0, 0, 60, 12)
         ring.center = (x, FLOOR + 2)
         pygame.draw.ellipse(s, P.INK, ring.inflate(2, 2), 3)
         pygame.draw.ellipse(s, colour, ring, 2)
-    # TRIO first, behind: the one being hit, purple (the X basis)
-    draw_puppet(s, POSES["hitstun"], TRIO.build, trio_at, -1, PURPLE, ACCENT["TRIO"])
-    # QUINT green (the Z basis); its heavy is the other colour, purple
-    j = draw_puppet(s, POSES["heavy_hit"], QUINT.build, quint_at, 1, GREEN, ACCENT["QUINT"])
+    # ROBERT first, behind: the one being hit, purple (the X basis)
+    draw_puppet(s, POSES["hitstun"], ROBERT.build, robert_at, -1, PURPLE, ACCENT["ROBERT"])
+    # BOHR green (the Z basis); its heavy is the other colour, purple
+    j = draw_puppet(s, POSES["heavy_hit"], BOHR.build, bohr_at, 1, GREEN, ACCENT["BOHR"])
     fist = (round(j["hand_f"][0]) + 3, round(j["hand_f"][1]))
     # the striker glow and the game's hit spark (Renderer._striker, _draw_effects), purple
     pygame.draw.circle(s, P.INK, fist, 10)
@@ -130,7 +130,7 @@ def panel(size: int | tuple[int, int], impact: tuple[float, float], k: float = 1
 def title(scale: int) -> pygame.Surface:
     """BRAWL-KET in a thick ink outline (and room for a shadow, which the
     marquee's transparency needs), in the fighters' colours as they stand:
-    BRAWL in QUINT's green, KET in TRIO's purple, and the hyphen white."""
+    BRAWL in BOHR's green, KET in ROBERT's purple, and the hyphen white."""
     parts = [(kit.text_shape(text, kit.PIXEL_FONT, 8 * scale), color)
              for text, color in (("BRAWL", GREEN), ("-", P.WHITE), ("KET", PURPLE))]
     w = sum(s.get_width() for s, _ in parts)

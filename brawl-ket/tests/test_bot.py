@@ -10,11 +10,11 @@ PAIRINGS = [(a, b) for a in CHARACTERS for b in CHARACTERS]
 
 
 def test_every_pairing_is_covered():
-    assert {"TRIO", "QUINT"} <= set(CHARACTERS)
+    assert {"ROBERT", "BOHR"} <= set(CHARACTERS)
     assert len(PAIRINGS) == len(CHARACTERS) ** 2
 
 
-def play(seed, pairing=("TRIO", "TRIO")):
+def play(seed, pairing=("ROBERT", "ROBERT")):
     """One round between two bots; returns the finished Fight and its events."""
     fight = Fight({"p1": CHARACTERS[pairing[0]], "p2": CHARACTERS[pairing[1]]})
     bots = {"p1": Bot("p1", seed), "p2": Bot("p2", seed + 1000)}
@@ -62,29 +62,29 @@ def test_neither_side_is_favoured(pairing):
 
 
 def test_neither_character_always_wins():
-    # TRIO against QUINT, from both sides: each character wins some rounds
+    # ROBERT against BOHR, from both sides: each character wins some rounds
     won = set()
-    for pairing in (("TRIO", "QUINT"), ("QUINT", "TRIO")):
+    for pairing in (("ROBERT", "BOHR"), ("BOHR", "ROBERT")):
         for seed in SEEDS:
             winner = play(seed, pairing)[0].winner
             if winner is not None:
                 won.add(pairing[0] if winner == "p1" else pairing[1])
-    assert won == {"TRIO", "QUINT"}
+    assert won == {"ROBERT", "BOHR"}
 
 
-def test_quint_bots_use_their_specials():
-    # over some rounds, a QUINT bot measures, waves and slams
+def test_bohr_bots_use_their_specials():
+    # over some rounds, a BOHR bot measures, waves and slams
     slots = set()
     for seed in range(40):
         if {"stand.X", "crouch.X", "air.X"} <= slots:
             break
-        fight = Fight({"p1": CHARACTERS["QUINT"], "p2": CHARACTERS["TRIO"]})
+        fight = Fight({"p1": CHARACTERS["BOHR"], "p2": CHARACTERS["ROBERT"]})
         bots = {"p1": Bot("p1", seed), "p2": Bot("p2", seed + 1000)}
         while not fight.over:
             fight.step({key: bot.input(fight) for key, bot in bots.items()})
-            quint = fight.fighters["p1"]
-            if quint.action == "attack":
-                slots.add(quint.slot)
+            bohr = fight.fighters["p1"]
+            if bohr.action == "attack":
+                slots.add(bohr.slot)
     assert {"stand.X", "crouch.X", "air.X"} <= slots
 
 

@@ -60,6 +60,7 @@ class Shot:
     vx: float
     life: int
     basis: str = "Z"    # the basis its owner was in when it was fired: its colour, for good
+    vy: float = 0.0     # px per frame up (a LASER flies down at 45 degrees)
 
     @property
     def facing(self) -> int:
@@ -144,6 +145,7 @@ class Fight:
         self.body_width = body_width(chars["p1"], chars["p2"])
         for f in self.fighters.values():   # a throw reaches a little past the push box
             f.throw_range = self.body_width + THROW_SLACK
+            f.body_width = self.body_width
         self.shots: list[Shot] = []
         self.frames_left = ROUND_FRAMES
         self.hitstop = 0
@@ -168,7 +170,7 @@ class Fight:
         events: list[Event] = []
         self._step_fighters(inputs, events)
         self._push_apart()
-        self._move_shots()
+        self._move_shots(events)
         self._resolve_hits(events)
         self.frames_left -= 1
         self._check_end(events)
@@ -188,6 +190,7 @@ class Fight:
                     self.shots.append(Shot(
                         key, move, f.x + f.facing * SHOT_SPAWN_OFFSET, f.y,
                         move.projectile.speed * f.facing, move.projectile.lifetime, f.attack_basis,
+                        move.projectile.vy,
                     ))
                     events.append(Event("projectile", key))
                 else:
@@ -202,7 +205,7 @@ class Fight:
         """The bodies are solid: two grounded fighters never stand closer than body_width."""
         a, b = self.fighters["p1"], self.fighters["p2"]
         width = self.body_width
-        if a.y > 0 or b.y > 0 or abs(b.x - a.x) >= width:
+        if a.y > 0 or b.y > 0 or a.intangible or b.intangible or abs(b.x - a.x) >= width:
             return
         side = 1 if b.x > a.x else -1 if b.x < a.x else a.facing   # b is on this side of a
         half = (width - abs(b.x - a.x)) / 2
@@ -215,13 +218,18 @@ class Fight:
             else:
                 a.x = _clamp(a.x - side * gap)
 
-    def _move_shots(self) -> None:
+    def _move_shots(self, events: list[Event]) -> None:
         # Collisions are overlap-only after each move, with no sweep, so a projectile
         # faster than about half the combined box widths per frame would tunnel
         # through its target (tests/test_fight.py checks every projectile's speed).
         for s in self.shots:
             s.x += s.vx
+            s.y += s.vy
             s.life -= 1
+            if s.vy < 0 and s.y + s.move.projectile.box.y <= 0:     # a LASER reaches the floor
+                s.life = 0
+                left, _, w, _ = s.box
+                events.append(Event("fizzle", s.owner, None, left + w / 2, FLOOR_Y))
         # shots of different owners cancel each other, with no event
         dead: set[int] = set()
         for i, s in enumerate(self.shots):
@@ -251,8 +259,8 @@ class Fight:
         for s in self.shots:
             rival_key = _other(s.owner)
             target = self.fighters[rival_key]
-            if target.action == "knockdown" or target.wakeup:   # downed or getting up: shots fly over
-                continue
+            if target.action == "knockdown" or target.wakeup or target.intangible:
+                continue        # downed, getting up or tunnelling: shots fly over or through
             if not can_reach(s.move.height, target):
                 continue
             where = _overlap(s.box, target.hurtbox)
@@ -301,7 +309,7 @@ class Fight:
             downed.add(st.defender)
         self.hitstop = max(self.hitstop, HITSTOP_KNOCKDOWN if knocked else HITSTOP)
         if m.measure_rival and defender.basis != owner.basis:
-            # MEASURE projects the rival onto QUINT's basis
+            # MEASURE projects the rival onto BOHR's basis
             defender.basis = owner.basis
             events.append(Event("measure", st.defender, None, x, y))
         if st.attacker is not None and owner.move is m:
@@ -320,7 +328,7 @@ class Fight:
         # a move hits once, except one that repeats (hit_every frames after its last hit)
         if f.move_hit and not (m.hit_every and f.frame - f.hit_frame >= m.hit_every):
             return
-        if rival.action == "knockdown" or rival.wakeup:     # downed, or getting up
+        if rival.action == "knockdown" or rival.wakeup or rival.intangible:   # downed, getting up, gone
             return
         if not can_reach(m.height, rival):
             return
@@ -346,7 +354,7 @@ class Fight:
         # the shockwave hits any rival still on its feet, one reeling from the slam itself
         # too (slam and shockwave are opposite colours: a standing rival takes one). A jump
         # clears it.
-        if not win.hit and rival.action != "knockdown" and not rival.wakeup \
+        if not win.hit and rival.action != "knockdown" and not rival.wakeup and not rival.intangible \
                 and can_reach(move.landing_height, rival):
             where = _overlap(f.world_box(move.landing), rival.hurtbox)
             if where is not None:

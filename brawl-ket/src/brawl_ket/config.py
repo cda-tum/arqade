@@ -27,6 +27,11 @@ START_X = {"p1": 220, "p2": 420}
 
 # --- Round timing and rules ---------------------------------------------------
 ROUND_FRAMES = frames(60.0)
+STAGES = ("lab", "cryo", "optics", "office", "toronto")   # the backdrops a match is fought in (stages.py)
+STAGE_NAMES = {"lab": "SERVER RACK", "cryo": "SUPERCONDUCTOR", "optics": "OPTICAL LAB",
+               "office": "QUANTUM SPACE", "toronto": "QUANTUM WEEK"}   # as CHOOSE YOUR STAGE shows them
+TUNNEL_PAST = 50         # TUNNEL: PHOEBE re-forms this far past the rival's x
+TUNNEL_EXPOSED = 4       # ... and can still be hit for this many frames of her dissolve
 ROUNDS_TO_WIN = 2
 HITSTOP = 5
 HITSTOP_KNOCKDOWN = 10   # a hit that knocks down freezes the fight a little longer
@@ -39,9 +44,9 @@ BLOCK_HITSTOP = 3
 BUFFER_FRAMES = 6
 CHAIN_MAX = 3
 BODY_MARGIN = 8          # the push box reaches this far past each fighter's standing hurtbox, px
-                         # (fight.body_width: 44 between two TRIOs, 52 between two QUINTs)
+                         # (fight.body_width: 44 between two ROBERTs, 52 between two BOHRs)
 THROW_SLACK = 6          # a throw reaches this far past the push box (px between the fighters' x)
-THROW_RANGE = 50         # two TRIOs' push box plus THROW_SLACK: a lone Fighter's throw range
+THROW_RANGE = 50         # two ROBERTs' push box plus THROW_SLACK: a lone Fighter's throw range
 
 
 # --- Screen transitions and input timing -------------------------------------

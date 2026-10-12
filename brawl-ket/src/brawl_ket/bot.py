@@ -24,6 +24,8 @@ STRIKE_RANGE = 66       # px between the fighters' x where a ground normal can r
 AIR_RANGE = 50          # the same for an air attack, whose boxes are shorter
 GRAB_RANGE = 120        # MEASURE (a dashing command throw) connects from about this far
 FIELD_RANGE = 70        # CHARGE NOISE shocks anything within about this far
+PILLAR_REACH = (-4, 56)     # LIGHT PILLAR: where a rival in the air is in the beam (ahead of her, px)
+SHOT_DANGER = 90        # a rival's shot this close and coming is worth TUNNELling through
 PRESS_GAP = 4           # frames between two presses, so every press is a fresh edge
 LONG_CROUCH = 40        # a rival crouched this long gets thrown
 SWITCH_MEMORY = 180     # frames over which the rival's switches are counted
@@ -75,6 +77,9 @@ class Bot:
             return FighterInput(dx=-toward)                     # back out of a field that hurts
         if me.stance == "air":
             return self._in_air(me, rival, toward, dist)
+        phoebe = self._phoebe(fight, me, rival, toward, dist)
+        if phoebe is not None:
+            return phoebe
         self.air_pressed = False
         if me.action == "attack":
             return self._continue_chain(me, toward)
@@ -135,7 +140,39 @@ class Bot:
     def _next_slot(self, me) -> str:
         return f"{'crouch' if me.stance == 'crouch' else 'stand'}.{self.chain[0].upper()}"
 
+    def _phoebe(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
+        """PHOEBE's two ground specials: LIGHT PILLAR on a rival in the air above her, TUNNEL
+        through an incoming shot or, now and then, to cross the rival up."""
+        if me.action not in ("idle", "walk", "crouch") or self.gap > 0:
+            return None
+        pillar, tunnel = me.char.moves["stand.X"], me.char.moves["crouch.X"]
+        ahead = (rival.x - me.x) * me.facing
+        if pillar.name == "LIGHT PILLAR" and rival.y > 20 and PILLAR_REACH[0] <= ahead <= PILLAR_REACH[1] \
+                and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, pillar, rival) \
+                and self.rng.random() < self.skill * 0.6:
+            self.down = False
+            return self._press("x", 0)
+        if not tunnel.tunnel or me.cooldowns.get("crouch.X", 0) > 0:
+            return None
+        coming = any(s.owner == self.rival and (s.x - me.x) * s.vx < 0 and abs(s.x - me.x) <= SHOT_DANGER
+                     and self.would_hurt_shot(s, me) for s in fight.shots)
+        if (coming and self.rng.random() < self.skill * 0.3) or (90 < dist < 200 and self.rng.random() < 0.004):
+            self.down = True
+            return self._press("x", 0)
+        return None
+
+    @staticmethod
+    def would_hurt_shot(shot, target) -> bool:
+        return basis.hurts(basis.error_for(shot.move.colour, shot.basis), target.basis)
+
     def _in_air(self, me, rival, toward: int, dist: float) -> FighterInput:
+        laser = me.char.moves["air.X"]
+        if laser.hover and not self.air_pressed and self.gap == 0 and "air.X" not in me.air_used \
+                and abs(dist - (me.y + 50)) < 45 and self.would_hurt(me, laser, rival):
+            # the shot leaves 50 px ahead at hand height (59 px) and falls one px per px, so it
+            # meets a standing body about y + 50 px ahead, give or take its height: fire
+            self.air_pressed = True
+            return self._press("x", toward)
         if not self.air_pressed and self.gap == 0 and dist <= AIR_RANGE:
             self.air_pressed = True
             button = "x" if self.rng.random() < 0.3 else self.matching(me, rival)

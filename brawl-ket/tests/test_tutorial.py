@@ -45,7 +45,7 @@ def test_the_scene_loops_with_a_fresh_fight() -> None:
 
 
 def test_nobody_is_thrown_by_accident() -> None:
-    """TRIO walks in between presses, but never while pressing B (that would throw)."""
+    """ROBERT walks in between presses, but never while pressing B (that would throw)."""
     lesson = Lesson()
     for _ in range(LOOP):
         inputs = lesson.inputs()
