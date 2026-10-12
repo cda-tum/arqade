@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
-`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, more later) built for the same
+`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, `qircuit/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
 Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. (`launcher/`
 runs them all from one menu on an ordinary PC instead.) This file
@@ -451,7 +451,7 @@ Where the games stand (2026-10-01): every game follows it except
 Superconductor, whose pause screen goes to its menu with Select rather than
 through a menu item. That one is deliberately left as it is.
 
-- Gate Drop, Planck Time, Brawl-Ket, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
+- Gate Drop, Planck Time, Brawl-Ket, Qircuit, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
   RESUME and QUIT TO TITLE.
 - Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
   from Start to Select, so that Start can pause there too.
@@ -478,6 +478,56 @@ like the button convention: new games follow it from the start.
 - Games where the two sides aren't players (Superconductor's white and gold
   chips, Pong's white paddles) don't need to change, but blue and red is the
   natural choice there too.
+
+## AI opponents: one AI per game, three levels (a precedent)
+
+Qircuit is the first game with computer opponents, and it sets the pattern
+for any game that gets them later.
+
+- **Three levels, named the same everywhere: EASY, TOUGH, BRUTAL.**
+  - EASY: a first-time visitor can beat it.
+  - TOUGH: a decent player has to work for the win.
+  - BRUTAL: as close to perfect as the game allows. It also knows everything
+    the game state tells it: items, hazards, where every rival is.
+- **A level is a handful of numbers, not separate code.** Qircuit's `ai.py`
+  has one `Skill` dataclass and a `SKILLS` dict keyed by level (how hard it
+  corners, how early it brakes, how often it thinks, whether it reads the
+  gates). One driver class runs all three.
+- **One AI per game, in the game's package (`<package>/ai.py`).** It is pure:
+  it reads the game's own state and returns the same controls a person's
+  input becomes (Qircuit: gas, brake, a wire change), never more. So it plays
+  by the same rules and is unit tested like the rules.
+- **Everything that plays the game without a person uses that one AI:**
+  - the in-game opponents;
+  - any demo racing behind the title (Qircuit's title shows four bots);
+  - the attract-reel bot, `batocera/attract/bots/<rom>.py`, which turns the
+    AI's controls into virtual pad presses (`bots/qircuit.py` is short:
+    menus, then stick moves).
+
+  The older games' reel bots predate this and keep their own logic. A game
+  that gets opponents later moves that logic into its `ai.py`, and its reel
+  bot calls it.
+- **The title picks people, bots and level.** PLAYERS (people), BOTS (how
+  many) and LEVEL (one level for all the bots in a race) are rows of the
+  title menu. One person gets bots by default, so a lone visitor always has
+  a race. Bots take the places people leave free.
+  - At most four people: the cabinet has two sticks and two button clusters.
+  - Bots can push the field past four (Qircuit allows 8 cars in all) where
+    the game has room for it.
+- **Bots never wear a player's colour**, nor a hue leaning towards one. P1–P4
+  are blue, red, green and purple, and orange, pink, cyan and teal lean
+  towards them (see "Player colours"), so bots get neutral colours (yellow,
+  white, grey, tan, ...) and are labelled CPU1, CPU2, and so on. People's
+  cars or cursors are marked as well (Qircuit outlines them in white), so you
+  find your own among many.
+- **Bots don't make every sound.** What happens to them (a bump, a crash)
+  sounds as it does for people. Continuous or personal cues (Qircuit's drift
+  and red warning, being put back in, taking the lead) sound only for
+  people, or eight cars turn into noise.
+- **Test the ladder:** alone on the same track, BRUTAL is faster than TOUGH,
+  TOUGH than EASY, and EASY clearly slower (`qircuit/tests/test_ai.py`).
+  None of them should make the mistakes the game punishes, unless a level
+  makes them on purpose.
 
 ## Game logos: app icons, each with its own look (a taste)
 
