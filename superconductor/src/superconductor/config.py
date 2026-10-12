@@ -32,6 +32,9 @@ INITIAL_PAIRS = 2            # pairs already waiting when the game starts
 SPAWN_INTERVAL_START = 5.0
 SPAWN_INTERVAL_MIN = 2.0
 COOP_SPAWN_RATE = 1.25             # CO-OP: pairs come 25% more often throughout
+# One router per chip (1 PLAYER, and each chip in VERSUS) starts the spawn
+# interval this far along its ramp, so the first pairs don't drag.
+SOLO_SPAWN_HEAD_START = 30.0
 COHERENCE_START = 30.0
 COHERENCE_MIN = 16.0
 RAMP_SECONDS = 150.0

@@ -75,7 +75,9 @@ The links between blocks and modules are drawn as hollow lines. Every coupler on
 chip joins grid neighbours, so the stick always works in four directions.
 
 **Modes:**
-- **1 Player:** one chip.
+- **1 Player:** one chip. Its spawn interval starts 30 s along the ramp
+  (`SOLO_SPAWN_HEAD_START`), so pairs come a little faster from the start; each chip in
+  Versus does the same.
 - **Co-op:** both players route on the same chip, with shared score and lives. Pairs come
   25% more often than solo (`COOP_SPAWN_RATE`). A pair one player has selected can't be
   taken by the other. When a new pair appears and both players are free, it goes to

@@ -85,8 +85,10 @@ def ramp(start: float, end: float, t: float) -> float:
     return start + (end - start) * frac
 
 
-def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0) -> Iterator[Spawn]:
-    """Endless pairs; `rate` > 1 makes them come that much more often."""
+def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0,
+                   head_start: float = 0.0) -> Iterator[Spawn]:
+    """Endless pairs; `rate` > 1 makes them come that much more often, and
+    `head_start` seconds start the spawn interval that far along its ramp."""
     rng = random.Random(seed)
     t = 0.5
     count = 0
@@ -97,7 +99,7 @@ def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0) -> Iterator[S
         yield Spawn(t, a, b, ramp(config.COHERENCE_START, config.COHERENCE_MIN, t))
         count += 1
         if count >= config.INITIAL_PAIRS:  # the first few all arrive at once
-            t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t) / rate
+            t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t + head_start) / rate
 
 
 @dataclass
@@ -224,9 +226,13 @@ class Board:
         self.endpoint_owner: dict[Node, int] = {}  # stations, exclusive
         self.specials: list[Special] = []
         self.queue: list[Spawn] = []
-        # Two routers on one chip get pairs more often (CO-OP).
-        rate = config.COOP_SPAWN_RATE if len(players) > 1 else 1.0
-        self._schedule = schedule if schedule is not None else spawn_schedule(lattice, seed, rate)
+        # Two routers on one chip get pairs more often (CO-OP); one router
+        # starts a little way along the ramp instead.
+        if len(players) > 1:
+            rate, head_start = config.COOP_SPAWN_RATE, 0.0
+        else:
+            rate, head_start = 1.0, config.SOLO_SPAWN_HEAD_START
+        self._schedule = schedule if schedule is not None else spawn_schedule(lattice, seed, rate, head_start)
         self.last_router: str | None = None  # who committed the latest route
         self._next = next(self._schedule)
         self._next_id = 0
