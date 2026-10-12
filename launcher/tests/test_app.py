@@ -15,9 +15,11 @@ class FakeRunner:
     def __init__(self, code=0):
         self.code = code
         self.calls = []
+        self.configs = []  # (the input config, whether the menu's display was still up)
 
-    def __call__(self, game, s, size):
+    def __call__(self, game, s, size, config=None):
         self.calls.append((game.package, s.fullscreen, size))
+        self.configs.append((config, pygame.display.get_init()))
         return runner.Result(self.code, ["Traceback", "ValueError: boom"])
 
 
@@ -146,6 +148,15 @@ def test_escape_cannot_be_bound(make_app):
     screen.start_capture("a", False)
     a.step([key(pygame.K_ESCAPE)], 1 / 60)
     assert screen.capture is None and a.settings.keys["p1"]["a"] == "n"
+
+
+def test_the_input_config_is_worked_out_before_the_menu_lets_go_of_the_display(make_app):
+    a, run = make_app()
+    a.play(a.games[0])
+    config, display_up = run.configs[0]
+    assert config == runner.input_config(a.settings)
+    assert config["exit_key"] == pygame.K_ESCAPE and config["pads"]
+    assert not display_up  # the game gets the display to itself
 
 
 def test_f11_switches_display_and_remembers_it(make_app, tmp_path):

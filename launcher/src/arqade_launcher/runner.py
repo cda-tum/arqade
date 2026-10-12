@@ -78,12 +78,18 @@ def command(game: Game, settings: Settings, window_size: tuple[int, int]) -> lis
             *game_args(settings, window_size)]
 
 
-def run_game(game: Game, settings: Settings, window_size: tuple[int, int]) -> Result:
+def run_game(game: Game, settings: Settings, window_size: tuple[int, int],
+             config: dict | None = None) -> Result:
     """Run a game to completion. Its stderr still reaches the terminal live;
-    the last lines are kept so the menu can say why a game crashed."""
+    the last lines are kept so the menu can say why a game crashed.
+
+    `config` is input_config(settings), worked out while the menu's display
+    was still up: pygame only turns key names into codes with SDL's video
+    running (without it, it warns and may get them wrong). Left out, it is
+    worked out here."""
     env = dict(os.environ)
     env["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
-    env[child.ENV_VAR] = json.dumps(input_config(settings))
+    env[child.ENV_VAR] = json.dumps(input_config(settings) if config is None else config)
     tail: deque[str] = deque(maxlen=20)
     try:
         proc = subprocess.Popen(command(game, settings, window_size), cwd=game.project_dir,

@@ -149,9 +149,12 @@ class App:
         size = self.surface.get_size() if self.surface is not None else self.window_size
         if not self.settings.fullscreen:
             self.window_size = size
+        # Key names only resolve with the display up, so the game's input
+        # config is worked out before the menu lets go of the display.
+        config = runner.input_config(self.settings)
         pygame.display.quit()
         try:
-            result = self.run_game(game, self.settings, size)
+            result = self.run_game(game, self.settings, size, config)
         finally:
             pygame.display.init()
             self.open_display()
