@@ -19,15 +19,16 @@ from error_invaders.config import (
     INPUT_CONFIG,
     INTERNAL_HEIGHT,
     INTERNAL_WIDTH,
-    KEY_PRESET,
     MASTER_VOLUME,
     QUIT_FROM_MENU,
     SHOW_SCANLINES,
 )
 from error_invaders import bosses
 from error_invaders.display import make_display, present
-from error_invaders.input import Input, keyboard_enabled
+from error_invaders.input import Input
 from error_invaders.pause import ITEMS as PAUSE_ITEMS, PauseMenu
+from error_invaders import tutorial
+from error_invaders.tutorial import Tutorial
 
 # =====================================================================
 # Constants
@@ -187,8 +188,8 @@ def play(name, delay=0.0):
     if not AUDIO or name not in SFX or SFX[name] is None: return
     if delay > 0: _sfx_queue.append((now() + delay, name)); return
     SFX[name].play()
-def arp(names, step):
-    for i, n in enumerate(names): play(n, i * step)
+def arp(names, step, delay=0.0):
+    for i, n in enumerate(names): play(n, delay + i * step)
 def pump_sfx():
     t = now()
     for item in _sfx_queue[:]:
@@ -322,12 +323,14 @@ def dashed_rect(S, col, r, dash=10, gap=6, width=3):
 # =====================================================================
 # Game state
 # =====================================================================
-state = "title"          # title | play | paused | over | inputtest
+state = "title"          # title | tutorial | play | paused | over | inputtest
 mode = "easy"            # easy | hard | rush
-menu = {"step": 0, "two": False}
+menu = {"step": 0, "two": False, "row": 0}   # step 0: players (row), step 1: mode
+TITLE_ROWS = ("1 PLAYER", "2 PLAYERS", "QUIT")
 title_t = over_t = 0.0
 g = None
 pause_menu = PauseMenu()
+how_to = Tutorial()      # the HOW TO PLAY card before every match
 
 class Obj:
     def __init__(self, **kw): self.__dict__.update(kw)
@@ -731,8 +734,10 @@ def update(dt):
         g.overDelay -= dt
         if g.overDelay <= 0:
             state = "over"; over_t = 0.0
+            arp(["nl784", "nl659", "nl523", "nl392"], 0.14)
             if g.score > hiscores.get(g.mode, 0) and not g.skipped:   # a skipped boss doesn't count
                 hiscores[g.mode] = g.score; g.newHi = True; save_hiscores()
+                arp(["n523", "n659", "n784", "n1047", "n1319"], 0.08, 0.8)
 
 # =====================================================================
 # Drawing
@@ -829,14 +834,7 @@ def draw_game(S):
 
     # cosmic ray: Gaussian wave packet
     if g.ufo:
-        u = g.ufo; d = 1 if u.vx > 0 else -1
-        glow(S, u.x, u.y, 46, YELLOW, 0.35)
-        env = lambda dx: math.exp(-(dx * dx) / (2 * 18 * 18))
-        pts = [(u.x + dx, u.y - 16 * env(dx) * math.cos(dx * 0.38 - d * u.t * 18)) for dx in range(-70, 71, 2)]
-        up = [(u.x + dx, u.y - 16 * env(dx)) for dx in range(-70, 71, 2)]
-        dn = [(u.x + dx, u.y + 16 * env(dx)) for dx in range(70, -71, -2)]
-        pygame.draw.lines(S, fade(YELLOW, 0.3), True, up + dn, 1)
-        pygame.draw.lines(S, YELLOW, False, pts, 3)
+        draw_cosmic_ray(S, g.ufo.x, g.ufo.y, g.ufo.t * (1 if g.ufo.vx > 0 else -1))
 
     # capsules
     for c in g.caps:
@@ -887,75 +885,154 @@ def draw_game(S):
     for q in g.pops:
         text(S, q.text, q.size, q.col, q.x, q.y, alpha=min(1.0, q.life * 1.5))
 
+def draw_cosmic_ray(S, x, y, t, half=70, amp=16):
+    """The Cosmic Ray: a Gaussian wave packet (also drawn small on the title)."""
+    glow(S, x, y, 46 * half // 70, YELLOW, 0.35)
+    sig = 18 * half / 70
+    env = lambda dx: math.exp(-(dx * dx) / (2 * sig * sig))
+    xs = range(-half, half + 1, 2)
+    pts = [(x + dx, y - amp * env(dx) * math.cos(dx * 0.38 * 70 / half - t * 18)) for dx in xs]
+    up = [(x + dx, y - amp * env(dx)) for dx in xs]
+    dn = [(x + dx, y + amp * env(dx)) for dx in reversed(xs)]
+    pygame.draw.lines(S, fade(YELLOW, 0.3), True, up + dn, 1)
+    pygame.draw.lines(S, YELLOW, False, pts, 3)
+
+GREY, DIM = (153, 170, 170), (68, 68, 85)
+
+def legend_heading(S, label, x0, x1, y):
+    """A legend group's heading: a short line of text over a thin rule."""
+    text(S, label, 8, GREY, x0, y, "left")
+    pygame.draw.line(S, DIM, (x0, y + 10), (x1, y + 10), 1)
+
 def draw_title(S):
     t = title_t
     S.fill(BG)
     for i, c in enumerate("XYZXZYX"):
-        draw_enemy(S, W/2 - 180 + i * 60, 90 + math.sin(t * 2 + i) * 6, c, int(t * 2) % 2)
-    glow(S, W/2, 180, 150, COL["X"], 0.25); glow(S, W/2, 240, 170, COL["Z"], 0.25)
-    text(S, "PAULI", 44, COL["X"], W/2, 180)
-    text(S, "INVADERS", 44, COL["Z"], W/2, 240)
-    text(S, "RETRO MEETS QUANTUM ERROR CORRECTION", 10, (153, 170, 170), W/2, 285)
+        draw_enemy(S, W/2 - 180 + i * 60, 52 + math.sin(t * 2 + i) * 5, c, int(t * 2) % 2)
+    glow(S, W/2, 126, 150, COL["X"], 0.25); glow(S, W/2, 182, 170, COL["Z"], 0.25)
+    text(S, "PAULI", 44, COL["X"], W/2, 126)
+    text(S, "INVADERS", 44, COL["Z"], W/2, 182)
+    text(S, "RETRO MEETS QUANTUM ERROR CORRECTION", 10, GREY, W/2, 224)
 
-    if mode == "easy":
-        text(S, "Only the matching color corrects an error.", 10, (221, 221, 221), W/2, 330)
-        draw_enemy(S, W/2 - 150, 372, "Y", 0)
-        text(S, "= X * Z  ->  hit it twice:", 10, (221, 221, 221), W/2 - 120, 366, "left")
-        text(S, "red + blue, or purple directly", 10, (221, 221, 221), W/2 - 120, 384, "left")
-    elif mode == "rush":
-        text(S, "BOSS RUSH: every wave is a boss!", 10, YELLOW, W/2, 330)
-        for i, k in enumerate(bosses.ORDER):
-            text(S, bosses.INFO[k][0], 8, (221, 221, 221), W/2, 350 + i * 13)
-        text(S, "easy color rules", 8, (153, 170, 170), W/2, 416)
-    else:
-        text(S, "HARD: a wrong color multiplies the error!", 10, COL["X"], W/2, 330)
-        for a, b, c, y in (("Z", "X", "Y", 362), ("X", "Y", "Z", 400)):
-            draw_enemy(S, W/2 - 210, y, a, 0)
-            S.fill(COL[b], (W/2 - 172, y - 7, 4, 14))
-            text(S, "+ %s  ->" % b, 10, (221, 221, 221), W/2 - 160, y, "left")
-            draw_enemy(S, W/2 - 50, y, c, 0)
-        text(S, "Pauli algebra:", 10, (153, 170, 170), W/2 + 20, 356, "left")
-        text(S, "any two colors", 10, (153, 170, 170), W/2 + 20, 376, "left")
-        text(S, "make the third", 10, (153, 170, 170), W/2 + 20, 394, "left")
-
-    blit_center(S, triangle_sprite("XZY"[int(t) % 3]), W/2 - 200, 450)
-    blit_center(S, patch_sprite("XZ"[int(t) % 2]), W/2 + 200, 450)
-    text(S, "P1  COLOR CODE", 10, WHITE, W/2 - 200, 490)
-    text(S, "P2  SURFACE PATCH", 10, WHITE, W/2 + 200, 490)
-    text(S, "3 colors", 8, (153, 170, 170), W/2 - 200, 508)
-    text(S, "2 colors · faster fire", 8, (153, 170, 170), W/2 + 200, 508)
-    if keyboard_enabled() and KEY_PRESET == "default":
-        text(S, "WASD · Y fire · X color", 8, (153, 170, 170), W/2 - 200, 526)
-        text(S, "Arrows · , fire · . color", 8, (153, 170, 170), W/2 + 200, 526)
-    else:
-        text(S, "Stick · A fire · B color", 8, (153, 170, 170), W/2 - 200, 526)
-        text(S, "Stick · A fire · B color", 8, (153, 170, 170), W/2 + 200, 526)
-
-    for i, c in enumerate(("spread", "bomb", "bias", "lattice")):
-        x, y = 150 + i * 220, 585
-        S.fill(SPECIAL[c], (x - 11, y - 10, 22, 20))
-        text(S, CAP_INFO[c][0], 10, BG, x + 1, y + 1)
-        text(S, CAP_INFO[c][1], 8, (187, 187, 187), x, y + 24)
-    text(S, "Power-ups: shoot the Cosmic Ray, catch the capsule", 8, (119, 119, 119), W/2, 624)
+    # The legend: two groups, read top to bottom, one sprite and one short
+    # line each. Everything else is on the HOW TO PLAY card or in the game.
+    LX, RX, Y0, DY = 96, 544, 300, 52
+    legend_heading(S, "MATCH THE COLOR", LX - 26, LX + 360, Y0 - 38)
+    for i, (c, label) in enumerate((("X", "RED SHOT"), ("Z", "BLUE SHOT"), ("Y", "PURPLE, OR RED+BLUE"))):
+        draw_enemy(S, LX, Y0 + i * DY, c, int(t * 2) % 2)
+        text(S, label, 16, COL[c], LX + 40, Y0 + i * DY, "left")
+    legend_heading(S, "SHIPS", RX - 30, RX + 340, Y0 - 38)
+    blit_center(S, triangle_sprite("XZY"[int(t) % 3]), RX, Y0)
+    text(S, "P1  3 COLORS", 16, WHITE, RX + 44, Y0, "left")
+    blit_center(S, patch_sprite("XZ"[int(t) % 2], 30), RX, Y0 + DY)
+    text(S, "P2  2 COLORS", 16, WHITE, RX + 44, Y0 + DY, "left")
+    draw_cosmic_ray(S, RX, Y0 + 2 * DY, t, 30, 12)
+    text(S, "SHOOT IT: POWER-UP", 16, YELLOW, RX + 44, Y0 + 2 * DY, "left")
 
     if menu["step"] == 0:
-        items = [("1 PLAYER", not menu["two"], WHITE), ("2 PLAYERS", menu["two"], WHITE)]
+        items = [(label, i == menu["row"], DIM if label == "QUIT" and i != menu["row"] else WHITE)
+                 for i, label in enumerate(TITLE_ROWS)]
+        note = "BACK TO THE GAME LIST" if TITLE_ROWS[menu["row"]] == "QUIT" else ""
+        note_col = GREY
     else:
         items = [("EASY", mode == "easy", SPECIAL["bias"]), ("HARD", mode == "hard", COL["X"]),
                  ("BOSS RUSH", mode == "rush", YELLOW)]
+        note = {"easy": "MATCH THE COLOR TO CORRECT AN ERROR",
+                "hard": "A WRONG COLOR CHANGES THE ERROR!",
+                "rush": "ONLY BOSSES, ONE AFTER ANOTHER"}[mode]
+        note_col = dict(easy=SPECIAL["bias"], hard=COL["X"], rush=YELLOW)[mode]
+        text(S, ("2 PLAYERS" if menu["two"] else "1 PLAYER") + " >", 8, (102, 102, 102), W/2 - 210, 528)
     blink = int(t * 3) % 2
-    y0 = 650 if len(items) == 2 else 642
     for i, (label, on, col) in enumerate(items):
-        y = y0 + i * 20
-        text(S, label, 14, col if on else (68, 68, 68), W/2, y)
+        y = 500 + i * 28
+        text(S, label, 16, col if on else DIM, W/2, y)
         if on and blink:
-            text(S, ">", 14, col, W/2 - 110, y); text(S, "<", 14, col, W/2 + 110, y)
-    if menu["step"] == 1:
-        text(S, ("2 PLAYERS" if menu["two"] else "1 PLAYER") + " >", 8, (102, 102, 102), W/2 - 190, 662)
-    hint = "UP/DOWN select  ·  FIRE confirm" if menu["step"] == 0 else "UP/DOWN select  ·  FIRE start  ·  COLOR back"
-    text(S, hint, 8, (119, 119, 119), W/2, 699)
+            text(S, ">", 16, col, W/2 - 120, y); text(S, "<", 16, col, W/2 + 120, y)
+    if note: text(S, note, 8, note_col, W/2, 600)
+    hint = ("STICK select  ·  A ok  ·  START go" if menu["step"] == 0
+            else "STICK select  ·  A/START play  ·  B back")
+    text(S, hint, 8, (119, 119, 119), W/2, 664)
     text(S, "HI %06d (%s)   ·   MUNICH QUANTUM SOFTWARE FORUM" % (hiscores.get(mode, 0), mode.upper()),
-         8, (85, 85, 102), W/2, 712)
+         8, (85, 85, 102), W/2, 700)
+
+# ---------------- HOW TO PLAY ----------------
+DEMO = pygame.Rect(56, 232, 440, 330)   # the demo scene's panel
+TUT_MODE_LINE = {"hard": ("HARD: A WRONG COLOR CHANGES IT!", COL["X"]),
+                 "rush": ("BOSS RUSH: ONLY BOSSES!", YELLOW)}
+
+def draw_button(S, x, y, label, used, lit):
+    """One of the cabinet's round buttons, with its printed label."""
+    if lit:
+        glow(S, x, y, 40, YELLOW, 0.6)
+        pygame.draw.circle(S, YELLOW, (x, y), 18)
+        text(S, label, 16, BG, x + 1, y + 1)
+    elif used:
+        pygame.draw.circle(S, WHITE, (x, y), 18)
+        text(S, label, 16, BG, x + 1, y + 1)
+    else:
+        pygame.draw.circle(S, DIM, (x, y), 18, 2)
+        text(S, label, 8, DIM, x + 1, y + 1)
+
+def draw_tutorial(S):
+    """The HOW TO PLAY card: goal, a looping demo, the controls."""
+    t = how_to.t
+    S.fill(BG)
+    glow(S, W/2 - 80, 52, 120, COL["X"], 0.25); glow(S, W/2 + 112, 52, 100, COL["Z"], 0.25)
+    text(S, "HOW TO", 32, COL["X"], W/2 - 176, 52, "left")    # "HOW TO PLAY", centred, in two colors
+    text(S, "PLAY", 32, COL["Z"], W/2 + 176, 52, "right")
+
+    text(S, "GOAL", 16, YELLOW, W/2, 108)
+    text(S, "SHOOT EACH ERROR IN ITS OWN COLOR.", 16, WHITE, W/2, 140)
+    text(S, "DON'T LET THEM CROSS THE RED LINE.", 16, WHITE, W/2, 168)
+    if mode in TUT_MODE_LINE:
+        line, col = TUT_MODE_LINE[mode]
+        text(S, line, 16, col, W/2, 196)
+
+    # the demo, on its own little field
+    d = tutorial.demo(t)
+    cx, cy = DEMO.centerx, DEMO.centery
+    S.fill((8, 14, 16), (DEMO.x, cy + 40, DEMO.w, DEMO.bottom - cy - 40))
+    pygame.draw.rect(S, DIM, DEMO, 2)
+    dashed_line(S, fade(COL["X"], 0.6), (DEMO.x + 2, cy + 22), (DEMO.right - 2, cy + 22), 6, 8, 1)
+    for x, y, col, flash in d["invaders"]:
+        draw_enemy(S, cx + x, cy + y, col, int(t * 2) % 2, flash)
+    for x, y, col, age in d["bursts"]:
+        c = fade(COL[col], 1 - age / tutorial.BURST)
+        for k in range(10):
+            a = k * math.pi / 5 + 0.3
+            S.fill(c, (int(cx + x + math.cos(a) * age * 220 - 2), int(cy + y + math.sin(a) * age * 220 - 2), 4, 4))
+    for x, y, col in d["shots"]:
+        glow(S, cx + x, cy + y, 10, COL[col], 0.5)
+        S.fill(COL[col], (int(cx + x - 2), int(cy + y - 8), 4, 16))
+    sx, sy = cx + d["ship_x"], cy + tutorial.SHIP_Y
+    glow(S, sx, sy, 34, COL[d["ship_col"]], 0.35)
+    blit_center(S, triangle_sprite(d["ship_col"]), sx, sy)
+    text(S, "P1", 8, WHITE, sx, sy + 34)
+    cap_col = SPECIAL["bias"] if d["caption"] == "WAVE CLEAN!" else WHITE
+    text(S, d["caption"], 16, cap_col, cx, DEMO.bottom + 26)
+
+    # the controls: the stick and the 2x3 button cluster as printed on the
+    # pads (L X R / Y B A), the buttons the game uses lit, the demo's presses
+    # flashing
+    kx = 728
+    text(S, "CONTROLS", 16, YELLOW, kx, 252)
+    jx, jy = 590, 330
+    pygame.draw.circle(S, DIM, (jx, jy), 30, 2)
+    pygame.draw.line(S, GREY, (jx, jy), (jx + int(math.sin(t * 2.4) * 12), jy - 14), 6)
+    pygame.draw.circle(S, WHITE, (jx + int(math.sin(t * 2.4) * 12), jy - 16), 12)
+    for r, row in enumerate(("LXR", "YBA")):
+        for c, label in enumerate(row):
+            draw_button(S, 680 + c * 52, 306 + r * 50, label, label in "AB", label.lower() in d["lit"])
+    for i, (key, action) in enumerate((("STICK", "MOVE"), ("A", "FIRE"), ("B", "SWITCH COLOR"),
+                                       ("START", "PAUSE"))):
+        y = 422 + i * 34
+        text(S, key, 16, WHITE, 556, y, "left")
+        text(S, action, 16, GREY, 656, y, "left")
+    if g is not None and g.two:
+        text(S, "SAME ON BOTH PADS", 8, GREY, kx, 562)
+
+    if int(t / 0.45) % 3 != 2:
+        text(S, "PRESS ANY BUTTON TO START", 16, WHITE, W/2, 668)
 
 def draw_over(S):
     draw_game(S)
@@ -1009,7 +1086,49 @@ def draw_input_test(S):
 # =====================================================================
 def to_menu():
     global state, title_t
-    state = "title"; title_t = 0.0; menu["step"] = 0
+    state = "title"; title_t = 0.0; menu["step"] = 0; menu["row"] = 1 if menu["two"] else 0
+
+def step_title(dt):
+    """One frame of the title menu. Page 0 picks the players (or QUIT), page 1
+    the mode. The stick moves, A picks, B (or Select) goes back a page, and
+    Start goes on with what is selected -- it never quits, on QUIT it keeps
+    the last player count. Returns False to quit the game."""
+    global state, mode, title_t
+    title_t += dt
+    moved = inp.any_hit("down") - inp.any_hit("up")
+    a, start = inp.any_hit("fire"), inp.confirm      # confirm: Start (or Enter)
+    back = inp.any_hit("swap") or inp.back
+    if moved:
+        if menu["step"] == 0: menu["row"] = (menu["row"] + moved) % len(TITLE_ROWS)
+        else: mode = MODES[(MODES.index(mode) + moved) % len(MODES)]
+        play("menu_move")
+    if menu["step"] == 0:
+        if a and TITLE_ROWS[menu["row"]] == "QUIT":
+            return False                                 # out to the game list, like Start + Select
+        if a or start:
+            if TITLE_ROWS[menu["row"]] != "QUIT": menu["two"] = menu["row"] == 1
+            menu["step"] = 1; play("menu_ok")
+        elif QUIT_FROM_MENU and (pygame.K_ESCAPE in inp.ev_keys or inp.back_held > BACK_HOLD_TO_QUIT):
+            return False
+    elif a or start:
+        menu["step"] = 0; new_game(menu["two"]); open_tutorial(); play("menu_ok")
+    elif back:
+        menu["step"] = 0; play("menu_back")
+    if pygame.K_F1 in inp.ev_keys: state = "inputtest"
+    return True
+
+def open_tutorial():
+    """Show the HOW TO PLAY card; the match (already set up) waits behind it."""
+    global state
+    state = "tutorial"; how_to.open()
+
+def step_tutorial(dt):
+    """One frame of the HOW TO PLAY card. Any new button press (after its
+    first moments) starts play; whatever is held then is swallowed, so the
+    press doesn't also fire or switch color."""
+    global state
+    if how_to.step(dt, inp.any_button):
+        state = "play"; inp.swallow(); play("menu_ok")
 
 def step_play(dt):
     """One frame of play: Start (or P / Esc) pauses, otherwise the game runs."""
@@ -1051,23 +1170,15 @@ def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=F
         pump_sfx()
 
         if state == "title":
-            title_t += dt
-            moved = inp.any_hit("down") - inp.any_hit("up")
-            ok = inp.any_hit("fire") or inp.confirm
-            back = inp.any_hit("swap") or inp.back
-            if moved:
-                if menu["step"] == 0: menu["two"] = not menu["two"]
-                else: mode = MODES[(MODES.index(mode) + moved) % len(MODES)]
-                play("menu_move")
-            if ok:
-                if menu["step"] == 0: menu["step"] = 1; play("menu_ok")
-                else: menu["step"] = 0; new_game(menu["two"])
-            elif back and menu["step"] == 1:
-                menu["step"] = 0; play("menu_back")
-            elif menu["step"] == 0 and QUIT_FROM_MENU and (pygame.K_ESCAPE in inp.ev_keys or inp.back_held > BACK_HOLD_TO_QUIT):
-                running = False
-            if pygame.K_F1 in inp.ev_keys: state = "inputtest"
-            draw_title(canvas); screen.blit(canvas, (0, 0))
+            running = step_title(dt)
+            (draw_tutorial if state == "tutorial" else draw_title)(canvas)
+            screen.blit(canvas, (0, 0))
+        elif state == "tutorial":
+            step_tutorial(dt)
+            if state == "tutorial":
+                draw_tutorial(canvas); screen.blit(canvas, (0, 0))
+            else:
+                draw_game(canvas); screen.blit(canvas, (0, 0)); draw_hud(screen)
         elif state in ("play", "paused"):
             was = state
             if state == "play": step_play(dt)

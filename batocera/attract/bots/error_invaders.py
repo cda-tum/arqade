@@ -18,7 +18,7 @@ from error_invaders import bosses as B
 from error_invaders import game as G
 
 SECONDS = 85.0
-SKIP = 0.7
+SKIP = 2.0  # title, mode and the HOW TO PLAY card (play starts at 1.85 s)
 HIGHLIGHTS = [
     37.5,  # wave 4: a full formation cleared colour by colour, MAGIC STATE x9 blast
     29.0,  # boss: the LOGICAL ERROR chain split apart segment by segment
@@ -219,10 +219,13 @@ class Bot:
             return
         self.next_menu = t + 0.3
         if G.state == "title":
-            if G.menu["step"] == 0 and not G.menu["two"]:
-                pads.stick(0, 0.0, 1.0)  # 1 PLAYER -> 2 PLAYERS
+            if G.menu["step"] == 0 and G.TITLE_ROWS[G.menu["row"]] != "2 PLAYERS":
+                # 1 PLAYER -> 2 PLAYERS (from QUIT, back up: never A on QUIT)
+                pads.stick(0, 0.0, -1.0 if G.TITLE_ROWS[G.menu["row"]] == "QUIT" else 1.0)
             else:
                 pads.tap(0, "a", 3)      # 2 PLAYERS, then EASY
+        elif G.state == "tutorial" and G.how_to.t > 1.0:
+            pads.tap(0, "x", 3)          # HOW TO PLAY: any button; X does nothing in play
         elif G.state == "over" and G.over_t > 1.6:
             pads.tap(0, "a", 3)
 
