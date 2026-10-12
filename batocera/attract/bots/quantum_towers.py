@@ -18,16 +18,16 @@ from quantum_towers import config
 from quantum_towers.quantum import ACTIONS, states_equal
 
 SECONDS = 85.0
-SKIP = 0.5
+SKIP = 1.4  # the title, then HOW TO PLAY (dismissed after 1 s)
 HIGHLIGHTS = [  # 2 s windows with seed 1, best first
-    74.3,  # photo finish: both reach floor 15, the tower top in sight
-    70.6,  # knockbacks traded just below the top
-    60.2,  # P1 knocks P2 off floor 13, P2 fires straight back
-    6.7,   # P2 knocked to the ground floor, climbs and hits back
-    34.5,  # attack and counter-attack mid-tower
-    54.0,  # P2 pushes up on the wrong state and is stunned; P1 clears a floor
-    20.1,  # an exchange of attacks low down, PERFECT floors
-    44.5,  # level at floor 8, gates going in on both sides
+    51.3,  # level at floor 14: P1 climbs to 15 and knocks P2 back down
+    53.2,  # P1's last climbs to the top, and PLAYER 1 WINS
+    36.9,  # knockbacks traded at floors 11 and 12
+    44.0,  # P2 knocks P1 off floor 12, P1 fires straight back
+    25.8,  # attack and counter-attack mid-tower
+    9.4,   # an exchange of attacks low down
+    60.3,  # second match: P2 knocks P1 back to the ground floor
+    3.6,   # P1 pushes up on the wrong state and is stunned; P2 climbs on
 ]
 
 # The button each gate is on, by its printed name -- the game's own legend.
@@ -71,6 +71,7 @@ class Bot:
         self.pads, self.rng = pads, rng
         self.climbers = [Climber(0), Climber(1)]
         self.menu_since = None
+        self.screen = None
 
     def update(self, t):
         loop = self.pads.loop
@@ -82,14 +83,18 @@ class Bot:
             self.play(c, loop)
 
     def menu(self, t, loop):
-        """Title or winner screen: straight on into the next match."""
-        if self.menu_since is None:
-            self.menu_since = t
+        """Title, HOW TO PLAY or winner screen: straight on into the next
+        match. Start on the title, which always plays (A on its QUIT row
+        would leave the game); any button on the other two."""
+        screen = "tutorial" if "dismissal" in loop else "winner" if "winner" in loop else "title"
+        if self.menu_since is None or screen != self.screen:
+            self.menu_since, self.screen = t, screen
             for c in self.climbers:
                 c.floor = None
-        wait = 1.0 if "winner" in loop else 0.25
-        if t - self.menu_since >= wait and not self.pads.held(0, "a"):
-            self.pads.tap(0, "a", 1)
+        wait = {"title": 0.25, "tutorial": 1.0, "winner": 1.0}[screen]
+        button = "start" if screen == "title" else "a"
+        if t - self.menu_since >= wait and not self.pads.held(0, button):
+            self.pads.tap(0, button, 1)
             self.menu_since = t
 
     def play(self, c, loop):
