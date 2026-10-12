@@ -263,3 +263,10 @@ def test_qec_fixes_the_circuits_hamming_distance():
     assert circuit.hamming(c.slots, target, 4) == 3  # one wrong, two unfilled
     c.qec()
     assert circuit.hamming(c.slots, target, 2) == 0
+
+
+def test_hamming_refuses_more_slots_than_the_target_has():
+    with pytest.raises(ValueError, match="upto"):
+        circuit.hamming(["H"], ["H", "X"], 3)
+    with pytest.raises(ValueError, match="upto"):
+        circuit.hamming(["H"], ["H", "X"], -1)

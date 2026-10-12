@@ -85,3 +85,8 @@ def test_player_colours_left_blue_right_red():
 
 def test_idle_timeout_is_a_minute():
     assert config.IDLE_TIMEOUT == 60.0
+
+
+@pytest.mark.parametrize("distance, clamped", [(-3, 0), (17, 16), (99, 16)])
+def test_circuit_check_boost_clamps_the_distance(distance, clamped):
+    assert config.check_boost(distance) == config.check_boost(clamped)

@@ -57,6 +57,8 @@ def random_target(rng: random.Random, n: int) -> list[str]:
 
 def hamming(mine: list[str | None], target: list[str], upto: int) -> int:
     """How many of the first `upto` slots differ from the target. Empty counts as different."""
+    if not 0 <= upto <= len(target):
+        raise ValueError(f"upto={upto} is outside the target's {len(target)} slots")
     return sum(
         1 for i in range(upto) if i >= len(mine) or mine[i] is None or mine[i] != target[i]
     )

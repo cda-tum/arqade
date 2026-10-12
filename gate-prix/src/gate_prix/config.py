@@ -57,13 +57,45 @@ def streak_boost(streak: int) -> tuple[float, float]:
 
 
 def check_boost(distance: int) -> tuple[float, float]:
-    """The CIRCUIT CHECK's (extra speed fraction, seconds) for a Hamming distance."""
-    right = CHECK_SLOTS - distance
+    """The CIRCUIT CHECK's (extra speed fraction, seconds) for a Hamming distance.
+
+    The distance is clamped to [0, CHECK_SLOTS], so the boost is never negative.
+    """
+    right = CHECK_SLOTS - max(0, min(CHECK_SLOTS, distance))
     return right / CHECK_SLOTS * CHECK_BOOST, CHECK_TIME_BASE + right * CHECK_TIME_PER_SLOT
 
 
 # --- Driving ---------------------------------------------------------------------------
 OFFROAD_SPEED_FACTOR = 0.6  # top speed on the copper plate
+TOP_SPEED = 10_000.0  # world units per second: 50 segments, so a lap of THE FRIDGE is ~45 s
+
+# --- The world and the camera (the look file's numbers) ---------------------------------
+# Lateral positions (car x, arch offsets, roadside sprites) are in road half-widths: -1 to 1
+# is the road. z is distance along the track in world units.
+SEG = 200.0  # world units per road segment
+ROAD_HALF_WIDTH = 1500.0  # world units
+RUMBLE = 1.12  # the rumble strip's outer edge, in road half-widths
+CAMERA_HEIGHT = 1000.0
+CAMERA_DEPTH = 0.84  # 1 / tan(half the field of view)
+CAR_AHEAD = 760.0  # camera to its own car: the car's wheels then sit 10 px above the bottom
+DRAW_SEGMENTS = 120  # how far ahead the road is projected (2.4 s at top speed)
+HORIZON = 112 / 270  # the horizon's height, as a fraction of a view's height
+PARALLAX_TILES = 3  # how many background widths scroll past in one full turn (a lap)
+
+# --- Gate rows -----------------------------------------------------------------------------
+ARCH_HALF_WIDTH = 0.22  # an arch's outer radius: a car within it of the offset goes through
+ARCH_OFFSET_MAX = 0.8  # arch centres lie in [-0.8, 0.8]
+ARCH_MIN_GAP = 0.04  # the least space between two arches of a row
+SHARP_CURVE = 3.0  # |curve| above this is a sharp curve: no gate row there
+
+# --- Sprites -------------------------------------------------------------------------------
+# Every sprite is drawn once at start-up, at SPRITE_SIZES sizes spaced evenly in log between
+# these scales (pixels per road half-width at the sprite's distance), and the nearest is
+# blitted. Nearer than the largest size (just behind the camera's own car) is not drawn.
+SPRITE_SIZES = 24
+SPRITE_SCALE_MIN = 20.0
+SPRITE_SCALE_MAX = 1000.0
+CAR_WIDTH = 0.32  # in road half-widths, as the look's own car beside its road
 
 # --- Flow ------------------------------------------------------------------------------
 ATTRACT_DELAY = 3.0  # untouched seconds on the title before the CPU racers play
@@ -71,6 +103,15 @@ IDLE_TIMEOUT = 60.0
 
 # --- Colours ---------------------------------------------------------------------------
 PLAYER_COLORS = {"p1": (64, 136, 248), "p2": (240, 64, 72)}  # left/top blue, right/bottom red
+CAR_COLORS = {  # P1 blue and P2 red as in the look; the CPU racers never blue or red
+    "p1": (80, 170, 255),
+    "p2": (255, 80, 90),
+    "green": (100, 210, 130),
+    "silver": (220, 222, 232),
+    "gold": (240, 196, 64),
+    "violet": (168, 112, 232),
+    "lime": (176, 226, 64),
+}
 GATE_COLORS = {  # shared with the other games
     "H": (248, 192, 40),
     "X": (232, 64, 72),
