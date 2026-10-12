@@ -68,6 +68,30 @@ def check_boost(distance: int) -> tuple[float, float]:
 # --- Driving ---------------------------------------------------------------------------
 OFFROAD_SPEED_FACTOR = 0.6  # top speed on the copper plate
 TOP_SPEED = 10_000.0  # world units per second: 50 segments, so a lap of THE FRIDGE is ~45 s
+# Speed changes, in world units per second per second.
+ACCEL = 5_000.0  # auto-acceleration: standing to top speed in 2 s
+BOOST_ACCEL = 20_000.0  # up to a boost's speed: +80% in 0.4 s
+COAST_DECEL = 5_000.0  # back down to top speed when a boost ends
+OFFROAD_DECEL = 12_000.0  # down to the off-road cap: top speed to 60% in 1/3 s
+BRAKE = 6_000.0  # with the stick fully back
+BRAKE_FLOOR = 0.4  # braking never slows the car below 40% of top speed
+# Lateral rates, in road half-widths per second, at top speed. Steering scales with speed
+# and the curves' outward push with speed squared, as OutRun does.
+STEER_RATE = 2.0  # full stick: across the whole road in a second
+CURVE_PUSH = 0.46  # outward push per unit of curve: the coax corner (4.4) just beats full stick
+DRIFT = 0.3  # a brake held through a curve takes up to 30% off the push
+X_LIMIT = 2.2  # the car never strays further than this from the centre line
+# Bumps. CAR_WIDTH (below) is a car's whole width in road half-widths.
+CAR_LENGTH = 400.0  # world units, two segments
+BUMP_KNOCK = 1.2  # a side bump knocks both cars apart at this many half-widths a second
+BUMP_KNOCK_DECAY = 8.0  # per second: the knock is mostly gone in a quarter of a second
+BUMP_SLOW = 0.85  # a rear bump leaves the car behind at 85% of the front car's speed
+BUMP_NUDGE = 0.6  # and nudges it sideways (half-widths a second), so it slides by
+BUMP_COOLDOWN = 0.3  # seconds before the same two cars can bump (and cue it) again
+# The starting grid: two lanes, the rows of cars a little apart behind the line.
+GRID_LANES = (-0.4, 0.4)
+GRID_FIRST = 300.0  # the front row's distance behind the line
+GRID_GAP = 1000.0  # between the rows; the right lane is half of it further back
 
 # --- The world and the camera (the look file's numbers) ---------------------------------
 # Lateral positions (car x, arch offsets, roadside sprites) are in road half-widths: -1 to 1
