@@ -213,6 +213,8 @@ def build_sfx() -> dict[str, list[int]]:
     c = note_freq
     return {
         "blip": tone(880, 0.04, 0.22, "square"),
+        # a menu choice taken (PLAY, READY, the HOW TO PLAY card away): a rising pair
+        "confirm": concat(tone(c("E5"), 0.04, 0.24, "pulse"), tone(c("B5"), 0.09, 0.24, "pulse", decay=12)),
         "pause": tone(660, 0.08, 0.25, "square"),
         # the round calls
         "round": concat(tone(c("G4"), 0.08, 0.28, "pulse"), tone(c("G4"), 0.08, 0.28, "pulse"),
@@ -241,7 +243,7 @@ def build_sfx() -> dict[str, list[int]]:
     }
 
 
-CUE_SOUNDS = {"blip": "blip", "pause": "pause", "round": "round", "fight": "fight", "ko": "ko",
+CUE_SOUNDS = {"blip": "blip", "confirm": "confirm", "pause": "pause", "round": "round", "fight": "fight", "ko": "ko",
               "timeout": "timeout", "perfect": "perfect", "draw": "draw", "match_won": "match"}
 # the fight's events; None: deliberately silent (a landing would chatter)
 EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "whoosh", "measure": "measure",

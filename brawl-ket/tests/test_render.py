@@ -139,7 +139,10 @@ def test_every_match_screen_draws(surface):
         for _ in range(n):
             inp = M.FrameInput(activity=bool(presses))
             for name, (player, value) in presses.items():
-                getattr(inp, name)[player] = value
+                if player is None:
+                    setattr(inp, name, value)
+                else:
+                    getattr(inp, name)[player] = value
             r.draw(m, m.update(inp))
             seen.add((m.state, m.paused, m.attract is not None))
 
@@ -149,6 +152,8 @@ def test_every_match_screen_draws(surface):
     step(confirms=("p1", True))
     step(nav=("p2", (1, 0)))
     step(confirms=("p2", True))
+    step(config.TUTORIAL_LOCK + 30)                 # HOW TO PLAY
+    step(any_button=(None, True))
     step(config.ROUND_INTRO_FRAMES // 2)
     step(pauses=("p1", True), confirms=("p1", True))
     step(3)
@@ -159,7 +164,7 @@ def test_every_match_screen_draws(surface):
         step(config.ROUND_END_FRAMES + config.ROUND_INTRO_FRAMES)
     step(config.MATCH_RESULT_LOCK + 2)
     states = {s for s, _, _ in seen}
-    assert states == {M.TITLE, M.SELECT, M.ROUND_INTRO, M.FIGHT, M.ROUND_END, M.MATCH_RESULT}
+    assert states == {M.TITLE, M.SELECT, M.TUTORIAL, M.ROUND_INTRO, M.FIGHT, M.ROUND_END, M.MATCH_RESULT}
     assert (M.TITLE, False, True) in seen and (M.ROUND_INTRO, True, False) in seen
 
 
@@ -302,9 +307,47 @@ def test_a_live_strike_leaves_a_trail(surface):
     assert fight.fighters["p1"].phase == "active"
     assert len(r.trails["p1"]) >= 2
 def test_the_teaching_text_is_ascii_capitals():
-    from brawl_ket.render import CARD_LINES, HINT, RULE_LINES
-    for text in (HINT, *RULE_LINES, *("".join(t for t, _ in parts) for parts in CARD_LINES)):
+    from brawl_ket.render import ANY_BUTTON, BUTTON_JOBS, CARD_LINES, GOAL_LINES, HINT, LESSON_LINES, RULE_LINES
+    parts = (*CARD_LINES, *LESSON_LINES)
+    for text in (HINT, ANY_BUTTON, *RULE_LINES, *GOAL_LINES, *(job for _b, job in BUTTON_JOBS),
+                 *("".join(t for t, _ in line) for line in parts)):
         assert text.isascii() and text == text.upper(), text
+
+
+def test_the_how_to_play_card_fits_the_screen():
+    """Every line of it in the 8 px font, inside the 640 px screen and its own boxes."""
+    from brawl_ket.render import GOAL_LINES, LESSON_LINES, LESSON_VIEW, font
+    pygame.init()
+    for line in GOAL_LINES:
+        assert font(8).size(line)[0] <= INTERNAL_WIDTH - 32, line
+    for parts in LESSON_LINES:
+        text = "".join(t for t, _ in parts)
+        assert font(8).size(text)[0] <= LESSON_VIEW.w - 16, text
+
+
+def test_the_how_to_play_card_draws_its_scene_and_title_draws_quit(surface):
+    import random
+
+    from brawl_ket import config
+    from brawl_ket import match as M
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    inp = M.FrameInput(activity=True)
+    inp.nav["p1"] = (0, 1)
+    r.draw(m, m.update(inp))
+    assert M.TITLE_ITEMS[m.title_index] == "QUIT"
+    for kind in ("p1", "p1", "p2"):
+        inp = M.FrameInput(activity=True)
+        inp.confirms[kind] = True
+        if m.state == M.TITLE:
+            inp.pauses[kind] = True         # Start: QUIT is selected, Start still plays
+        r.draw(m, m.update(inp))
+    assert m.state == M.TUTORIAL
+    before = surface.copy()
+    for _ in range(config.TUTORIAL_LOCK + 40):
+        r.draw(m, m.update(M.FrameInput()))
+    assert m.state == M.TUTORIAL and r._lesson is not None
+    assert pygame.image.tostring(before, "RGB") != pygame.image.tostring(surface, "RGB")   # it moves
 
 
 def test_the_rules_card_plays_its_three_beats(surface):
@@ -325,6 +368,7 @@ def test_the_rules_card_plays_its_three_beats(surface):
 def test_the_first_round_intro_draws_its_hint(surface):
     import random
 
+    from brawl_ket import config
     from brawl_ket import match as M
     r = Renderer(surface)
     m = M.Match(random.Random(1))
@@ -332,5 +376,8 @@ def test_the_first_round_intro_draws_its_hint(surface):
         inp = M.FrameInput(activity=True)
         inp.confirms[kind] = True
         m.update(inp)
+    for _ in range(config.TUTORIAL_LOCK):
+        m.update(M.FrameInput())
+    m.update(M.FrameInput(activity=True, any_button=True))
     assert m.state == M.ROUND_INTRO and m.hint
     r.draw(m, [])

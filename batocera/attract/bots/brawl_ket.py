@@ -1,8 +1,9 @@
 """Brawl-Ket: TRIO against QUINT, both fought by the game's own CPU.
 
-A on the title, then A on each pad at the character select, which keeps the
-game's default pairing: P1 TRIO on the left (blue ring), P2 QUINT on the
-right (red ring). In a round the game's CPU (brawl_ket.bot.Bot, the one its
+A on the title (on PLAY: the bot never moves the stick there, so never onto
+QUIT), then A on each pad at the character select, which keeps the game's
+default pairing: P1 TRIO on the left (blue ring), P2 QUINT on the right (red
+ring), then A again to take the HOW TO PLAY card away. In a round the game's CPU (brawl_ket.bot.Bot, the one its
 title demo uses) reads the fight and answers with a FighterInput per
 fighter, and this bot presses exactly that on the two pads: the stick to
 walk, jump and crouch, A, B, X and Y tapped for one frame each. The game
@@ -23,7 +24,7 @@ WINNER_LEFT). A fighter whose rival is above its line presses harder and
 stops dodging; one whose rival is below it now and then presses the wrong
 colour, which bounces off with the game's ping, and never finishes off the
 round's winner. QUINT takes round 1 and TRIO comes back to win 2-1 (with
-seed 1: K.O.s at 23, 52 and 78 s, then P1 WINS! to the end). The demo CPU
+seed 1: K.O.s at 23.5, 52 and 78 s, then P1 WINS! to the end). The demo CPU
 can also flicker, Y and straight back, so switches are kept SWITCH_GAP apart.
 """
 
@@ -34,18 +35,19 @@ from brawl_ket.bot import STRIKE_RANGE, Bot as CPU
 from brawl_ket.fighter import FighterInput
 
 SECONDS = 85.0
-SKIP = 3.1  # title 0.4 s, select 0.7 s, then ROUND 1 / FIGHT!; the fight starts at 3.1 s
-HIGHLIGHTS = [  # 2 s windows with seed 1, best first
-    35.3,  # QUINT's CHARGE NOISE shocks TRIO, TRIO switches (H) and the shocks bounce off,
-           # then TRIO knocks QUINT down
-    21.9,  # end of round 1: TRIO sweeps QUINT down, QUINT switches, throws TRIO: K.O.
-    57.0,  # round 3: a green hit, QUINT switches and the next one bounces, CHARGE NOISE
-           # against a HADAMARD DIVE
-    3.5,   # the opening: both switch, a PHOTON, a PHASE SLIDE knocks QUINT down
-    76.5,  # match point: purple hits on QUINT, K.O. in slow motion, TRIO WINS THE ROUND
-    67.2,  # knockdowns traded: QUINT down, TRIO thrown, QUINT down again
-    38.2,  # a sweep, QUINT's MEASURE, TRIO knocked down
-    50.4,  # end of round 2: TRIO lands the last purple hits, K.O.
+SKIP = 3.45  # title 0.4 s, select 0.7 s, HOW TO PLAY 0.35 s, then ROUND 1 / FIGHT!; the fight
+             # starts at 3.45 s
+HIGHLIGHTS = [  # 2 s windows with seed 1, best first (HOW TO PLAY moved them all 0.35 s on)
+    35.65,  # QUINT's CHARGE NOISE shocks TRIO, TRIO switches (H) and the shocks bounce off,
+            # then TRIO knocks QUINT down
+    22.25,  # end of round 1: TRIO sweeps QUINT down, QUINT switches, throws TRIO: K.O.
+    57.35,  # round 3: a green hit, QUINT switches and the next one bounces, CHARGE NOISE
+            # against a HADAMARD DIVE
+    3.85,  # the opening: both switch, a PHOTON, a PHASE SLIDE knocks QUINT down
+    76.85,  # match point: purple hits on QUINT, K.O. in slow motion, TRIO WINS THE ROUND
+    67.55,  # knockdowns traded: QUINT down, TRIO thrown, QUINT down again
+    38.55,  # a sweep, QUINT's MEASURE, TRIO knocked down
+    50.75,  # end of round 2: TRIO lands the last purple hits, K.O.
 ]
 
 MENU_GAP = 20  # frames between two menu presses
@@ -150,6 +152,8 @@ class Bot:
             self.pads.tap(0, "a", 1)
         elif game.state == M.SELECT:
             self.pads.tap(1 if game.ready["p1"] else 0, "a", 1)
+        elif game.state == M.TUTORIAL:     # any button goes on; MENU_GAP is past its lock
+            self.pads.tap(0, "a", 1)
 
     def play(self, game):
         fight = game.fight

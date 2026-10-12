@@ -35,6 +35,7 @@ def merge_pending(pending: FrameInput, now: FrameInput) -> FrameInput:
         backs=either(pending.backs, now.backs),
         pauses=either(pending.pauses, now.pauses),
         activity=pending.activity or now.activity,
+        any_button=pending.any_button or now.any_button,
     )
 
 
@@ -45,7 +46,7 @@ def consume(pending: FrameInput) -> FrameInput:
         pending,
         fighters={p: replace(f, a=False, b=False, x=False, y=False) for p, f in pending.fighters.items()},
         nav={p: (0, 0) for p in PLAYERS},
-        confirms=dict(none), backs=dict(none), pauses=dict(none),
+        confirms=dict(none), backs=dict(none), pauses=dict(none), any_button=False,
         activity=any(f.dx or f.up or f.down for f in pending.fighters.values()) or pending.held,
     )
 
@@ -86,6 +87,8 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
             acc -= STEP
             events += match.update(pending)
             pending = consume(pending)
+        if match.quit:          # QUIT on the title: the same way out as Start + Select
+            break
 
         audio.music(music_for(match))
         audio.update()

@@ -1,7 +1,12 @@
 """The match flow. Pure (no pygame): one FrameInput per 60 Hz frame in, events out.
 
-  title -> select -> round intro -> fight -> round end -> (round intro ...)
+  title -> select -> tutorial -> round intro -> fight -> round end -> (round intro ...)
         -> match result -> rematch (round intro) or title
+
+The title is a menu, PLAY / QUIT: the stick picks, A takes it, and Start always plays.
+QUIT ends the game (`quit` is set and the main loop exits, as Start + Select does).
+The tutorial is the HOW TO PLAY card, before every match from the select screen (not
+a rematch); any button pressed after its first TUTORIAL_LOCK frames goes on.
 
 Rounds are first to ROUNDS_TO_WIN; a draw round counts for nobody. Start pauses
 the round intro, the fight and the round end (RESUME / QUIT TO TITLE). Left
@@ -19,16 +24,19 @@ from .bot import Bot
 from .fight import Fight
 from .fighter import IDLE
 from .moves import CHARACTERS
+from .tutorial import Lesson
 
 PLAYERS = ("p1", "p2")
 ROSTER = tuple(CHARACTERS.values())     # the select screen's order: TRIO, QUINT
 
 TITLE = "title"
 SELECT = "select"
+TUTORIAL = "tutorial"
 ROUND_INTRO = "round_intro"
 FIGHT = "fight"
 ROUND_END = "round_end"
 MATCH_RESULT = "match_result"
+TITLE_ITEMS = ("PLAY", "QUIT")
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 PAUSABLE = (ROUND_INTRO, FIGHT, ROUND_END)
 FIGHT_CALL = config.ROUND_INTRO_FRAMES // 2     # "ROUND n" until here, then "FIGHT!"
@@ -38,7 +46,7 @@ FIGHT_CALL = config.ROUND_INTRO_FRAMES // 2     # "ROUND n" until here, then "FI
 class Cue:
     """A match-level event, for the sound and the renderer."""
 
-    kind: str   # blip pause round fight ko timeout perfect draw match_won
+    kind: str   # blip confirm pause round fight ko timeout perfect draw match_won
     player: str | None = None
 
 
@@ -53,6 +61,7 @@ class FrameInput:
     confirms: dict = field(default_factory=_per_player(bool))  # A or Start pressed
     backs: dict = field(default_factory=_per_player(bool))     # B pressed
     pauses: dict = field(default_factory=_per_player(bool))    # Start pressed
+    any_button: bool = False    # any button at all went down, on either pad (the tutorial)
     activity: bool = False      # any input at all (the idle timeout, stopping the demo)
     held: bool = False          # any button still down (the title waits for it to clear)
 
@@ -87,6 +96,9 @@ class Match:
         self.paused = False
         self.pause_index = 0
         self.wait_release = False   # the title ignores buttons until all are let go
+        self.title_index = 0        # PLAY / QUIT
+        self.quit = False           # QUIT was picked: the main loop ends the game
+        self.lesson: Lesson | None = None   # the tutorial's scene
         self.attract: Fight | None = None
         self.card = False           # the title shows the COLOUR MUST MATCH card (between demos)
         self.hint = False           # this round intro shows the rules hint (a match's first)
@@ -156,9 +168,15 @@ class Match:
                 return
             self._step_attract()
             return
-        if inp.confirm:
+        dy = next((d[1] for d in inp.nav.values() if d[1]), 0)
+        if inp.pause or (inp.confirm and TITLE_ITEMS[self.title_index] == "PLAY"):
             self.ready = {p: False for p in PLAYERS}
             self._set_state(SELECT)
+            events.append(Cue("confirm"))
+        elif inp.confirm:           # A on QUIT: no questions asked
+            self.quit = True
+        elif dy:
+            self.title_index = (self.title_index + dy) % len(TITLE_ITEMS)
             events.append(Cue("blip"))
         elif self.t >= config.ATTRACT_DELAY and not inp.activity:
             self._start_attract()
@@ -176,12 +194,24 @@ class Match:
                 continue
             elif inp.confirms[p]:
                 self.ready[p] = True
-                events.append(Cue("blip"))
+                events.append(Cue("confirm"))
             elif inp.nav[p][0]:
                 self.picks[p] = (self.picks[p] + inp.nav[p][0]) % len(ROSTER)
                 events.append(Cue("blip"))
         if all(self.ready.values()):
+            self.lesson = Lesson()
+            self._set_state(TUTORIAL)
+
+    def _on_tutorial(self, inp: FrameInput, events: list) -> None:
+        """HOW TO PLAY: its scene plays until any button, pressed once the card has been up
+        TUTORIAL_LOCK frames (the A that readied, or its bounce, must not skip it unseen).
+        Only edges count, so the press that goes on does nothing in the round."""
+        if self.t > config.TUTORIAL_LOCK and inp.any_button:
+            self.lesson = None
+            events.append(Cue("confirm"))
             self._start_match(events)
+            return
+        events += self.lesson.step()
 
     def _on_round_intro(self, inp: FrameInput, events: list) -> None:
         if self.t == FIGHT_CALL:
@@ -239,6 +269,7 @@ class Match:
     # --- the attract demo ------------------------------------------------------------------
 
     def _start_attract(self) -> None:
+        self.title_index = 0    # whoever stops the demo finds PLAY, never QUIT, under A
         chars = {p: self.rng.choice(ROSTER) for p in PLAYERS}
         self.attract = Fight(chars)
         self._title_phase = 0
@@ -270,8 +301,10 @@ class Match:
 
     def _to_title(self) -> None:
         self.fight = None
+        self.lesson = None
         self.paused = False
         self.card = False
+        self.title_index = 0
         self._stop_attract()
         self._set_state(TITLE)
 

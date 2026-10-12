@@ -71,3 +71,70 @@ def test_with_no_pads_and_no_keys_both_fighters_are_idle() -> None:
         assert not inp.quit_combo() and inp.select_held_time == 0.0
     finally:
         binput.set_keyboard_enabled(True)
+
+
+class FakePad:
+    """A cabinet pad: 12 buttons and two axes, no hat."""
+
+    def __init__(self) -> None:
+        self.down: set[int] = set()
+        self.axes = [0.0, 0.0]
+
+    def get_numbuttons(self) -> int:
+        return 12
+
+    def get_button(self, b: int) -> bool:
+        return b in self.down
+
+    def get_numaxes(self) -> int:
+        return 2
+
+    def get_axis(self, i: int) -> float:
+        return self.axes[i]
+
+    def get_numhats(self) -> int:
+        return 0
+
+
+def test_any_button_is_any_raw_button_going_down_but_never_the_stick() -> None:
+    pygame.init()
+    binput.set_keyboard_enabled(False)
+    try:
+        inp = Input()
+        pad = FakePad()
+        inp.joysticks = [pad]
+        pad.axes = [1.0, -1.0]
+        inp.update(1 / 60)
+        assert not inp.frame_input().any_button
+        pad.down = {config.INPUT_CONFIG["system"]["select_button"]}    # not A, not Start
+        inp.update(1 / 60)
+        assert inp.frame_input().any_button
+        inp.update(1 / 60)                  # held: not again
+        assert not inp.frame_input().any_button
+        pad.down = {4}                      # L
+        inp.update(1 / 60)
+        assert inp.frame_input().any_button
+    finally:
+        binput.set_keyboard_enabled(True)
+
+
+def test_any_button_from_events_and_keys_only_with_the_keyboard_on() -> None:
+    pygame.init()
+    inp = Input()
+    inp.joysticks = []
+    inp.handle(pygame.event.Event(pygame.JOYBUTTONDOWN, joy=0, instance_id=0, button=5))
+    inp.update(1 / 60)
+    assert inp.frame_input().any_button
+    inp.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+    inp.update(1 / 60)
+    assert inp.frame_input().any_button
+    inp.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT))      # P2's stick
+    inp.update(1 / 60)
+    assert not inp.frame_input().any_button
+    binput.set_keyboard_enabled(False)
+    try:
+        inp.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE))
+        inp.update(1 / 60)
+        assert not inp.frame_input().any_button
+    finally:
+        binput.set_keyboard_enabled(True)
