@@ -9,7 +9,8 @@ rows each car crossed, counts laps, and returns the frame's cues as `Event`s:
 | "right" | the car's streak after this gate |
 | "wrong", "miss" | the slot that was filled wrong or left empty |
 | "lap" | the lap the car has just started (2, 3) |
-| "check" | the CIRCUIT CHECK's Hamming distance, at the start of the final lap |
+| "check" | the CIRCUIT CHECK's Hamming distance, as the car crosses into the final lap |
+| "warp" | the check's boost (strength, seconds), as it starts CHECK_FREEZE later |
 | "finish" | the car's finishing place |
 | "bump" | the other car (each bump cues both cars) |
 | "box" | the item a box gave ("SPLIT", "QEC"), or None for an empty box |
@@ -18,12 +19,19 @@ rows each car crossed, counts laps, and returns the frame's cues as `Event`s:
 | "split_end" | None: the car's clone is gone |
 
 Rules decided here:
+- The target has SLOTS (16) gates, one per gate row, and the rows stand on laps 1 and 2
+  only: the final lap is a gate-free sprint (item boxes stay on every lap).
 - A row is crossed when a car's z passes the row's z. The car's x at that moment (between
-  where the frame started and ended) picks the arch: the one whose centre is within
-  ARCH_HALF_WIDTH of it, or none. Rows are crossed strictly in order, so row k of the race is
-  always the car's slot k.
-- A right gate gives `streak_boost(streak)`; the CIRCUIT CHECK gives
-  `check_boost(distance)`, once per car. Boosts never cut each other short: the car runs at
+  where the frame started and ended) picks the arch: the nearest whose centre is within its
+  `half_width` of it (ARCH_HALF_WIDTH for the right arch, the smaller DECOY_HALF_WIDTH for a
+  decoy: each as wide as it is drawn), or none. Rows are crossed strictly in order, so row k
+  of the race is always the car's slot k.
+- A right gate gives `streak_boost(streak)`. The CIRCUIT CHECK, as a car crosses into the
+  final lap, compares all 16 slots with the target, once per car (the CPUs too, by their
+  own circuits). Its `check_boost(distance)` starts CHECK_FREEZE seconds later (cued
+  "warp"): meanwhile a player's view is frozen on the comparison (the match's and the
+  renderer's business) while the car drives on, losing no distance. No boost (all 16
+  wrong), no warp. Boosts never cut each other short: the car runs at
   the strongest one running, and a weaker, longer one carries on after it (`Car.give_boost`),
   so a right gate never slows a car down.
 - Places: finished cars in the order they finished, then the rest by laps and distance (the
@@ -36,7 +44,8 @@ Rules decided here:
   is interpolated, as for the rows; a line the car was put past without driving through it
   doesn't count). The box breaks even when the car already holds an item;
   it only gives one (rolled by the car's place, `ITEM_ODDS`) to a car holding none, and
-  cues "box_full" for a car that already holds one.
+  cues "box_full" for a car that already holds one. Past its last gate row a box never
+  gives a SPLIT (there is no second gate left to take): QEC or nothing.
 - `Controls.item` uses the held item, before the frame's rows are crossed:
   - SPLIT: for the next SPLIT_ROWS rows a clone drives at -x. A row is right if the car or
     the clone takes the right arch; otherwise wrong if either takes a wrong one (the car's
@@ -44,6 +53,8 @@ Rules decided here:
     ends after its rows, or at the finish.
   - QEC: `Circuit.qec()`, repairing the most recent mistake (not the streak). With no
     mistake it does nothing, but the item is still used.
+  - A SPLIT is over with the car's last gate row: a clone still out goes (cued
+    "split_end") and a SPLIT still held is dropped, as no gate is left to take.
   A car that has finished can't use an item: an item still held at the line is dropped.
 """
 
@@ -76,6 +87,8 @@ class Racer:
         self.laps = 0  # laps completed
         self.check: int | None = None  # the CIRCUIT CHECK's distance, once it has had it
         self.check_boost: tuple[float, float] | None = None
+        self.check_wait = 0.0  # seconds until the check's boost starts (the freeze)
+        self.warp_time: float | None = None  # the race time the check's boost started
         self.finish_time: float | None = None
         self.place = 0
         self.item: str | None = None  # the held item, one of config.ITEMS
@@ -111,11 +124,11 @@ def _x_at(car: Car, z: float) -> float:
 
 
 def arch_at(row: track.GateRow, x: float) -> track.Arch | None:
-    """The arch a car at x goes through, if any: the nearest within an arch's half-width."""
+    """The arch a car at x goes through, if any: the nearest within its own half-width."""
     best = None
     for arch in row.arches:
         d = abs(x - arch.offset)
-        if d <= config.ARCH_HALF_WIDTH and (best is None or d < abs(x - best.offset)):
+        if d <= arch.half_width and (best is None or d < abs(x - best.offset)):
             best = arch
     return best
 
@@ -195,9 +208,12 @@ class Race:
         return next((i for i, (bz, _) in enumerate(self.box_lines) if bz > z),
                     len(self.box_lines))
 
-    def roll_item(self, place: int) -> str | None:
-        """A box's item for a car in this place, from the race's own item stream."""
+    def roll_item(self, place: int, split: bool = True) -> str | None:
+        """A box's item for a car in this place, from the race's own item stream. With
+        `split` False (no gate row left) a SPLIT's share is dropped: QEC or nothing."""
         odds = config.ITEM_ODDS[max(1, min(len(config.ITEM_ODDS), place)) - 1]
+        if not split:
+            odds = (0, *odds[1:])
         return self.rng.choices(config.ITEMS + (None,), weights=odds)[0]
 
     # --- A frame ----------------------------------------------------------------------------
@@ -218,6 +234,7 @@ class Race:
         self._bumps(dt, events)
         self._place()  # boxes roll by the places as the cars are now
         for r in self.racers:
+            self._warp(r, dt, events)
             self._rows(r, events)
             self._boxes(r, events)
             self._laps(r, events)
@@ -246,7 +263,9 @@ class Race:
                 if abs(x - offset) <= config.BOX_REACH and self.box_present(k, j):
                     self._box_back[(k, j)] = self.time + config.BOX_RESPAWN
                     if r.item is None:
-                        r.item = self.roll_item(r.place)
+                        rows_left = r.next_row < len(self.rows)
+                        r.item = (self.roll_item(r.place) if rows_left
+                                  else self.roll_item(r.place, split=False))
                         events.append(Event("box", car.id, r.item))
                     else:
                         events.append(Event("box_full", car.id, r.item))
@@ -286,6 +305,12 @@ class Race:
             else:
                 events.append(Event("wrong" if arch else "miss", car.id, row.slot))
             r.next_row += 1
+            if r.next_row == len(self.rows):  # no gate left: no second gate to take
+                if r.split_rows > 0:
+                    r.split_rows = 0
+                    events.append(Event("split_end", car.id))
+                if r.item == "SPLIT":
+                    r.item = None
 
     def _laps(self, r: Racer, events: list[Event]) -> None:
         car = r.car
@@ -304,8 +329,20 @@ class Race:
             if r.lap == config.LAPS:  # laps only grow, so this comes once per car
                 r.check = circuit.hamming(r.circuit.slots, self.target, config.CHECK_SLOTS)
                 r.check_boost = config.check_boost(r.check)
-                car.give_boost(*r.check_boost)
+                r.check_wait = config.CHECK_FREEZE
                 events.append(Event("check", car.id, r.check))
+
+    def _warp(self, r: Racer, dt: float, events: list[Event]) -> None:
+        """The check's boost, once the freeze after the crossing is over."""
+        if r.check_wait <= 0:
+            return
+        r.check_wait -= dt
+        if r.check_wait > 1e-9:
+            return
+        r.check_wait = 0.0
+        if r.check_boost and r.car.give_boost(*r.check_boost):
+            r.warp_time = self.time
+            events.append(Event("warp", r.car.id, r.check_boost))
 
     # --- Places -----------------------------------------------------------------------------
 

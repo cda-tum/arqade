@@ -36,9 +36,16 @@ def cues(events, kind=None):
     return [e for e in events if isinstance(e, Cue) and (kind is None or e.kind == kind)]
 
 
+def fresh(seed=1) -> Match:
+    """A match just launched, with nothing held: its first frame lets the title go."""
+    m = Match(random.Random(seed))
+    m.update(DT, IDLE)
+    return m
+
+
 def started(mode=1, seed=1) -> Match:
     """A match whose race has just begun (after the countdown)."""
-    m = Match(random.Random(seed))
+    m = fresh(seed)
     if mode == 2:
         m.update(DT, DOWN)
     m.update(DT, START)
@@ -62,7 +69,7 @@ def finish(m: Match, car_id: str) -> None:
 
 
 def test_the_title_starts_at_one_player_and_the_stick_picks_up_or_down():
-    m = Match(random.Random(1))
+    m = fresh(1)
     assert m.state == TITLE and m.mode == 1
     events = m.update(DT, DOWN)
     assert m.mode == 2 and cues(events, "blip")
@@ -89,7 +96,7 @@ def held_diagonal(dx: int, dy: int, lag: int, seconds: float = 2.0):
 @pytest.mark.parametrize("dx, dy, want", [(1, -1, 1), (-1, 1, 2), (1, 1, 2), (-1, -1, 1)])
 @pytest.mark.parametrize("lag", [0, 2, 5])
 def test_a_held_diagonal_picks_one_mode(dx, dy, want, lag):
-    m = Match(random.Random(1))
+    m = fresh(1)
     modes, blips = [], 0
     for inp in held_diagonal(dx, dy, lag):
         blips += len(cues(m.update(DT, inp), "blip"))
@@ -99,7 +106,7 @@ def test_a_held_diagonal_picks_one_mode(dx, dy, want, lag):
 
 
 def test_two_pads_held_opposite_ways_settle_on_p1s_choice():
-    m = Match(random.Random(1))
+    m = fresh(1)
     modes = []
     for _ in range(120):
         m.update(DT, frame(p1={"stick": (0, 1)}, p2={"stick": (0, -1), "nav": (0, -1)}))
@@ -109,7 +116,7 @@ def test_two_pads_held_opposite_ways_settle_on_p1s_choice():
 
 def test_a_held_stick_stays_on_its_choice():
     """Auto-repeated steps of a held stick must not flicker between the two modes."""
-    m = Match(random.Random(1))
+    m = fresh(1)
     modes, blips = [], 0
     for k in range(60):  # a second held down, a step every few frames
         events = m.update(DT, frame(p1={"nav": (0, 1) if k % 7 == 0 else (0, 0),
@@ -120,7 +127,7 @@ def test_a_held_stick_stays_on_its_choice():
 
 
 def test_the_input_that_stops_the_attract_race_does_not_change_the_mode():
-    m = Match(random.Random(1))
+    m = fresh(1)
     run(m, config.ATTRACT_DELAY + 0.5)
     assert m.attract
     events = m.update(DT, DOWN)
@@ -132,7 +139,7 @@ def test_the_input_that_stops_the_attract_race_does_not_change_the_mode():
 @pytest.mark.parametrize("button", ["a", "start"])
 def test_a_or_start_begins_the_countdown_with_the_chosen_players(button):
     for mode in (1, 2):
-        m = Match(random.Random(1))
+        m = fresh(1)
         if mode == 2:
             m.update(DT, DOWN)
         m.update(DT, frame(p2={button: True, "held": True}))
@@ -141,7 +148,7 @@ def test_a_or_start_begins_the_countdown_with_the_chosen_players(button):
 
 
 def test_the_attract_race_runs_after_3_s_untouched_and_any_input_stops_it():
-    m = Match(random.Random(1))
+    m = fresh(1)
     run(m, config.ATTRACT_DELAY - 0.1)
     assert m.race is None
     run(m, 0.2)
@@ -157,14 +164,14 @@ def test_the_attract_race_runs_after_3_s_untouched_and_any_input_stops_it():
 
 
 def test_start_during_the_attract_race_begins_a_real_race():
-    m = Match(random.Random(1))
+    m = fresh(1)
     run(m, config.ATTRACT_DELAY + 1)
     m.update(DT, START)
     assert m.state == COUNTDOWN and not m.attract and m.race.players == 1
 
 
 def test_a_finished_attract_race_is_followed_by_another():
-    m = Match(random.Random(1))
+    m = fresh(1)
     run(m, config.ATTRACT_DELAY + 0.1)
     first = m.race
     first.over = True
@@ -176,7 +183,7 @@ def test_a_finished_attract_race_is_followed_by_another():
 
 
 def test_the_countdown_beeps_3_2_1_then_go_and_the_cars_wait_for_it():
-    m = Match(random.Random(1))
+    m = fresh(1)
     events = m.update(DT, START)
     assert [c.value for c in cues(events, "count")] == [3]
     assert m.countdown == 3
@@ -290,7 +297,7 @@ def test_a_resumed_a_press_does_not_use_an_item():
 
 
 def test_start_also_pauses_the_countdown():
-    m = Match(random.Random(1))
+    m = fresh(1)
     m.update(DT, START)
     m.update(DT, IDLE)
     m.update(DT, START)
@@ -434,20 +441,145 @@ def test_b_on_the_result_goes_to_the_title():
 # --- Banners ---------------------------------------------------------------------------------
 
 
-def test_the_circuit_check_shows_a_banner_for_the_player():
+def to_the_check(m: Match, car_id: str = "p1", wrong: int = 3):
+    """Fill a player's circuit (the first `wrong` slots missed) and put the car just short of
+    the line into the final lap."""
+    race = m.race
+    r = race.racer(car_id)
+    for slot in range(config.SLOTS):
+        r.circuit.take(slot, None if slot < wrong else r.circuit.target[slot])
+    r.next_row = len(race.rows)
+    r.next_box = race.box_index(2 * race.lap_length)
+    r.laps = 1
+    r.car.z = 2 * race.lap_length - 20
+    r.car.speed = config.TOP_SPEED
+    return r
+
+
+def test_the_circuit_check_freezes_only_that_players_view_while_the_car_drives_on():
     m = started()
-    p1 = m.race.racer("p1")
-    for slot in range(config.ROWS_PER_LAP * 2):
-        p1.circuit.take(slot, None if slot < 3 else p1.circuit.target[slot])
-    p1.next_row = config.ROWS_PER_LAP * 2
-    p1.next_box = m.race.box_index(2 * m.race.lap_length)
-    p1.laps = 1
-    p1.car.z = 2 * m.race.lap_length - 20
+    p1 = to_the_check(m)
+    p1.item = "QEC"
+    events = run(m, 0.1)
+    assert [e.value for e in events if getattr(e, "kind", None) == "check"] == [3]
+    assert m.frozen("p1") and p1.check_wait > 0
+    x, z, t = p1.car.x, p1.car.z, m.race.time
+    # the pad does nothing while frozen: the car drives straight on, the item stays held
+    run(m, 0.5, frame(p1={"steer": 1.0, "a": True, "held": True}))
+    assert m.race.time == pytest.approx(t + 0.5)  # the race runs on
+    assert p1.car.x == pytest.approx(x, abs=0.01) and p1.item == "QEC"
+    assert p1.car.z - z == pytest.approx(0.5 * config.TOP_SPEED, rel=0.02)
+    run(m, config.CHECK_FREEZE - 0.5)
+    assert not m.frozen("p1") and p1.car.boost > 0  # the warp
+    run(m, 0.3, frame(p1={"steer": 1.0}))
+    assert p1.car.x > x + 0.3
+
+
+def test_in_2p_the_check_freezes_only_the_player_who_crossed():
+    m = started(mode=2)
+    to_the_check(m, "p1")
     run(m, 0.1)
-    banner = m.banner("p1", "check")
-    assert banner is not None and banner.value == 3
-    run(m, config.CHECK_BANNER)
-    assert m.banner("p1", "check") is None
+    assert m.frozen("p1") and not m.frozen("p2")
+    p2 = m.race.racer("p2")
+    x = p2.car.x
+    run(m, 0.3, frame(p2={"steer": 1.0}))
+    assert p2.car.x > x + 0.03  # still slow off the grid, but steering
+
+
+def at_row(m: Match, x_of) -> None:
+    """Put P1 just before its next row, at x_of(row)."""
+    p1 = m.race.racer("p1")
+    row = m.race.rows[p1.next_row]
+    p1.car.z, p1.car.x, p1.car.speed = row.z - 50.0, x_of(row), config.TOP_SPEED
+
+
+def test_each_row_flashes_right_gate_wrong_gate_or_missed_near_the_car():
+    for seed in range(1, 60):  # a race whose second row has a decoy
+        m = started(seed=seed)
+        if len(m.race.rows[1].arches) > 1:
+            break
+    at_row(m, lambda row: next(a.offset for a in row.arches if a.right))
+    m.update(DT, IDLE)
+    flash = m.banner("p1", "gate")
+    assert flash is not None and flash.value == ("right", 1)
+    assert flash.time == pytest.approx(config.FLASH_TIME, abs=1.5 * DT)
+    at_row(m, lambda row: next(a.offset for a in row.arches if not a.right))
+    m.update(DT, IDLE)
+    assert m.banner("p1", "gate").value == ("wrong", 1)  # one flash at a time
+    assert len([b for b in m.banners["p1"] if b.kind == "gate"]) == 1
+    at_row(m, lambda row: 1.9)
+    m.update(DT, IDLE)
+    assert m.banner("p1", "gate").value == ("miss", 2)
+    run(m, config.FLASH_TIME)
+    assert m.banner("p1", "gate") is None
+
+
+def through_box(m: Match, car_id: str = "p1") -> list:
+    """Drive a player through a box of its next box line (one still there)."""
+    race = m.race
+    r = race.racer(car_id)
+    z, k = race.box_lines[r.next_box]
+    j = next(j for j in range(len(race.track.boxes[k][1])) if race.box_present(k, j))
+    r.car.z, r.car.x, r.car.speed = z - 50.0, race.track.boxes[k][1][j], config.TOP_SPEED
+    return m.update(DT, IDLE)
+
+
+def rematch(m: Match) -> None:
+    finish(m, "p1")
+    run(m, config.FINISH_DELAY + config.RESULT_LOCK + 0.2)
+    m.update(DT, A)
+    run(m, config.COUNTDOWN + DT)
+    assert m.state == RACE
+
+
+def test_the_first_pickup_of_each_item_shows_how_to_use_it_once_a_session():
+    m = started()
+    m.race.roll_item = lambda place, **kw: "SPLIT"
+    through_box(m)
+    tip = m.banner("p1", "tip")
+    assert tip is not None and tip.value == "SPLIT"
+    run(m, config.TIP_TIME)
+    assert m.banner("p1", "tip") is None
+    m.race.racer("p1").item = None
+    through_box(m)
+    assert m.race.racer("p1").item == "SPLIT" and m.banner("p1", "tip") is None  # seen
+    m.race.racer("p1").item = None
+    m.race.roll_item = lambda place, **kw: "QEC"
+    through_box(m)
+    assert m.banner("p1", "tip").value == "QEC"
+    # a rematch is the same visitor: no tips again
+    rematch(m)
+    m.race.roll_item = lambda place, **kw: "SPLIT"
+    through_box(m)
+    assert m.banner("p1", "tip") is None
+    # a minute untouched means someone new: the tips come back
+    run(m, config.IDLE_TIMEOUT + 0.1)
+    assert m.state == TITLE
+    m.update(DT, START)
+    run(m, config.COUNTDOWN + DT)
+    m.race.roll_item = lambda place, **kw: "SPLIT"
+    through_box(m)
+    assert m.banner("p1", "tip").value == "SPLIT"
+
+
+def test_each_player_gets_their_own_item_tips():
+    m = started(mode=2)
+    m.race.roll_item = lambda place, **kw: "QEC"
+    through_box(m, "p1")
+    assert m.banner("p1", "tip").value == "QEC"
+    through_box(m, "p2")
+    assert m.banner("p2", "tip").value == "QEC"
+
+
+def test_a_button_held_at_launch_does_not_start_a_match():
+    m = Match(random.Random(1))
+    assert m.title_wait
+    for k in range(40):  # held down from the launch, mashed too
+        m.update(DT, frame(p1={"a": k % 3 == 0, "start": k % 5 == 0, "held": True}))
+        assert m.state == TITLE
+    m.update(DT, IDLE)  # let go
+    m.update(DT, A)
+    assert m.state == COUNTDOWN
 
 
 def test_a_held_input_has_no_presses():

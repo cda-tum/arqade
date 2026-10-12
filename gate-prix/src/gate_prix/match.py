@@ -15,12 +15,22 @@ the HUD use both).
   seconds untouched an attract race plays behind it: `Race(seed, 2, finish_all=True)`, all
   six cars driven by bots, silently. Any input stops it (and that frame's stick changes
   nothing); A or Start still begins at once.
-  Reached through QUIT TO TITLE or B, the title waits for every button to be let go, so the
-  press that left the race doesn't start the next one.
+  At launch, and reached through QUIT TO TITLE or B, the title waits for every button to be
+  let go, so a button held as the game starts, or the press that left the race, doesn't
+  start the next one.
 - **Driving:** each player's stick steers and pulled back brakes; A *pressed* uses the held
   item (never A held, or a held button would fire the next item the moment a box gives it).
   With 1 PLAYER either pad drives P1. A player past the line is driven on by a bot and the
   pad no longer counts.
+- **The CIRCUIT CHECK freeze:** for CHECK_FREEZE seconds after a player crosses into the
+  final lap (`frozen(p)`, the race's `check_wait`) their view shows the comparison and their
+  pad does nothing: the car drives straight on (the line is on the start straight) and loses
+  no distance. The race, and any other player, runs on.
+- **Banners**, per player, for the HUD: "gate" flashes each row's outcome for FLASH_TIME
+  (value ("right", streak), ("wrong", slot) or ("miss", slot); one at a time), "tip" says how
+  to use an item on its first pickup (value the item; once per item and player each
+  session, a session ending when the idle timeout sends the cabinet back to the title),
+  "lap" (LAP 2) and "finish" (the place, until the result).
 - **Pause:** Start (either pad) pauses the countdown or the race: RESUME / QUIT TO TITLE.
   The stick moves, A picks, B or Start resumes. Nothing moves meanwhile.
 - **The end:** once every player has finished (or, with 2 players, FINISH_GRACE seconds
@@ -99,7 +109,7 @@ class FrameInput:
 
 @dataclass
 class Banner:
-    kind: str  # "check" (value: the distance), "lap" (value: the lap), "finish" (the place)
+    kind: str  # "gate", "tip", "lap" (value: the lap), "finish" (the place): see the top
     value: object
     time: float | None  # seconds left; None for one that stays until the result
 
@@ -127,13 +137,14 @@ class Match:
         self.bots: dict[str, bot.Bot] = {}
         self.seed = 0
         self.attract = False
-        self.title_wait = False  # the title waits for every button to be let go
+        self.title_wait = True  # the title waits for every button to be let go (at launch too)
         self.pause_index = 0
         self.paused_from = RACE
         self.banners: dict[str, list[Banner]] = {p: [] for p in PLAYERS}
         self.results: list[ResultRow] | None = None
         self.first_finish: float | None = None  # race time the first player finished
         self.over_time: float | None = None  # seconds since the race was frozen
+        self.tips_seen: dict[str, set[str]] = {p: set() for p in PLAYERS}  # this session's
         self._count = 0
 
     # --- Queries for the renderer ------------------------------------------------------------
@@ -155,6 +166,11 @@ class Match:
     def banner(self, player: str, kind: str) -> Banner | None:
         return next((b for b in self.banners[player] if b.kind == kind), None)
 
+    def frozen(self, player: str) -> bool:
+        """Whether a player's view is frozen on the CIRCUIT CHECK's comparison now."""
+        return (self.race is not None and player in self.players
+                and self.race.racer(player).check_wait > 0)
+
     # --- The state machine -------------------------------------------------------------------
 
     def update(self, dt: float, inp: FrameInput) -> list:
@@ -162,6 +178,7 @@ class Match:
         if self.state != TITLE and self.idle >= config.IDLE_TIMEOUT:
             self._to_title(wait=False)
             self.mode = 1
+            self.tips_seen = {p: set() for p in PLAYERS}  # someone new: tips again
             return [Cue("title")]
         events: list = []
         if self.state in (RACE, COUNTDOWN) and inp.any("start"):
@@ -270,6 +287,8 @@ class Match:
                 item = a.a or b.a
             else:
                 steer, brake, item = pads[p].steer, pads[p].brake, pads[p].a
+            if race.racer(p).check_wait > 0:  # frozen on the check: straight on, blind
+                steer, brake, item = 0.0, 0.0, False
             controls[p] = Controls(steer, brake, item)
         return controls
 
@@ -299,9 +318,15 @@ class Match:
 
     def _on_event(self, e: Event) -> None:
         banners = self.banners[e.car]
-        if e.kind == "check":
-            banners[:] = [b for b in banners if b.kind not in ("check", "lap")]
-            banners.append(Banner("check", e.value, config.CHECK_BANNER))
+        if e.kind in ("right", "wrong", "miss"):
+            banners[:] = [b for b in banners if b.kind != "gate"]
+            banners.append(Banner("gate", (e.kind, e.value), config.FLASH_TIME))
+        elif e.kind == "box" and e.value is not None and e.value not in self.tips_seen[e.car]:
+            self.tips_seen[e.car].add(e.value)
+            banners[:] = [b for b in banners if b.kind != "tip"]
+            banners.append(Banner("tip", e.value, config.TIP_TIME))
+        elif e.kind == "check":
+            banners[:] = [b for b in banners if b.kind not in ("lap", "gate")]
         elif e.kind == "lap" and e.value != config.LAPS:  # the final lap has the check's
             banners.append(Banner("lap", e.value, config.LAP_BANNER))
         elif e.kind == "finish":

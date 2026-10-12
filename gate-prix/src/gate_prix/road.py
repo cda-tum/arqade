@@ -10,6 +10,11 @@ clipped near to far by the highest road drawn so far, so a crest hides the road 
 then painted far to near as flat polygons: the copper plate (alternating rings), the rumble
 strip (gold and white), the road (two tones) and a cyan centre line. Nothing is scaled per
 frame: only fills, polygons and blits of pre-rendered surfaces.
+
+The boost's wider field of view is only a smaller projection constant (`depth`), with the
+camera pulled in towards its car by the same factor (`ahead`): the car stays where it is
+and the same size while the road and everything on it stretch away. `lift` raises the
+camera a little, for the shake at speed.
 """
 
 from __future__ import annotations
@@ -61,12 +66,16 @@ class RoadView:
         self._count = 1  # the track's segment count
         self.cam_x = 0.0
         self.cam_y = 0.0
+        self.depth = config.CAMERA_DEPTH
 
     # --- Projection -------------------------------------------------------------------------
 
-    def project(self, track, cam_z: float, cam_x: float) -> None:
+    def project(self, track, cam_z: float, cam_x: float, depth: float | None = None,
+                ahead: float | None = None, lift: float = 0.0) -> None:
         """Project the road ahead of a camera at race distance cam_z, cam_x road half-widths
-        to the side of the centre line."""
+        to the side of the centre line. `depth` is the projection constant (CAMERA_DEPTH
+        when None), `ahead` the camera's distance to its car (CAR_AHEAD), whose road height
+        it rides above, and `lift` extra camera height."""
         segs = track.segments
         count = len(segs)
         n = self.segments
@@ -75,12 +84,13 @@ class RoadView:
         bi = b % count
         here = segs[bi]
         # the camera rides above its own car, so the car keeps its place over the hills
-        cam_y = config.CAMERA_HEIGHT + track.height_at(cam_z + config.CAR_AHEAD)
+        ahead = config.CAR_AHEAD if ahead is None else ahead
+        cam_y = config.CAMERA_HEIGHT + lift + track.height_at(cam_z + ahead)
         cam_w = cam_x * config.ROAD_HALF_WIDTH
         hw = self.width / 2
         hh = self.height / 2
         hz = self.horizon
-        depth = config.CAMERA_DEPTH
+        depth = self.depth = config.CAMERA_DEPTH if depth is None else depth
         road = config.ROAD_HALF_WIDTH * hw
         zs, wxs, wys, sxs, sys_, sws = self.z, self.wx, self.wy, self.sx, self.sy, self.sw
         curves, heights = track.curves, track.heights  # these run on past the lap line
@@ -134,7 +144,7 @@ class RoadView:
         wx = self.wx[k] + (self.wx[k + 1] - self.wx[k]) * f
         wy = self.wy[k] + (self.wy[k + 1] - self.wy[k]) * f
         hw = self.width / 2
-        p = config.CAMERA_DEPTH / rel_z
+        p = self.depth / rel_z
         scale = p * config.ROAD_HALF_WIDTH * hw
         x = hw + p * (wx - self.cam_x) * hw + offset * scale
         y = self.horizon - p * (wy - self.cam_y) * self.height / 2
@@ -143,16 +153,17 @@ class RoadView:
     # --- Drawing ----------------------------------------------------------------------------
 
     def draw(self, surface: pygame.Surface, track, cam_z: float, cam_x: float,
-             sprites_out: list[Sprite], objects=()) -> None:
+             sprites_out: list[Sprite], objects=(), depth: float | None = None,
+             ahead: float | None = None, lift: float = 0.0) -> None:
         """Draw the background and the road into this view's rect of `surface`.
 
         `sprites_out` is cleared and filled with every visible sprite, far to near:
         (kind, x, y, scale, clip_y) in the view's own coordinates. `objects` are extra
         (z, x, kind) things to project (arches, item boxes, cars), with z a race distance
-        like cam_z and x in road half-widths.
+        like cam_z and x in road half-widths. `depth`, `ahead` and `lift` are `project`'s.
         """
         view = surface if self.rect == surface.get_rect() else surface.subsurface(self.rect)
-        self.project(track, cam_z, cam_x)
+        self.project(track, cam_z, cam_x, depth, ahead, lift)
         offset = track.heading_at(cam_z) / track.turn * config.PARALLAX_TILES * self.width
         self.background.draw(view, offset)
         self._draw_road(view)

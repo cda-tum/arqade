@@ -129,7 +129,7 @@ def test_the_attract_field_has_a_bot_for_every_car():
 def lap_alone(seed, skill, car_id="green"):
     """One lap of rows for one bot driving alone, with empty boxes (no SPLIT or QEC)."""
     race = Race(seed=seed, players=1)
-    race.roll_item = lambda place: None
+    race.roll_item = lambda place, **kw: None
     b = Bot(car_id, skill, seed)
     events = []
     while race.racer(car_id).next_row < config.ROWS_PER_LAP:

@@ -1,12 +1,17 @@
-"""Time the road renderer: two 960x270 views, then one 960x540 view.
+"""Time the road renderer: two 960x270 views, then one 960x540 view, each plain and then
+with the boost and warp effects at their heaviest.
 
     uv run python tools/benchmark.py [--frames 3000] [--profile]
 
 Plain surfaces and pygame.font.init() only, with no display at all, because the cabinet's
 SDL has no dummy video driver: it runs the same on the cabinet and on a desktop without a
 screen. Each frame is the whole road: the background, the road, every roadside sprite, the
-race's arches and item boxes, a row of 3 arches always coming up, and 6 cars. It prints the
-mean, 95th percentile and worst milliseconds per frame. Desktop guide: worst <= 4 ms.
+race's arches and item boxes, a row of 3 arches always coming up, and 6 cars. The "warp"
+runs add what a player sees in the LIGHT SPEED! warp, in every view at once (the worst
+case): the field of view widened (a projection constant and the camera pulled in), the
+camera shake, exhaust flames on every car, the marker over the right arch, the
+star-streak tunnel and the edge tint. It prints the mean, 95th percentile and worst
+milliseconds per frame. Desktop guide: worst <= 4 ms.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ import time
 import pygame
 
 from gate_prix import circuit, config, track
+from gate_prix.render import Renderer, fov, shake
 from gate_prix.road import RoadView
 from gate_prix.sprites import SpriteCache
 
@@ -43,21 +49,41 @@ def objects_for(fridge, statics, cams, frame: int):
     return statics + row + cars + players
 
 
-def run(views, frames: int, fridge, statics, cache) -> list[float]:
-    screen = pygame.Surface((W, H))
+def run(views, frames: int, fridge, statics, cache, renderer=None) -> list[float]:
+    """Time `frames` frames; with a renderer, with the warp's effects (see the top)."""
+    screen = renderer.surface if renderer else pygame.Surface((W, H))
     sprites: list = []
     cams = [[0.0, 0.0], [-3000.0, -0.3]][: len(views)]
     times = []
     step = config.TOP_SPEED / config.FPS
+    speed = 2.0 * config.TOP_SPEED  # a perfect check's warp
+    widen = fov(speed, 1.0)
     for frame in range(frames):
         for i, cam in enumerate(cams):
             cam[0] += step
             cam[1] = 0.9 * math.sin(frame / 70 + i)
         objects = objects_for(fridge, statics, cams, frame)
+        if renderer:
+            objects += [(z - 1.0, x, f"flame:{frame // 3 % 4}") for z, x, kind in objects
+                        if kind.startswith("car:")]
         start = time.perf_counter()
-        for view, (cam_z, cam_x) in zip(views, cams):
-            view.draw(screen, fridge, cam_z, cam_x, sprites, objects)
+        for i, (view, (cam_z, cam_x)) in enumerate(zip(views, cams)):
+            if renderer is None:
+                view.draw(screen, fridge, cam_z, cam_x, sprites, objects)
+                view.draw_sprites(screen, sprites, cache)
+                continue
+            ahead = config.CAR_AHEAD / widen
+            view.draw(screen, fridge, cam_z + config.CAR_AHEAD - ahead, cam_x, sprites,
+                      objects, depth=config.CAMERA_DEPTH / widen, ahead=ahead,
+                      lift=shake(speed, frame, i))
             view.draw_sprites(screen, sprites, cache)
+            renderer._sprites = sprites
+            renderer.frame = frame
+            renderer._markers_over_right_arches(view)
+            k = (frame // 2) % len(renderer._tunnel[view.height])
+            screen.blit(renderer._tunnel[view.height][k], view.rect.topleft)
+            for strip, (x, y) in renderer._tint[view.height][-1]:
+                screen.blit(strip, (view.rect.x + x, view.rect.y + y))
         times.append((time.perf_counter() - start) * 1000)
     return times
 
@@ -86,7 +112,14 @@ def main(argv=None) -> None:
     rows = track.gate_rows(fridge, target, 1)
     statics = track.arch_objects(rows) + track.box_objects(fridge, config.LAPS)
 
-    run(views2, 60, fridge, statics, cache)  # warm up
+    renderer = Renderer(pygame.Surface((W, H)))
+    # warm up for 4 s: every sprite size blitted once (RLE encodes on the first blit), and
+    # the CPU up to its clock (on a desktop the first seconds can run 2-3x slower)
+    warm = time.perf_counter()
+    while time.perf_counter() - warm < 4.0:
+        for views in (views2, views1):
+            run(views, 150, fridge, statics, cache)
+            run(views, 150, fridge, statics, cache, renderer)
     if args.profile:
         profiler = cProfile.Profile()
         profiler.enable()
@@ -95,8 +128,12 @@ def main(argv=None) -> None:
         profiler.disable()
         pstats.Stats(profiler).sort_stats("tottime").print_stats(15)
     times1 = run(views1, args.frames, fridge, statics, cache)
+    warp2 = run(views2, args.frames, fridge, statics, cache, renderer)
+    warp1 = run(views1, args.frames, fridge, statics, cache, renderer)
     report("2 views of 960x270", times2)
     report("1 view of 960x540", times1)
+    report("2 views, warp", warp2)
+    report("1 view, warp", warp1)
 
 
 if __name__ == "__main__":

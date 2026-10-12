@@ -47,13 +47,16 @@ def test_every_cue_has_a_sound_and_the_effects_build():
     for e in [Cue("blip"), Cue("select"), Cue("count", value=3), Cue("go"), Cue("pause"),
               Cue("result"), Event("right", "p1", 1), Event("right", "p1", 30),
               Event("wrong", "p1", 0), Event("miss", "p1", 0), Event("check", "p1", 0),
-              Event("check", "p1", 4), Event("lap", "p1", 2), Event("finish", "p1", 1),
+              Event("check", "p1", 4), Event("warp", "p1", (1.0, 6.0)), Event("lap", "p1", 2), Event("finish", "p1", 1),
               Event("bump", "p1", "green"), Event("box", "p1", "QEC"), Event("box", "p1", None),
               Event("box_full", "p1", "SPLIT"), Event("item", "p1", "SPLIT"),
               Event("item", "p1", "QEC"), Event("split_end", "p1")]:
         name = audio.sound_for(e)
         assert name in sfx, e
     assert audio.sounds_for([Event("bump", "p1", "a"), Event("bump", "p1", "b")]) == ["bump"]
+    assert audio.sound_for(Event("warp", "p1", (1.0, 6.0))) == "warp"
+    # a whoosh you can hear: the warp's is the longest sound there is
+    assert len(sfx["warp"]) == max(len(v) for v in sfx.values())
 
 
 def test_the_engine_rises_with_speed_and_loops_whole_periods():

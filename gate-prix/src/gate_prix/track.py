@@ -38,6 +38,12 @@ class Arch:
     offset: float  # the arch's centre, in road half-widths
     right: bool  # the target's gate for this slot
 
+    @property
+    def half_width(self) -> float:
+        """How far from its centre a car goes through it: as wide as it is drawn (a decoy
+        is drawn smaller than the right arch)."""
+        return config.ARCH_HALF_WIDTH if self.right else config.DECOY_HALF_WIDTH
+
 
 @dataclass(frozen=True, slots=True)
 class GateRow:
@@ -110,18 +116,19 @@ def _racing_line(curves: list[float], window: int = 12) -> list[float]:
 
 
 def _roadside(count: int, drops: list[tuple[int, int]]) -> list[list[tuple[float, str]]]:
-    """Coax trees all along, attenuators beside the straights, standoffs on the drops."""
+    """Coax trees all along, attenuators beside the straights, standoffs on the drops: all
+    close to the road, so that they rush past (the sense of speed)."""
     sprites: list[list[tuple[float, str]]] = [[] for _ in range(count)]
     for i in range(0, count, 6):
-        sprites[i].append((-1.6 if (i // 6) % 2 else 1.6, "coax"))
+        sprites[i].append((-1.3 if (i // 6) % 2 else 1.3, "coax"))
         if i % 24 == 0:
-            sprites[i].append((2.4 if (i // 24) % 2 else -2.4, "coax"))
+            sprites[i].append((1.9 if (i // 24) % 2 else -1.9, "coax"))
     for i in range(21, count, 45):
-        sprites[i].append((-1.3 if (i // 45) % 2 else 1.3, "attenuator"))
+        sprites[i].append((-1.22 if (i // 45) % 2 else 1.22, "attenuator"))
     for start, end in drops:
         for i in range(start + 3, end, 9):
-            sprites[i].append((-2.0, "standoff"))
-            sprites[i].append((2.0, "standoff"))
+            sprites[i].append((-1.55, "standoff"))
+            sprites[i].append((1.55, "standoff"))
     return sprites
 
 
@@ -242,7 +249,8 @@ def _offsets(rng: random.Random, n: int) -> list[float]:
 
 
 def gate_rows(track: Track, target: list[str], seed: int) -> list[GateRow]:
-    """One row per slot of the target, at the track's row positions lap after lap."""
+    """One row per slot of the target, at the track's row positions lap after lap: the
+    target's SLOTS fill laps 1 and 2, and the final lap has none."""
     rng = random.Random(seed)
     per_lap = len(track.rows)
     rows = []

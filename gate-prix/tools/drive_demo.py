@@ -62,7 +62,7 @@ def draw(screen, views, race, statics, cache):
         marks = "".join("." if r is None else ("+" if r else "x") for r in c.results)
         text = (f"{car.id.upper()}  P{racer.place}  LAP {racer.lap}/{config.LAPS}  "
                 f"{car.speed / config.TOP_SPEED:4.0%}  STREAK {c.streak}  "
-                f"BOOST {car.boost:+.0%} {car.boost_time:3.1f}s  NEXT {c.target[c.filled] if c.filled < 24 else '-'}"
+                f"BOOST {car.boost:+.0%} {car.boost_time:3.1f}s  NEXT {c.target[c.filled] if c.filled < len(c.target) else '-'}"
                 f"  ITEM {racer.item or '-'}{'  SPLIT ' + str(racer.split_rows) if racer.split else ''}")
         screen.blit(font(12).render(text, True, config.CAR_COLORS[car.colour]),
                     (view.rect.x + 10, view.rect.y + 8))

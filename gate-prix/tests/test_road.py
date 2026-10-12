@@ -90,6 +90,35 @@ def test_place_interpolates_between_segment_points():
     assert view.place(config.DRAW_SEGMENTS * SEG + 10, 0.0) is None
 
 
+def test_a_wider_field_of_view_with_the_camera_closer_keeps_the_car_put():
+    """The boost's widening: a smaller projection constant and the camera pulled in towards
+    its car by the same factor (a dolly zoom). The car stays the same size in the same
+    place while the road ahead shrinks away."""
+    fridge = flat()
+    view = RoadView((0, 0, 960, 270))
+    view.project(fridge, 0.0, 0.0)
+    car = view.place(config.CAR_AHEAD, 0.0)
+    far = view.place(60 * SEG, 0.0)
+    k = 0.8
+    ahead = config.CAR_AHEAD * k
+    view.project(fridge, config.CAR_AHEAD - ahead, 0.0, depth=config.CAMERA_DEPTH * k,
+                 ahead=ahead)
+    assert view.place(ahead, 0.0)[:3] == pytest.approx(car[:3])
+    wide = view.place(60 * SEG - (config.CAR_AHEAD - ahead), 0.0)
+    assert wide[2] < far[2]  # the same stretch of road, smaller: the view is wider
+    view.project(fridge, 0.0, 0.0)  # and back to normal
+    assert view.place(config.CAR_AHEAD, 0.0)[:3] == pytest.approx(car[:3])
+
+
+def test_a_lift_raises_the_camera_a_little_for_the_shake():
+    view = RoadView((0, 0, 960, 270))
+    view.project(flat(), 0.0, 0.0)
+    y = view.place(5 * SEG, 0.0)[1]
+    view.project(flat(), 0.0, 0.0, lift=10.0)
+    lifted = view.place(5 * SEG, 0.0)[1]
+    assert 0 < lifted - y < 4  # a pixel or two: the road drops away from the camera
+
+
 # --- Drawing --------------------------------------------------------------------------------
 
 
@@ -150,6 +179,7 @@ def cache():
 def test_the_sprite_cache_holds_every_kind_at_every_size(cache):
     assert len(cache.scales) == config.SPRITE_SIZES
     expected = {"coax", "attenuator", "standoff", "box", "clone"}
+    expected |= {f"flame:{i}" for i in range(sprites.FLAME_FRAMES)}
     expected |= {f"arch:{g}" for g in circuit.GATES} | {f"arch:{g}:lit" for g in circuit.GATES}
     expected |= {f"car:{name}" for name in config.CAR_COLORS}
     assert set(cache.images) == expected
@@ -163,9 +193,9 @@ def test_the_sprite_cache_holds_every_kind_at_every_size(cache):
 
 def test_a_gate_letter_keeps_a_minimum_size_far_away(cache):
     """A second ahead an arch is ~12 px high: its badge must still be big enough to read."""
-    for kind in ("arch:H", "arch:H:lit"):
+    for kind, half in (("arch:H", config.DECOY_HALF_WIDTH), ("arch:H:lit", config.ARCH_HALF_WIDTH)):
         img, ax, ay = cache.images[kind][0]
-        r = config.ARCH_HALF_WIDTH * cache.scales[0]
+        r = half * cache.scales[0]
         # the badge (min letter 10 px, badge 1.6x that) stands above the crown
         assert ay - r >= 0.55 * 1.6 * sprites.BADGE_LETTER_MIN - 1, kind
 
@@ -223,3 +253,46 @@ def test_the_camera_rides_above_its_car_so_the_car_stays_put_on_hills():
             cam_z = k * SEG - config.CAR_AHEAD
             view.project(fridge, cam_z, 0.0)
             assert view.place(config.CAR_AHEAD, 0.0)[1] == pytest.approx(flat_y, abs=0.5)
+
+
+def _opaque_width(img):
+    """The width of a sprite's fully opaque part (its glow, shadow and curtain are not)."""
+    rects = pygame.mask.from_surface(img, 250).get_bounding_rects()
+    return max(r.right for r in rects) - min(r.left for r in rects)
+
+
+@pytest.mark.parametrize("kind, half", [("arch:X:lit", "ARCH_HALF_WIDTH"),
+                                        ("arch:X", "DECOY_HALF_WIDTH")])
+def test_an_arch_is_drawn_as_wide_as_what_counts_as_going_through_it(cache, kind, half):
+    """The right arch's feet are ARCH_HALF_WIDTH from its centre, a decoy's (drawn smaller)
+    DECOY_HALF_WIDTH: what you see is what you hit."""
+    i = len(cache.scales) - 4
+    img, _, _ = cache.images[kind][i]
+    want = 2 * getattr(config, half) * cache.scales[i]
+    assert _opaque_width(img) == pytest.approx(want, rel=0.06)
+
+
+def test_a_decoy_is_dimmer_than_the_right_arch(cache):
+    def brightness(img):
+        """The mean brightness of its solid parts: the arch itself and its badge."""
+        total = n = 0
+        for x in range(img.get_width()):
+            for y in range(img.get_height()):
+                r, g, b, a = img.get_at((x, y))
+                if a > 240:
+                    total += r + g + b
+                    n += 1
+        return total / n
+
+    i = len(cache.scales) // 2
+    for g in circuit.GATES:
+        assert brightness(cache.images[f"arch:{g}"][i][0]) < 0.75 * brightness(
+            cache.images[f"arch:{g}:lit"][i][0]), g
+
+
+def test_the_right_arch_marker_is_built_once_at_a_few_sizes():
+    a = sprites.markers()
+    assert sprites.markers() is a
+    sizes = [img.get_width() for img in a]
+    assert sizes == sorted(sizes) and len(sizes) >= 4
+    assert sprites.marker_for(1.0) is a[0] and sprites.marker_for(1e6) is a[-1]

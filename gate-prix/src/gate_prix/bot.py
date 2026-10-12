@@ -98,7 +98,7 @@ class Bot:
             lo, hi = -config.BOT_GOAL_MAX, config.BOT_GOAL_MAX
             clear = config.BOT_AVOID_CLEAR
         else:
-            reach = config.ARCH_HALF_WIDTH - 0.01
+            reach = arch.half_width - 0.01
             lo, hi = arch.offset - reach, arch.offset + reach
             clear = config.CAR_WIDTH + 0.005
         ahead, behind = [], []

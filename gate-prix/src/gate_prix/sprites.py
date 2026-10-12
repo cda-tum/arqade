@@ -148,25 +148,36 @@ BADGE_LETTER_MIN = 10  # px: a gate's letter never shrinks below this, so a row 
 ARCH_PAD = 16  # px around the arch's extents, for the badge and glow kept big at small sizes
 
 
+DECOY_DIM = 0.5  # a decoy's colours, this far towards the dark
+
+
 def draw_arch(surf, x, y, u, gate, lit):
     """A gate: a semicircular arch standing on the track, both feet on the road, a light
     curtain under it and the gate's letter on a badge at its crown.
 
-    Far away (a second ahead the arch is only ~12 px high) the badge and its letter keep a
-    minimum size and the lit arch's glow grows stronger, so the gate reads in time. All of
-    it is drawn once, into the cache: nothing here costs anything per frame."""
+    The right arch (`lit`) is unmissable: a bright glow and a bright curtain, its colours
+    lifted towards white. A decoy is drawn dimmer and smaller (DECOY_HALF_WIDTH, which is
+    also all of it that counts as going through it). Far away (a second ahead the arch is
+    only ~12 px high) the badge and its letter keep a minimum size and the lit arch's glow
+    grows stronger, so the gate reads in time. All of it is drawn once, into the cache:
+    nothing here costs anything per frame. (The bouncing marker over the right arch is
+    `markers`, drawn by the renderer.)"""
     col = config.GATE_COLORS[gate]
-    r = config.ARCH_HALF_WIDTH * u  # its outer radius: the feet are 2r apart
+    half = config.ARCH_HALF_WIDTH if lit else config.DECOY_HALF_WIDTH
+    r = half * u  # its outer radius: the feet are 2r apart
     t = max(2.0, 0.16 * r)  # its thickness
     # 0 when the arch is big on screen, 1 when it is far away and small (u is at SS x)
     small = min(1.0, max(0.0, (44 * SS - r) / (32 * SS)))
     if lit:
-        glow_r = max(r * 1.3, r * 1.3 + small * 10 * SS)
-        _glow(surf, x, y - r * 0.55, glow_r, col, round(110 + 90 * small))
+        glow_r = r * (1.3 + 0.3 * small) + small * 10 * SS  # widest far away, cheap near
+        _glow(surf, x, y - r * 0.55, glow_r, mix(col, WHITE, 0.25), round(150 + 60 * small))
+        col = mix(col, WHITE, 0.2)
+    else:
+        col = mix(col, (24, 26, 40), DECOY_DIM)
     _ellipse(surf, (0, 0, 0, 110), x - r * 1.05, y - r * 0.05, r * 2.1, r * 0.14)
     # the light curtain: the upper half of the inner disc
     lay = _layer(surf)
-    pygame.draw.polygon(lay, (*col, 85 if lit else 50), _band(x, y, r - t, 0))
+    pygame.draw.polygon(lay, (*col, 130 if lit else 35), _band(x, y, r - t, 0))
     surf.blit(lay, (0, 0))
     # the arch: a dark rim, its colour, a bright highlight along its upper left
     pygame.draw.polygon(surf, mix(col, INK, 0.55), _band(x, y, r, r - t))
@@ -184,7 +195,45 @@ def draw_arch(surf, x, y, u, gate, lit):
         _circle(surf, WHITE, x, y - r, bw * 0.55 + small * 1.5 * SS)
     _circle(surf, (14, 16, 30), x, y - r, bw * 0.55)
     _circle(surf, col, x, y - r, bw * 0.48)
-    _text(surf, gate, letter, WHITE, x, y - r + 1)
+    _text(surf, gate, letter, WHITE if lit else (176, 178, 196), x, y - r + 1)
+
+
+def badge_top(scale: float) -> float:
+    """How far above the right arch's foot its badge reaches, in pixels at a sprite scale:
+    where the marker over it goes."""
+    r = config.ARCH_HALF_WIDTH * scale
+    letter = max(0.36 * r, BADGE_LETTER_MIN)
+    return r + 0.55 * max(0.4267 * r, letter * 1.6)
+
+
+MARKER_SIZES = (16, 20, 24, 28, 32, 36)  # px wide: never smaller, even over a far arch
+_MARKERS: list[pygame.Surface] = []
+
+
+def markers() -> list[pygame.Surface]:
+    """The bouncing marker over the right arch: a bright downward triangle with a dark
+    edge, drawn once at a few sizes (built on first use, at start-up)."""
+    if not _MARKERS:
+        for w in MARKER_SIZES:
+            big = pygame.Surface((w * SS + 4 * SS, w * SS + 4 * SS), pygame.SRCALPHA)
+            m = 2 * SS
+            tip = (m + w * SS / 2, m + w * SS * 0.86)
+            pts = [(m, m), (m + w * SS, m), tip]
+            _glow(big, tip[0], m + w * SS * 0.4, w * SS * 0.75, (255, 240, 150), 120)
+            pygame.draw.polygon(big, (255, 238, 120), pts)
+            pygame.draw.polygon(big, INK, pts, max(2, SS * 2 * w // 20))
+            img = pygame.transform.smoothscale(big, (w + 4, w + 4))
+            _rle(img)
+            _MARKERS.append(img)
+    return _MARKERS
+
+
+def marker_for(scale: float) -> pygame.Surface:
+    """The marker size for a right arch at this sprite scale."""
+    images = markers()
+    want = config.ARCH_HALF_WIDTH * scale * 0.5
+    i = sum(1 for w in MARKER_SIZES if w <= want) - 1
+    return images[max(0, min(len(images) - 1, i))]
 
 
 def draw_box(surf, x, y, u):
@@ -204,6 +253,23 @@ def draw_box(surf, x, y, u):
     pygame.draw.rect(surf, WHITE, pygame.Rect(round(x - b / 2), round(top), round(b), round(b)),
                      max(1, round(b * 0.06)), border_radius=round(b * 0.18))
     _text(surf, "?", max(6, round(b * 0.72)), WHITE, x, top + b * 0.52)
+
+
+FLAME_FRAMES = 4  # flickering exhaust flames, cycled while a car boosts
+
+
+def draw_flame(surf, x, y, u, frame):
+    """A boosting car's exhaust: two blue-white jets from under its rear wing, flickering
+    over FLAME_FRAMES frames. Its foot is the car's, and it is drawn just in front of it."""
+    w = config.CAR_WIDTH * u
+    h = 0.4 * w
+    rnd = random.Random(frame * 7 + 1)
+    for sx in (-0.2, 0.2):
+        n = 0.85 + 0.3 * rnd.random()
+        px, py = x + sx * w, y - h * 0.24
+        _glow(surf, px, py + h * 0.08 * n, w * 0.14 * n, (90, 170, 255), 170)
+        _ellipse(surf, (120, 200, 255, 210), px - w * 0.055, py - h * 0.06, w * 0.11, h * 0.34 * n)
+        _ellipse(surf, (235, 250, 255, 255), px - w * 0.03, py - h * 0.03, w * 0.06, h * 0.2 * n)
 
 
 def draw_car(surf, x, y, u, col, ghost=False):
@@ -240,8 +306,9 @@ GHOST = (170, 230, 255)
 
 # kind: (draw(surf, x, y, u), extents (left, top, right, bottom) in road half-widths)
 _A = config.ARCH_HALF_WIDTH
-_ARCH_EXT = (-1.06 * _A, -1.27 * _A, 1.06 * _A, 0.1 * _A)
-_LIT_EXT = (-1.31 * _A, -1.86 * _A, 1.31 * _A, 0.76 * _A)
+_D = config.DECOY_HALF_WIDTH
+_ARCH_EXT = (-1.06 * _D, -1.27 * _D, 1.06 * _D, 0.1 * _D)  # a decoy
+_LIT_EXT = (-1.61 * _A, -2.16 * _A, 1.61 * _A, 1.06 * _A)  # the right arch and its glow
 
 
 def _kinds():
@@ -252,6 +319,8 @@ def _kinds():
         "box": (draw_box, (-0.24, -0.55, 0.24, 0.03)),
         "clone": (lambda s, x, y, u: draw_car(s, x, y, u, GHOST, ghost=True), (-0.21, -0.15, 0.21, 0.03)),
     }
+    for i in range(FLAME_FRAMES):
+        kinds[f"flame:{i}"] = (lambda s, x, y, u, i=i: draw_flame(s, x, y, u, i), (-0.12, -0.08, 0.12, 0.07))
     for g in GATES:
         kinds[f"arch:{g}"] = (lambda s, x, y, u, g=g: draw_arch(s, x, y, u, g, False), _ARCH_EXT)
         kinds[f"arch:{g}:lit"] = (lambda s, x, y, u, g=g: draw_arch(s, x, y, u, g, True), _LIT_EXT)

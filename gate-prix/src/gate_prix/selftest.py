@@ -4,9 +4,10 @@ It plays, as a visitor would, and checks the match at every turn:
 1. the title, untouched until the attract race starts, then a while of it;
 2. 1 PLAYER: the countdown, a race steered by a bot with the stick mashed on top (A
    pressed at random, Select tapped, Start to pause, the pause menu moved and B to
-   resume), to the finish and the result; a mashed A in the result's lock is ignored,
-   then A rematches; in the rematch, pause and QUIT TO TITLE with A held on: the title
-   must wait for it to be let go;
+   resume), through the CIRCUIT CHECK (all 16 gates before it, a freeze of about a
+   second while the car drives on, no gate after it), to the finish and the result; a
+   mashed A in the result's lock is ignored, then A rematches; in the rematch, pause and
+   QUIT TO TITLE with A held on: the title must wait for it to be let go;
 3. 2 PLAYERS (picked with the stick, held: it must not flicker): a race with both pads driven the same way, to the result, B to the title;
 4. a race left untouched: 60 s later it is back on the title, at 1 PLAYER.
 
@@ -187,12 +188,21 @@ class Script:
         yield from self.tap(nav=(0, -1))
         yield from self.tap(b=True)
         check(m.state == RACE, "B resumes")
-        lap3 = lambda: m.banner("p1", "check") is not None  # noqa: E731
-        yield from self.drive_until(lap3, 200)
-        yield from self.idle(DT)
+        p1 = m.race.racer("p1")
+        yield from self.drive_until(lambda: m.frozen("p1"), 200)
+        check(p1.circuit.filled == config.SLOTS, "all 16 gates before the final lap")
+        z, t = p1.car.z, m.race.time
         yield from self.snap("check-1p")
+        yield from self.drive_until(lambda: not m.frozen("p1"), 2)  # the pad is mashed on
+        check(m.race.time - t > 0.9 * config.CHECK_FREEZE, "the freeze lasts about a second")
+        check(p1.car.z - z > 0.8 * config.TOP_SPEED * (m.race.time - t),
+              "the car drove on through the freeze")
+        rows = p1.next_row
         yield from self.drive_until(lambda: m.state == RESULT, 200,
-                                    shots=((m.race.time + 6.0, "final-lap-1p"),))
+                                    shots=((m.race.time + 0.4, "warp-1p"),
+                                           (m.race.time + 12.0, "final-lap-1p")))
+        check(p1.next_row == rows and p1.circuit.filled == config.SLOTS,
+              "no gates on the final lap")
         check(m.results[0].car in {r.car.id for r in m.race.racers}, "the results")
         yield from self.tap(a=True)
         check(m.state == RESULT, "a mashed A in the result's lock is ignored")
@@ -219,8 +229,7 @@ class Script:
         yield from self.tap(a=True)
         check(m.state == COUNTDOWN and m.race.players == 2, "A begins a 2P countdown")
         yield from self.idle(config.COUNTDOWN + 0.1)
-        yield from self.drive_until(lambda: m.banner("p1", "check") is not None
-                                    or m.banner("p2", "check") is not None, 200,
+        yield from self.drive_until(lambda: m.frozen("p1") or m.frozen("p2"), 200,
                                     shots=((8.0, "race-2p"),))
         yield from self.idle(DT)
         yield from self.snap("check-2p")

@@ -144,8 +144,17 @@ def test_arch_at_uses_the_arch_half_width():
     assert arch_at(row, -0.5).gate == "H"
     assert arch_at(row, -0.5 + h * 0.99).gate == "H"
     assert arch_at(row, -0.5 - h * 1.01) is None
-    assert arch_at(row, 0.3 + h * 0.99).gate == "X"
     assert arch_at(row, 0.0) is None
+    # a decoy is drawn smaller, and only what is drawn counts
+    d = config.DECOY_HALF_WIDTH
+    assert arch_at(row, 0.3 + d * 0.99).gate == "X"
+    assert arch_at(row, 0.3 - d * 1.01) is None
+    assert arch_at(row, 0.3 + (d + h) / 2) is None  # inside a right arch's width, not a decoy's
+
+
+def test_an_arch_knows_its_own_half_width():
+    assert track.Arch("H", 0.0, True).half_width == config.ARCH_HALF_WIDTH
+    assert track.Arch("X", 0.0, False).half_width == config.DECOY_HALF_WIDTH
 
 
 def right_x(race, racer):
@@ -209,20 +218,101 @@ def test_a_perfect_driver_gets_a_perfect_check_and_the_biggest_boost(perfect_rac
     checks = of(events, "p1", "check")
     assert checks == [Event("check", "p1", 0)]
     assert p1.check == 0
-    assert config.check_boost(0) == (pytest.approx(0.8), pytest.approx(5.0))
+    assert config.check_boost(0) == (pytest.approx(1.0), pytest.approx(6.0))
     # the boost the check gave, read off the frame it happened
     assert p1.check_boost == config.check_boost(0)
+    assert of(events, "p1", "warp") == [Event("warp", "p1", config.check_boost(0))]
     assert all(p1.circuit.results)
-    assert [e.value for e in of(events, "p1", "right")] == list(range(1, 25))
+    assert [e.value for e in of(events, "p1", "right")] == list(range(1, 17))
 
 
 def test_the_check_comes_at_the_start_of_lap_3(perfect_race):
     race, events = perfect_race
-    kinds = [(e.kind, e.value) for e in of(events, "p1") if e.kind in ("lap", "check", "finish")]
-    assert kinds == [("lap", 2), ("lap", 3), ("check", 0), ("finish", 1)]
+    kinds = [e.kind for e in of(events, "p1") if e.kind in ("lap", "check", "warp", "finish")]
+    assert kinds == ["lap", "lap", "check", "warp", "finish"]
     i = [e.kind for e in of(events, "p1")].index("check")
     rights_before = [e for e in of(events, "p1")[:i] if e.kind == "right"]
-    assert len(rights_before) == config.CHECK_SLOTS
+    assert len(rights_before) == config.CHECK_SLOTS == config.SLOTS
+    # the final lap is a gate-free sprint: no gate after the check
+    assert not [e for e in of(events, "p1")[i:] if e.kind in ("right", "wrong", "miss")]
+
+
+def to_the_check(race, racer, slots_right=16):
+    """Fill a car's circuit (the first `slots_right` right, the rest missed) and put it just
+    short of the line into the final lap, at top speed."""
+    c = racer.circuit
+    for slot in range(config.SLOTS):
+        c.take(slot, c.target[slot] if slot < slots_right else None)
+    racer.next_row = len(race.rows)
+    racer.laps = config.LAPS - 2
+    racer.next_box = race.box_index((config.LAPS - 1) * race.lap_length)
+    put(racer, (config.LAPS - 1) * race.lap_length - 20.0, 0.0)
+
+
+def test_the_check_boost_starts_after_the_freeze_and_the_car_keeps_moving():
+    race = Race(seed=3, players=1)
+    p1 = race.racers[0]
+    to_the_check(race, p1, slots_right=14)
+    events = of(race.update(DT, {}), "p1")
+    assert Event("check", "p1", 2) in events
+    assert p1.check_wait == pytest.approx(config.CHECK_FREEZE)
+    assert p1.car.boost == 0.0
+    z, frames, warp = p1.car.z, 0, []
+    while not warp:
+        frames += 1
+        warp = of(race.update(DT, {}), "p1", "warp")
+        assert frames <= round(config.CHECK_FREEZE / DT)
+    assert frames == round(config.CHECK_FREEZE / DT)
+    assert warp == [Event("warp", "p1", config.check_boost(2))]
+    assert p1.check_wait == 0.0 and p1.warp_time == pytest.approx(race.time)
+    assert p1.car.boost == pytest.approx(config.check_boost(2)[0])
+    # all through the freeze the car drove on at top speed: no distance lost
+    assert p1.car.z - z == pytest.approx(frames * DT * TOP, rel=0.01)
+
+
+def test_the_cpus_get_the_check_by_their_own_circuits():
+    race = Race(seed=3, players=1)
+    green = race.racer("green")
+    to_the_check(race, green, slots_right=11)
+    events = of(race.update(DT, {}), "green")
+    assert Event("check", "green", 5) in events
+    events = []
+    for _ in range(round(config.CHECK_FREEZE / DT)):
+        events += of(race.update(DT, {}), "green", "warp")
+    assert events == [Event("warp", "green", config.check_boost(5))]
+
+
+def test_a_better_circuits_warp_passes_a_cpu_that_crossed_earlier():
+    """The warp is strong and long enough to pass cars: a perfect circuit catches and
+    passes a CPU with a typical 13/16 that crossed into the final lap 1.5 s earlier."""
+    race = Race(seed=3, players=1)
+    p1, green = race.racer("p1"), race.racer("green")
+    to_the_check(race, p1, slots_right=16)
+    to_the_check(race, green, slots_right=13)
+    green.car.z += 1.5 * TOP
+    p1.car.x, green.car.x = -0.3, 0.3
+    for r in race.racers[2:]:
+        put(r, race.lap_length / 2, 2.1)
+    lanes = {"p1": -0.3, "green": 0.3}
+    passed = None
+    while race.time < 9.0 and passed is None:
+        race.update(DT, {r.car.id: (hold(race, r, lanes[r.car.id]) if r.car.id in lanes
+                                    else park(race, r)) for r in race.racers})
+        if p1.car.z > green.car.z:
+            passed = race.time
+    assert passed is not None
+    assert passed < config.CHECK_FREEZE + config.check_boost(0)[1]  # while it still warps
+
+
+def test_no_warp_without_a_check_boost():
+    race = Race(seed=3, players=1)
+    p1 = race.racers[0]
+    to_the_check(race, p1, slots_right=0)
+    events = []
+    for _ in range(round(2 * config.CHECK_FREEZE / DT)):
+        events += of(race.update(DT, {}), "p1")
+    assert Event("check", "p1", 16) in events
+    assert not [e for e in events if e.kind == "warp"] and p1.car.boost == 0.0
 
 
 def test_a_right_gate_never_lowers_the_boost():
@@ -242,23 +332,12 @@ def test_a_right_gate_never_lowers_the_boost():
     assert rights == config.SLOTS
 
 
-def test_lap_3_streak_boosts_only_ever_help(perfect_race, monkeypatch):
-    race, _ = perfect_race
-    real = config.streak_boost
-    monkeypatch.setattr(config, "streak_boost",
-                        lambda streak: real(streak) if streak <= config.CHECK_SLOTS else (0.0, 0.0))
-    without = Race(seed=7, players=1)
-    run(without, perfect)
-    assert without.over
-    assert race.racers[0].finish_time <= without.racers[0].finish_time
-
-
 def test_a_car_missing_every_row_gets_distance_16_and_the_smallest_boost(missing_race):
     race, events = missing_race
     p1 = race.racers[0]
     assert of(events, "p1", "check") == [Event("check", "p1", 16)]
     assert [e.kind for e in of(events, "p1") if e.kind in ("right", "wrong", "miss")] == ["miss"] * 16
-    assert p1.check_boost == config.check_boost(16) == (0.0, 1.0)
+    assert p1.check_boost == config.check_boost(16) == (0.0, 2.0)
     assert p1.car.boost == 0.0
 
 
@@ -269,7 +348,7 @@ def test_the_finish_and_the_end_of_the_race(perfect_race):
     assert race.finish_order == ["p1"]
     assert p1.place == 1
     assert p1.finish_time == pytest.approx(race.time)
-    # three laps of THE FRIDGE, well under the 135 s they take at top speed: the boosts
+    # three laps of THE FRIDGE, well under the 120 s they take at top speed: the boosts
     assert 3 * race.track.lap_length() / TOP * 0.7 < p1.finish_time < 3 * race.track.lap_length() / TOP
     results = race.results()
     assert results[0] == "p1" and sorted(results) == sorted(r.car.id for r in race.racers)

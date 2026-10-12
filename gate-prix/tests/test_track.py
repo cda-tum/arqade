@@ -15,8 +15,8 @@ def fridge():
 # --- The lap ----------------------------------------------------------------------------
 
 
-def test_a_lap_takes_about_45_seconds_at_top_speed(fridge):
-    assert 43.0 <= fridge.lap_length() / config.TOP_SPEED <= 47.0
+def test_a_lap_takes_about_40_seconds_at_top_speed(fridge):
+    assert 38.5 <= fridge.lap_length() / config.TOP_SPEED <= 41.5
     assert track.lap_length() == fridge.lap_length()
 
 
@@ -140,6 +140,22 @@ def test_a_race_has_one_gate_row_per_slot_at_the_lap_positions(fridge):
         lap_no, k = divmod(row.slot, config.ROWS_PER_LAP)
         assert row.z == pytest.approx(lap_no * lap + fridge.rows[k])
     assert [row.slot for row in rows] == list(range(config.SLOTS))
+
+
+def test_the_rows_stand_on_laps_1_and_2_only_and_the_final_lap_has_none(fridge):
+    _, rows = _rows(4, fridge)
+    lap = fridge.lap_length()
+    assert len(rows) == 2 * config.ROWS_PER_LAP == 16
+    assert all(row.z < config.GATE_LAPS * lap for row in rows)
+    assert sum(row.z < lap for row in rows) == config.ROWS_PER_LAP
+    assert not [row for row in rows if row.z >= (config.LAPS - 1) * lap]
+
+
+def test_item_boxes_stay_on_every_lap_the_final_one_too(fridge):
+    lap = fridge.lap_length()
+    boxes = track.box_objects(fridge, config.LAPS)
+    final = [b for b in boxes if b[0] >= (config.LAPS - 1) * lap]
+    assert len(final) == sum(len(offsets) for _, offsets in fridge.boxes)
 
 
 @pytest.mark.parametrize("seed", range(40))

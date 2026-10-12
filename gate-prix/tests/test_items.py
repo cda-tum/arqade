@@ -160,10 +160,27 @@ def test_box_odds_by_place_statistically_over_seeds():
     assert counts[config.CARS]["QEC"] > counts[1]["QEC"]
 
 
+def test_with_no_gate_left_a_box_never_gives_a_split():
+    """A SPLIT takes a second gate; on the gate-free final lap there is none to take."""
+    got = Counter()
+    for seed in range(30):
+        race = Race(seed=seed, players=1)
+        p1 = race.racer("p1")
+        p1.next_row = len(race.rows)  # past its last row
+        for k in range(len(race.track.boxes)):
+            p1.item = None
+            events = through_box(race, p1, k=k, lap=config.LAPS - 1)
+            got.update(e.value for e in events if e.kind == "box")
+    assert got["SPLIT"] == 0 and got["QEC"] > 0
+    race = Race(seed=1, players=1)
+    assert {race.roll_item(config.CARS, split=False) for _ in range(50)} == {"QEC"}
+    assert "SPLIT" in {race.roll_item(config.CARS) for _ in range(50)}
+
+
 def test_a_box_rolls_with_the_drivers_place(monkeypatch):
     race = Race(seed=2, players=1)
     seen = []
-    monkeypatch.setattr(race, "roll_item", lambda place: seen.append(place) or "QEC")
+    monkeypatch.setattr(race, "roll_item", lambda place, **kw: seen.append(place) or "QEC")
     green, p1 = race.racer("green"), race.racer("p1")
     through_box(race, green, lap=1)  # far ahead of everyone
     p1.car.z = green.car.z - 30_000  # still behind the others
@@ -300,6 +317,28 @@ def test_a_new_split_while_one_runs_starts_again_from_two_rows():
     p1.item = "SPLIT"
     race.update(DT, {"p1": USE})
     assert p1.split_rows == 2
+
+
+def test_the_split_is_over_with_the_last_gate_row():
+    """No gate is left after row 16: a clone still out goes, and a SPLIT still held is
+    dropped, so the HUD never offers one for the gate-free final lap."""
+    race = Race(seed=3, players=1)
+    p1 = race.racer("p1")
+    skip_to(race, p1, len(race.rows) - 1)
+    p1.item = "SPLIT"
+    race.update(DT, {"p1": USE})
+    assert p1.split_rows == 2
+    p1.item = "SPLIT"  # and another one held
+    events = cross(race, p1, 1.9)
+    assert p1.next_row == len(race.rows)
+    assert Event("split_end", "p1") in events
+    assert not p1.split and p1.item is None
+    p2 = Race(seed=3, players=1)
+    q = p2.racer("p1")
+    skip_to(p2, q, len(p2.rows) - 1)
+    q.item = "QEC"
+    cross(p2, q, 1.9)
+    assert q.item == "QEC"  # a QEC still fixes a gate on the final lap
 
 
 def test_the_clone_ends_at_the_finish():

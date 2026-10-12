@@ -22,29 +22,36 @@ CPU_CARS_2P = 4
 CPU_CARS_1P = 5
 LAPS = 3
 ROWS_PER_LAP = 8
-SLOTS = LAPS * ROWS_PER_LAP  # 24: one slot of the target circuit per gate row
+GATE_LAPS = 2  # gate rows stand on laps 1 and 2 only: the final lap is a gate-free sprint
+SLOTS = GATE_LAPS * ROWS_PER_LAP  # 16: one slot of the target circuit per gate row
 ARCHES_MIN = 1
 ARCHES_MAX = 3
 ITEM_BOXES_PER_LAP = 2
-LAP_SECONDS = 45.0  # about, at top speed
+LAP_SECONDS = 40.0  # about, at top speed
 
 # --- Boosts ----------------------------------------------------------------------------
-# Streak: +20% for 1.0 s on the first right gate in a row, then +8% and +0.2 s per further
-# one, up to +60% for 2.0 s.
-STREAK_BOOST_FIRST = 0.20
-STREAK_BOOST_STEP = 0.08
-STREAK_BOOST_MAX = 0.60
-STREAK_TIME_FIRST = 1.0
-STREAK_TIME_STEP = 0.2
-STREAK_TIME_MAX = 2.0
+# Streak: +30% for 1.5 s on the first right gate in a row, then +10% and +0.25 s per further
+# one, up to +70% for 2.5 s (the fifth in a row).
+STREAK_BOOST_FIRST = 0.30
+STREAK_BOOST_STEP = 0.10
+STREAK_BOOST_MAX = 0.70
+STREAK_TIME_FIRST = 1.5
+STREAK_TIME_STEP = 0.25
+STREAK_TIME_MAX = 2.5
 
-# CIRCUIT CHECK, at the start of the final lap, over the first CHECK_SLOTS slots:
-# (CHECK_SLOTS - d) / CHECK_SLOTS * CHECK_BOOST extra speed, for
-# CHECK_TIME_BASE + (CHECK_SLOTS - d) * CHECK_TIME_PER_SLOT seconds.
-CHECK_SLOTS = 16
-CHECK_BOOST = 0.80
-CHECK_TIME_BASE = 1.0
+# CIRCUIT CHECK, as a car crosses into the final lap, over all CHECK_SLOTS slots, with d
+# of them wrong: ((CHECK_SLOTS - d) / CHECK_SLOTS) ** 2 * CHECK_BOOST extra speed, for
+# CHECK_TIME_BASE + (CHECK_SLOTS - d) * CHECK_TIME_PER_SLOT seconds: the LIGHT SPEED! warp.
+# A perfect circuit is +100% for 6 s, 14/16 +77% for 5.5 s, 12/16 +56% for 5 s, 8/16 +25%
+# for 4 s. Squared, so that accuracy pays: the CPUs get the same check by their own
+# circuits, and a better circuit's warp passes a CPU up to ~2 s ahead.
+CHECK_SLOTS = SLOTS
+CHECK_BOOST = 1.00
+CHECK_TIME_BASE = 2.0
 CHECK_TIME_PER_SLOT = 0.25
+# The check's boost starts this long after the crossing: meanwhile that player's view is
+# frozen on the comparison panel, and the car drives straight on at its speed.
+CHECK_FREEZE = 1.0
 
 
 def streak_boost(streak: int) -> tuple[float, float]:
@@ -62,18 +69,18 @@ def check_boost(distance: int) -> tuple[float, float]:
     The distance is clamped to [0, CHECK_SLOTS], so the boost is never negative.
     """
     right = CHECK_SLOTS - max(0, min(CHECK_SLOTS, distance))
-    return right / CHECK_SLOTS * CHECK_BOOST, CHECK_TIME_BASE + right * CHECK_TIME_PER_SLOT
+    return (right / CHECK_SLOTS) ** 2 * CHECK_BOOST, CHECK_TIME_BASE + right * CHECK_TIME_PER_SLOT
 
 
 # --- Driving ---------------------------------------------------------------------------
 OFFROAD_SPEED_FACTOR = 0.6  # top speed on the copper plate
-TOP_SPEED = 10_000.0  # world units per second: 50 segments, so a lap of THE FRIDGE is ~45 s
-# Speed changes, in world units per second per second.
-ACCEL = 5_000.0  # auto-acceleration: standing to top speed in 2 s
-BOOST_ACCEL = 20_000.0  # up to a boost's speed: +80% in 0.4 s
-COAST_DECEL = 5_000.0  # back down to top speed when a boost ends
-OFFROAD_DECEL = 12_000.0  # down to the off-road cap: top speed to 60% in 1/3 s
-BRAKE = 6_000.0  # with the stick fully back
+TOP_SPEED = 11_200.0  # world units per second: 56 segments, so a lap of THE FRIDGE is ~40 s
+# Speed changes, in world units per second per second, in proportion to the top speed.
+ACCEL = TOP_SPEED / 2  # auto-acceleration: standing to top speed in 2 s
+BOOST_ACCEL = TOP_SPEED * 2  # up to a boost's speed: +80% in 0.4 s
+COAST_DECEL = TOP_SPEED / 2  # back down to top speed when a boost ends
+OFFROAD_DECEL = TOP_SPEED * 1.2  # down to the off-road cap: top speed to 60% in 1/3 s
+BRAKE = TOP_SPEED * 0.6  # with the stick fully back
 BRAKE_FLOOR = 0.4  # braking never slows the car below 40% of top speed
 # Lateral rates, in road half-widths per second, at top speed. Steering scales with speed
 # and the curves' outward push with speed squared, as OutRun does.
@@ -148,6 +155,9 @@ PARALLAX_TILES = 3  # how many background widths scroll past in one full turn (a
 
 # --- Gate rows -----------------------------------------------------------------------------
 ARCH_HALF_WIDTH = 0.22  # an arch's outer radius: a car within it of the offset goes through
+# Decoys are drawn smaller (and dimmer), and only what is drawn counts: a car within
+# DECOY_HALF_WIDTH of a decoy's centre goes through it. Rows are still spaced for full arches.
+DECOY_HALF_WIDTH = 0.8 * ARCH_HALF_WIDTH
 ARCH_OFFSET_MAX = 0.8  # arch centres lie in [-0.8, 0.8]
 ARCH_MIN_GAP = 0.04  # the least space between two arches of a row
 SHARP_CURVE = 3.0  # |curve| above this is a sharp curve: no gate row there
@@ -171,8 +181,21 @@ AUTOPILOT_SKILL = 0.725  # a player's car after the line is driven on by a bot
 FINISH_GRACE = 40.0  # 2P: once one player has finished, the other has this long to
 FINISH_DELAY = 3.0  # the finish banner, before the result screen
 RESULT_LOCK = 1.0  # the result screen ignores the buttons this long (a mashed A)
-CHECK_BANNER = 4.0  # the CIRCUIT CHECK banner's seconds
 LAP_BANNER = 1.6
+FLASH_TIME = 0.8  # RIGHT GATE +BOOST / WRONG GATE / MISSED, near the car
+TIP_TIME = 2.5  # PRESS A TO USE SPLIT: on the first pickup of each item, per player
+
+# --- The feel of speed (the renderer's only: nothing here changes the race) ------------
+# The field of view widens with speed above the top speed: the projection constant is
+# divided by 1 + FOV_BOOST * (speed / TOP_SPEED - 1), and the camera moves in towards its
+# car by the same factor (a dolly zoom), so the car stays put while the world stretches.
+FOV_BOOST = 0.35
+FOV_WARP = 0.15  # and by this much more at the start of the LIGHT SPEED! warp, fading out
+FOV_MAX = 1.45
+SPEED_LINES_AT = 0.97  # speed lines from this fraction of the top speed
+SHAKE = 7.0  # the camera's height jitter (world units) at top speed ...
+SHAKE_BOOST = 14.0  # ... and at +100%
+LIGHT_SPEED_TEXT = 1.3  # seconds the LIGHT SPEED! title stays up
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 
 # --- Colours ---------------------------------------------------------------------------

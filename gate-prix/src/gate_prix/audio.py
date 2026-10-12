@@ -2,8 +2,9 @@
 
 The engine hums at a pitch that follows the car's speed (one looping sound per speed
 step, switched as the car speeds up or slows down); a right gate rings higher the longer
-the streak, a wrong or missed one buzzes; boosts whoosh, the CIRCUIT CHECK plays a fanfare
-(a bigger one for a perfect circuit), the countdown beeps, items and boxes chime and cars
+the streak, with a boost whoosh on top; a wrong or missed one buzzes; the CIRCUIT CHECK
+plays a fanfare (a bigger one for a perfect circuit) as the view freezes, and the LIGHT
+SPEED! warp after it is a long rising whoosh; the countdown beeps, items and boxes chime and cars
 thud when they bump.
 
 Everything is rendered in a background thread at start-up (a second or two on the Pi), so
@@ -28,7 +29,7 @@ from gate_prix.race import Event
 SAMPLE_RATE = 22050
 AMP = 32767
 ENGINE_STEPS = 12  # looping engine sounds, from standing to the biggest boost
-ENGINE_TOP = 1.8  # the speed (in top speeds) of the highest step
+ENGINE_TOP = 2.0  # the speed (in top speeds) of the highest step: the biggest boost
 ENGINE_VOLUME = 0.35
 
 NOTE_INDEX = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8,
@@ -113,8 +114,17 @@ def _arp(names, dur, vol, kind="square", decay=6.0):
 RIGHT_NOTES = ("C5", "D5", "E5", "G5", "A5", "C6")  # the streak climbs a pentatonic scale
 
 
+def warp_sound() -> list[int]:
+    """LIGHT SPEED!: a rising whoosh (noise, darker to brighter) over a climbing tone."""
+    parts = [noise(0.25, 0.10 + 0.04 * i, hold=max(1, 4 - i), seed=20 + i, swell=i == 0)
+             for i in range(4)]
+    rush = concat(*parts) + noise(0.6, 0.22, decay=4, seed=24)
+    climb = tone(110, 1.0, 0.16, "saw", slide=4.0) + tone(440, 0.6, 0.12, "saw", decay=5)
+    return mix(rush, climb)
+
+
 def build_sfx() -> dict[str, list[int]]:
-    whoosh = noise(0.35, 0.22, hold=1, seed=7, swell=True)
+    whoosh = noise(0.45, 0.3, hold=1, seed=7, swell=True)
     sfx = {
         "blip": tone(880, 0.04, 0.2, "square"),
         "select": _arp(("E5", "B5"), 0.05, 0.25),
@@ -125,9 +135,9 @@ def build_sfx() -> dict[str, list[int]]:
                      tone(158, 0.2, 0.22, "square", decay=8, slide=0.7)),
         "miss": tone(220, 0.16, 0.25, "triangle", decay=10, slide=0.6),
         "boost": whoosh,
-        "check": mix(_arp(("C5", "E5", "G5"), 0.1, 0.26, "square"), whoosh + [0] * 4000),
-        "perfect": mix(_arp(("C5", "E5", "G5", "C6", "E6", "G6"), 0.09, 0.27, "pulse"),
-                       whoosh + [0] * 8000),
+        "check": _arp(("C5", "E5", "G5"), 0.1, 0.26, "square"),
+        "perfect": _arp(("C5", "E5", "G5", "C6", "E6", "G6"), 0.09, 0.27, "pulse"),
+        "warp": warp_sound(),
         "lap": _arp(("G5", "C6"), 0.08, 0.25, "triangle"),
         "finish": _arp(("C5", "G5", "C6", "E6", "G6", "C7"), 0.1, 0.26, "triangle", decay=3),
         "box": _arp(("A5", "E6", "A6"), 0.04, 0.22, "triangle"),
@@ -143,7 +153,7 @@ def build_sfx() -> dict[str, list[int]]:
     for i, name in enumerate(RIGHT_NOTES):
         ring = concat(tone(note(name), 0.05, 0.26, "pulse"),
                       tone(note(name) * 1.5, 0.12, 0.24, "triangle", decay=10))
-        sfx[f"right{i + 1}"] = mix(ring, noise(0.25, 0.12, seed=11, swell=True))
+        sfx[f"right{i + 1}"] = mix(ring, whoosh)  # the boost's whoosh
     return sfx
 
 
@@ -179,6 +189,8 @@ def sound_for(event) -> str | None:
             return f"right{min(len(RIGHT_NOTES), max(1, int(value)))}"
         if kind == "check":
             return "perfect" if value == 0 else "check"
+        if kind == "warp":
+            return "warp"
         if kind == "box":
             return "box" if value else "box_empty"
         if kind == "item":

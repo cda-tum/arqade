@@ -7,8 +7,9 @@ def test_race_shape():
     assert config.CARS == 6
     assert config.LAPS == 3
     assert config.ROWS_PER_LAP == 8
-    assert config.SLOTS == 24
-    assert config.CHECK_SLOTS == 16
+    assert config.GATE_LAPS == 2  # the final lap has no gates
+    assert config.SLOTS == 16
+    assert config.CHECK_SLOTS == config.SLOTS  # the check covers the whole target
     assert (config.ARCHES_MIN, config.ARCHES_MAX) == (1, 3)
     assert config.CPU_CARS_2P == 4 and config.CPU_CARS_1P == 5
     assert config.ITEM_BOXES_PER_LAP == 2
@@ -22,7 +23,7 @@ def test_resolution_divides_the_panel_exactly():
 
 @pytest.mark.parametrize(
     "streak, strength, seconds",
-    [(1, 0.20, 1.0), (2, 0.28, 1.2), (3, 0.36, 1.4), (4, 0.44, 1.6), (5, 0.52, 1.8), (6, 0.60, 2.0)],
+    [(1, 0.30, 1.5), (2, 0.40, 1.75), (3, 0.50, 2.0), (4, 0.60, 2.25), (5, 0.70, 2.5)],
 )
 def test_streak_boost_table(streak, strength, seconds):
     got_strength, got_seconds = config.streak_boost(streak)
@@ -30,11 +31,11 @@ def test_streak_boost_table(streak, strength, seconds):
     assert got_seconds == pytest.approx(seconds)
 
 
-@pytest.mark.parametrize("streak", [7, 12, 24])
+@pytest.mark.parametrize("streak", [6, 12, 16])
 def test_streak_boost_is_capped(streak):
     strength, seconds = config.streak_boost(streak)
-    assert strength == pytest.approx(0.60)
-    assert seconds == pytest.approx(2.0)
+    assert strength == pytest.approx(0.70)
+    assert seconds == pytest.approx(2.5)
 
 
 def test_streak_boost_of_zero_is_nothing():
@@ -43,12 +44,42 @@ def test_streak_boost_of_zero_is_nothing():
 
 @pytest.mark.parametrize(
     "distance, strength, seconds",
-    [(0, 0.80, 5.0), (16, 0.0, 1.0), (3, 13 / 16 * 0.80, 1.0 + 13 * 0.25), (8, 0.40, 3.0)],
+    [(0, 1.00, 6.0), (16, 0.0, 2.0), (3, (13 / 16) ** 2, 2.0 + 13 * 0.25), (8, 0.25, 4.0),
+     (4, 0.5625, 5.0)],
 )
 def test_circuit_check_boost(distance, strength, seconds):
     got_strength, got_seconds = config.check_boost(distance)
     assert got_strength == pytest.approx(strength)
     assert got_seconds == pytest.approx(seconds)
+
+
+def test_the_top_speed_is_12_percent_up_and_the_rates_keep_their_timing():
+    assert config.TOP_SPEED == 11_200.0
+    top = config.TOP_SPEED
+    assert config.ACCEL == pytest.approx(top / 2)  # standing to top speed in 2 s
+    assert config.BOOST_ACCEL == pytest.approx(2 * top)
+    assert config.COAST_DECEL == pytest.approx(top / 2)
+    assert config.BRAKE == pytest.approx(0.6 * top)
+
+
+def test_the_check_freezes_a_view_for_about_a_second():
+    assert config.CHECK_FREEZE == 1.0
+    assert 0.6 <= config.FLASH_TIME <= 1.0
+
+
+def test_decoys_are_smaller_than_the_right_arch():
+    assert config.DECOY_HALF_WIDTH == pytest.approx(0.8 * config.ARCH_HALF_WIDTH)
+
+
+def test_a_better_circuit_out_boosts_a_worse_one_by_more_than_in_proportion():
+    """The check rewards accuracy steeply, so a good circuit's warp passes the CPUs (whose
+    own checks are 10-14 of 16 right): 2 more right gates are worth at least +15% (in
+    proportion they would be +12.5%), and more the better the circuit already is."""
+    for right in range(10, 15):
+        better, worse = config.check_boost(16 - right - 2), config.check_boost(16 - right)
+        assert better[0] - worse[0] >= 0.15 and better[1] > worse[1]
+    gains = [config.check_boost(d - 1)[0] - config.check_boost(d)[0] for d in range(16, 0, -1)]
+    assert gains == sorted(gains)
 
 
 def test_off_road_top_speed_is_60_percent():
