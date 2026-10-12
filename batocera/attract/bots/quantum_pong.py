@@ -99,12 +99,15 @@ class Bot:
             self.pads.stick(p.index, 0.0, 0.0 if abs(gap) < STEP / 2 else math.copysign(1.0, gap))
 
     def menu(self, t, loop):
-        """Title or winner screen: straight on into the next match."""
+        """Title, HOW TO PLAY or winner screen: straight on into the next
+        match. The stick stays centred, so the title's PLAY row (preselected)
+        is what A picks -- never QUIT. HOW TO PLAY ignores presses for its
+        first 0.3 s, so wait a little longer there."""
         for player in (0, 1):
             self.pads.stick(player, 0.0, 0.0)
         if self.menu_since is None:
             self.menu_since = t
-        wait = 1.0 if "winner" in loop else 0.25
+        wait = 1.0 if "winner" in loop else 0.6 if "tutorial" in loop else 0.25
         if t - self.menu_since >= wait and not self.pads.held(0, "a"):
             self.pads.tap(0, "a", 1)
             self.menu_since = t
