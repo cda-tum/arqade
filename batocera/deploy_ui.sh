@@ -2,9 +2,11 @@
 set -euo pipefail
 
 # Deploy the cabinet's front end over SSH: the game icons in the menu, the
-# attract reels (EmulationStation's screensaver after 15 s idle) and the
-# loading-screen art (boot video, splash stills). The games themselves deploy
-# with their own deploy_batocera.sh.
+# attract reels (EmulationStation's screensaver after 15 s idle), the
+# loading-screen art (boot video, splash stills), and the scripts behind the
+# kiosk lock and the experimental games (kiosk.py, experimental.py,
+# unlock_daemon.py). The games themselves deploy with their own
+# deploy_batocera.sh.
 #
 # Usage: ./deploy_ui.sh [--dry-run] [user@host]
 #   Defaults to root@batocera.local (fallback: root@10.42.0.100, see AGENTS.md).
@@ -33,7 +35,8 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 
 UI="$STAGE_DIR/arqade-ui"
 mkdir -p "$UI/images"
-cp "$SCRIPT_DIR/install_ui.py" "$SCRIPT_DIR/kiosk.py" "$SCRIPT_DIR/gamelist.xml" "$UI/"
+cp "$SCRIPT_DIR/install_ui.py" "$SCRIPT_DIR/kiosk.py" "$SCRIPT_DIR/experimental.py" \
+   "$SCRIPT_DIR/unlock_daemon.py" "$SCRIPT_DIR/gamelist.xml" "$UI/"
 if ! compgen -G "$REELS/arqade_reel_*.mp4" > /dev/null; then
     echo "no reels in $REELS -- build them with batocera/attract/build_reel.py" >&2
     exit 1

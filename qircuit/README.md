@@ -22,9 +22,10 @@ put back in at the back of the pack, already moving.
 - `--input-test` and a deploy script.
 
 There is no logo or `batocera/gamelist.xml` entry yet. The PC launcher finds
-the game anyway, using the description in its `pyproject.toml`. It has not
-yet run on the cabinet, and OpenGL there is unchecked (see "On the cabinet"
-below).
+the game anyway, using the description in its `pyproject.toml`. On the
+cabinet it is an experimental game: deployed but hidden from the public game
+list (see "On the cabinet" below). It has not yet run there, and OpenGL there
+is unchecked.
 
 ## How to play
 
@@ -425,5 +426,11 @@ Not tried yet. Things to check before the first deploy:
   library's `array`.
 - **Frame time on the Pi 4.**
 
-The first deploy also needs a `batocera/gamelist.xml` entry and an
-EmulationStation restart (see `../AGENTS.md`).
+`./deploy_batocera.sh` parks the loader at
+`/userdata/games/qircuit/qircuit.pygame`, outside the ROMs folder, so the
+game stays out of the public game list. To try it on the cabinet, hold Start
++ Select on both pads at once in the menu: it joins the list, until the same
+combo again or the cabinet idles into the attract reels ("Experimental
+games" in `../AGENTS.md`). Making it public later takes a `gamelist.xml`
+entry, a logo, and the loader in `/userdata/roms/pygame/` like the other
+games.

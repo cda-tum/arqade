@@ -4,7 +4,9 @@ deploy_ui.sh copies this folder to /userdata/arqade-ui and runs it there:
     python3 /userdata/arqade-ui/install_ui.py --dry-run   # say what would change
     python3 /userdata/arqade-ui/install_ui.py
 
-It does three things, with EmulationStation stopped for all of them (and
+It installs kiosk.py, experimental.py and unlock_daemon.py in /userdata
+(the daemon restarted, so it runs the new copy), writes experimental.py's ES
+event hooks, and then does three things with EmulationStation stopped (and
 started again afterwards, if it was running):
 
   - images/*.png -> /userdata/roms/pygame/images/: the per-game logos and
@@ -36,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -47,12 +50,16 @@ GAMELIST = ROMS / "gamelist.xml"
 GAMELIST_BACKUP = ROMS / "gamelist.xml.arqade-bak"
 REEL_PATTERN = "arqade_reel*.mp4"  # also the single arqade_reel.mp4 of the first deploy
 KIOSK = Path("/userdata/kiosk.py")
+EXPERIMENTAL = Path("/userdata/experimental.py")
+DAEMON = Path("/userdata/unlock_daemon.py")
 FILE_MODE = 0o644
 # What the repo decides for each game; ES's own fields are left alone.
 REPO_FIELDS = ("name", "desc", "image", "marquee")
 
 sys.path.insert(0, str(HERE))
+import experimental  # noqa: E402
 import kiosk  # noqa: E402
+import unlock_daemon  # noqa: E402
 
 
 def copy(src: Path, dst: Path, dry_run: bool) -> None:
@@ -138,12 +145,36 @@ def install_reels(dry_run: bool) -> None:
         print(f"NOTE: {folder} also holds {', '.join(others)}; the screensaver plays those too")
 
 
+def install_daemon(dry_run: bool) -> None:
+    """Install the copied daemon to start at boot, and restart it on that copy.
+
+    Its --install must run from DAEMON itself: it writes its own path into
+    custom.sh. Restarted even when unchanged, which costs nothing: it only
+    watches the pads.
+    """
+    if dry_run:
+        print(f"would restart {DAEMON.name} through {unlock_daemon.CUSTOM_SH}")
+        return
+    subprocess.run([sys.executable, str(DAEMON), "--install"], check=True)
+    custom = unlock_daemon.CUSTOM_SH
+    if not custom.exists() or "arqade-unlock" not in custom.read_text():
+        print(f"SKIPPED restarting {DAEMON.name}: {custom} isn't ours")
+        return
+    subprocess.run([str(custom), "stop"])
+    subprocess.run([str(custom), "start"], check=True)
+    print(f"restarted {DAEMON.name}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--dry-run", action="store_true", help="only say what would change")
     args = parser.parse_args()
 
     copy(HERE / "kiosk.py", KIOSK, args.dry_run)
+    copy(HERE / "experimental.py", EXPERIMENTAL, args.dry_run)
+    copy(HERE / "unlock_daemon.py", DAEMON, args.dry_run)
+    experimental.install(args.dry_run)
+    install_daemon(args.dry_run)
     install_icons(args.dry_run)
     install_reels(args.dry_run)
     if args.dry_run:
