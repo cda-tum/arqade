@@ -113,6 +113,7 @@ def test_the_grid_is_behind_the_line_players_at_the_back_in_their_colours():
     cars = {r.car.id: r.car for r in race.racers}
     assert all(c.z < 0 for c in cars.values())
     assert cars["p1"].x < 0 < cars["p2"].x  # P1 blue on the left, P2 red on the right
+    assert cars["p1"].z == cars["p2"].z  # side by side: neither player starts ahead
     assert max(cars["p1"].z, cars["p2"].z) < min(c.z for k, c in cars.items() if k[0] != "p")
     assert (cars["p1"].colour, cars["p2"].colour) == ("p1", "p2")
     # no two cars overlap on the grid
@@ -126,6 +127,12 @@ def test_the_rng_is_kept_for_the_items():
     rng = random.Random(5)
     assert Race(seed=1, players=1, rng=rng).rng is rng
     assert isinstance(Race(seed=1, players=1).rng, random.Random)
+
+
+def test_the_item_rng_is_its_own_stream_not_the_targets():
+    a, b = Race(seed=1, players=1), Race(seed=1, players=1)
+    assert a.rng.random() == b.rng.random()  # deterministic per seed
+    assert Race(seed=1, players=1).rng.random() != random.Random(1).random()
 
 
 # --- Arches -------------------------------------------------------------------------------
@@ -216,6 +223,34 @@ def test_the_check_comes_at_the_start_of_lap_3(perfect_race):
     i = [e.kind for e in of(events, "p1")].index("check")
     rights_before = [e for e in of(events, "p1")[:i] if e.kind == "right"]
     assert len(rights_before) == config.CHECK_SLOTS
+
+
+def test_a_right_gate_never_lowers_the_boost():
+    race = Race(seed=7, players=1)
+    p1 = race.racers[0]
+    rights = 0
+    while not race.over:
+        # what the boost would be after this frame without a new gate
+        survives = [s for s, t in p1.car.boosts if t > DT]
+        expected = max(survives, default=0.0)
+        controls = {r.car.id: (perfect(race, r) if r.car.id == "p1" else park(race, r))
+                    for r in race.racers}
+        events = race.update(DT, controls)
+        if Event("right", "p1", p1.circuit.streak) in events:
+            rights += 1
+            assert p1.car.boost >= expected
+    assert rights == config.SLOTS
+
+
+def test_lap_3_streak_boosts_only_ever_help(perfect_race, monkeypatch):
+    race, _ = perfect_race
+    real = config.streak_boost
+    monkeypatch.setattr(config, "streak_boost",
+                        lambda streak: real(streak) if streak <= config.CHECK_SLOTS else (0.0, 0.0))
+    without = Race(seed=7, players=1)
+    run(without, perfect)
+    assert without.over
+    assert race.racers[0].finish_time <= without.racers[0].finish_time
 
 
 def test_a_car_missing_every_row_gets_distance_16_and_the_smallest_boost(missing_race):

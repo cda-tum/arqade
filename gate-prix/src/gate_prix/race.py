@@ -21,10 +21,11 @@ Rules decided here:
   ARCH_HALF_WIDTH of it, or none. Rows are crossed strictly in order, so row k of the race is
   always the car's slot k.
 - A right gate gives `streak_boost(streak)`; the CIRCUIT CHECK gives
-  `check_boost(distance)`, once per car. A new boost replaces the running one if it is
-  stronger or lasts longer than what is left of it (`Car.give_boost`).
+  `check_boost(distance)`, once per car. Boosts never cut each other short: the car runs at
+  the strongest one running, and a weaker, longer one carries on after it (`Car.give_boost`),
+  so a right gate never slows a car down.
 - Places: finished cars in the order they finished, then the rest by laps and distance (the
-  grid order breaks a tie). The race is over once every player has finished; CPU cars still
+  order of `racers`, players first, breaks a tie). The race is over once every player has finished; CPU cars still
   racing are placed where they are. An over race no longer changes.
 """
 
@@ -82,15 +83,16 @@ def arch_at(row: track.GateRow, x: float) -> track.Arch | None:
 
 def grid(players: int) -> list[tuple[float, float]]:
     """The (z, x) of each car on the grid, players first. Two lanes, the right lane half a
-    row back; the players start in the back row, P1 on the left and P2 on the right."""
+    row back; the players start side by side in the back row, P1 on the left and P2 on the
+    right, so that neither starts ahead."""
     spots = []
     for k in range(config.CARS):
         row, lane = divmod(k, 2)
         z = -(config.GRID_FIRST + row * config.GRID_GAP + lane * config.GRID_GAP / 2)
         spots.append((z, config.GRID_LANES[lane]))
     back = config.CARS - 2
-    mine = [spots[back + i] for i in range(players)]
-    rest = [s for s in spots if s not in mine]
+    rest = [s for k, s in enumerate(spots) if not back <= k < back + players]
+    mine = [(spots[back][0], config.GRID_LANES[i]) for i in range(players)]
     return mine + rest
 
 
@@ -103,7 +105,8 @@ class Race:
             raise ValueError(f"a race has 1 or 2 players, not {players}")
         self.seed = seed
         self.players = players
-        self.rng = rng if rng is not None else random.Random(seed)  # for the items (Task 4)
+        # for the items (Task 4): a stream of its own, not a copy of the target's
+        self.rng = rng if rng is not None else random.Random(f"{seed}:items")
         self.track = course if course is not None else track.fridge()
         self.lap_length = self.track.lap_length()
         self.target = circuit.random_target(random.Random(seed), config.SLOTS)
@@ -200,7 +203,7 @@ class Race:
     # --- Places -----------------------------------------------------------------------------
 
     def places(self) -> list[str]:
-        """Car ids from first to last."""
+        """Car ids from first to last. Ties keep the order of `racers` (players first)."""
         done = [self._by_id[i] for i in self.finish_order]
         rest = sorted((r for r in self.racers if not r.finished),
                       key=lambda r: (-r.laps, -r.car.z))

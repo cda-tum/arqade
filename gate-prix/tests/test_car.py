@@ -120,13 +120,41 @@ def test_a_boost_lifts_the_off_road_cap_too():
     assert car.speed == pytest.approx(config.OFFROAD_SPEED_FACTOR * 1.5 * TOP)
 
 
-def test_a_stronger_or_longer_boost_replaces_the_current_one():
+def test_a_stronger_boost_takes_over_and_the_weaker_one_runs_on_after_it():
     car = at_speed()
     car.give_boost(0.3, 1.0)
-    assert car.give_boost(0.4, 0.5)  # stronger
+    assert car.give_boost(0.4, 0.5)  # stronger: it takes over at once
     assert (car.boost, car.boost_time) == (0.4, 0.5)
+    drive(car, 0.6)  # the 0.4 is over; what is left of the 0.3 runs on
+    assert car.boost == 0.3 and car.boost_time == pytest.approx(0.4)
+    drive(car, 0.5)
+    assert (car.boost, car.boost_time) == (0.0, 0.0)
+
+
+def test_a_weaker_longer_boost_is_a_tail_that_never_weakens_or_shortens_anything():
+    car = at_speed()
+    car.give_boost(0.8, 0.5)
     assert car.give_boost(0.2, 2.0)  # weaker but outlasts it
-    assert (car.boost, car.boost_time) == (0.2, 2.0)
+    assert (car.boost, car.boost_time) == (0.8, 0.5)  # the 0.8 is untouched
+    drive(car, 0.5)
+    assert car.speed == pytest.approx(1.8 * TOP)
+    drive(car, 0.1)  # the 0.8 has ended: the tail carries on at 0.2
+    assert car.boost == 0.2 and car.boost_time == pytest.approx(1.4)
+    drive(car, 1.5)
+    assert (car.boost, car.boost_time) == (0.0, 0.0)
+    assert car.boosts == ()
+
+
+def test_the_boost_is_never_below_what_it_would_be_without_a_new_one():
+    with_new, without = at_speed(), at_speed()
+    for car in (with_new, without):
+        car.give_boost(0.8, 1.55)
+    with_new.give_boost(0.6, 2.0)  # a streak gate arriving during the CIRCUIT CHECK's boost
+    for _ in range(200):
+        drive(with_new, DT)
+        drive(without, DT)
+        assert with_new.boost >= without.boost
+        assert with_new.z >= without.z
 
 
 def test_a_weaker_shorter_boost_is_ignored():

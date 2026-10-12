@@ -91,7 +91,7 @@ BUMP_COOLDOWN = 0.3  # seconds before the same two cars can bump (and cue it) ag
 # The starting grid: two lanes, the rows of cars a little apart behind the line.
 GRID_LANES = (-0.4, 0.4)
 GRID_FIRST = 300.0  # the front row's distance behind the line
-GRID_GAP = 1000.0  # between the rows; the right lane is half of it further back
+GRID_GAP = 1000.0  # between the rows; a CPU in the right lane is half of it further back
 
 # --- The world and the camera (the look file's numbers) ---------------------------------
 # Lateral positions (car x, arch offsets, roadside sprites) are in road half-widths: -1 to 1

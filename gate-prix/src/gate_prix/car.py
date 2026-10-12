@@ -42,8 +42,7 @@ class Car:
         self.x = lane_x
         self.z = 0.0
         self.speed = 0.0
-        self.boost = 0.0  # extra top speed, as a fraction
-        self.boost_time = 0.0  # seconds left of it
+        self._boosts: list[list[float]] = []  # [strength, seconds left], each running down
         self.steer = 0.0  # the stick as last applied, for a lean
         self.drifting = False  # braking through a curve
         self.offroad = False
@@ -54,14 +53,35 @@ class Car:
     # --- Boosts -----------------------------------------------------------------------------
 
     def give_boost(self, strength: float, seconds: float) -> bool:
-        """Start a boost. It replaces the current one if it is stronger or lasts longer than
-        what is left of it; otherwise it is ignored. True when it took."""
+        """Start a boost (extra top speed as a fraction, for seconds).
+
+        Boosts never cut each other short. Each runs down on its own clock and the car goes
+        at the strongest one running: a stronger boost takes over at once, and a weaker one
+        that outlasts it carries on as a tail once it ends. So a new boost never lowers the
+        car's boost at any moment. It is ignored (False) when a running boost is at least
+        as strong and lasts at least as long, since it would add nothing."""
         if strength <= 0 or seconds <= 0:
             return False
-        if strength > self.boost or seconds > self.boost_time:
-            self.boost, self.boost_time = strength, seconds
-            return True
-        return False
+        if any(s >= strength and t >= seconds for s, t in self._boosts):
+            return False
+        self._boosts = [[s, t] for s, t in self._boosts if s > strength or t > seconds]
+        self._boosts.append([strength, seconds])
+        return True
+
+    @property
+    def boost(self) -> float:
+        """The extra top speed now, as a fraction: the strongest running boost's."""
+        return max((s for s, _ in self._boosts), default=0.0)
+
+    @property
+    def boost_time(self) -> float:
+        """Seconds left at the present strength (a weaker tail may follow)."""
+        return max((t for s, t in self._boosts if s == self.boost), default=0.0)
+
+    @property
+    def boosts(self) -> tuple[tuple[float, float], ...]:
+        """Every running boost, as (strength, seconds left)."""
+        return tuple((s, t) for s, t in self._boosts)
 
     def top_speed(self) -> float:
         """The speed the car accelerates (or coasts) to where it is now."""
@@ -85,10 +105,10 @@ class Car:
         steer = _clamp(steer, -1.0, 1.0)
         brake = _clamp(brake, 0.0, 1.0)
         self.prev_z, self.prev_x = self.z, self.x
-        if self.boost_time > 0:
-            self.boost_time -= dt
-            if self.boost_time <= 0:
-                self.boost = self.boost_time = 0.0
+        if self._boosts:
+            for b in self._boosts:
+                b[1] -= dt
+            self._boosts = [b for b in self._boosts if b[1] > 0]
         self.offroad = abs(self.x) > 1.0
         top = self.top_speed()
         if self.speed > top:

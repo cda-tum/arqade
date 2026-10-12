@@ -33,10 +33,9 @@ def lap(boost: float = 0.0, lookahead: float = 600.0, stick: float = 1.0):
     fridge = track.fridge()
     car = Car("p1", "p1", 0.0)
     car.speed = config.TOP_SPEED * (1 + boost)
+    car.give_boost(boost, 1e9)
     stats = {}
     while car.z < fridge.lap_length():
-        if boost:
-            car.boost, car.boost_time = boost, 99.0
         seg = fridge.segment_at(car.z)
         steer, brake = aim(car, fridge.segment_at(car.z + lookahead).line, seg)
         steer = max(-stick, min(stick, steer))
