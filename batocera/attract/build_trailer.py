@@ -3,9 +3,12 @@
     launcher/.venv/bin/python batocera/attract/build_trailer.py
     launcher/.venv/bin/python batocera/attract/build_trailer.py --audio-only   # remix, keep the picture
     launcher/.venv/bin/python batocera/attract/build_trailer.py --short        # the ~20 s cut
+    launcher/.venv/bin/python batocera/attract/build_trailer.py --teaser       # opening, mosaic, logo
+    launcher/.venv/bin/python batocera/attract/build_trailer.py --tiles        # ...ending still on the mosaic
+    launcher/.venv/bin/python batocera/attract/build_trailer.py --minute       # ...or a minute of it, all running
 
 Writes trailer/arqade_trailer.mp4 (1920x1080, 30 fps, AAC stereo), or
-trailer/arqade_trailer_short.mp4, and a sheet with a frame of every shot
+trailer/arqade_trailer_short.mp4, arqade_teaser.mp4, arqade_tiles.mp4 or arqade_minute.mp4, and a sheet with a frame of every shot
 beside the folder.
 
 Nothing in it is new material:
@@ -152,17 +155,49 @@ WORKERS = 3
 SPIN_CROP = (200, 280, 1520, 520)  # where the logo turns in the 1920x1080 spin
 END_SPIN_FROM = 10  # the end card's turn starts here: the zoom before it sees the logo face on
 OUT_NAME = "arqade_trailer"
-# What --short changes: (TIMELINE, CELL_EVERY, END_SPIN_FROM, OUT_NAME).
-# END_SPIN_FROM 120 means no turn on the end card: the logo is face on.
+END_PARTNERS = True  # the end card's logo rises for the TUM and MQT logos
+MOSAIC_ZOOM = True  # the mosaic ends zooming into the logo (else it turns face on and holds)
+POWER_OFF = True  # the tube switches off at the end (not for a slide: it would end on black)
+MUSIC_LEAD = None  # beats from the start to MUSIC_END, if not outro_beat()
+MUSIC_CUT = True  # the music stops on MUSIC_END (reverse cymbal, crash, reverb); else it plays on
+# The opening's pixel zap straight into the mosaic, and the logo standing
+# still in the middle: no games on their own, no partner logos.
+TIMELINE_TEASER = [
+    (4, "intro", ()),
+    (6, "mosaic", TIMELINE_SHORT[-2][2]),
+    (4, "end", ()),
+]
+# The same opening into the mosaic, which then stands still, logo face on,
+# on the music's crash: a video for a slide, ending on a picture to stay on.
+TIMELINE_TILES = [
+    (4, "intro", ()),
+    (8, "mosaic", TIMELINE_SHORT[-2][2]),
+    (6, "hold", ()),
+]
+# The opening, then a minute of the mosaic with every game running and the
+# logo turning, for a slide's background. The clips are ~85 s long, so the
+# cells start early enough to play a minute. The mosaic comes in pieces (one
+# render worker each) that carry on from each other.
+MINUTE_CELLS = (("quantum_pong", 12.7), ("quantum_towers", 20.1), ("error_invaders", 13.6),
+                ("ion_surfer", 18.0), ("superconductor", 17.8), ("planck_time", 17.6),
+                ("gate_drop", 15.0), ("qurves", 17.5), ("overquqed", 13.2), ("brawl_ket", 21.9))
+TIMELINE_MINUTE = [(4, "intro", ())] + [(10, "mosaic", MINUTE_CELLS)] * 8 + [(3, "mosaic", MINUTE_CELLS)]
+# What --short, --teaser, --tiles and --minute change. END_SPIN_FROM 120 means no turn
+# on the end card: the logo is face on.
 EDITIONS = {
-    "full": (TIMELINE, 0.3, 10, "arqade_trailer"),
-    "short": (TIMELINE_SHORT, 0.2, 120, "arqade_trailer_short"),
+    "full": dict(TIMELINE=TIMELINE, CELL_EVERY=0.3, END_SPIN_FROM=10, OUT_NAME="arqade_trailer"),
+    "short": dict(TIMELINE=TIMELINE_SHORT, CELL_EVERY=0.2, END_SPIN_FROM=120, OUT_NAME="arqade_trailer_short"),
+    "teaser": dict(TIMELINE=TIMELINE_TEASER, CELL_EVERY=0.3, END_SPIN_FROM=120, END_PARTNERS=False,
+                   OUT_NAME="arqade_teaser"),
+    "tiles": dict(TIMELINE=TIMELINE_TILES, CELL_EVERY=0.3, END_SPIN_FROM=0, MOSAIC_ZOOM=False,
+                  POWER_OFF=False, OUT_NAME="arqade_tiles"),
+    "minute": dict(TIMELINE=TIMELINE_MINUTE, CELL_EVERY=0.3, END_SPIN_FROM=0, MOSAIC_ZOOM=False,
+                   POWER_OFF=False, MUSIC_LEAD=12, MUSIC_CUT=False, OUT_NAME="arqade_minute"),
 }
 
 
 def use(edition: str) -> None:
-    global TIMELINE, CELL_EVERY, END_SPIN_FROM, OUT_NAME
-    TIMELINE, CELL_EVERY, END_SPIN_FROM, OUT_NAME = EDITIONS[edition]
+    globals().update(EDITIONS[edition])
 END_LIFT = 0.08  # of the height: the logo rises to make room for the partner logos
 
 
@@ -178,12 +213,12 @@ def ease(t: float) -> float:
 def outro_beat() -> float:
     """Beats before the end card. Keep it whole: the trailer's beats line up
     with the music's only if the cut at MUSIC_END falls on a whole beat."""
-    return sum(beats for beats, kind, _ in TIMELINE if kind != "end")
+    return sum(beats for beats, kind, _ in TIMELINE if kind not in ("end", "hold"))
 
 
 def music_start() -> float:
     """Where in the track the trailer starts: its cut is at MUSIC_END."""
-    return MUSIC_END - outro_beat() * BEAT
+    return MUSIC_END - (outro_beat() if MUSIC_LEAD is None else MUSIC_LEAD) * BEAT
 
 
 @dataclass
@@ -382,35 +417,77 @@ class Painter:
             pygame.draw.rect(frame, BLUE, (left, h // 2 + full[1] // 2 + 22, round(full[0] * grow), 6))
             yield self.tube(frame)
 
-    def draw_mosaic(self, seg: Segment, cells: tuple):
-        """Ten games in a 4x3 grid around the turning logo, which takes the
-        two middle cells; then a zoom into the logo: the cells fade out while
-        the logo grows until it is exactly the size and turn of the end card's
-        first frame."""
+    @staticmethod
+    def mosaic_layout():
         w, h = SIZE
         gap = 20
         cw = (w - 5 * gap) // 4
         ch = cw * 9 // 16
         x0, y0 = (w - (4 * cw + 3 * gap)) // 2, (h - (3 * ch + 2 * gap)) // 2
         spots = [(0, 0), (1, 0), (2, 0), (3, 0), (3, 1), (3, 2), (2, 2), (1, 2), (0, 2), (0, 1)]  # clockwise
-        n = seg.last - seg.first
-        zoom_frames = frame_at(ZOOM_BEATS)
         logo_w = min(2 * cw + gap, round(ch * SPIN_CROP[2] / SPIN_CROP[3]))
+        return gap, cw, ch, x0, y0, spots, logo_w
+
+    def draw_hold(self, seg: Segment):
+        """The mosaic's last picture standing still, the logo turned face on,
+        and the music's credit coming up under it."""
+        w, h = SIZE
+        gap, cw, ch, x0, y0, spots, logo_w = self.mosaic_layout()
+        before = segments()[seg.index - 1]
+        frame = pygame.Surface(SIZE)
+        frame.fill((4, 5, 8))
+        last = (before.last - before.first - 1) / FPS
+        for (cx, cy), (rom, start) in zip(spots, before.args):
+            picture = next(reel.Frames(CLIPS / f"{rom}.mp4", (cw, ch), when(rom, start) + last).take(1))
+            frame.blit(picture, (x0 + cx * (cw + gap), y0 + cy * (ch + gap)))
+        logo = next(reel.Frames(reel.SPIN, (SPIN_CROP[2], SPIN_CROP[3]), crop=SPIN_CROP).take(1))
+        logo = pygame.transform.smoothscale(logo, (logo_w, round(logo_w * SPIN_CROP[3] / SPIN_CROP[2])))
+        frame.blit(logo, logo.get_rect(center=(w // 2, h // 2)), special_flags=pygame.BLEND_RGB_MAX)
+        credit = self.credit_font.render(MUSIC_CREDIT, False, (110, 116, 132))
+        credit_in = frame_at(1)
+        for i in range(seg.last - seg.first):
+            shown = frame.copy()
+            if i >= credit_in:
+                credit.set_alpha(min(255, round(255 * (i - credit_in) / (0.5 * FPS))))
+                shown.blit(credit, credit.get_rect(midbottom=(w // 2, h - round(h * 0.03))))
+            yield self.tube(shown)
+
+    def draw_mosaic(self, seg: Segment, cells: tuple):
+        """Ten games in a 4x3 grid around the turning logo, which takes the
+        two middle cells; then a zoom into the logo: the cells fade out while
+        the logo grows until it is exactly the size and turn of the end card's
+        first frame."""
+        w, h = SIZE
+        gap, cw, ch, x0, y0, spots, logo_w = self.mosaic_layout()
+        n = seg.last - seg.first
+        # Mosaics in a row are one mosaic in pieces: this one carries on
+        # `offset` frames in, and only the last zooms.
+        segs = segments()
+        first = seg
+        while first.index > 0 and segs[first.index - 1].kind == "mosaic":
+            first = segs[first.index - 1]
+        final = seg
+        while final.index + 1 < len(segs) and segs[final.index + 1].kind == "mosaic":
+            final = segs[final.index + 1]
+        offset, run = seg.first - first.first, final.last - first.first
+        zoom_frames = frame_at(ZOOM_BEATS) if MOSAIC_ZOOM and seg is final else 0
         zoom_to = SPIN_CROP[2] / logo_w  # the logo at the end card's size
-        streams = [reel.Frames(CLIPS / f"{rom}.mp4", (cw, ch), when(rom, start)).take(n) for rom, start in cells]
+        streams = [reel.Frames(CLIPS / f"{rom}.mp4", (cw, ch), when(rom, start) + offset / FPS).take(n)
+                   for rom, start in cells]
         # Full-size logo frames, phased so the last one is the frame before
         # the end card's first: the turn carries straight on across the cut.
         # (Skipped rather than seeked: a seek and a loop together would
         # restart every loop at the seek point.)
-        spin_from = (END_SPIN_FROM - n) % 120
+        spin_from = (END_SPIN_FROM - run + offset) % 120
         spin = reel.Frames(reel.SPIN, (SPIN_CROP[2], SPIN_CROP[3]), loop=True, crop=SPIN_CROP).take(spin_from + n)
         for _ in range(spin_from):
             next(spin)
         center = (w // 2, h // 2)
+        out_of_pixels = frame_at(UNPIXELATE_BEATS) if seg.index > 0 and TIMELINE[seg.index - 1][1] == "intro" else 0
         for i in range(n):
             frame = pygame.Surface(SIZE)
             frame.fill((4, 5, 8))
-            beat = i / (BEAT * FPS)
+            beat = (i + offset) / (BEAT * FPS)
             for k, ((cx, cy), stream) in enumerate(zip(spots, streams)):
                 picture = next(stream)
                 appear = CELL_EVERY * k
@@ -420,7 +497,7 @@ class Painter:
             logo = next(spin)
             z = 1.0
             into = i - (n - zoom_frames)
-            if into >= 0:
+            if zoom_frames and into >= 0:
                 e = ease((into + 1) / zoom_frames)
                 z = 1 + (zoom_to - 1) * e
                 self.black.set_alpha(round(255 * e))
@@ -431,6 +508,8 @@ class Painter:
             size = (round(logo_w * z), round(logo_w * z * SPIN_CROP[3] / SPIN_CROP[2]))
             logo = logo if size == logo.get_size() else pygame.transform.smoothscale(logo, size)
             frame.blit(logo, logo.get_rect(center=center), special_flags=pygame.BLEND_RGB_MAX)
+            if i < out_of_pixels:
+                frame = pixelate(frame, 96 ** (1 - (i + 1) / out_of_pixels))
             yield self.tube(frame)
 
     def draw_end(self, seg: Segment):
@@ -454,7 +533,7 @@ class Painter:
                 still = frame.copy() if i == turn_frames - 1 else still
             else:
                 frame = still.copy() if still is not None else pygame.Surface(SIZE)
-            lift = round(h * END_LIFT * ease((i - lift_from) / lift_frames))
+            lift = round(h * END_LIFT * ease((i - lift_from) / lift_frames)) if END_PARTNERS else 0
             if lift:
                 lifted = pygame.Surface(SIZE)
                 lifted.blit(frame, (0, -lift))
@@ -462,7 +541,7 @@ class Painter:
             if i >= logos_in:
                 alpha = min(255, round(255 * (i - logos_in) / (0.5 * FPS)))
                 x = (w - row_w) // 2
-                for k, img in enumerate(self.partners):
+                for k, img in enumerate(self.partners if END_PARTNERS else ()):
                     img.set_alpha(alpha)
                     frame.blit(img, img.get_rect(midleft=(x, round(h * 0.8))))
                     x += img.get_width() + 120
@@ -523,6 +602,8 @@ def render_segments(job: tuple[int, list[Segment], Path, int]) -> tuple[Path, li
             frames = painter.draw_intro(seg)
         elif kind == "panel":
             frames = painter.draw_panel(seg, args)
+        elif kind == "hold":
+            frames = painter.draw_hold(seg)
         else:
             frames = painter.draw_end(seg)
         n = seg.last - seg.first
@@ -530,7 +611,7 @@ def render_segments(job: tuple[int, list[Segment], Path, int]) -> tuple[Path, li
             f = seg.first + i
             if f < POWER_ON_FRAMES:
                 frame = power(frame, f, POWER_ON_FRAMES, on=True)
-            if f >= total_frames - POWER_OFF_FRAMES:
+            if POWER_OFF and f >= total_frames - POWER_OFF_FRAMES:
                 frame = power(frame, f - (total_frames - POWER_OFF_FRAMES), POWER_OFF_FRAMES, on=False)
             # Some segments are worth two looks: built up, and at the end.
             looks = {min(4, n - 1)} | ({n * 2 // 3} if kind in ("mosaic", "end", "intro", "panel") else set())
@@ -621,7 +702,7 @@ def music(total: float) -> np.ndarray:
     """The track from music_start() to MUSIC_END, filtered in under the intro,
     then cut on that beat with a reverse cymbal into a crash, and the last
     bars ringing on in a reverb tail under the end card."""
-    length = MUSIC_END - music_start()
+    length = MUSIC_END - music_start() if MUSIC_CUT else total
     raw = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-v", "error", "-ss", f"{music_start():.4f}",
                           "-i", str(MUSIC), "-t", f"{length + 0.05:.4f}", "-ac", "2", "-ar", str(RATE),
                           "-f", "s16le", "-"], capture_output=True, check=True).stdout
@@ -637,6 +718,8 @@ def music(total: float) -> np.ndarray:
 
     track = np.zeros((round(total * RATE), 2), np.float32)
     place(track, 0, dry, MUSIC_GAIN)
+    if not MUSIC_CUT:
+        return track
     # The last two bars ring on: their reverb, starting where they do.
     ring = round(8 * BEAT * RATE)
     tail = reverb(dry[-ring:] * MUSIC_GAIN, 6.0)
@@ -707,6 +790,13 @@ def soundtrack(segs: list[Segment], total: float) -> np.ndarray:
         place(sfx, at, piece, gains[rom])
     sfx = SFX_LIMIT * np.tanh(sfx / SFX_LIMIT)
     track += sfx * SFX_GAIN
+    if not POWER_OFF:  # no tube going off: the sound fades out with the picture
+        end = round(segs[-1].last / FPS * RATE)
+        fade_n = round(1.5 * RATE)
+        track[end - fade_n:end] *= np.linspace(1, 0, fade_n, dtype=np.float32)[:, None]
+        track[end:] = 0
+        peak = float(np.max(np.abs(track))) or 1.0
+        return track * min(1.0, 0.89 / peak)
     # The tube going off: a falling sine, and silence after it.
     off = (segs[-1].last - POWER_OFF_FRAMES) / FPS
     gone = round((off + POWER_OFF_FRAMES / FPS) * RATE)
@@ -752,7 +842,7 @@ def remix() -> None:
 
 
 def main() -> None:
-    use("short" if "--short" in sys.argv[1:] else "full")
+    use(next((e for e in ("short", "teaser", "tiles", "minute") if f"--{e}" in sys.argv[1:]), "full"))
     if "--audio-only" in sys.argv[1:]:
         remix()
         return
