@@ -19,16 +19,18 @@ from pathlib import Path
 from ion_surfer import game as GM
 
 SECONDS = 85.0
-SKIP = 0.5
+SKIP = 0.8  # menu, then the HOW TO PLAY card
+# The HOW TO PLAY card before the match adds 0.32 s (19 frames) in front of
+# the same footage, so these are the earlier capture's times plus 0.3.
 HIGHLIGHTS = [
-    34.0,  # past a stray ion: blue rides high over it, red low under it, photons
-    59.6,  # big swoops, blue in the air, photons to pick up
-    70.4,  # blue's curve heaves around a stray, laser beams behind
-    30.0,  # surfing past a loss hole towards a stray
-    13.1,  # blue sails over the blocks, red climbs out of an energy cap
-    65.1,  # through the laser beams, red thrown high
-    18.0,  # swooping curves between the blocks
-    78.4,  # late and fast: energy caps, a defect, a wall to climb
+    34.3,  # past a stray ion: blue rides high over it, red low under it, photons
+    59.9,  # big swoops, blue in the air, photons to pick up
+    70.7,  # blue's curve heaves around a stray, laser beams behind
+    30.3,  # surfing past a loss hole towards a stray
+    13.4,  # blue sails over the blocks, red climbs out of an energy cap
+    65.4,  # through the laser beams, red thrown high
+    18.3,  # swooping curves between the blocks
+    78.7,  # late and fast: energy caps, a defect, a wall to climb
 ]
 
 # The game would otherwise read (and in solo/co-op write) the real records in ~.
@@ -224,6 +226,11 @@ class Bot:
                 s.update(game, pads, wait)
             return
         pads.release_all()
+        if game.state == "tutorial":
+            # the HOW TO PLAY card: any button, once it takes presses
+            if game.tutorial.can_dismiss():
+                pads.tap(0, "a", 3)
+            return
         if t < self.next_menu:
             return
         self.next_menu = t + 0.3

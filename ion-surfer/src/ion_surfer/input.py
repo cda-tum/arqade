@@ -83,12 +83,30 @@ class Pad:
         self.src = {a: set() for a in self.ACTIONS}
         self.pressed = set()
         self.rep = {d: 0.0 for d in self.DIRS}
+        self.consumed = set()  # (action, source) used up until released, see consume_buttons
+
+    def consume_buttons(self):
+        """Every button or key held right now stops counting until it is
+        released, as if it had never been pressed. The stick is left alone
+        (it can't dismiss anything, so holding it is meant), and so are
+        Start and Select, so the quit combo still works with them held."""
+        for act, sources in self.src.items():
+            if act in ("start", "select"):
+                continue
+            for source in [s for s in sources if isinstance(s, tuple)]:
+                sources.discard(source)
+                self.consumed.add((act, source))
+        self.pressed.clear()
 
     def held(self, act):
         # .get, not [act]: an unknown action is "not held", never a crash.
         return bool(self.src.get(act))
 
     def set(self, act, source, on):
+        if (act, source) in self.consumed:
+            if not on:
+                self.consumed.discard((act, source))
+            return
         was = self.held(act)
         sources = self.src.setdefault(act, set())
         if on:
@@ -113,6 +131,7 @@ class Controls:
     def __init__(self):
         self.pads = [Pad(), Pad()]
         self.pause_key = False  # keyboard-only pause key (Esc) pressed this frame
+        self.any_button = False  # any joystick button (or, with the keyboard on, key) went down
         self.joys = {}  # instance id -> (joystick, pad index)
         self.keymap = {pi: {act: key_codes(names) for act, names in m.items()} for pi, m in KEYMAP.items()}
         self.pause_keys = key_codes(PAUSE_KEYS)
@@ -121,6 +140,11 @@ class Controls:
         for p in self.pads:
             p.pressed.clear()
         self.pause_key = False
+        self.any_button = False
+
+    def consume_buttons(self):
+        for p in self.pads:
+            p.consume_buttons()
 
     def any_pressed(self, act):
         return any(act in p.pressed for p in self.pads)
@@ -146,6 +170,7 @@ class Controls:
             if not _keyboard_enabled:
                 return
             on = e.type == pygame.KEYDOWN
+            self.any_button |= on
             if on and e.key in self.pause_keys:
                 self.pause_key = True
             for pi, m in self.keymap.items():
@@ -160,6 +185,9 @@ class Controls:
         elif e.type == pygame.JOYDEVICEREMOVED:
             self.joys.pop(e.instance_id, None)
         elif e.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP):
+            # any button at all, mapped or not, on any pad: the HOW TO PLAY
+            # card is dismissed with it
+            self.any_button |= e.type == pygame.JOYBUTTONDOWN
             pad = self._joy_pad(e)
             if pad is None:
                 return
