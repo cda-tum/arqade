@@ -459,6 +459,53 @@ through a menu item. That one is deliberately left as it is.
   let go, or the A that picked the item starts a new match on its first frame
   (Quantum Pong and Qlimbers do this).
 
+### QUIT on the title menu (all games must follow this)
+
+Playtesters (2026-10-12) asked for one obvious way out of every game. So
+every game's title or main menu has a `QUIT` row, the last row of its first
+page, which exits the process. That returns to the game list on the cabinet
+and to the launcher's menu on a PC. It uses the same exit path as
+Start + Select.
+
+- **A on QUIT quits at once**, with no confirmation step.
+- **Start never quits.** Start begins play from the title whatever row is
+  selected (see the button convention above), and B on the first page does
+  nothing.
+- The older quit routes stay: Start + Select, holding Select on the title,
+  and Esc without `--no-keyboard`.
+- Attract bots and title demos never pick QUIT.
+
+### HOW TO PLAY card before every match (all games must follow this)
+
+Also from the 2026-10-12 feedback: a visitor who walks up to a game should
+learn its controls and its goal in a few seconds, or be able to mash past
+them. Every game therefore shows a full-screen card after the match is set
+up (players, mode, map, …) and right before play or the countdown starts:
+
+- It is drawn in the **game's own look** (font, palette, sprites), not as a
+  generic overlay. It has a `HOW TO PLAY` heading, a 1–3 line **goal** in
+  plain words, an **animated demo** of the core mechanic drawn with the
+  game's own code, the **controls** (printed labels STICK/A/B/X/Y/L/R/START,
+  ideally as a small drawing of the `L X R / Y B A` cluster with the buttons
+  the game uses lit up, P1 and P2 shown separately if they differ), and a
+  blinking `PRESS ANY BUTTON TO START` at the bottom.
+- **Any button on either pad dismisses it, and the stick doesn't.** Presses
+  in the first ~0.3 s are ignored, so the A or Start that confirmed the menu
+  can't skip it unseen. After that, mashing gets past it at once. The press
+  that dismisses the card does nothing in the game.
+- It shows on every match started from the title, but not on an in-match
+  RESTART or on a rematch from the game-over screen.
+- Start + Select still quits from it, and the game's idle timeout keeps
+  running.
+- The attract bot has to press a button to get past it.
+
+Where the games stand (2026-10-12): all eleven games have the QUIT row and the
+card. The card lives in `<package>/tutorial.py`, except in Overquqed, where
+`tutorial.py` was already taken by the playable Training Day level and the
+card is `howto.py`. Each demo runs the game's own rules and draw code on a
+small scripted scene. Every game also has synthesized sound effects now (Ion
+Surfer was the last to get them, in `ion_surfer/sound.py`).
+
 ## Player colours: left is blue, right is red (a taste)
 
 The cabinet itself is coloured: the **left** pad's side (joystick 0, P1) is
