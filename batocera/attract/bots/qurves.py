@@ -19,17 +19,18 @@ and doesn't turn away from the next trail in its way, so a round lasts about
 from collections import deque
 
 from qurves import rules
-from qurves.match import MATCH_RESULT, ROUND, TITLE
+from qurves.match import MATCH_RESULT, ROUND, TITLE, TUTORIAL
 
 SECONDS = 90.0
-SKIP = 3.1
+SKIP = 3.65
 # 2 s windows, best first: all four players split into ghost copies, with
-# measurements (9.7); a full arena with a crash and a split (54.4); a split
-# and two crashes in a tangle (17.5); splits in round 3 (73.5); round 1's
-# full arena, a crash and a split (23.6); an X-gate jump and a crash (85.0);
-# a split copy boxed in and a crash (57.1); X-gate jumps and ghost trails
-# early in round 2 (38.3).
-HIGHLIGHTS = [9.7, 54.4, 17.5, 73.5, 23.6, 85.0, 57.1, 38.3]
+# measurements (10.25); a full arena with a crash and a split (54.95); a
+# split and two crashes in a tangle (18.05); splits in round 3 (74.05);
+# round 1's full arena, a crash and a split (24.15); an X-gate jump and a
+# crash (85.55); a split copy boxed in and a crash (57.65); X-gate jumps and
+# ghost trails early in round 2 (38.85). All 0.55 s later than before the
+# HOW TO PLAY card (TUTORIAL_WAIT); the match itself is frame for frame the same.
+HIGHLIGHTS = [10.25, 54.95, 18.05, 74.05, 24.15, 85.55, 57.65, 38.85]
 
 MODE = 4
 INPUTS = (None, (0, -1), (0, 1), (-1, 0), (1, 0))
@@ -37,6 +38,10 @@ INPUTS = (None, (0, -1), (0, 1), (-1, 0), (1, 0))
 SEATS = {"p1": (0, "stick"), "p2": (1, "stick"), "p3": (0, "pad"), "p4": (1, "pad")}
 # The face buttons sit like W A S D: X up, Y left, B down, A right.
 BUTTON = {(0, -1): "x", (-1, 0): "y", (0, 1): "b", (1, 0): "a"}
+# Dismiss HOW TO PLAY 33 frames after the title's press: a whole number of
+# the capture clock's 17/17/16 ms cycles, so every frame of the match gets the
+# same dt as before the card existed and HIGHLIGHTS only shift by 0.55 s.
+TUTORIAL_WAIT = 0.54
 POCKET = 200  # boxed into fewer cells than this: give up and crash soon
 
 
@@ -68,10 +73,15 @@ class Bot:
         if match.paused:  # never meant to happen; B resumes
             self.press("b", t)
         elif match.state == TITLE:
-            if match.mode != MODE:
+            if match.title_index != 0:  # never on QUIT: back up to the player count
+                self.pads.stick(0, 0.0, -1.0 if self.pads.frame % 2 else 0.0)
+            elif match.mode != MODE:
                 self.pads.stick(0, 1.0 if self.pads.frame % 2 else 0.0, 0.0)
             else:
                 self.press("a", t)
+        elif match.state == TUTORIAL and t - self.last_press > TUTORIAL_WAIT:
+            self.pads.tap(0, "a")  # HOW TO PLAY goes on any button, once its guard is over
+            self.last_press = t
         elif match.state == MATCH_RESULT:
             self.press("a", t)
 

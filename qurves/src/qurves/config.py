@@ -64,6 +64,7 @@ SHIELD_X = 3.0  # and after an X gate's jump
 
 # --- Match flow -------------------------------------------------------------------
 ROUNDS_TO_WIN = 3
+TUTORIAL_GUARD = 0.3  # seconds the HOW TO PLAY card ignores buttons (the press that opened it)
 COUNTDOWN = 3.0
 ROUND_RESULT_TIME = 2.0
 MATCH_RESULT_LOCK = 1.0  # seconds before the result screen takes input

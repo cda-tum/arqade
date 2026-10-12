@@ -31,12 +31,13 @@ EFFECTS = {
     "teleport": (400, 2200, 0.16, 0.15),
     "shield": (700, 1400, 0.22, 0.0),
     "blip": (880, 880, 0.05, 0.0),
+    "confirm": (660, 1320, 0.12, 0.0),
     "round": (520, 780, 0.30, 0.0),
     "match": (520, 1040, 0.60, 0.0),
 }
 
-_CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "pause": "beep", "round_won": "round", "draw": "round",
-               "match_won": "match"}
+_CUE_SOUNDS = {"beep": "beep", "go": "go", "blip": "blip", "start": "confirm", "ready": "confirm", "pause": "beep",
+               "round_won": "round", "draw": "round", "match_won": "match"}
 
 
 def sweep_samples(

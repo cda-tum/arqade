@@ -15,14 +15,26 @@ def run(mt, seconds, inp=None, dt=1 / 60):
 
 
 def confirm():
-    return FrameInput(confirm=True, activity=True)
+    return FrameInput(confirm=True, pick=True, activity=True)
 
 
-def started(mode=2):
+def any_button():
+    return FrameInput(any_button=True, activity=True)
+
+
+def at_tutorial(mode=2):
     mt = Match(random.Random(0))
     if mode == 4:
         mt.update(1 / 60, FrameInput(nav=RIGHT, activity=True))
     mt.update(1 / 60, confirm())
+    assert mt.state == m.TUTORIAL
+    return mt
+
+
+def started(mode=2):
+    mt = at_tutorial(mode)
+    run(mt, config.TUTORIAL_GUARD)
+    mt.update(1 / 60, any_button())
     return mt
 
 
@@ -92,10 +104,11 @@ def test_confirm_on_the_title_starts_a_countdown_with_a_fresh_round():
 
 
 def test_the_countdown_beeps_three_times_then_goes():
-    mt = Match(random.Random(0))
-    events = mt.update(1 / 60, confirm())
+    mt = at_tutorial()
+    run(mt, config.TUTORIAL_GUARD)
+    events = mt.update(1 / 60, any_button())
     events += run(mt, config.COUNTDOWN + 0.05)
-    assert [e.kind for e in events if isinstance(e, Cue)] == ["beep", "beep", "beep", "go"]
+    assert [e.kind for e in events if isinstance(e, Cue)] == ["ready", "beep", "beep", "beep", "go"]
     assert mt.state == m.ROUND
 
 
@@ -159,6 +172,13 @@ def test_the_match_result_waits_a_moment_then_offers_a_rematch():
     assert mt.state == m.COUNTDOWN and mt.scores == {"p1": 0, "p2": 0}
 
 
+def test_a_rematch_skips_the_how_to_play_card():
+    mt = won_match()
+    run(mt, config.MATCH_RESULT_LOCK)
+    mt.update(1 / 60, confirm())
+    assert mt.state == m.COUNTDOWN
+
+
 def test_b_on_the_match_result_goes_back_to_the_title():
     mt = won_match()
     run(mt, config.MATCH_RESULT_LOCK)
@@ -204,3 +224,106 @@ def test_a_picks_resume_or_quit_to_title():
     assert m.PAUSE_ITEMS[mt.pause_index] == "QUIT TO TITLE"
     mt.update(1 / 60, FrameInput(pick=True, confirm=True, activity=True))
     assert mt.state == m.TITLE and not mt.paused and mt.round is None
+
+
+# --- the title menu ----------------------------------------------------------------------
+
+
+def test_the_title_menu_ends_with_quit():
+    assert m.TITLE_ITEMS[-1] == "QUIT"
+
+
+def test_stick_up_and_down_moves_between_the_title_rows():
+    mt = Match(random.Random(0))
+    events = mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    assert m.TITLE_ITEMS[mt.title_index] == "QUIT" and Cue("blip") in events
+    mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    assert mt.title_index == 0
+    mt.update(1 / 60, FrameInput(nav=UP, activity=True))
+    assert m.TITLE_ITEMS[mt.title_index] == "QUIT"
+
+
+def test_on_the_quit_row_the_stick_does_not_change_the_player_count():
+    mt = Match(random.Random(0))
+    mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    mt.update(1 / 60, FrameInput(nav=RIGHT, activity=True))
+    assert mt.mode == 2
+
+
+def test_a_on_quit_quits_at_once():
+    mt = Match(random.Random(0))
+    mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    mt.update(1 / 60, confirm())
+    assert mt.quit_requested and mt.state == m.TITLE
+
+
+def test_start_always_starts_even_on_quit():
+    mt = Match(random.Random(0))
+    mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    events = mt.update(1 / 60, FrameInput(pause=True, confirm=True, activity=True))
+    assert mt.state == m.TUTORIAL and not mt.quit_requested and Cue("start") in events
+
+
+def test_b_on_the_title_does_nothing():
+    mt = Match(random.Random(0))
+    mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    mt.update(1 / 60, FrameInput(back=True, activity=True))
+    assert mt.state == m.TITLE and not mt.quit_requested
+
+
+def test_back_on_the_title_the_first_row_is_selected_again():
+    mt = in_round()
+    mt.title_index = 1
+    mt.update(1 / 60, FrameInput(pause=True, activity=True))
+    mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    mt.update(1 / 60, FrameInput(pick=True, confirm=True, activity=True))
+    assert mt.state == m.TITLE and mt.title_index == 0
+
+
+# --- how to play -------------------------------------------------------------------------
+
+
+def test_a_match_from_the_title_opens_on_how_to_play():
+    mt = at_tutorial(4)
+    assert mt.round is None and mt.mode == 4
+    assert mt.scores == {"p1": 0, "p2": 0, "p3": 0, "p4": 0}
+
+
+def test_how_to_play_ignores_buttons_at_first():
+    mt = at_tutorial()
+    mt.update(1 / 60, any_button())  # the press that opened it, bouncing
+    run(mt, config.TUTORIAL_GUARD - 0.1)
+    mt.update(1 / 60, any_button())
+    assert mt.state == m.TUTORIAL
+
+
+def test_any_button_then_dismisses_it_and_the_countdown_starts():
+    mt = at_tutorial()
+    run(mt, config.TUTORIAL_GUARD)
+    events = mt.update(1 / 60, any_button())
+    assert mt.state == m.COUNTDOWN and mt.round is not None
+    assert Cue("ready") in events
+
+
+def test_the_stick_does_not_dismiss_how_to_play():
+    mt = at_tutorial()
+    run(mt, 1.0)
+    for nav in (UP, DOWN, LEFT, RIGHT):
+        mt.update(1 / 60, FrameInput(nav=nav, stick=(nav, nav), activity=True))
+    assert mt.state == m.TUTORIAL and mt.mode == 2
+
+
+def test_how_to_play_times_out_to_the_title():
+    mt = at_tutorial()
+    run(mt, config.IDLE_TIMEOUT + 1.0, dt=0.5)
+    assert mt.state == m.TITLE
+
+
+def test_quit_to_title_then_a_new_match_shows_how_to_play_again():
+    mt = in_round()
+    mt.update(1 / 60, FrameInput(pause=True, activity=True))
+    mt.update(1 / 60, FrameInput(nav=DOWN, activity=True))
+    mt.update(1 / 60, FrameInput(pick=True, confirm=True, activity=True))
+    assert mt.state == m.TITLE
+    mt.update(1 / 60, confirm())
+    assert mt.state == m.TUTORIAL

@@ -41,6 +41,14 @@ class Shooter:
             self.frame(script(t) if script else FrameInput(activity=True))
             t += DT
 
+    def start(self, tutorial_shot: str | None = None) -> None:
+        """Start a match from the title: HOW TO PLAY, then any button."""
+        self.frame(FrameInput(confirm=True, activity=True))
+        self.run(2.4)  # far enough into the demo for the split
+        if tutorial_shot:
+            self.shot(tutorial_shot)
+        self.frame(FrameInput(any_button=True, activity=True))
+
     def shot(self, name: str) -> None:
         size = (config.INTERNAL_WIDTH * 2, config.INTERNAL_HEIGHT * 2)
         pygame.image.save(pygame.transform.scale(self.surface, size), os.path.join(self.out_dir, name))
@@ -58,7 +66,7 @@ def two_players(out_dir: str) -> None:
     sh = Shooter(out_dir, 2, seed=7)
     sh.run(1.2)
     sh.shot("1-title.png")
-    sh.frame(FrameInput(confirm=True, activity=True))
+    sh.start("1b-how-to-play.png")
     sh.run(0.4)
     sh.shot("2-countdown.png")
     sh.run(config.COUNTDOWN)
@@ -92,7 +100,7 @@ def four_players(out_dir: str) -> None:
     sh = Shooter(out_dir, 4, seed=3)
     sh.run(0.6)
     sh.shot("7-title-4p.png")
-    sh.frame(FrameInput(confirm=True, activity=True))
+    sh.start("7b-how-to-play-4p.png")
     sh.run(config.COUNTDOWN + 0.1)
     sh.match.round.gates.clear()
     for player, kinds in (("p1", "H"), ("p2", "HZ"), ("p3", "X"), ("p4", "H")):
