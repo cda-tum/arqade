@@ -1,6 +1,6 @@
 """Scene machine and main loop.
 
-Title -> Join -> LevelSelect -> Round -> Results -> Title, plus the input test
+Title -> Join -> LevelSelect -> HowToPlay -> Round -> Results -> LevelSelect, plus the input test
 (F1 on the title). Start + Select on one pad quits from anywhere; holding
 Select on the title quits too. Any screen left idle for IDLE_TIMEOUT falls
 back to the title, so the cabinet resets itself for the next visitors.

@@ -1,7 +1,8 @@
 """Overquqed: two chefs cook real co-op rounds, driven by the game's own kitchen AI.
 
-The menus are walked with the pads like two players would: A on the title,
-P2 joins, then a kitchen from the level select. In a round the game's own
+The menus are walked with the pads like two players would: Start on the
+title, P2 joins, a kitchen from the level select, then A on the HOW TO PLAY
+card as soon as it takes a press. In a round the game's own
 kitchen bot (overquqed.bot.Bot, the one its attract demo uses) plans the
 orders and returns one ChefInput per chef, and this bot presses exactly that
 on the two pads: the stick to walk, A to pick up and put down, B tapped or
@@ -16,6 +17,7 @@ menu (Start, up, A: a few frames on screen).
 """
 
 from overquqed.bot import Bot as KitchenBot
+from overquqed.howto import DISMISS_GUARD
 from overquqed.levels import LEVELS
 from overquqed.stations import TAP_GATES
 from overquqed.world import IDLE
@@ -24,16 +26,16 @@ from overquqed.world import IDLE
 KITCHENS = ((3, 42.0), (1, None))  # Cosmic Cafe, then the Superconducting Snack Bar
 
 SECONDS = 85.0
-SKIP = 0.6  # the Cosmic Cafe round starts at 0.6 s
+SKIP = 1.0  # the Cosmic Cafe round starts at 0.97 s, after the HOW TO PLAY card
 HIGHLIGHTS = [
-    21.2,  # Cosmic Cafe: both chefs on the two-chef Waffle Iron, ENTANGLED!
-    37.2,  # Cosmic Cafe: a Bell tray carried to the pass and served
-    29.9,  # Cosmic Cafe: cosmic-ray warning, then the hit
-    55.0,  # Snack Bar: |-> carried over and served, receipt slides in
-    5.0,   # Cosmic Cafe: Hadamard Blender, |-> served
-    51.0,  # Snack Bar: Pauli-X Flipper, bowl on to the Blender
-    77.3,  # Snack Bar: |+> served
-    13.2,  # Cosmic Cafe: blending |+> for the Waffle Iron
+    21.55,  # Cosmic Cafe: both chefs on the two-chef Waffle Iron, ENTANGLED!
+    37.55,  # Cosmic Cafe: a Bell tray carried to the pass and served
+    30.25,  # Cosmic Cafe: cosmic-ray warning, then the hit
+    55.7,   # Snack Bar: |-> carried over and served, receipt slides in
+    5.35,   # Cosmic Cafe: Hadamard Blender, |-> served
+    51.7,   # Snack Bar: Pauli-X Flipper, bowl on to the Blender
+    78.0,   # Snack Bar: |+> served
+    13.55,  # Cosmic Cafe: blending |+> for the Waffle Iron
 ]
 
 DT = 1 / 60
@@ -61,7 +63,10 @@ class Bot:
             return
         self.wait = MENU_GAP
         if name == "TitleScene":
-            self.pads.hold(0, "a")
+            self.pads.hold(0, "start")  # Start plays whatever is selected: never QUIT
+        elif name == "HowToPlayScene":
+            if scene.t > DISMISS_GUARD:
+                self.pads.hold(0, "a")  # any button starts the round
         elif name == "JoinScene":
             self.pads.hold(0 if 1 in scene.joined else 1, "a")
         elif name == "LevelSelectScene":

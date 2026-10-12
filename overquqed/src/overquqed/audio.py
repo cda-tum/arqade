@@ -193,6 +193,7 @@ def build_sfx() -> dict[str, list[int]]:
     return {
         "blip": tone(880, 0.04, 0.25, "square"),
         "confirm": _arp([c("C5"), c("G5")], 0.05, 0.3),
+        "back": _arp([c("G5"), c("C5")], 0.045, 0.22),
         "nope": tone(140, 0.09, 0.3, "square", decay=10),
         "pick": tone(620, 0.05, 0.25, "triangle", slide=1.5),
         "put": tone(420, 0.05, 0.25, "triangle", slide=0.7),
