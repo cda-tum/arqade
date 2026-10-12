@@ -83,6 +83,37 @@ def test_player_colours_left_blue_right_red():
     assert b1 > r1 and r2 > b2
 
 
+def _hue(rgb):
+    import colorsys
+
+    h, s, v = colorsys.rgb_to_hsv(*(c / 255 for c in rgb))
+    return h * 360, s, v
+
+
+def test_the_cars_take_their_colours_from_one_place():
+    for p in ("p1", "p2"):
+        assert config.CAR_COLORS[p] == config.PLAYER_COLORS[p]
+    assert set(config.CAR_COLORS) == {"p1", "p2", *config.CPU_COLORS}
+    assert len(config.CPU_COLORS) == config.CARS - 1  # the 1P field; 2P races use the first 4
+
+
+def test_cpu_colours_are_clear_of_the_players_the_gates_and_each_other():
+    def dist(a, b):
+        return min(abs(a - b), 360 - abs(a - b))
+
+    hues = []
+    for name, rgb in config.CPU_COLORS.items():
+        h, s, v = _hue(rgb)
+        if s < 0.3:
+            continue  # white and graphite: not hues at all
+        hues.append((name, h))
+        for other in (*config.PLAYER_COLORS.values(), *config.GATE_COLORS.values()):
+            assert dist(h, _hue(other)[0]) >= 20, name
+    for i, (a, ha) in enumerate(hues):
+        for b, hb in hues[i + 1:]:
+            assert dist(ha, hb) >= 40, (a, b)
+
+
 def test_idle_timeout_is_a_minute():
     assert config.IDLE_TIMEOUT == 60.0
 

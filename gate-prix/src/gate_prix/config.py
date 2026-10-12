@@ -163,19 +163,31 @@ CAR_WIDTH = 0.32  # in road half-widths, as the look's own car beside its road
 
 # --- Flow ------------------------------------------------------------------------------
 ATTRACT_DELAY = 3.0  # untouched seconds on the title before the CPU racers play
-IDLE_TIMEOUT = 60.0
+ATTRACT_SKILL = 0.725  # the bots driving P1's and P2's cars in the attract race
+IDLE_TIMEOUT = 60.0  # untouched seconds anywhere but the title: back to the title, 1 PLAYER
+COUNTDOWN = 3.0  # 3, 2, 1 a second each, then GO
+GO_TIME = 0.8  # GO! stays up this long into the race
+AUTOPILOT_SKILL = 0.725  # a player's car after the line is driven on by a bot
+FINISH_GRACE = 40.0  # 2P: once one player has finished, the other has this long to
+FINISH_DELAY = 3.0  # the finish banner, before the result screen
+RESULT_LOCK = 1.0  # the result screen ignores the buttons this long (a mashed A)
+CHECK_BANNER = 4.0  # the CIRCUIT CHECK banner's seconds
+LAP_BANNER = 1.6
+PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 
 # --- Colours ---------------------------------------------------------------------------
-PLAYER_COLORS = {"p1": (64, 136, 248), "p2": (240, 64, 72)}  # left/top blue, right/bottom red
-CAR_COLORS = {  # P1 blue and P2 red as in the look; the CPU racers never blue or red
-    "p1": (80, 170, 255),
-    "p2": (255, 80, 90),
-    "green": (100, 210, 130),
-    "silver": (220, 222, 232),
-    "gold": (240, 196, 64),
-    "violet": (168, 112, 232),
-    "lime": (176, 226, 64),
+# The one source of the players' colours (the look's): P1 blue on top, P2 red below.
+PLAYER_COLORS = {"p1": (80, 170, 255), "p2": (255, 80, 90)}
+# The CPU racers, best first: never blue or red, and clear of the gates' hues (H gold, X red,
+# Z blue, Y purple) and of each other. Two of them are not hues at all.
+CPU_COLORS = {
+    "green": (70, 200, 50),
+    "white": (236, 238, 246),
+    "orange": (255, 112, 24),
+    "teal": (30, 196, 178),
+    "graphite": (84, 88, 104),
 }
+CAR_COLORS = {**PLAYER_COLORS, **CPU_COLORS}
 GATE_COLORS = {  # shared with the other games
     "H": (248, 192, 40),
     "X": (232, 64, 72),
@@ -202,9 +214,9 @@ REPEAT_INTERVAL = 0.11
 KEYMAP = {
     # ESDF, not WASD: P1's dev keys must avoid the pad's own letters l, x, r, b, y, a.
     "p1": {"left": ["K_s"], "right": ["K_f"], "up": ["K_e"], "down": ["K_d"], "a": ["K_q"],
-           "back": ["K_w"], "start": ["K_1"]},
+           "back": ["K_w"], "start": ["K_1"], "select": ["K_3"]},
     "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"],
-           "a": ["K_PERIOD"], "back": ["K_COMMA"], "start": ["K_2"]},
+           "a": ["K_PERIOD"], "back": ["K_COMMA"], "start": ["K_2"], "select": ["K_4"]},
 }
 
 # --- Sound -----------------------------------------------------------------------------

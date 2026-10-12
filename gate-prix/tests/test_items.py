@@ -84,9 +84,12 @@ def test_a_box_gives_nothing_new_while_an_item_is_held_but_still_breaks():
     race = Race(seed=1, players=1)
     p1 = race.racer("p1")
     p1.item = "QEC"
-    assert not [e for e in through_box(race, p1) if e.kind == "box"]
+    events = through_box(race, p1)
+    assert not [e for e in events if e.kind == "box"]
     assert p1.item == "QEC"
     assert not race.box_present(0, 0)
+    # it is still cued, for the sound and the HUD: the box broke, the item is still held
+    assert [e for e in events if e.kind == "box_full"] == [Event("box_full", "p1", "QEC")]
 
 
 def test_missing_every_box_gives_nothing():
@@ -164,8 +167,8 @@ def test_a_box_rolls_with_the_drivers_place(monkeypatch):
     green, p1 = race.racer("green"), race.racer("p1")
     through_box(race, green, lap=1)  # far ahead of everyone
     p1.car.z = green.car.z - 30_000  # still behind the others
-    through_box(race, race.racer("lime"), k=1, j=2)
-    assert seen[0] == 1 and seen[1] == race.racer("lime").place
+    through_box(race, race.racer("graphite"), k=1, j=2)
+    assert seen[0] == 1 and seen[1] == race.racer("graphite").place
 
 
 # --- Using items ---------------------------------------------------------------------------
@@ -310,6 +313,37 @@ def test_the_clone_ends_at_the_finish():
     p1.car.speed = TOP
     events = race.update(DT, {})
     assert Event("split_end", "p1") in events and not p1.split
+
+
+def finish(race, racer):
+    """Put a car just short of the line on its last lap and step a frame."""
+    racer.next_row = len(race.rows)
+    racer.next_box = len(race.box_lines)
+    racer.laps = config.LAPS - 1
+    racer.car.z = config.LAPS * race.lap_length - 10.0
+    racer.car.speed = TOP
+    return race.update(DT, {})
+
+
+def test_a_finished_car_cannot_use_an_item():
+    race = Race(seed=3, players=1, finish_all=True)
+    p1 = race.racer("p1")
+    finish(race, p1)
+    assert p1.finished
+    for item in config.ITEMS:
+        p1.item = item
+        p1.circuit.results[0] = False  # something for a QEC to repair
+        events = race.update(DT, {"p1": USE})
+        assert not [e for e in events if e.kind == "item"]
+        assert not p1.split and p1.circuit.results[0] is False
+
+
+def test_an_item_held_at_the_finish_is_dropped():
+    race = Race(seed=3, players=1, finish_all=True)
+    p1 = race.racer("p1")
+    p1.item = "QEC"
+    finish(race, p1)
+    assert p1.finished and p1.item is None
 
 
 # --- Pace and racing to the end ------------------------------------------------------------

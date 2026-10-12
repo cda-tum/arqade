@@ -99,12 +99,12 @@ def test_draw_reports_sprites_far_to_near_with_roadside_and_objects():
     view = RoadView((0, 270, 960, 270))
     out = [("stale", 0, 0, 0, 0)]
     objects = [(5000.0, 0.3, "arch:H:lit"), (9000.0, -0.5, "box"), (2000.0, 0.0, "car:green"),
-               (-500.0, 0.0, "car:gold")]  # behind the camera: not drawn
+               (-500.0, 0.0, "car:orange")]  # behind the camera: not drawn
     view.draw(surface, fridge, 0.0, 0.0, out, objects)
     kinds = [s[0] for s in out]
     assert "stale" not in kinds
     assert {"arch:H:lit", "box", "car:green", "coax"} <= set(kinds)
-    assert "car:gold" not in kinds
+    assert "car:orange" not in kinds
     scales = [s[3] for s in out]
     assert scales == sorted(scales)  # far (small) to near (big)
     view.draw_sprites(surface, out)
@@ -156,7 +156,18 @@ def test_the_sprite_cache_holds_every_kind_at_every_size(cache):
     for kind, images in cache.images.items():
         assert len(images) == config.SPRITE_SIZES
         heights = [img.get_height() for img, _, _ in images]
-        assert heights == sorted(heights) and heights[-1] > 4 * heights[0], kind
+        # within a pixel: far away an arch's badge keeps a minimum size, so it barely grows
+        assert all(b >= a - 1 for a, b in zip(heights, heights[1:])), kind
+        assert heights[-1] > 4 * heights[0], kind
+
+
+def test_a_gate_letter_keeps_a_minimum_size_far_away(cache):
+    """A second ahead an arch is ~12 px high: its badge must still be big enough to read."""
+    for kind in ("arch:H", "arch:H:lit"):
+        img, ax, ay = cache.images[kind][0]
+        r = config.ARCH_HALF_WIDTH * cache.scales[0]
+        # the badge (min letter 10 px, badge 1.6x that) stands above the crown
+        assert ay - r >= 0.55 * 1.6 * sprites.BADGE_LETTER_MIN - 1, kind
 
 
 def test_the_sprite_cache_builds_once(cache, monkeypatch):

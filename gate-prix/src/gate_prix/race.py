@@ -13,6 +13,7 @@ rows each car crossed, counts laps, and returns the frame's cues as `Event`s:
 | "finish" | the car's finishing place |
 | "bump" | the other car (each bump cues both cars) |
 | "box" | the item a box gave ("SPLIT", "QEC"), or None for an empty box |
+| "box_full" | the item still held: the box broke but gave nothing new |
 | "item" | the item the car has just used |
 | "split_end" | None: the car's clone is gone |
 
@@ -34,7 +35,8 @@ Rules decided here:
   seconds later. A car crossing a box line takes the box within BOX_REACH of its x (the x
   is interpolated, as for the rows; a line the car was put past without driving through it
   doesn't count). The box breaks even when the car already holds an item;
-  it only gives one (rolled by the car's place, `ITEM_ODDS`) to a car holding none.
+  it only gives one (rolled by the car's place, `ITEM_ODDS`) to a car holding none, and
+  cues "box_full" for a car that already holds one.
 - `Controls.item` uses the held item, before the frame's rows are crossed:
   - SPLIT: for the next SPLIT_ROWS rows a clone drives at -x. A row is right if the car or
     the clone takes the right arch; otherwise wrong if either takes a wrong one (the car's
@@ -42,6 +44,7 @@ Rules decided here:
     ends after its rows, or at the finish.
   - QEC: `Circuit.qec()`, repairing the most recent mistake (not the streak). With no
     mistake it does nothing, but the item is still used.
+  A car that has finished can't use an item: an item still held at the line is dropped.
 """
 
 from __future__ import annotations
@@ -53,7 +56,7 @@ from typing import NamedTuple
 from gate_prix import circuit, config, track
 from gate_prix.car import Car, Controls, bump
 
-CPU_COLOURS = ("green", "silver", "gold", "violet", "lime")
+CPU_COLOURS = tuple(config.CPU_COLORS)
 
 
 class Event(NamedTuple):
@@ -209,7 +212,7 @@ class Race:
         idle = Controls()
         for r in self.racers:
             c = controls.get(r.car.id, idle)
-            if c.item and r.item is not None:
+            if c.item and r.item is not None and not r.finished:
                 self._use(r, events)
             r.car.update(dt, c.steer, c.brake, self.track.segment_at(r.car.z), c.pace)
         self._bumps(dt, events)
@@ -245,6 +248,8 @@ class Race:
                     if r.item is None:
                         r.item = self.roll_item(r.place)
                         events.append(Event("box", car.id, r.item))
+                    else:
+                        events.append(Event("box_full", car.id, r.item))
                     break
 
     def _bumps(self, dt: float, events: list[Event]) -> None:
@@ -290,6 +295,7 @@ class Race:
                 r.finish_time = self.time
                 self.finish_order.append(car.id)
                 events.append(Event("finish", car.id, len(self.finish_order)))
+                r.item = None  # no item after the line: a QEC would change the results
                 if r.split_rows > 0:
                     r.split_rows = 0
                     events.append(Event("split_end", car.id))

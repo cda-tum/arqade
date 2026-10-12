@@ -268,20 +268,20 @@ def test_two_bots_share_one_arch_side_by_side():
         if k is not None:
             break
     row = race.rows[k]
-    green, silver = race.racer("green"), race.racer("silver")
-    bots = {"green": Bot("green", 1.0, seed, offset=-0.3), "silver": Bot("silver", 1.0, seed, offset=0.3)}
+    green, white = race.racer("green"), race.racer("white")
+    bots = {"green": Bot("green", 1.0, seed, offset=-0.3), "white": Bot("white", 1.0, seed, offset=0.3)}
     for i, r in enumerate(race.racers):
         _skip_rows(r, k)
         if r.car.id not in bots:
             r.car.z = -50_000.0 - 1000.0 * i
     z = row.z - 2.0 * TOP
-    for r, x in ((green, -0.3), (silver, 0.3)):
+    for r, x in ((green, -0.3), (white, 0.3)):
         r.car.z, r.car.x, r.car.speed = z, x, TOP
     events = []
-    while green.next_row == k or silver.next_row == k:
+    while green.next_row == k or white.next_row == k:
         events += race.update(DT, bot.drive(race, bots))
     gates = [(e.kind, e.car) for e in events if e.kind in ("right", "wrong", "miss")]
-    assert sorted(gates) == [("right", "green"), ("right", "silver")]
+    assert sorted(gates) == [("right", "green"), ("right", "white")]
     assert not [e for e in events if e.kind == "bump"]
 
 

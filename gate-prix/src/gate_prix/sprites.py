@@ -38,6 +38,9 @@ _FONTS: dict[int, pygame.font.Font] = {}
 def font(px: int) -> pygame.font.Font:
     """The bundled DejaVu Sans Condensed Bold at a pixel size (needs pygame.font.init())."""
     px = max(4, px)
+    if not pygame.font.get_init():  # after a pygame.quit(), every cached Font is dead
+        pygame.font.init()
+        _FONTS.clear()
     if px not in _FONTS:
         path = resources.files("gate_prix") / "assets" / "fonts" / "DejaVuSansCondensed-Bold.ttf"
         _FONTS[px] = pygame.font.Font(str(path), px)
@@ -141,14 +144,25 @@ def draw_standoff(surf, x, y, u):
     _circle(surf, (240, 220, 160), x, y - h, w * 0.8)
 
 
+BADGE_LETTER_MIN = 10  # px: a gate's letter never shrinks below this, so a row reads early
+ARCH_PAD = 16  # px around the arch's extents, for the badge and glow kept big at small sizes
+
+
 def draw_arch(surf, x, y, u, gate, lit):
     """A gate: a semicircular arch standing on the track, both feet on the road, a light
-    curtain under it and the gate's letter on a badge at its crown."""
+    curtain under it and the gate's letter on a badge at its crown.
+
+    Far away (a second ahead the arch is only ~12 px high) the badge and its letter keep a
+    minimum size and the lit arch's glow grows stronger, so the gate reads in time. All of
+    it is drawn once, into the cache: nothing here costs anything per frame."""
     col = config.GATE_COLORS[gate]
     r = config.ARCH_HALF_WIDTH * u  # its outer radius: the feet are 2r apart
     t = max(2.0, 0.16 * r)  # its thickness
+    # 0 when the arch is big on screen, 1 when it is far away and small (u is at SS x)
+    small = min(1.0, max(0.0, (44 * SS - r) / (32 * SS)))
     if lit:
-        _glow(surf, x, y - r * 0.55, r * 1.3, col, 110)
+        glow_r = max(r * 1.3, r * 1.3 + small * 10 * SS)
+        _glow(surf, x, y - r * 0.55, glow_r, col, round(110 + 90 * small))
     _ellipse(surf, (0, 0, 0, 110), x - r * 1.05, y - r * 0.05, r * 2.1, r * 0.14)
     # the light curtain: the upper half of the inner disc
     lay = _layer(surf)
@@ -164,10 +178,13 @@ def draw_arch(surf, x, y, u, gate, lit):
     for fx in (-1, 1):  # its feet on the road
         _rect(surf, mix(col, (20, 20, 30), 0.45), x + fx * (r - t / 2) - t * 0.65, y - t * 0.5,
               t * 1.3, t * 0.6, rad=2)
-    bw = 0.4267 * r  # the badge at the crown
+    letter = max(round(0.36 * r), BADGE_LETTER_MIN * SS)  # the badge at the crown
+    bw = max(0.4267 * r, letter * 1.6)
+    if lit and small:  # a white ring round the right gate's badge, far away
+        _circle(surf, WHITE, x, y - r, bw * 0.55 + small * 1.5 * SS)
     _circle(surf, (14, 16, 30), x, y - r, bw * 0.55)
     _circle(surf, col, x, y - r, bw * 0.48)
-    _text(surf, gate, max(6, round(0.36 * r)), WHITE, x, y - r + 1)
+    _text(surf, gate, letter, WHITE, x, y - r + 1)
 
 
 def draw_box(surf, x, y, u):
@@ -256,7 +273,7 @@ def render_sprite(kind: str, scale: float) -> tuple[pygame.Surface, int, int]:
     """One sprite at one scale: drawn at 2x, cropped, smoothscaled. Its surface and anchor."""
     draw, (left, top, right, bottom) = _KIND_TABLE[kind]
     u = scale * SS
-    pad = 4 * SS
+    pad = (ARCH_PAD if kind.startswith("arch:") else 4) * SS
     cw = math.ceil((right - left) * u) + 2 * pad
     ch = math.ceil((bottom - top) * u) + 2 * pad
     cx = math.ceil(-left * u) + pad

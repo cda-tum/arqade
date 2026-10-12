@@ -26,7 +26,7 @@ from gate_prix.road import RoadView
 from gate_prix.sprites import SpriteCache
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
-CPU = ("green", "silver", "gold", "violet")
+CPU = ("green", "white", "orange", "teal")
 
 
 def objects_for(fridge, statics, cams, frame: int):

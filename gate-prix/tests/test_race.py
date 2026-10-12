@@ -91,10 +91,10 @@ def cross(race, racer, x, dt=DT):
 def test_a_race_has_six_cars_players_first():
     race = Race(seed=1, players=2)
     ids = [r.car.id for r in race.racers]
-    assert ids == ["p1", "p2", "green", "silver", "gold", "violet"]
+    assert ids == ["p1", "p2", "green", "white", "orange", "teal"]
     assert [r.player for r in race.racers] == [True, True, False, False, False, False]
     race = Race(seed=1, players=1)
-    assert [r.car.id for r in race.racers] == ["p1", "green", "silver", "gold", "violet", "lime"]
+    assert [r.car.id for r in race.racers] == ["p1", "green", "white", "orange", "teal", "graphite"]
     assert len(race.racers) == config.CARS
 
 
@@ -326,15 +326,15 @@ def test_the_check_fires_once_even_if_a_car_is_bumped_back_over_the_line():
 def test_places_are_ordered_by_laps_then_distance():
     race = Race(seed=4, players=2)
     lap = race.track.lap_length()
-    spots = {"p1": 1.5 * lap, "p2": 0.2 * lap, "green": 1.1 * lap, "silver": 0.9 * lap,
-             "gold": 5000.0, "violet": 2.2 * lap}
+    spots = {"p1": 1.5 * lap, "p2": 0.2 * lap, "green": 1.1 * lap, "white": 0.9 * lap,
+             "orange": 5000.0, "teal": 2.2 * lap}
     for r in race.racers:
         r.car.z = spots[r.car.id]
         r.car.x = -1.9 + 0.75 * race.racers.index(r)  # nobody bumps
     race.update(1e-6, {})
-    assert race.places() == ["violet", "p1", "green", "silver", "p2", "gold"]
+    assert race.places() == ["teal", "p1", "green", "white", "p2", "orange"]
     assert {r.car.id: r.place for r in race.racers} == {
-        "violet": 1, "p1": 2, "green": 3, "silver": 4, "p2": 5, "gold": 6}
+        "teal": 1, "p1": 2, "green": 3, "white": 4, "p2": 5, "orange": 6}
 
 
 def test_a_finished_car_keeps_its_place_whoever_passes_it():
