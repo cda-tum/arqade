@@ -3,7 +3,8 @@ in versus, one in the middle solo), each with a true 240x160 screen that
 the current microgame draws itself into, plus everything around it: hearts
 and scores, the timer fuse, the intro card (the verb and its input icon),
 the result stamp and caption, SPEED UP!, the title with its attract demo,
-initials, high scores, the match result and the pause menu.
+initials, high scores, the match result, the pause menu and the HOW TO
+PLAY card.
 
 Static art (bezels, hearts, the tiled backdrop) is drawn once at start-up;
 per frame it's blits, a few fills and cached text, which the Pi manages
@@ -14,12 +15,14 @@ from __future__ import annotations
 
 import math
 import random
+from types import SimpleNamespace
 
 import pygame
 
 from planck_time import config
 from planck_time import palette as P
 from planck_time import session as S
+from planck_time import tutorial as T
 from planck_time.microgames import BOSSES
 from planck_time.pixel import backdrop, blit_center, orb, outlined
 
@@ -146,6 +149,8 @@ class Renderer:
         state = s.state
         if state == S.TITLE:
             self._title(s)
+        elif state == S.TUTORIAL:
+            self._tutorial(s)
         elif state == S.NAME_ENTRY:
             self._name_entry(s)
         elif state == S.HISCORES:
@@ -200,7 +205,7 @@ class Renderer:
         screen = self.screens[p]
         self._screen(s, p, screen)
         surf.blit(screen, (bx + 30, by + 18))
-        self._fuse(s, bx + 30, by + 18 + SH + 6)
+        self._fuse(s.time_left, s.state == S.PLAY, bx + 30, by + 18 + SH + 6)
 
     def _hud(self, s: S.Session, p: str, cx: int, y: int) -> None:
         """Above a handheld: the player tag, hearts and score."""
@@ -217,19 +222,18 @@ class Renderer:
         score = outlined(f"{s.scores[p]:>3}", 16, P.WHITE)
         surf.blit(score, (cx + BEZEL_W // 2 - 12 - score.get_width(), y - 8))
 
-    def _fuse(self, s: S.Session, x: int, y: int) -> None:
+    def _fuse(self, k: float, burning: bool, x: int, y: int) -> None:
         """The timer: a fuse burning down from right to left, with a spark."""
         surf = self.surface
-        k = s.time_left
         surf.fill(P.INK, (x - 1, y - 1, SW + 2, 7))
         w = round(SW * k)
         if w > 0:
             color = P.GOLD if k > 0.5 else P.ORANGE if k > 0.25 else P.BAD
-            if s.state == S.PLAY and k <= 0.25 and int(self.t * 8) % 2:
+            if burning and k <= 0.25 and int(self.t * 8) % 2:
                 color = P.WHITE
             surf.fill(color, (x, y, w, 5))
             surf.fill(P.lighten(color, 0.5), (x, y, w, 1))
-        if s.state == S.PLAY and 0 < k < 1:
+        if burning and 0 < k < 1:
             sx = x + w
             for _ in range(4):
                 a = self.rng.uniform(0, 2 * math.pi)
@@ -493,13 +497,115 @@ class Renderer:
                             (box.x + 140, f"{e.score:>5}"), (box.x + 226, f"LV{e.level + 1}")):
                 surf.blit(outlined(text, 8, col, shadow=False), (x, y))
 
-    # --- title ----------------------------------------------------------------------------
+    # --- how to play ------------------------------------------------------------------------
 
-    def _logo(self, center, size: int) -> None:
-        """PLANCK TIME, each letter in a gate colour, riding a wave."""
+    def _tutorial(self, s: S.Session) -> None:
+        """HOW TO PLAY: on the left a handheld plays real microgames through the
+        game's own beats (the verb, the fuse, NICE!); on the right the goal and
+        the controls, with the stick and A lit on the button drawing as the
+        demo uses them."""
+        surf = self.surface
+        demo = s.tutorial
+        self._scroll(self.title_tiles)
+        self._wavy("HOW TO PLAY", (W // 2, 26), 24)
+
+        # the demo handheld, with the hearts above it
+        bx, by = 168 - BEZEL_W // 2, 92
+        for i in range(config.LIVES):
+            surf.blit(self.heart, (bx + 12 + i * 20, by - 22))
+        surf.blit(self.bezels["p1"], (bx, by))
+        game = demo.game
+        won = demo.phase == T.RESULT and game.result
+        lit = won and int(demo.t * 10) % 2 == 0
+        pygame.draw.circle(surf, P.INK, (bx + 14, by + 34), 3)
+        pygame.draw.circle(surf, P.GOOD if lit else P.shade(P.BAD, 0.8), (bx + 14, by + 34), 2)
+        screen = self.screens["p1"]
+        game.draw(screen)
+        beat = SimpleNamespace(t=demo.t, first_time=True, gained={"p1": 1 if game.result else 0}, first=None)
+        if demo.phase == T.INTRO:
+            screen.blit(self.intro_dim, (0, 0))
+            self._intro(beat, screen, game)
+        elif demo.phase == T.RESULT:
+            self._stamp(beat, "p1", screen, game)
+        surf.blit(screen, (bx + 30, by + 18))
+        self._fuse(demo.time_left, demo.phase == T.PLAY, bx + 30, by + 18 + SH + 6)
+
+        # the goal and the controls
+        panel = pygame.Rect(334, 58, 294, 246)
+        pygame.draw.rect(surf, P.INK, panel.inflate(4, 4), border_radius=10)
+        pygame.draw.rect(surf, P.NIGHT, panel, border_radius=8)
+        pygame.draw.rect(surf, P.GOLD, panel, 2, border_radius=8)
+        x0 = panel.x + 14
+        surf.blit(outlined("GOAL", 8, P.GOLD), (x0, panel.y + 12))
+        for i, line in enumerate(T.GOAL[s.mode]):
+            surf.blit(outlined(line, 8, P.WHITE, shadow=False), (x0, panel.y + 30 + i * 14))
+        surf.blit(outlined("CONTROLS", 8, P.GOLD), (x0, panel.y + 104))
+        self._controls(demo, (panel.centerx, panel.y + 146))
+        for i, (key, action) in enumerate((("STICK", "MOVE / POINT"), ("A", "PRESS / PICK"),
+                                           ("START", "PAUSE"))):
+            y = panel.y + 182 + i * 14
+            surf.blit(outlined(f"{key}:", 8, P.GOLD, shadow=False), (x0 + 6, y))
+            surf.blit(outlined(action, 8, P.WHITE, shadow=False), (x0 + 62, y))
+        if s.mode == 1:
+            pads = [("EITHER PAD PLAYS", P.MIST)]
+        else:
+            pads = [("P1 LEFT PAD", config.PLAYER_COLORS["p1"]), ("   ", P.MIST),
+                    ("P2 RIGHT PAD", config.PLAYER_COLORS["p2"])]
+        imgs = [outlined(text, 8, color, shadow=False) for text, color in pads]
+        x = panel.centerx - sum(i.get_width() for i in imgs) // 2
+        for img in imgs:
+            surf.blit(img, (x, panel.bottom - 18))
+            x += img.get_width()
+        if int(self.t * 2) % 2 == 0:
+            blit_center(surf, outlined("PRESS ANY BUTTON TO START", 16, P.WHITE), (W // 2, H - 26))
+
+    def _controls(self, demo, center) -> None:
+        """The cabinet's pad as it is built: the stick, the 2x3 buttons printed
+        L X R over Y B A, and Start. What the game uses is lit: the stick, A
+        and Start; the stick tilts and A goes down as the demo plays."""
         surf = self.surface
         cx, cy = center
-        text = "PLANCK TIME"
+        # the stick
+        sx, sy = cx - 92, cy + 6
+        base = pygame.Rect(0, 0, 34, 12)
+        base.center = (sx, sy + 8)
+        pygame.draw.ellipse(surf, P.INK, base.inflate(2, 2))
+        pygame.draw.ellipse(surf, P.SLATE, base)
+        dx, dy = demo.stick if demo.stick_left > 0 else (0, 0)
+        top = (sx + dx * 9, sy - 16 + dy * 5)
+        pygame.draw.line(surf, P.INK, (sx, sy + 8), top, 5)
+        pygame.draw.line(surf, P.MIST, (sx, sy + 8), top, 3)
+        orb(surf, top, 8, P.BAD)
+        # the buttons
+        for row, letters in enumerate(("LXR", "YBA")):
+            for col, letter in enumerate(letters):
+                x, y = cx - 30 + col * 26, cy - 10 + row * 24
+                if letter == "A":
+                    down = demo.a_left > 0
+                    pygame.draw.circle(surf, P.INK, (x, y + 2), 11)
+                    yy = y + (2 if down else 0)
+                    orb(surf, (x, yy), 9, P.BAD, glow=down)
+                    blit_center(surf, outlined("A", 8, P.WHITE, shadow=False), (x + 1, yy + 1))
+                    if down:
+                        pygame.draw.circle(surf, P.WHITE, (x, yy), 13, 1)
+                else:
+                    pygame.draw.circle(surf, P.INK, (x, y + 2), 11)
+                    pygame.draw.circle(surf, P.shade(P.SLATE, 0.7), (x, y), 9)
+                    blit_center(surf, outlined(letter, 8, P.SLATE, shadow=False), (x + 1, y + 1))
+        # Start, apart from the cluster
+        pill = pygame.Rect(0, 0, 50, 16)
+        pill.center = (cx + 98, cy + 2)
+        pygame.draw.rect(surf, P.INK, pill.inflate(4, 4), border_radius=8)
+        pygame.draw.rect(surf, P.GOLD, pill, border_radius=7)
+        label = outlined("START", 8, P.INK, outline=P.GOLD, shadow=False)
+        blit_center(surf, label, (pill.centerx + 1, pill.centery + 1))
+
+    # --- title ----------------------------------------------------------------------------
+
+    def _wavy(self, text: str, center, size: int) -> None:
+        """Each letter in a gate colour, riding a wave: the logo's lettering."""
+        surf = self.surface
+        cx, cy = center
         colors = (P.GATE["X"], P.GATE["H"], P.GOOD, P.GATE["Z"], P.GATE["Y"], P.PINK)
         x0 = cx - len(text) * size // 2
         for i, ch in enumerate(text):
@@ -507,6 +613,14 @@ class Renderer:
                 continue
             y = cy - 4 * math.sin(self.t * 4 + i * 0.6)
             blit_center(surf, outlined(ch, size, colors[i % len(colors)]), (x0 + i * size + size // 2, y))
+
+    def _logo(self, center, size: int) -> None:
+        """PLANCK TIME, each letter in a gate colour, riding a wave."""
+        surf = self.surface
+        cx, cy = center
+        text = "PLANCK TIME"
+        x0 = cx - len(text) * size // 2
+        self._wavy(text, center, size)
         # a stopwatch, its hand racing round
         r = size // 2 + 2
         wx, wy = x0 + len(text) * size + r + 10, cy
@@ -533,9 +647,9 @@ class Renderer:
             return
         self._logo((W // 2 - 18, 92), 32)
         blit_center(surf, outlined("A QUANTUM MICROGAME PARTY", 8, P.CREAM), (W // 2, 132))
-        for i, (n, label) in enumerate(((1, "1 PLAYER"), (2, "2 PLAYERS"))):
-            y = 190 + i * 30
-            on = s.mode == n
+        for i, label in enumerate(S.TITLE_ITEMS):
+            y = 182 + i * 28
+            on = s.title_index == i
             color = P.GOLD if on else P.WHITE
             img = outlined(label, 16, color)
             blit_center(surf, img, (W // 2, y))

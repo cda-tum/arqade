@@ -97,6 +97,7 @@ def pointer(surf: pygame.Surface, x: float, y: float, color) -> None:
 class Fix(Microgame):
     VERB = "FIX!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "Undo an error with its inverse: Paulis are their own"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

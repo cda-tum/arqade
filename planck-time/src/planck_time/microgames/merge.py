@@ -150,6 +150,7 @@ def smooth(k: float) -> float:
 class Merge(Microgame):
     VERB = "MERGE!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "Code patches merge along matching edges"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

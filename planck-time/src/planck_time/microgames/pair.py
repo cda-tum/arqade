@@ -38,6 +38,7 @@ BOT_SETTLE = 0.25  # ...and looks once more before pressing A
 class Pair(Microgame):
     VERB = "PAIR!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "Entangled qubits behave as one"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

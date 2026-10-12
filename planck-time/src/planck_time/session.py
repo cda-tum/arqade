@@ -1,13 +1,19 @@
 """Session flow. Pure (no pygame): it takes one FrameInput per frame and
 returns cues, so it is unit tested like the microgames.
 
-  title (bots play an attract demo after 3 s untouched)
+  title (1 PLAYER / 2 PLAYERS / QUIT; bots play an attract demo after 3 s untouched)
+    -> how to play (a card, dismissed with any button)
     -> intro -> play -> result -> [speed up every 4 microgames]
        -> [BOSS! after every 12 wins -> intro -> boss -> result] -> intro ...
        (Start pauses any of these: resume / quit to title)
     single:  out of lives -> game over -> initials (if it's a high score)
              -> high scores -> title
-    versus:  someone out of lives -> match result -> rematch or title
+    versus:  someone out of lives -> match result -> rematch (no card) or title
+
+A microgame ends as soon as everyone's outcome is decided: a failure at
+once, a success WIN_LINGER later (long enough for the win to register),
+rather than waiting out the fuse. Games that are won by surviving to the
+end (SHIELD!, REFRESH!, SYNDROME!) can only be decided by the timer.
 
 In versus both players get their own instance of the same microgame from
 the same seed, at the same moment. A success scores 1, and if both succeed
@@ -28,9 +34,11 @@ from dataclasses import dataclass, field
 from planck_time import config
 from planck_time.hiscores import Hiscores
 from planck_time.microgames import BOSSES, REGISTRY, Microgame, PlayerInput, play_time
+from planck_time.tutorial import Demo
 
 PLAYERS = ("p1", "p2")
 TITLE = "title"
+TUTORIAL = "tutorial"
 INTRO = "intro"
 PLAY = "play"
 RESULT = "result"
@@ -43,6 +51,8 @@ MATCH_RESULT = "match_result"
 PAUSABLE = (INTRO, PLAY, RESULT, SPEED_UP, BOSS_CARD)
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
+TITLE_ITEMS = ("1 PLAYER", "2 PLAYERS", "QUIT")
+QUIT = TITLE_ITEMS.index("QUIT")
 ATTRACT_LINGER = 1.0  # seconds an attract microgame stays up after its time runs out
 
 
@@ -50,7 +60,7 @@ ATTRACT_LINGER = 1.0  # seconds an attract microgame stays up after its time run
 class Cue:
     """A session event for the sound and the renderer."""
 
-    kind: str  # blip, start, pause, intro, win, fail, speed_up, boss, game_over, match_won, draw
+    kind: str  # blip, start, pause, intro, tick, tap, win, fail, speed_up, boss, game_over, match_won, draw
     player: str | None = None
 
 
@@ -65,6 +75,7 @@ class FrameInput:
     confirms: dict = field(default_factory=_per_player(bool))  # A or Start pressed this frame
     backs: dict = field(default_factory=_per_player(bool))  # B pressed this frame
     pauses: dict = field(default_factory=_per_player(bool))  # Start pressed this frame
+    presses: dict = field(default_factory=_per_player(bool))  # any button (or dev key) pressed this frame
     activity: bool = False  # any input at all (for the idle timeout and the attract demo)
 
     @property
@@ -78,6 +89,10 @@ class FrameInput:
     @property
     def pause(self) -> bool:
         return any(self.pauses.values())
+
+    @property
+    def any_press(self) -> bool:
+        return any(self.presses.values())
 
 
 def merge(a: PlayerInput, b: PlayerInput) -> PlayerInput:
@@ -152,6 +167,11 @@ class Session:
         self.next_boss: type[Microgame] | None = None  # the one the BOSS! card announces
         self.toward_boss = 0  # wins since the last boss
         self.mode = 1  # 1 or 2 players
+        self.title_index = 0  # the title's row: TITLE_ITEMS
+        self.quit_requested = False  # QUIT picked on the title: the game loop exits
+        self.tutorial: Demo | None = None  # the HOW TO PLAY card's demo, while it is up
+        self.fresh = False  # the first intro after the card: Start doesn't pause yet (a mashed dismiss)
+        self.fuse_left = 0.0  # the fuse when play ended, frozen for the result card
         self.state = TITLE
         self.t = 0.0  # seconds in the current state
         self.idle = 0.0
@@ -204,6 +224,8 @@ class Session:
         """0..1 of the play time remaining (the timer bar)."""
         if self.state == PLAY:
             return max(0.0, 1.0 - self.t / self.duration)
+        if self.state == RESULT:
+            return self.fuse_left  # an early win leaves fuse to spare
         return 1.0 if self.state == INTRO else 0.0
 
     # --- the state machine ------------------------------------------------------------------
@@ -216,7 +238,8 @@ class Session:
             self._to_title()
             return []
         events: list = []
-        if self.state in PAUSABLE and (self.paused or inp.pause):
+        grace = self.fresh and self.state == INTRO and self.t < config.PAUSE_GRACE
+        if self.state in PAUSABLE and (self.paused or (inp.pause and not grace)):
             self._on_pause(inp, events)
             return events
         self.t += dt
@@ -247,16 +270,40 @@ class Session:
                 self._to_title()
 
     def _on_title(self, dt: float, inp: FrameInput, events: list) -> None:
+        """The stick moves between 1 PLAYER, 2 PLAYERS and QUIT (no wrap, so
+        QUIT is never one push away from the top). A picks the row. Start
+        always starts, with the player count last picked, whatever the row."""
         if inp.activity:
             self.attract = {}
-        if any(d != (0, 0) for d in inp.nav.values()):
-            self.mode = 3 - self.mode
+        dy = next((d[1] for d in inp.nav.values() if d[1]), 0)
+        row = max(0, min(len(TITLE_ITEMS) - 1, self.title_index + dy))
+        if row != self.title_index:
+            self.title_index = row
+            if row != QUIT:
+                self.mode = row + 1
             events.append(Cue("blip"))
-        if inp.confirm:
-            self._start_session(events)
+        if inp.pause:
+            self._start_session(events, tutorial=True)
+            return
+        if inp.confirm:  # A
+            if self.title_index == QUIT:
+                self.quit_requested = True
+            else:
+                self._start_session(events, tutorial=True)
             return
         if self.idle >= config.ATTRACT_DELAY:
+            self.title_index = self.mode - 1  # never left on QUIT under the demo: a waking A would quit
             self._run_attract(dt)
+
+    def _on_tutorial(self, dt: float, inp: FrameInput, events: list) -> None:
+        """HOW TO PLAY: any button, pressed after the first moment (so the
+        press that started the run, or its bounce, can't skip it unseen)."""
+        self.tutorial.update(dt)
+        if self.t >= config.TUTORIAL_LOCK and inp.any_press:
+            self.tutorial = None
+            self.fresh = True
+            events.append(Cue("start"))
+            self._next_microgame(events)
 
     def _run_attract(self, dt: float) -> None:
         """Bots play random microgames on both screens, each its own."""
@@ -278,22 +325,34 @@ class Session:
     def _on_intro(self, dt: float, inp: FrameInput, events: list) -> None:
         if self.t >= config.INTRO_TIME:
             self.seen.add(self.game_cls.__name__)
+            self.fresh = False
             self._set_state(PLAY)
 
     def _on_play(self, dt: float, inp: FrameInput, events: list) -> None:
         for p, g in self.games.items():
-            g.update(dt, self._input_for(inp, p))
+            pi = self._input_for(inp, p)
+            g.update(dt, pi)
             if g.result is not None and p not in self._cued:
                 self._cued.add(p)
                 events.append(Cue("win" if g.result else "fail", p))
+            elif g.result is None:  # a press that didn't end the game still clicks
+                if pi.a:
+                    events.append(Cue("tap", p))
+                elif pi.step != (0, 0) and g.STEPS:
+                    events.append(Cue("tick", p))
         everyone_failed = all(g.result is False for g in self.games.values())
-        # a boss is long: once everyone is done, don't make them wait out the timer
+        # once every outcome is decided, don't make anyone wait out the fuse: a
+        # failure ends at once, a success after a short beat so the win registers
+        settled = all(g.result is False or (g.result and g.since_end >= config.WIN_LINGER)
+                      for g in self.games.values())
+        # a boss is long: once everyone is done, it lingers a little longer
         boss_done = self.boss and all(
             g.result is not None and g.since_end >= config.BOSS_LINGER for g in self.games.values())
-        if self.t >= self.duration or everyone_failed or boss_done:
+        if self.t >= self.duration or everyone_failed or boss_done or (settled and not self.boss):
             self._end_play(events)
 
     def _end_play(self, events: list) -> None:
+        self.fuse_left = self.time_left
         for p, g in self.games.items():
             if g.result is None:
                 g.timeout()
@@ -415,6 +474,9 @@ class Session:
         self.games = {}
         self.attract = {}
         self.paused = False
+        self.tutorial = None
+        self.fresh = False
+        self.title_index = self.mode - 1
         self._set_state(TITLE)
 
     def _save_name(self) -> None:
@@ -423,7 +485,9 @@ class Session:
             self.new_rank = rank if rank >= 0 else None
             self.name_entry = None
 
-    def _start_session(self, events: list) -> None:
+    def _start_session(self, events: list, tutorial: bool = False) -> None:
+        """A new run. From the title it opens on the HOW TO PLAY card; a
+        rematch (the same people) goes straight in."""
         self.lives = {p: config.LIVES for p in PLAYERS}
         self.scores = {p: 0 for p in PLAYERS}
         self.gained = {p: 0 for p in PLAYERS}
@@ -437,6 +501,11 @@ class Session:
         self.winner = None
         self.new_rank = None
         self.attract = {}
+        if tutorial:
+            self.tutorial = Demo()
+            self._set_state(TUTORIAL)
+            events.append(Cue("blip"))
+            return
         events.append(Cue("start"))
         self._next_microgame(events)
 

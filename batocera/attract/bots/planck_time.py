@@ -1,6 +1,7 @@
 """Planck Time: a versus match, P1 on the blue handheld left, P2 on the red right.
 
-The title is walked like two people would (the stick to 2 PLAYERS, then A).
+The title is walked like two people would (the stick to 2 PLAYERS, then A,
+and A again on the HOW TO PLAY card).
 The microgames are dealt in a fixed order instead of from the shuffled deck,
 so the capture holds the ones the trailer wants: ALIGN! and PAIR! twice
 each, MEASURE!, SORT!, CANCEL!, MERGE!, FIX! and CONNECT!, and then the
@@ -36,34 +37,39 @@ SCRIPT = (
 )
 SLIPS = {(2, 1): "early", (3, 0): "late", (7, 1): "lost"}  # (deal, player): the mistake
 
-SECONDS = 94.9  # ends on the boss's NICE!, just before the next intro
-SKIP = 2.1  # the first ALIGN! starts at 2.08 s
+SECONDS = 71.1  # ends on the boss's NICE!, just before the next intro
+SKIP = 3.6  # the first ALIGN! starts at 3.62 s, after the HOW TO PLAY card
+# The times below were moved, not re-picked, when the HOW TO PLAY card came in
+# and a won microgame started ending 0.4 s after the win: each is the same
+# moment of the same deal (the outcomes are unchanged), but a short game's
+# window now runs on into its NICE! card instead of the rest of its fuse.
 HIGHLIGHTS = [  # 2 s windows with seed 1, best first
-    41.4,  # ALIGN!: P1 stops short of the star and nudges on, P2 swings past and back; NICE x2
-    64.6,  # PAIR!, six particles: each picks its half of the pair, the wavy bonds light up
-    80.2,  # SYNDROME!: DECOHERENCE winds up and strikes, the checks light, both fix it (OW!)
-    17.6,  # MEASURE!: P2 presses too early (red X), P1 collapses the needle to |1>
-    92.6,  # SYNDROME!: the last strike, then NICE! QUBIT SAVED! as the monster dissolves
-    56.2,  # FIX!: the cards shuffle, P1 applies Y to the Y bug, P2 lost it and picks X
-    10.3,  # PAIR!, four particles: both cursors walk to the pair, picked and bonded
-    49.3,  # MERGE!: P2 pushes straight in, P1 turns its patch round first; ZZ measured
+    30.1,  # ALIGN!: P1 stops short of the star and nudges on, P2 swings past and back; NICE x2
+    45.7,  # PAIR!, six particles: each picks its half of the pair, the wavy bonds light up
+    56.5,  # SYNDROME!: DECOHERENCE winds up and strikes, the checks light, both fix it (OW!)
+    13.0,  # MEASURE!: P2 presses too early (red X), P1 collapses the needle to |1>
+    68.9,  # SYNDROME!: the last strike, then NICE! QUBIT SAVED! as the monster dissolves
+    40.0,  # FIX!: the cards shuffle, P1 applies Y to the Y bug, P2 lost it and picks X
+    8.6,  # PAIR!, four particles: both cursors walk to the pair, picked and bonded
+    35.4,  # MERGE!: P2 pushes straight in, P1 turns its patch round first; ZZ measured
 ]
 MOMENTS = {  # microgame -> start times (s) of good 2 s play windows, seed 1
-    "ALIGN!": [41.4, 2.3],
-    "PAIR!": [64.6, 10.3],
-    "MEASURE!": [17.6],
-    "SORT!": [27.0],  # P2 sorts the second token, P1 is late and it hits the floor
-    "CANCEL!": [34.4],
-    "MERGE!": [49.3],
-    "FIX!": [56.2],
-    "CONNECT!": [71.1],
-    "SYNDROME!": [80.2, 92.6, 82.4],  # 82.4: a double strike, four checks lit
+    "ALIGN!": [30.1, 3.8],
+    "PAIR!": [45.7, 8.6],
+    "MEASURE!": [13.0],
+    "SORT!": [18.6],  # P2 sorts the second token, P1 is late and it hits the floor
+    "CANCEL!": [25.8],
+    "MERGE!": [35.4],
+    "FIX!": [40.0],
+    "CONNECT!": [50.1],
+    "SYNDROME!": [56.5, 68.9, 58.7],  # 58.7: a double strike, four checks lit
 }
 
 # seconds of game time before a player first moves, by microgame
 REACT = {"ALIGN!": (0.2, 0.45), "PAIR!": (0.9, 1.5), "MEASURE!": (0.2, 0.4), "SORT!": (0.0, 0.0),
          "CANCEL!": (0.0, 0.0), "MERGE!": (0.8, 1.2), "FIX!": (0.25, 0.45), "CONNECT!": (0.1, 0.3),
          "SYNDROME!": (0.0, 0.0)}
+TUTORIAL_READ = 1.5  # seconds the HOW TO PLAY card stays up before the bot presses on
 GAP = (0.16, 0.26)  # between two stick pushes
 SETTLE = (0.12, 0.28)  # on the right item before pressing A
 IDLE = PlayerInput()
@@ -274,6 +280,11 @@ class Bot:
         if s.state == S.TITLE:
             self.title(t, s)
             return
+        if s.state == S.TUTORIAL:  # the HOW TO PLAY card: a moment to show it, then A
+            self.apply(0, IDLE)
+            if s.t >= TUTORIAL_READ and not self.pads.held(0, "a"):
+                self.pads.tap(0, "a", 4)
+            return
         if s.games.get("p1") is not self.dealt:
             self.dealt = s.games.get("p1")
             self.deals += 1
@@ -291,13 +302,15 @@ class Bot:
             self.apply(i, player.play(g))
 
     def title(self, t, s):
-        """Down to 2 PLAYERS, then A (never Start: in play it pauses)."""
+        """To 2 PLAYERS, then A (never Start: in play it pauses). The row is
+        read, not counted, so it can never end up on QUIT below it."""
         self.pads.stick(0, 0.0, 0.0)
         if t < self.next_menu:
             return
         self.next_menu = t + 0.3
-        if s.mode != 2:
-            self.pads.stick(0, 0.0, 1.0)
+        want = S.TITLE_ITEMS.index("2 PLAYERS")
+        if s.title_index != want:
+            self.pads.stick(0, 0.0, 1.0 if s.title_index < want else -1.0)
         else:
             self.pads.tap(0, "a", 4)
 

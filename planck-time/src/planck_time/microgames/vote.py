@@ -38,6 +38,7 @@ def pointer(surf: pygame.Surface, x: float, y: float, color) -> None:
 class Vote(Microgame):
     VERB = "VOTE!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "A majority vote corrects a bit flip"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

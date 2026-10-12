@@ -126,6 +126,7 @@ def smooth(k: float) -> float:
 class Climb(Microgame):
     VERB = "CLIMB!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "Gates turn one state into another"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

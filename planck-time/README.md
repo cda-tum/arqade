@@ -25,14 +25,29 @@ explains its concept in a one-line caption *afterwards*.
 
 ## How to play
 
-- **Title:** the stick picks 1 or 2 players, and A or Start begins. Left
-  alone for 3 s, the title shows bots playing.
+- **Title:** the stick moves between 1 PLAYER, 2 PLAYERS and QUIT (it
+  doesn't wrap, so QUIT is never one push from the top). A picks the row:
+  QUIT goes straight back to the cabinet's menu. Start always starts, with
+  the player count last picked, even on QUIT. Left alone for 3 s, the title
+  shows bots playing (and its selection goes back to the player count).
+- **HOW TO PLAY:** a run started from the title opens on a card
+  (`tutorial.py`): the goal, the controls on a drawing of the cabinet's pad
+  (the stick, L X R over Y B A, Start; the stick, A and Start lit), and a
+  handheld playing VOTE! and MEASURE! with their own bots through the real
+  beats. Any button dismisses it, after its first 0.3 s; the stick doesn't.
+  A rematch skips it. Start doesn't pause in the first 0.5 s after it, so
+  mashing through the card can't pause the first intro.
 - **Every microgame has three beats:**
   1. **Intro** (1.5 s): the verb, and an icon of the one input it uses. The
      first time a microgame comes up, the icon is animated.
-  2. **Play:** the fuse below the screen burns down. Win early and the win
-     animation plays out the rest. A failure ends it at once.
+  2. **Play:** the fuse below the screen burns down. A failure ends it at
+     once, and a win 0.4 s later (`WIN_LINGER`), with the fuse left over
+     frozen on the result. In versus it ends once both outcomes are decided.
+     SHIELD! and REFRESH! (and the boss) are won by surviving, so only the
+     fuse can end those with a win.
   3. **Result:** NICE! or OOPS!, plus the concept caption.
+- **Sound:** chiptune jingles for every beat, a tick for each cursor step
+  and a click for each A press that doesn't end the microgame.
 - **Speed:** every 4 microgames the level goes up (SPEED UP!).
   - The play time is `max(2.5, 5 x 0.9^level)` s.
   - Objects move `1 + 0.15 x level` times as fast.
@@ -106,7 +121,7 @@ own track.
 | A (and confirm in menus) | A | Q | . |
 | Back (menus) | B | W | , |
 | Start / pause (resume or quit to the title) | Start | 1 | 2 |
-| Quit | Start + Select, or hold Select 2 s on the title | Esc | Esc |
+| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Esc | Esc |
 
 P1's dev keys avoid the pad's own letters (l, x, r, b, y, a; see
 `../AGENTS.md`). The keyboard is a dev fallback only: on the cabinet the
@@ -131,8 +146,9 @@ uv run python tools/snapshot.py /tmp/planck-snaps   # every screen and microgame
 | Module | Role |
 |---|---|
 | `microgames/` | One module per microgame or boss, plus `base.py`, the contract. Rules are pure; `draw()` is the only pygame part. |
-| `session.py` | Title, the beats, speed levels, lives, scores, versus, pause, idle, the attract demo. Pure, tested. |
+| `session.py` | Title, the HOW TO PLAY card, the beats, speed levels, lives, scores, versus, pause, idle, the attract demo. Pure, tested. |
 | `palette.py`, `pixel.py` | The 15-bit GBA palette, and pixel-art helpers (outlined text, orbs, cards, the win/fail overlay). |
+| `tutorial.py` | The HOW TO PLAY card's words and its demo (real microgames, played by their bots). |
 | `render.py` | The 640x360 frame: handheld bezels, HUD, fuse, cards, and every screen. |
 | `decoherence.py` | DECOHERENCE, SYNDROME!'s monster: its pre-rendered static body, face, moods, bolt and dissolve. |
 | `audio.py` | Chiptune effects and music, adapted from Gate Drop's. |
