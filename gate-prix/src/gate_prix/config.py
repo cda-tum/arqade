@@ -178,14 +178,15 @@ PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 # --- Colours ---------------------------------------------------------------------------
 # The one source of the players' colours (the look's): P1 blue on top, P2 red below.
 PLAYER_COLORS = {"p1": (80, 170, 255), "p2": (255, 80, 90)}
-# The CPU racers, best first: never blue or red, and clear of the gates' hues (H gold, X red,
-# Z blue, Y purple) and of each other. Two of them are not hues at all.
+# The CPU racers, best first: never a player's hue (P1's blue, cyan and teal; P2's red,
+# orange and pink) and clear of the gates' (H gold, X red, Z blue, Y purple). Only greens are
+# left as hues, so two greens far apart, and three greys apart in brightness.
 CPU_COLORS = {
-    "green": (70, 200, 50),
+    "green": (30, 180, 90),  # emerald
     "white": (236, 238, 246),
-    "orange": (255, 112, 24),
-    "teal": (30, 196, 178),
-    "graphite": (84, 88, 104),
+    "lime": (150, 220, 40),
+    "steel": (120, 124, 138),
+    "black": (34, 34, 40),  # only in 1P races (the fifth CPU)
 }
 CAR_COLORS = {**PLAYER_COLORS, **CPU_COLORS}
 GATE_COLORS = {  # shared with the other games

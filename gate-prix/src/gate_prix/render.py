@@ -351,8 +351,10 @@ class Renderer:
             self.put(label, 26, WHITE if chosen else (150, 156, 180), center=(cx, y))
         if (self.frame // 30) % 2 == 0:
             self.put("PRESS START", 24, (255, 230, 120), center=(cx, 410))
-        self.put("STICK: STEER   PULL BACK: BRAKE   A: USE ITEM   START: PAUSE", 12, LABEL,
-                 center=(cx, 470))
+        self.surface.blit(self.panel(640, 58, None, 190), (cx - 320, 443))  # over the car
+        self.put("STICK: CHOOSE   A OR START: RACE", 14, SOFT, center=(cx, 458))
+        self.put("IN THE RACE   STICK: STEER   PULL BACK: BRAKE   A: USE ITEM   START: PAUSE",
+                 12, LABEL, center=(cx, 486))
         if match.attract:
             self.put("DEMO", 14, LABEL, topright=(W - 16, 12))
 
@@ -382,6 +384,7 @@ class Renderer:
             bright = row.player
             self.put(ordinal(row.place), 18, WHITE if bright else SOFT, midright=(250, y))
             pygame.draw.rect(surf, col, (268, y - 9, 30, 18), border_radius=4)
+            pygame.draw.rect(surf, (150, 156, 180), (268, y - 9, 30, 18), 1, border_radius=4)
             name = NAMES[row.car] if row.player else "CPU " + row.car.upper()
             self.put(name, 18, col if bright else SOFT, midleft=(312, y))
             self.put(race_time(row.time), 16, WHITE if bright else SOFT, midleft=(470, y))
@@ -397,8 +400,7 @@ class Renderer:
 
     def _circuit_rows(self, match: Match, row, y: int) -> None:
         """A player's whole circuit under the target's, with its accuracy."""
-        racer = match.race.racer(row.car)
-        c = racer.circuit
+        target = match.race.target  # the row's own circuit is frozen at the finish
         col = config.PLAYER_COLORS[row.car]
         w = 18 * config.SLOTS + 150
         x = (W - w) // 2
@@ -413,10 +415,10 @@ class Renderer:
         x0 = x + 120
         for i in range(config.SLOTS):
             bx = x0 + 18 * i
-            self.surface.blit(self._small[(c.target[i], "plain")], (bx - 4, y + 18 - 4))
-            if c.results[i] is not None:
-                state = "ok" if c.results[i] else "bad"
-                self.surface.blit(self._small[(c.slots[i], state)], (bx - 4, y + 48 - 4))
+            self.surface.blit(self._small[(target[i], "plain")], (bx - 4, y + 18 - 4))
+            if row.results[i] is not None:
+                state = "ok" if row.results[i] else "bad"
+                self.surface.blit(self._small[(row.slots[i], state)], (bx - 4, y + 48 - 4))
 
 
 def loading_screen(surface: pygame.Surface) -> None:

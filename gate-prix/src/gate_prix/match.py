@@ -9,9 +9,11 @@ the HUD use both).
       |                                                      A/Start rematches  |
       +----------------- B, QUIT TO TITLE, or 60 s untouched ------------------+
 
-- **The title:** the stick picks 1 or 2 PLAYERS; A or Start begins. After ATTRACT_DELAY
+- **The title:** the stick picks 1 or 2 PLAYERS by direction (up or left: 1, down or
+  right: 2), so a held stick stays on its choice; A or Start begins. After ATTRACT_DELAY
   seconds untouched an attract race plays behind it: `Race(seed, 2, finish_all=True)`, all
-  six cars driven by bots, silently. Any input stops it; A or Start still begins at once.
+  six cars driven by bots, silently. Any input stops it (and that frame's stick changes
+  nothing); A or Start still begins at once.
   Reached through QUIT TO TITLE or B, the title waits for every button to be let go, so the
   press that left the race doesn't start the next one.
 - **Driving:** each player's stick steers and pulled back brakes; A *pressed* uses the held
@@ -108,6 +110,8 @@ class ResultRow:
     time: float | None  # its finishing time, None when it was still racing
     right: int  # right slots of its circuit
     check: int | None  # its CIRCUIT CHECK distance
+    slots: tuple = ()  # its circuit's gates (None: an empty slot), frozen at the finish
+    results: tuple = ()  # and each slot's right (True), wrong (False) or undecided (None)
 
 
 class Match:
@@ -188,12 +192,15 @@ class Match:
             if any(i.held for i in inp.players.values()):
                 return
             self.title_wait = False
-        if inp.activity and self.attract:
+        stopped = inp.activity and self.attract
+        if stopped:
             self.race, self.bots, self.attract = None, {}, False
         dx, dy = inp.nav()
-        if dx or dy:
-            self.mode = 3 - self.mode
-            events.append(Cue("blip"))
+        if (dx or dy) and not stopped:
+            mode = 1 if (dy or dx) < 0 else 2  # up/left: 1 PLAYER, down/right: 2
+            if mode != self.mode:
+                self.mode = mode
+                events.append(Cue("blip"))
         if inp.any("a") or inp.any("start"):
             events.append(Cue("select"))
             self._new_race(events)
@@ -301,8 +308,10 @@ class Match:
         rows = []
         for place, car_id in enumerate(race.places(), 1):
             r = race.racer(car_id)
+            c = r.circuit
             rows.append(ResultRow(car_id, place, r.player, r.finish_time,
-                                  sum(1 for ok in r.circuit.results if ok), r.check))
+                                  sum(1 for ok in c.results if ok), r.check,
+                                  tuple(c.slots), tuple(c.results)))
         self.results = rows
         self.over_time = 0.0
 

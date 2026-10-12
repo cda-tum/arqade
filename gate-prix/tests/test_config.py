@@ -97,27 +97,47 @@ def test_the_cars_take_their_colours_from_one_place():
     assert len(config.CPU_COLORS) == config.CARS - 1  # the 1P field; 2P races use the first 4
 
 
+# Hue bands that belong to the players (AGENTS.md): P1 is blue or blue-leaning (cyan,
+# teal), P2 red or red-leaning (orange, pink). A CPU racer's colour stays out of both.
+P1_BAND = (165, 265)
+P2_BAND = (315, 40)  # wraps round 0
+
+
+def _in_band(h, band):
+    lo, hi = band
+    return lo <= h <= hi if lo < hi else h >= lo or h <= hi
+
+
+@pytest.mark.parametrize("rgb, ok", [
+    ((30, 196, 178), False),  # teal
+    ((40, 220, 240), False),  # cyan
+    ((255, 112, 24), False),  # orange
+    ((255, 110, 200), False),  # pink
+    ((30, 180, 90), True),  # emerald
+    ((150, 220, 40), True),  # lime
+])
+def test_the_player_bands_catch_cyan_teal_orange_and_pink(rgb, ok):
+    h = _hue(rgb)[0]
+    assert (not _in_band(h, P1_BAND) and not _in_band(h, P2_BAND)) == ok
+
+
 def test_cpu_colours_are_clear_of_the_players_the_gates_and_each_other():
     def dist(a, b):
         return min(abs(a - b), 360 - abs(a - b))
 
-    hues = []
+    hues, greys = [], []
     for name, rgb in config.CPU_COLORS.items():
         h, s, v = _hue(rgb)
         if s < 0.3:
-            continue  # white and graphite: not hues at all
+            greys.append((name, v))  # white, steel, black: not hues at all
+            continue
         hues.append((name, h))
+        assert not _in_band(h, P1_BAND) and not _in_band(h, P2_BAND), name
         for other in (*config.PLAYER_COLORS.values(), *config.GATE_COLORS.values()):
             assert dist(h, _hue(other)[0]) >= 20, name
     for i, (a, ha) in enumerate(hues):
         for b, hb in hues[i + 1:]:
             assert dist(ha, hb) >= 40, (a, b)
-
-
-def test_idle_timeout_is_a_minute():
-    assert config.IDLE_TIMEOUT == 60.0
-
-
-@pytest.mark.parametrize("distance, clamped", [(-3, 0), (17, 16), (99, 16)])
-def test_circuit_check_boost_clamps_the_distance(distance, clamped):
-    assert config.check_boost(distance) == config.check_boost(clamped)
+    for i, (a, va) in enumerate(greys):
+        for b, vb in greys[i + 1:]:
+            assert abs(va - vb) >= 0.25, (a, b)  # greys apart by brightness

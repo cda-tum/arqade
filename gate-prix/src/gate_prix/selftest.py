@@ -7,7 +7,7 @@ It plays, as a visitor would, and checks the match at every turn:
    resume), to the finish and the result; a mashed A in the result's lock is ignored,
    then A rematches; in the rematch, pause and QUIT TO TITLE with A held on: the title
    must wait for it to be let go;
-3. 2 PLAYERS: a race with both pads driven the same way, to the result, B to the title;
+3. 2 PLAYERS (picked with the stick, held: it must not flicker): a race with both pads driven the same way, to the result, B to the title;
 4. a race left untouched: 60 s later it is back on the title, at 1 PLAYER.
 
 It stops after SECONDS of game time (exit 0 if every check held until then) or at the
@@ -160,9 +160,12 @@ class Script:
 
         # 1 PLAYER: down and up again, then Start
         yield from self.tap(nav=(0, 1))
-        check(m.mode == 2 and not m.attract, "the stick picks 2 PLAYERS and stops the demo")
-        yield from self.tap(nav=(0, -1))
-        check(m.mode == 1, "and back to 1 PLAYER")
+        check(m.mode == 1 and not m.attract, "the stick stops the demo, and only that")
+        for k in range(40):  # the stick held down, auto-repeating: 2 PLAYERS, no flicker
+            yield self._press(nav=(0, 1) if k == 0 or self.rng.random() < 0.2 else (0, 0))
+            check(m.mode == 2, "a held stick stays on 2 PLAYERS")
+        yield from self.tap(nav=(-1, 0))
+        check(m.mode == 1, "left: back to 1 PLAYER")
         yield from self.tap("p2", start=True)
         check(m.state == COUNTDOWN and m.race.players == 1, "Start begins a 1P countdown")
         yield from self.idle(1.4)

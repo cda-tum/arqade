@@ -61,13 +61,40 @@ def finish(m: Match, car_id: str) -> None:
 # --- The title -------------------------------------------------------------------------------
 
 
-def test_the_title_starts_at_one_player_and_the_stick_toggles_it():
+def test_the_title_starts_at_one_player_and_the_stick_picks_by_direction():
     m = Match(random.Random(1))
     assert m.state == TITLE and m.mode == 1
     events = m.update(DT, DOWN)
     assert m.mode == 2 and cues(events, "blip")
-    m.update(DT, frame(p2={"nav": (1, 0)}))  # either pad, either direction
+    events = m.update(DT, frame(p2={"nav": (1, 0)}))  # right, on either pad: still 2
+    assert m.mode == 2 and not cues(events, "blip")
+    events = m.update(DT, frame(p2={"nav": (0, -1)}))  # up: 1 PLAYER
+    assert m.mode == 1 and cues(events, "blip")
+    m.update(DT, frame(p1={"nav": (1, 0)}))
+    m.update(DT, frame(p1={"nav": (-1, 0)}))  # left: 1 PLAYER
     assert m.mode == 1
+
+
+def test_a_held_stick_stays_on_its_choice():
+    """Auto-repeated steps of a held stick must not flicker between the two modes."""
+    m = Match(random.Random(1))
+    modes, blips = [], 0
+    for k in range(60):  # a second held down, a step every few frames
+        events = m.update(DT, frame(p1={"nav": (0, 1) if k % 7 == 0 else (0, 0),
+                                        "steer": 0.0}) if k % 7 else DOWN)
+        modes.append(m.mode)
+        blips += len(cues(events, "blip"))
+    assert set(modes) == {2} and blips == 1
+
+
+def test_the_input_that_stops_the_attract_race_does_not_change_the_mode():
+    m = Match(random.Random(1))
+    run(m, config.ATTRACT_DELAY + 0.5)
+    assert m.attract
+    events = m.update(DT, DOWN)
+    assert not m.attract and m.mode == 1 and not cues(events, "blip")
+    m.update(DT, DOWN)
+    assert m.mode == 2
 
 
 @pytest.mark.parametrize("button", ["a", "start"])
@@ -334,6 +361,20 @@ def test_the_result_holds_each_players_circuit_accuracy():
     run(m, config.FINISH_DELAY + 0.2)
     row = m.results[0]
     assert row.right == config.SLOTS - config.SLOTS // 4
+
+
+def test_the_result_keeps_each_players_circuit_as_it_was_at_the_finish():
+    m = started()
+    p1 = m.race.racer("p1")
+    for slot in range(config.SLOTS):
+        p1.circuit.take(slot, None)
+    finish(m, "p1")
+    run(m, 0.1)
+    row = m.results[0]
+    assert row.right == 0 and row.slots == (None,) * config.SLOTS
+    assert row.results == (False,) * config.SLOTS
+    p1.circuit.qec()  # anything after the freeze changes nothing in the result
+    assert m.results[0].results == (False,) * config.SLOTS
 
 
 def test_the_result_ignores_a_mashed_a_then_a_rematches():

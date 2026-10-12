@@ -167,8 +167,8 @@ def test_a_box_rolls_with_the_drivers_place(monkeypatch):
     green, p1 = race.racer("green"), race.racer("p1")
     through_box(race, green, lap=1)  # far ahead of everyone
     p1.car.z = green.car.z - 30_000  # still behind the others
-    through_box(race, race.racer("graphite"), k=1, j=2)
-    assert seen[0] == 1 and seen[1] == race.racer("graphite").place
+    through_box(race, race.racer("black"), k=1, j=2)
+    assert seen[0] == 1 and seen[1] == race.racer("black").place
 
 
 # --- Using items ---------------------------------------------------------------------------
