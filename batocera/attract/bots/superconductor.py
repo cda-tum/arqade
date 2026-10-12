@@ -11,23 +11,27 @@ a pair from its other end (B) when that is better, and moves to another pair
 (A) when nothing is safe. Once in versus, P2 ignores the X and crashes.
 
 Between the rounds it goes back to the title the quick way (Select twice:
-a few frames of the pause screen).
+a few frames of the pause screen). On the title it picks mode and chip with
+the stick and starts with Start, which never quits (A on the QUIT row would),
+then presses A on the HOW TO PLAY card.
 """
 
 from superconductor.lattice import DIRECTIONS
 from superconductor.rules import Occupancy
 
 SECONDS = 85.0
-SKIP = 0.3  # co-op play starts at 0.22 s
+SKIP = 1.0  # co-op play starts at 0.87 s, after the HOW TO PLAY card
+# The same footage as before the HOW TO PLAY card: the card moved co-op
+# 0.63 s and versus 1.25 s later (play starts at 0.87 s and 46.35 s).
 HIGHLIGHTS = [
-    71.9,  # versus: two of P2's qubits meet -- COLLISION, the chip flashes red
-    57.3,  # versus: both chips busy, four gates fire, P2 drawing
-    17.8,  # co-op: red X where P2's route cuts the purple qubit, a gate fires
-    49.3,  # versus: crossing routes on both chips, a gate on each
-    32.0,  # co-op: P1 drawing, two gates, a speed qubit turns up
-    65.8,  # versus: P1 waits on the red X, P2 completes a gate
-    5.5,   # co-op: P1's cursor on a fresh pair, two gates
-    79.2,  # versus: late, busier chips, gates on both sides
+    73.2,  # versus: two of P2's qubits meet -- COLLISION, the chip flashes red
+    58.6,  # versus: both chips busy, four gates fire, P2 drawing
+    18.4,  # co-op: red X where P2's route cuts the purple qubit, a gate fires
+    50.6,  # versus: crossing routes on both chips, a gate on each
+    32.6,  # co-op: P1 drawing, two gates, a speed qubit turns up
+    67.1,  # versus: P1 waits on the red X, P2 completes a gate
+    6.1,   # co-op: P1's cursor on a fresh pair, two gates
+    80.5,  # versus: late, busier chips, gates on both sides
 ]
 
 # (mode, chip, seconds of play before going back to the title, and when
@@ -386,6 +390,10 @@ class Bot:
         if game.state == "paused":
             self.pads.tap(0, "select" if self.leaving else "a", 2)
             self.next_menu = t + 0.15
+        elif game.state == "tutorial":
+            if game.state_t > 0.6:  # a glimpse of the card, then any button
+                self.pads.tap(0, "a", 2)
+                self.next_menu = t + 0.15
         elif game.state == "over":
             if game.state_t > 1.6:
                 self.pads.tap(0, "a", 2)
@@ -394,18 +402,19 @@ class Bot:
             mode, chip = ROUNDS[min(self.round, len(ROUNDS) - 1)][:2]
             modes = ("single", "coop", "versus")
             chips = ("square", "brick", "bottleneck", "distributed")
+            # rows: 0 MODE, 1 CHIP, 2 QUIT -- the stick only ever aims at 0 or 1
             if game.mode != mode:
-                if game.menu_row != 0:
-                    self.pads.stick(0, 0.0, 1.0)
-                else:
-                    self.pads.stick(0, self.lean(modes, game.mode, mode), 0.0)
+                row, options, now, want = 0, modes, game.mode, mode
             elif game.lattice_kind != chip:
-                if game.menu_row != 1:
-                    self.pads.stick(0, 0.0, 1.0)
-                else:
-                    self.pads.stick(0, self.lean(chips, game.lattice_kind, chip), 0.0)
+                row, options, now, want = 1, chips, game.lattice_kind, chip
             else:
-                self.pads.tap(0, "a", 2)
+                self.pads.tap(0, "start", 2)  # Start plays from any row, never quits
+                self.next_menu = t + 0.15
+                return
+            if game.menu_row != row:
+                self.pads.stick(0, 0.0, 1.0 if game.menu_row < row else -1.0)
+            else:
+                self.pads.stick(0, self.lean(options, now, want), 0.0)
 
     @staticmethod
     def lean(options, now, want):

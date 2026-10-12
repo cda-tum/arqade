@@ -213,7 +213,10 @@ class Board:
     """One chip and everything happening on it (one per chip, so two in VERSUS)."""
 
     def __init__(self, lattice: Lattice, seed: int, players: tuple[str, ...],
-                 lives: int = config.LIVES, specials: bool = True):
+                 lives: int = config.LIVES, specials: bool = True,
+                 schedule: Iterator[Spawn] | None = None):
+        """`schedule` replaces the seeded random pairs (the scripted scenes
+        of tutorial.py); it should end with a Spawn at t=inf."""
         self.lattice = lattice
         self.players = players
         self.cursors = {p: Cursor(p) for p in players}
@@ -223,7 +226,7 @@ class Board:
         self.queue: list[Spawn] = []
         # Two routers on one chip get pairs more often (CO-OP).
         rate = config.COOP_SPAWN_RATE if len(players) > 1 else 1.0
-        self._schedule = spawn_schedule(lattice, seed, rate)
+        self._schedule = schedule if schedule is not None else spawn_schedule(lattice, seed, rate)
         self.last_router: str | None = None  # who committed the latest route
         self._next = next(self._schedule)
         self._next_id = 0

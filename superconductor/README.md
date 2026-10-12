@@ -85,6 +85,14 @@ chip joins grid neighbours, so the stick always works in four directions.
 - **Versus:** two chips side by side, fed the identical sequence of pairs (same seed).
   Each player has their own lives. Once both chips have decohered, the higher score wins.
 
+**Title screen legend:** while MODE or QUIT is picked, the right half of the title plays
+a legend, one thing on the chip at a time: PAIR, COHERENCE, RED X, MISCALIBRATED, DEFECT,
+SPEED QUBIT and BELL PAIR. Each is a few seconds on a small 3x4 chip, played by the real
+rules (a `Board` with a scripted spawn list and scripted stick pushes, in `tutorial.py`)
+and drawn by the game's own `draw_board()`, with a name and two short lines under it. The
+scenes make no sound. While CHIP is picked it shows the chosen chip playing itself instead.
+The HOW TO PLAY card reuses the PAIR and RED X scenes.
+
 ## Setup and run (dev machine)
 
 Requires [uv](https://docs.astral.sh/uv/).
@@ -117,11 +125,18 @@ screen opens the input test.
 
 - Moving back the way you came also undoes one step. A Bell jump has no "way back" on the
   stick, so undo it with X. Reaching the partner commits the route automatically.
-- On the title screen, use the stick to pick mode and chip, and A or Start to play.
+- On the title screen, the stick picks a row (MODE, CHIP, QUIT) and changes it. Start
+  always plays, whatever row is picked; A plays too, except on **QUIT**, where it leaves
+  the game at once (back to EmulationStation, or the launcher's menu). B does nothing
+  there.
+- Every match from the title opens on a **HOW TO PLAY** card: the goal in three lines, a
+  scripted scene played by the game's own rules, and the cabinet's 2x3 button cluster with
+  the used buttons lit. Any button closes it (presses in the first 0.3 s are ignored, so
+  the Start that picked the match can't skip it); that press does nothing in the match.
 - In-game, Start (or P) pauses. Select (or Esc) pauses too, and from the pause menu it
   goes back to the title.
-- **Quit:** hold Start and Select together on either pad, or hold Select (or press Esc) for
-  2 s on the title screen.
+- **Quit:** QUIT on the title, or hold Start and Select together on either pad, or hold
+  Select (or press Esc) for 2 s on the title screen.
 - Start is raw 9 and Select raw 8, confirmed on the cabinet. B resumes from the pause menu
   and leaves the game-over screen, per the cabinet's button convention (`../AGENTS.md`).
 - The keyboard is a dev fallback only. P1's keys avoid `l x r b y a`, which the cabinet's P1
@@ -137,6 +152,7 @@ High scores (per mode and chip, not for versus) are saved to
 | `lattice.py` | The chip layouts: couplers, drawing positions, neighbours, distances |
 | `rules.py` | All game rules (spawning, drawing, committing, travel, collisions, specials, scoring), pure Python and unit tested |
 | `input.py` | Pad and keyboard to actions, with stick auto-repeat |
+| `tutorial.py` | The scripted scenes (title legend, HOW TO PLAY) and when a press closes the card |
 | `game.py` | Menus, drawing, sound and the main loop |
 | `config.py` | Input mapping and every tuning constant (speed, timers, ramp, scoring) |
 
