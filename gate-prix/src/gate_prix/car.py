@@ -20,11 +20,16 @@ TOP = config.TOP_SPEED
 
 
 class Controls(NamedTuple):
-    """One car's input for a frame: steer -1 (left) to 1 (right), brake 0 to 1."""
+    """One car's input for a frame: steer -1 (left) to 1 (right), brake 0 to 1, and whether
+    to use the held item (true on the frame of a press: a held button would use the next
+    item the moment a box gives it). `pace` multiplies the top speed (within config.PACE_LIMITS): a
+    human always drives at 1.0, and the CPU racers use it for their skill and rubber-banding,
+    so the race never needs to know who drives."""
 
     steer: float = 0.0
     brake: float = 0.0
-    item: bool = False  # use the held item (Task 4)
+    item: bool = False
+    pace: float = 1.0
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -49,6 +54,7 @@ class Car:
         self.knock = 0.0  # lateral speed left from a side bump, half-widths a second
         self.prev_z = 0.0  # where the last update started, to find where it crossed a row
         self.prev_x = lane_x
+        self.pace = 1.0  # the top speed's multiplier, from the controls
 
     # --- Boosts -----------------------------------------------------------------------------
 
@@ -85,7 +91,7 @@ class Car:
 
     def top_speed(self) -> float:
         """The speed the car accelerates (or coasts) to where it is now."""
-        top = TOP * (1 + self.boost)
+        top = TOP * (1 + self.boost) * self.pace
         return top * config.OFFROAD_SPEED_FACTOR if self.offroad else top
 
     # --- Driving ----------------------------------------------------------------------------
@@ -100,10 +106,12 @@ class Car:
         """How fast full stick moves the car sideways, at its speed now."""
         return config.STEER_RATE * self.speed / TOP
 
-    def update(self, dt: float, steer: float, brake: float, segment) -> None:
-        """Drive for dt seconds on `segment` (the track's segment under the car)."""
+    def update(self, dt: float, steer: float, brake: float, segment, pace: float = 1.0) -> None:
+        """Drive for dt seconds on `segment` (the track's segment under the car), at `pace`
+        times the top speed."""
         steer = _clamp(steer, -1.0, 1.0)
         brake = _clamp(brake, 0.0, 1.0)
+        self.pace = _clamp(pace, *config.PACE_LIMITS)
         self.prev_z, self.prev_x = self.z, self.x
         if self._boosts:
             for b in self._boosts:

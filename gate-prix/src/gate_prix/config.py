@@ -93,6 +93,46 @@ GRID_LANES = (-0.4, 0.4)
 GRID_FIRST = 300.0  # the front row's distance behind the line
 GRID_GAP = 1000.0  # between the rows; a CPU in the right lane is half of it further back
 
+# Pace: a speed multiplier on top of everything else, from the controls. Humans always drive
+# at 1.0; the CPU racers use it for their skill and the rubber-banding.
+PACE_LIMITS = (0.9, 1.1)
+
+# --- Items -----------------------------------------------------------------------------------
+ITEMS = ("SPLIT", "QEC")
+BOX_REACH = 0.2  # a car whose centre is within this of a box's offset drives through it
+BOX_RESPAWN = 3.0  # seconds before a taken box is back (the same box on every lap)
+SPLIT_ROWS = 2  # the clone lasts for this many gate rows
+# The odds of a box by place (1st to 6th), as weights of (SPLIT, QEC, nothing). The back gets
+# more of both items and the front more empty boxes; last place always gets something.
+ITEM_ODDS = (
+    (20, 30, 50),
+    (30, 30, 40),
+    (35, 35, 30),
+    (45, 35, 20),
+    (55, 35, 10),
+    (60, 40, 0),
+)
+
+# --- The CPU racers --------------------------------------------------------------------------
+BOT_SKILL_BEST = 0.85  # the CPU skills spread evenly from the best down to the worst
+BOT_SKILL_WORST = 0.60
+BOT_LOOK = 600.0  # how far ahead on the racing line a bot steers for (world units)
+BOT_ROW_LEAD = 1.5  # seconds before a gate row a bot lines up for its arch
+BOT_OFFSET_MAX = 0.3  # each bot keeps its own offset from the racing line, up to this
+BOT_GOAL_MAX = 0.9  # and never aims further out than this (the road is -1 to 1)
+BOT_GAP_CLEAR = 0.08  # aiming for a gap, it keeps this far outside every arch
+BOT_DECOY = 0.6  # a bot that misses aims for a decoy this often (when there is one)
+BOT_AVOID_TIME = 0.8  # a car it would reach within this many seconds, in its path, is passed
+BOT_YIELD_TIME = 0.5  # and it makes way for a faster car that would hit it within this
+BOT_AVOID_CLEAR = 0.38  # passing, it aims this far beside the car (CAR_WIDTH and a margin)
+BOT_BRAKE_SKILL = 0.7  # bots below this skill brake into sharp curves; the rest never brake
+BOT_BRAKE = 0.5  # how hard
+BOT_BRAKE_LOOK = 800.0  # how far ahead they look for the curve
+BOT_SPLIT_LEAD = 0.6  # seconds before a row with decoys a bot uses its SPLIT
+BOT_PACE_WORST = 0.99  # the pace of the worst skill; the best drives at 1.0
+BOT_RUBBER_FIRST = 0.97  # rubber-banding: the pace multiplier in 1st place ...
+BOT_RUBBER_LAST = 1.03  # ... and in last, in a straight line between
+
 # --- The world and the camera (the look file's numbers) ---------------------------------
 # Lateral positions (car x, arch offsets, roadside sprites) are in road half-widths: -1 to 1
 # is the road. z is distance along the track in world units.

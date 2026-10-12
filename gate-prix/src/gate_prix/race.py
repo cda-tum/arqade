@@ -12,8 +12,9 @@ rows each car crossed, counts laps, and returns the frame's cues as `Event`s:
 | "check" | the CIRCUIT CHECK's Hamming distance, at the start of the final lap |
 | "finish" | the car's finishing place |
 | "bump" | the other car (each bump cues both cars) |
-
-Task 4 adds "box" and "item".
+| "box" | the item a box gave ("SPLIT", "QEC"), or None for an empty box |
+| "item" | the item the car has just used |
+| "split_end" | None: the car's clone is gone |
 
 Rules decided here:
 - A row is crossed when a car's z passes the row's z. The car's x at that moment (between
@@ -26,7 +27,21 @@ Rules decided here:
   so a right gate never slows a car down.
 - Places: finished cars in the order they finished, then the rest by laps and distance (the
   order of `racers`, players first, breaks a tie). The race is over once every player has finished; CPU cars still
-  racing are placed where they are. An over race no longer changes.
+  racing are placed where they are. An over race no longer changes. `finish_all` races on
+  until every car has finished instead (the attract race, and the tests).
+- Item boxes stand at the track's box lines, lap after lap; each box is one object, so a box
+  taken on lap 1 is also gone for a car arriving on lap 2, until it respawns BOX_RESPAWN
+  seconds later. A car crossing a box line takes the box within BOX_REACH of its x (the x
+  is interpolated, as for the rows; a line the car was put past without driving through it
+  doesn't count). The box breaks even when the car already holds an item;
+  it only gives one (rolled by the car's place, `ITEM_ODDS`) to a car holding none.
+- `Controls.item` uses the held item, before the frame's rows are crossed:
+  - SPLIT: for the next SPLIT_ROWS rows a clone drives at -x. A row is right if the car or
+    the clone takes the right arch; otherwise wrong if either takes a wrong one (the car's
+    gate first), otherwise missed. Using another SPLIT starts the count again. The clone
+    ends after its rows, or at the finish.
+  - QEC: `Circuit.qec()`, repairing the most recent mistake (not the streak). With no
+    mistake it does nothing, but the item is still used.
 """
 
 from __future__ import annotations
@@ -60,6 +75,19 @@ class Racer:
         self.check_boost: tuple[float, float] | None = None
         self.finish_time: float | None = None
         self.place = 0
+        self.item: str | None = None  # the held item, one of config.ITEMS
+        self.split_rows = 0  # rows the SPLIT clone still has
+        self.next_box = 0  # the index of the next box line it will cross
+
+    @property
+    def split(self) -> bool:
+        """Whether its SPLIT clone is out."""
+        return self.split_rows > 0
+
+    @property
+    def clone_x(self) -> float | None:
+        """The clone's x, mirrored across the centre line, while it is out."""
+        return -self.car.x if self.split_rows > 0 else None
 
     @property
     def lap(self) -> int:
@@ -69,6 +97,14 @@ class Racer:
     @property
     def finished(self) -> bool:
         return self.laps >= config.LAPS
+
+
+def _x_at(car: Car, z: float) -> float:
+    """The car's x as it passed race distance z during its last update."""
+    span = car.z - car.prev_z
+    f = (z - car.prev_z) / span if span > 0 else 1.0
+    f = min(1.0, max(0.0, f))
+    return car.prev_x + (car.x - car.prev_x) * f
 
 
 def arch_at(row: track.GateRow, x: float) -> track.Arch | None:
@@ -100,7 +136,7 @@ class Race:
     """A race of LAPS laps of the track for 1 or 2 players and the CPU racers."""
 
     def __init__(self, seed: int, players: int, rng: random.Random | None = None,
-                 course: track.Track | None = None) -> None:
+                 course: track.Track | None = None, finish_all: bool = False) -> None:
         if players not in (1, 2):
             raise ValueError(f"a race has 1 or 2 players, not {players}")
         self.seed = seed
@@ -111,6 +147,11 @@ class Race:
         self.lap_length = self.track.lap_length()
         self.target = circuit.random_target(random.Random(seed), config.SLOTS)
         self.rows = track.gate_rows(self.track, self.target, seed)
+        self.finish_all = finish_all
+        # the box lines of the whole race, in order: (race distance, line index on the lap)
+        self.box_lines = sorted((n * self.lap_length + z, k) for n in range(config.LAPS)
+                                for k, (z, _) in enumerate(self.track.boxes))
+        self._box_back: dict[tuple[int, int], float] = {}  # a taken box: when it is back
         ids = [f"p{i + 1}" for i in range(players)]
         ids += list(CPU_COLOURS[: config.CARS - players])
         self.racers: list[Racer] = []
@@ -132,6 +173,30 @@ class Race:
         """The renderer's (z, x, kind) for every car."""
         return [(r.car.z, r.car.x, r.car.kind) for r in self.racers]
 
+    def clone_objects(self) -> list[tuple[float, float, str]]:
+        """The renderer's (z, x, "clone") for every SPLIT clone that is out."""
+        return [(r.car.z, -r.car.x, "clone") for r in self.racers if r.split]
+
+    def box_present(self, k: int, j: int) -> bool:
+        """Whether box j of box line k is there (not taken, or respawned)."""
+        back = self._box_back.get((k, j))
+        return back is None or self.time >= back
+
+    def box_objects(self) -> list[tuple[float, float, str]]:
+        """The renderer's (z, x, "box") for every box that is there, lap after lap."""
+        return [(z, x, "box") for z, k in self.box_lines
+                for j, x in enumerate(self.track.boxes[k][1]) if self.box_present(k, j)]
+
+    def box_index(self, z: float) -> int:
+        """The index of the first box line beyond race distance z."""
+        return next((i for i, (bz, _) in enumerate(self.box_lines) if bz > z),
+                    len(self.box_lines))
+
+    def roll_item(self, place: int) -> str | None:
+        """A box's item for a car in this place, from the race's own item stream."""
+        odds = config.ITEM_ODDS[max(1, min(len(config.ITEM_ODDS), place)) - 1]
+        return self.rng.choices(config.ITEMS + (None,), weights=odds)[0]
+
     # --- A frame ----------------------------------------------------------------------------
 
     def update(self, dt: float, controls: Mapping[str, Controls]) -> list[Event]:
@@ -144,15 +209,43 @@ class Race:
         idle = Controls()
         for r in self.racers:
             c = controls.get(r.car.id, idle)
-            r.car.update(dt, c.steer, c.brake, self.track.segment_at(r.car.z))
+            if c.item and r.item is not None:
+                self._use(r, events)
+            r.car.update(dt, c.steer, c.brake, self.track.segment_at(r.car.z), c.pace)
         self._bumps(dt, events)
+        self._place()  # boxes roll by the places as the cars are now
         for r in self.racers:
             self._rows(r, events)
+            self._boxes(r, events)
             self._laps(r, events)
         self._place()
-        if all(r.finished for r in self.racers if r.player):
+        if all(r.finished for r in self.racers if r.player or self.finish_all):
             self.over = True
         return events
+
+    def _use(self, r: Racer, events: list[Event]) -> None:
+        item, r.item = r.item, None
+        if item == "SPLIT":
+            r.split_rows = config.SPLIT_ROWS
+        elif item == "QEC":
+            r.circuit.qec()
+        events.append(Event("item", r.car.id, item))
+
+    def _boxes(self, r: Racer, events: list[Event]) -> None:
+        car = r.car
+        while r.next_box < len(self.box_lines) and car.z >= self.box_lines[r.next_box][0]:
+            z, k = self.box_lines[r.next_box]
+            r.next_box += 1
+            if z < car.prev_z:
+                continue  # put past it (a test's teleport), not driven through it
+            x = _x_at(car, z)
+            for j, offset in enumerate(self.track.boxes[k][1]):
+                if abs(x - offset) <= config.BOX_REACH and self.box_present(k, j):
+                    self._box_back[(k, j)] = self.time + config.BOX_RESPAWN
+                    if r.item is None:
+                        r.item = self.roll_item(r.place)
+                        events.append(Event("box", car.id, r.item))
+                    break
 
     def _bumps(self, dt: float, events: list[Event]) -> None:
         for key in list(self._cooldown):
@@ -172,10 +265,15 @@ class Race:
         car = r.car
         while r.next_row < len(self.rows) and car.z >= self.rows[r.next_row].z:
             row = self.rows[r.next_row]
-            span = car.z - car.prev_z
-            f = (row.z - car.prev_z) / span if span > 0 else 1.0
-            f = min(1.0, max(0.0, f))
-            arch = arch_at(row, car.prev_x + (car.x - car.prev_x) * f)
+            x = _x_at(car, row.z)
+            arch = arch_at(row, x)
+            if r.split_rows > 0:
+                clone = arch_at(row, -x)
+                if clone is not None and (arch is None or (clone.right and not arch.right)):
+                    arch = clone
+                r.split_rows -= 1
+                if r.split_rows == 0:
+                    events.append(Event("split_end", car.id))
             right = r.circuit.take(row.slot, arch.gate if arch else None)
             if right:
                 car.give_boost(*config.streak_boost(r.circuit.streak))
@@ -192,6 +290,9 @@ class Race:
                 r.finish_time = self.time
                 self.finish_order.append(car.id)
                 events.append(Event("finish", car.id, len(self.finish_order)))
+                if r.split_rows > 0:
+                    r.split_rows = 0
+                    events.append(Event("split_end", car.id))
                 continue
             events.append(Event("lap", car.id, r.lap))
             if r.lap == config.LAPS:  # laps only grow, so this comes once per car

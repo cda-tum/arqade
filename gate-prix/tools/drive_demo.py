@@ -3,10 +3,10 @@
     uv run python tools/drive_demo.py [--views 1|2] [--seed N] [--auto]
     uv run python tools/drive_demo.py --auto --seconds 95 --screenshot OUT.png
 
-P1 (top view) steers with S/F and brakes with D, or pad 0's stick (pulled back brakes); P2
-(bottom) uses the arrows and Down, or pad 1. The CPU cars follow the racing line (a little to
-the side, by grid lane) and take whichever arch is on it. Every right/wrong/miss/lap/check/finish/bump cue is printed. --auto
-drives P1 through every right arch. --screenshot runs --seconds of the race headless with
+P1 (top view) steers with S/F, brakes with D and uses its item with Q, or pad 0's stick
+(pulled back brakes) and A; P2 (bottom) uses the arrows, Down and ".", or pad 1. The CPU cars
+are the real bots (bot.py). Every cue is printed (each bump once). --auto drives P1 through
+every right arch. --screenshot runs --seconds of the race headless with
 P1 on --auto, saves the last frame and exits. Esc quits.
 """
 
@@ -18,7 +18,7 @@ import sys
 
 import pygame
 
-from gate_prix import config, track
+from gate_prix import bot, config, track
 from gate_prix.car import Controls, aim
 from gate_prix.race import Race
 from gate_prix.road import RoadView
@@ -26,13 +26,6 @@ from gate_prix.sprites import SpriteCache, font
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 DT = 1 / config.FPS
-
-
-def line(race, racer):
-    """The racing line, each CPU half its grid lane to the side of it so they don't jostle."""
-    car = racer.car
-    goal = race.track.segment_at(car.z + 600).line + car.lane / 2
-    return Controls(*aim(car, goal, race.track.segment_at(car.z)))
 
 
 def perfect(race, racer):
@@ -44,20 +37,22 @@ def perfect(race, racer):
 
 
 def human(keys, pads, p):
-    left, right, down = ((pygame.K_s, pygame.K_f, pygame.K_d),
-                         (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_DOWN))[p]
+    left, right, down, use = ((pygame.K_s, pygame.K_f, pygame.K_d, pygame.K_q),
+                              (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_DOWN, pygame.K_PERIOD))[p]
     steer = (1.0 if keys[right] else 0.0) - (1.0 if keys[left] else 0.0)
     brake = 1.0 if keys[down] else 0.0
+    item = bool(keys[use])
     dead = config.INPUT_CONFIG["axis_deadzone"]
     if p < len(pads) and pads[p].get_numaxes() >= 2:
         sx, sy = pads[p].get_axis(0), pads[p].get_axis(1)
         steer = sx if abs(sx) > dead else steer
         brake = 1.0 if sy > dead else brake
-    return Controls(steer, brake)
+        item = item or bool(pads[p].get_button(config.INPUT_CONFIG["system"]["a_button"]))
+    return Controls(steer, brake, item)
 
 
 def draw(screen, views, race, statics, cache):
-    objects = statics + race.car_objects()
+    objects = statics + race.box_objects() + race.car_objects() + race.clone_objects()
     sprites: list = []
     for view, racer in zip(views, race.racers):
         car = racer.car
@@ -67,7 +62,8 @@ def draw(screen, views, race, statics, cache):
         marks = "".join("." if r is None else ("+" if r else "x") for r in c.results)
         text = (f"{car.id.upper()}  P{racer.place}  LAP {racer.lap}/{config.LAPS}  "
                 f"{car.speed / config.TOP_SPEED:4.0%}  STREAK {c.streak}  "
-                f"BOOST {car.boost:+.0%} {car.boost_time:3.1f}s  NEXT {c.target[c.filled] if c.filled < 24 else '-'}")
+                f"BOOST {car.boost:+.0%} {car.boost_time:3.1f}s  NEXT {c.target[c.filled] if c.filled < 24 else '-'}"
+                f"  ITEM {racer.item or '-'}{'  SPLIT ' + str(racer.split_rows) if racer.split else ''}")
         screen.blit(font(12).render(text, True, config.CAR_COLORS[car.colour]),
                     (view.rect.x + 10, view.rect.y + 8))
         screen.blit(font(10).render(marks, True, (230, 235, 255)), (view.rect.x + 10, view.rect.y + 28))
@@ -93,7 +89,8 @@ def main(argv=None) -> None:
         screen = pygame.display.set_mode((W, H), pygame.SCALED)
         pygame.display.set_caption("GATE PRIX drive demo")
     race = Race(args.seed, args.views)
-    statics = track.arch_objects(race.rows) + track.box_objects(race.track, config.LAPS)
+    statics = track.arch_objects(race.rows)
+    bots = bot.cpu_bots(race, args.seed)
     views = ([RoadView((0, 0, W, 270)), RoadView((0, 270, W, 270))] if args.views == 2
              else [RoadView((0, 0, W, H))])
     cache = SpriteCache.shared()
@@ -112,11 +109,11 @@ def main(argv=None) -> None:
                     pygame.quit()
                     return
             keys = pygame.key.get_pressed()
-        controls = {}
+        controls = bot.drive(race, bots)
         for p, racer in enumerate(race.racers):
             if not racer.player:
-                controls[racer.car.id] = line(race, racer)
-            elif (args.auto or keys is None) and p == 0:
+                continue
+            if (args.auto or keys is None) and p == 0:
                 controls[racer.car.id] = perfect(race, racer)
             elif keys is not None:
                 controls[racer.car.id] = human(keys, pads, p)
