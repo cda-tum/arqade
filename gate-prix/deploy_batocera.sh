@@ -6,19 +6,30 @@ set -euo pipefail
 # Batocera's pygame system just runs `python <file>.pygame` with that file's
 # own directory as cwd (see ../AGENTS.md). This script keeps the real game
 # code out of the ROMs folder: the package goes to /userdata/games/<game>/,
-# and a tiny loader at /userdata/roms/pygame/<game>.pygame points sys.path
-# at it and runs it.
+# and a tiny loader that points sys.path at it and runs it.
 #
-# Usage: ./deploy_batocera.sh [user@host]
+# GATE PRIX isn't public yet, so by default the loader is PARKED at
+# /userdata/games/<game>/<game>.pygame: EmulationStation never sees it, and it
+# appears in the game list only in the cabinet's experimental mode (hold
+# Start + Select on both pads; /userdata/experimental.py). --public puts the
+# loader in /userdata/roms/pygame/ instead, for when the game goes live.
+#
+# Usage: ./deploy_batocera.sh [--public] [user@host]
 #   Defaults to root@batocera.local. Pass root@10.42.0.100 (or whatever the
 #   cabinet's actual address is) if mDNS/.local resolution isn't working.
 
 GAME_NAME="gate_prix"
+PUBLIC=0
+if [ "${1:-}" = "--public" ]; then PUBLIC=1; shift; fi
 HOST="${1:-root@batocera.local}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GAMES_DIR="/userdata/games/${GAME_NAME}"
-ROM_FILE="/userdata/roms/pygame/${GAME_NAME}.pygame"
+if [ "$PUBLIC" = 1 ]; then
+    ROM_FILE="/userdata/roms/pygame/${GAME_NAME}.pygame"
+else
+    ROM_FILE="${GAMES_DIR}/${GAME_NAME}.pygame"
+fi
 
 STAGE_DIR="$(mktemp -d)"
 trap 'rm -rf "$STAGE_DIR"' EXIT
@@ -51,4 +62,8 @@ echo
 echo "Deployed."
 echo "  Code:   ${GAMES_DIR}/gate_prix/"
 echo "  Loader: ${ROM_FILE}"
-echo "A first deploy needs the gamelist.xml entry and an EmulationStation restart (see ../AGENTS.md)."
+if [ "$PUBLIC" = 1 ]; then
+    echo "A first public deploy needs the gamelist.xml entry and an EmulationStation restart (see ../AGENTS.md)."
+else
+    echo "Parked: it appears in experimental mode (Start + Select on both pads), no ES restart needed."
+fi
