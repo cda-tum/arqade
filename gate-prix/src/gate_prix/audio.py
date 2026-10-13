@@ -195,8 +195,12 @@ def sound_for(event) -> str | None:
             return "box" if value else "box_empty"
         if kind == "item":
             return "split" if value == "SPLIT" else "qec"
+        # the new rules' cues borrow the existing effects until they get their own (5d)
         return {"wrong": "wrong", "miss": "miss", "lap": "lap", "finish": "finish",
-                "bump": "bump", "box_full": "box_full", "split_end": "split_end"}.get(kind)
+                "bump": "bump", "box_full": "box_full", "split_end": "split_end",
+                "turbo": "boost", "drift": "blip", "hazard": "bump", "collapse": "wrong",
+                "decohered": "miss", "fizzle": "box_empty", "immune": "box_full",
+                "tunnel_end": "split_end"}.get(kind)
     return None
 
 

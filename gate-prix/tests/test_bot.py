@@ -7,7 +7,7 @@ import pytest
 from gate_prix import bot, config
 from gate_prix.bot import Bot
 from gate_prix.car import Controls, aim
-from gate_prix.race import Race
+from gate_prix.race import Cloud, Race
 
 DT = 1 / 60
 TOP = config.TOP_SPEED
@@ -15,13 +15,17 @@ SEEDS = range(20)
 
 
 def perfect(race, racer):
-    """A scripted player: the racing line, and the right arch of every row from 1.5 s out."""
+    """A scripted player: the racing line, the right arch of every row from 1.5 s out, and
+    clear of every hazard and cloud it sees coming (it sees them all)."""
     car = racer.car
     goal = race.track.segment_at(car.z + 600.0).line
+    arch = None
     if racer.next_row < len(race.rows):
         row = race.rows[racer.next_row]
         if row.z - car.z < 1.5 * TOP:
-            goal = next(a.offset for a in row.arches if a.right)
+            arch = next(a for a in row.arches if a.right)
+            goal = arch.offset
+    goal = bot.dodge(race, racer, goal, arch)
     return Controls(*aim(car, goal, race.track.segment_at(car.z)))
 
 
@@ -166,12 +170,13 @@ def brake_frames(skill):
     while race.racer("green").laps < 1:
         controls = alone(race, "green")
         controls["green"] = c = b.controls(race)
-        braked += c.brake > 0
+        braked += c.brake > 0 and abs(c.steer) < config.DRIFT_STEER  # a brake, not a drift
         race.update(DT, controls)
     return braked
 
 
 def test_only_low_skill_bots_brake_into_sharp_curves():
+    # (the better ones drift there instead: stick back *and* steered)
     assert brake_frames(0.6) > 0
     assert brake_frames(0.85) == 0
 
@@ -330,6 +335,133 @@ def test_a_bot_uses_split_just_before_a_row_with_decoys():
         assert not b.controls(race).item
 
 
+def ahead_of(race, me, gaps, x=0.0):
+    """Put `me` on a straight at top speed and the cars in `gaps` (id: dz) around it, the
+    rest far behind; no rows or boxes near."""
+    z = race.track.segments[_straight(race)].z
+    for i, r in enumerate(race.racers):
+        r.next_row, r.next_box = len(race.rows), len(race.box_lines)
+        r.car.speed, r.car.x = TOP, x
+        r.car.z = z + gaps.get(r.car.id, -200_000.0 - 1000.0 * i)
+    race.racer(me).car.z = z
+    return race.racer(me)
+
+
+def test_a_bot_fires_measure_only_at_a_car_ahead_in_range():
+    race = Race(seed=3, players=1, finish_all=True)
+    b = Bot("green", 0.7, 3)
+    green = ahead_of(race, "green", {"p1": config.MEASURE_RANGE + 3000.0, "white": -2000.0})
+    green.item = "MEASURE"
+    assert not b.controls(race).item
+    race.racer("p1").car.z -= 6000.0
+    assert b.controls(race).item
+    race.racer("p1").car.tunnel(1.0)  # no use: it is immune
+    assert not b.controls(race).item
+
+
+def test_a_bot_drops_decoherence_with_a_car_close_behind_it():
+    race = Race(seed=3, players=1, finish_all=True)
+    b = Bot("green", 0.7, 3)
+    green = ahead_of(race, "green", {"p1": -12_000.0})
+    green.item = "DECOHERENCE"
+    assert not b.controls(race).item
+    race.racer("p1").car.z = green.car.z - 2500.0
+    assert b.controls(race).item
+    race.racer("p1").car.x = 0.9  # well to the side: it would miss the cloud
+    assert not b.controls(race).item
+
+
+def test_a_bot_tunnels_in_traffic_before_a_hazard_or_a_shot():
+    race = Race(seed=3, players=1, finish_all=True)
+    b = Bot("green", 0.7, 3)
+    green = ahead_of(race, "green", {"p1": 20_000.0})
+    green.item = "TUNNEL"
+    assert not b.controls(race).item
+    # in traffic: a car just ahead in its path
+    race.racer("p1").car.z = green.car.z + 500.0
+    assert b.controls(race).item
+    race.racer("p1").car.z = green.car.z + 20_000.0
+    # a shot coming for it
+    race.racer("white").car.z = green.car.z - 5000.0
+    race.racer("white").item = "MEASURE"
+    race.update(DT, {"white": Controls(item=True)})
+    assert race.shots and race.shots[0].target == "green"
+    assert b.controls(race).item
+
+
+def test_a_bot_tunnels_through_a_cloud_it_cannot_steer_round():
+    race = Race(seed=3, players=1, finish_all=True)
+    b = Bot("green", 0.7, 3)
+    green = ahead_of(race, "green", {"p1": 30_000.0})
+    green.item = "TUNNEL"
+    race.clouds.append(Cloud(0, green.car.z + 0.3 * TOP, green.car.x, "p1", 5.0))
+    assert b.controls(race).item
+    race.clouds[0].z = green.car.z + 2.0 * TOP  # far yet: it can still steer round it
+    assert not b.controls(race).item
+
+
+def lap_of_drifts(seed, skill):
+    race = Race(seed=seed, players=1)
+    race.roll_item = lambda place, **kw: None
+    b = Bot("green", skill, seed)
+    turbos = 0
+    green = race.racer("green")
+    while green.laps < 1:
+        controls = alone(race, "green")
+        controls["green"] = b.controls(race)
+        turbos += sum(e.kind == "turbo" and e.car == "green"
+                      for e in race.update(DT, controls))
+    return turbos
+
+
+def test_a_bot_drifts_the_sharpest_curves_by_skill():
+    # THE FRIDGE has three: the two halves of the s-bend and the coax corner
+    assert lap_of_drifts(1, 1.0) == 3
+    drifted = sum(lap_of_drifts(seed, 0.6) for seed in range(12))
+    assert 0.4 * 36 <= drifted <= 0.8 * 36
+
+
+def storm_alone(seed, skill, right=4):
+    """A bot driving alone through its own final-lap storm: the hazards it hits."""
+    race = Race(seed=seed, players=1)
+    race.roll_item = lambda place, **kw: None
+    b = Bot("green", skill, seed)
+    green = race.racer("green")
+    c = green.circuit
+    for slot in range(config.SLOTS):
+        c.take(slot, c.target[slot] if slot < right else None)
+    green.next_row, green.laps = len(race.rows), config.LAPS - 1 - 1
+    green.next_box = len(race.box_lines)
+    green.car.z = (config.LAPS - 1) * race.lap_length - 20.0
+    green.car.speed = TOP
+    hits = 0
+    while not green.finished:
+        controls = alone(race, "green")
+        controls["green"] = b.controls(race)
+        hits += sum(e.kind == "hazard" and e.car == "green" for e in race.update(DT, controls))
+    return hits, len(green.hazards)
+
+
+def test_a_bot_dodges_the_storm_by_skill():
+    best = [storm_alone(seed, 1.0) for seed in range(6)]
+    worst = [storm_alone(seed, 0.0) for seed in range(6)]
+    assert all(n == 24 for _, n in best)
+    assert sum(h for h, _ in best) <= 1
+    assert sum(h for h, _ in worst) >= 10
+
+
+def test_a_blind_bot_picks_its_arch_at_half_its_skill():
+    right = picks = 0
+    for seed in range(200):
+        race = Race(seed=seed, players=1)
+        b = Bot("green", 0.8, seed)
+        race.racer("green").blind_time = 1.0
+        _, arch = b._row_aim(0, race.rows[0], 0.0, race.racer("green"))
+        picks += 1
+        right += arch is not None and arch.right
+    assert right / picks == pytest.approx(0.8 * config.BOT_BLIND_SKILL, abs=0.08)
+
+
 # --- Whole races, 20 seeds ------------------------------------------------------------------
 
 
@@ -347,7 +479,9 @@ def test_the_best_cpus_right_gate_rate_is_80_to_90_percent(races):
 def test_a_perfect_scripted_player_wins_every_race(races):
     for race, _, _ in races:
         assert race.results()[0] == "p1"
-        assert all(race.racer("p1").circuit.results)
+    # every right arch, but for the odd collapse just before a row (a CPU's MEASURE)
+    right = [sum(race.racer("p1").circuit.results) for race, _, _ in races]
+    assert statistics.mean(right) >= 15.5 and min(right) >= 14
 
 
 def test_races_stay_close():
@@ -360,6 +494,10 @@ def test_races_stay_close():
 
 
 def test_the_bots_use_their_items(races):
-    used = sum(e.kind == "item" for _, _, events in races for e in events)
-    got = sum(e.kind == "box" and e.value is not None for _, _, events in races for e in events)
+    # the CPUs' items (the scripted player never uses any)
+    used = sum(e.kind == "item" and e.car != "p1" for _, _, events in races for e in events)
+    got = sum(e.kind == "box" and e.value is not None and e.car != "p1"
+              for _, _, events in races for e in events)
     assert got > 0 and used >= 0.8 * got
+    kinds = {e.value for _, _, events in races for e in events if e.kind == "item"}
+    assert kinds == set(config.ITEMS)  # every one of them

@@ -12,7 +12,9 @@ lap, a simpler HUD, items that explain themselves, the CIRCUIT CHECK as an event
 sense of speed). The race, items, CPU racers, title with an attract race, pause, results,
 sound, `--input-test` and the Batocera deploy script are in; the screens get the look
 file's polish next (Task 6 of the plan). Button numbers follow the ones confirmed on the
-cabinet.
+cabinet. The second playtest's rules are in (drifting, the noise storm, MEASURE, TUNNEL and
+DECOHERENCE); their visuals come next (Task 5d), so until then the storm, the shots and
+the clouds are not drawn.
 
 ## The race
 
@@ -37,24 +39,42 @@ cabinet.
   for 2 s + 0.25 s per right gate. A perfect circuit is +100% for 6 s, 14/16 is +77% for
   5.5 s, 12/16 is +56% for 5 s. The CPU racers get the same check by their own circuits,
   so a better circuit's warp passes them.
-- **The final lap** has no gates: a sprint to the line on the check's boost.
+  A check under +5% (3/16 or fewer) is **NO BOOST**: no warp at all.
+- **The final lap** has no gates, but a **noise storm**: your own decoherence hazards, that
+  only you see and hit (the CPUs get theirs). There are 4 + 2 per wrong gate of the check
+  (a perfect circuit 4, 8/16 20, at most 24), spread over the lap, never within 1 s of the
+  finish, and they always leave a clear line more than a car wide:
+  - a **static cloud** (wide) takes your boosts and caps you at 70% for 1 s;
+  - a **bit-flip mine** (small) spins you out: 40% speed, and no steering for 0.8 s.
+- **Drifting:** pull the stick back *and* steer (at least 40% of the stick, from 60% of the
+  top speed). The car slides, turns tighter and runs at 92% speed. After 0.7 s it is
+  charged to level 1, after 1.5 s to level 2; letting go gives a **mini-turbo**, +25% for
+  0.6 s or +40% for 1 s. Slowing below half speed, a bump or a hit ends it with nothing.
 - **Off the road** (on the copper plate) the top speed drops to 60%. Cars bump.
-- **Item boxes** (two lines a lap, every lap) give an item, better odds further back. You
-  hold one; its slot pulses with its name, a big A and what it does, and the first time
-  you get each one a banner says "PRESS A TO USE ...":
+- **Item boxes** (two lines a lap, every lap) always give an item: the back of the field
+  gets more MEASURE, TUNNEL and SPLIT, the front more DECOHERENCE and QEC, and on the final
+  lap there is no SPLIT or QEC. You hold one; its slot pulses with its name, a big A and
+  what it does, and the first time you get each one a banner says "PRESS A TO USE ...":
   - **SPLIT** ("a clone takes a second gate"): for the next 2 gate rows a translucent
     clone drives mirrored across the centre line; if either of you takes the right arch,
-    the slot is right. It is over with the last gate row: boxes on the final lap never give
-    one, and one still held is dropped;
+    the slot is right. It is over with the last gate row: one still held is dropped;
   - **QEC** ("fixes your last wrong gate"): error correction, your most recent wrong or
-    empty slot becomes right (for the check and the results, not the streak).
+    empty slot becomes right (for the check and the results, not the streak);
+  - **MEASURE:** a homing shot at the nearest car ahead within 30,000 units (about 2.7 s).
+    It flies 0.4 s and **collapses** that car: a spin-out, its streak reset, its boosts
+    gone. With nobody in range it fizzles;
+  - **TUNNEL:** for 3 s you pass through cars, drive off-road at full speed, and are
+    immune to the storm, clouds and MEASURE;
+  - **DECOHERENCE:** drops a noise cloud just behind you for 10 s. Whoever drives through
+    it loses their boosts and, on laps 1-2, their NEXT GATE badge and arch marker go blank
+    for 1.5 s (on the final lap it is a storm cloud's slowdown instead).
 - **The HUD:** one big NEXT GATE badge with a dot under it for each of the 16 slots (✓
   green, ✗ red), the place and the lap, and the held item.
 - **Speed you can feel:** the top speed is 12% up from the first build, the roadside
   stands close to the road, speed lines show at top speed, the camera shakes a little,
   and a boost widens the field of view, lights the exhaust and whooshes.
 - **The result:** places and times, and each player's circuit under the target with its
-  accuracy ("14/16 GATES"). A rematches, B goes to the title.
+  accuracy ("14/16 GATES") and its check ("CHECK 12/16"). A rematches, B goes to the title.
 - **2 PLAYERS:** the race ends when both have finished, or 40 s after the first one did
   (the other is placed where they are). A finished car is driven on by the computer.
 
@@ -63,7 +83,8 @@ cabinet.
 | Action | Cabinet | P1 keyboard | P2 keyboard |
 |---|---|---|---|
 | Steer | stick left / right | S / F | Left / Right |
-| Brake (held through a curve: a little drift) | stick pulled back | D | Down |
+| Brake | stick pulled straight back | D | Down |
+| Drift (let go for the mini-turbo) | stick pulled back and steered | D + S / F | Down + Left / Right |
 | Use the item; confirm in menus | A | Q | . |
 | Back (pause menu, result) | B | W | , |
 | Start the race; pause (RESUME / QUIT TO TITLE) | Start | 1 | 2 |
@@ -128,7 +149,7 @@ table, and a short scripted session of the real loop.
 | `tools/drive_demo.py` | A real race with debug text; `--auto` drives P1 perfectly. |
 | `tools/benchmark.py` | Times the road renderer (2 views, then 1; plain, then with the warp's effects); runs headless, also on the cabinet. |
 | `tools/handling.py` | How the track drives, piece by piece, for tuning the handling. |
-| `tools/race_stats.py` | Races the CPUs over many seeds: gate rates, finish gaps, bumps. |
+| `tools/race_stats.py` | Races the CPUs over many seeds: gate rates, finish gaps and P1's margin, bumps, items, turbos and hits. |
 
 ## Layout (`src/gate_prix/`)
 
@@ -136,8 +157,9 @@ table, and a short scripted session of the real loop.
 |---|---|
 | `circuit.py` | Gates, the exact single-qubit simulation, targets, slots, Hamming distance, QEC. Pure. |
 | `track.py` | THE FRIDGE's segments (curves, hills), gate rows, item boxes, roadside sprites, the racing line. Pure. |
-| `car.py` | Car physics: auto-acceleration, steering, curves, off-road, boosts, bumps. Pure. |
-| `race.py` | The race: cars, arches, items, laps, the CIRCUIT CHECK, places, the finish. Pure. |
+| `car.py` | Car physics: auto-acceleration, steering, drifting, curves, off-road, boosts, spin-outs, bumps. Pure. |
+| `race.py` | The race: cars, arches, items (shots, clouds), laps, the CIRCUIT CHECK, the storm, places, the finish. Pure. |
+| `storm.py` | The final lap's noise storm: one racer's hazards, laid out from its check. Pure. |
 | `bot.py` | The CPU racers (and the attract race's drivers, and a finished player's autopilot). Pure. |
 | `match.py` | Title, attract, countdown, race, pause, result, idle. Pure. |
 | `road.py` | The pseudo-3D projection and road drawing for one view. |

@@ -26,6 +26,8 @@ the HUD use both).
   final lap (`frozen(p)`, the race's `check_wait`) their view shows the comparison and their
   pad does nothing: the car drives straight on (the line is on the start straight) and loses
   no distance. The race, and any other player, runs on.
+- **Events:** a player gets the race's events of its own car, and those aimed at another car
+  from its own (`AIMED`: its bumps, its MEASURE hitting, its cloud driven through).
 - **Banners**, per player, for the HUD: "gate" flashes each row's outcome for FLASH_TIME
   (value ("right", streak), ("wrong", slot) or ("miss", slot); one at a time), "tip" says how
   to use an item on its first pickup (value the item; once per item and player each
@@ -57,6 +59,9 @@ COUNTDOWN = "countdown"
 RACE = "race"
 PAUSED = "paused"
 RESULT = "result"
+# race events whose value is another car, cued to that car's player too: the other side of
+# a bump, the shooter of a MEASURE that hit, the dropper of a cloud that was driven through
+AIMED = ("bump", "collapse", "decohered")
 
 
 @dataclass(frozen=True)
@@ -124,6 +129,7 @@ class ResultRow:
     check: int | None  # its CIRCUIT CHECK distance
     slots: tuple = ()  # its circuit's gates (None: an empty slot), frozen at the finish
     results: tuple = ()  # and each slot's right (True), wrong (False) or undecided (None)
+    check_right: int | None = None  # how many of its check's slots were right ("CHECK 12/16")
 
 
 class Match:
@@ -296,7 +302,7 @@ class Match:
         race = self.race
         mine = set(self.players)
         for e in race.update(dt, self._controls(inp)):
-            if e.car in mine or (e.kind == "bump" and e.value in mine):
+            if e.car in mine or (e.kind in AIMED and e.value in mine):
                 events.append(e)
             if e.car in mine:
                 self._on_event(e)
@@ -348,7 +354,7 @@ class Match:
             c = r.circuit
             rows.append(ResultRow(car_id, place, r.player, r.finish_time,
                                   sum(1 for ok in c.results if ok), r.check,
-                                  tuple(c.slots), tuple(c.results)))
+                                  tuple(c.slots), tuple(c.results), r.check_right))
         self.results = rows
         self.over_time = 0.0
 

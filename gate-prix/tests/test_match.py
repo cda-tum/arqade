@@ -402,6 +402,30 @@ def test_the_result_holds_each_players_circuit_accuracy():
     assert row.right == config.SLOTS - config.SLOTS // 4
 
 
+def test_the_result_shows_the_check_as_the_number_right():
+    m = started()
+    p1 = m.race.racer("p1")
+    p1.check = 4  # what the CIRCUIT CHECK found: 4 wrong
+    finish(m, "p1")
+    run(m, 0.1)
+    row = next(r for r in m.results if r.car == "p1")
+    assert row.check == 4 and row.check_right == config.CHECK_SLOTS - 4 == 12
+    cpu = next(r for r in m.results if not r.player)
+    assert cpu.check is None and cpu.check_right is None
+
+
+def test_a_measure_that_hits_reaches_the_shooters_sound_too():
+    m = started()
+    p1 = m.race.racer("p1")
+    p1.item = "MEASURE"
+    target = m.race.measure_target("p1")  # a CPU on the grid ahead
+    assert target is not None and not target.player
+    events = m.update(DT, A)
+    events += run(m, config.MEASURE_FLIGHT + 0.1)
+    assert [e for e in events if getattr(e, "kind", None) == "collapse"
+            and e.car == target.car.id and e.value == "p1"]
+
+
 def test_the_result_keeps_each_players_circuit_as_it_was_at_the_finish():
     m = started()
     p1 = m.race.racer("p1")

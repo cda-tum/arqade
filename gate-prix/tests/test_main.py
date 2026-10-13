@@ -50,7 +50,13 @@ def test_every_cue_has_a_sound_and_the_effects_build():
               Event("check", "p1", 4), Event("warp", "p1", (1.0, 6.0)), Event("lap", "p1", 2), Event("finish", "p1", 1),
               Event("bump", "p1", "green"), Event("box", "p1", "QEC"), Event("box", "p1", None),
               Event("box_full", "p1", "SPLIT"), Event("item", "p1", "SPLIT"),
-              Event("item", "p1", "QEC"), Event("split_end", "p1")]:
+              Event("item", "p1", "QEC"), Event("split_end", "p1"),
+              Event("item", "p1", "MEASURE"), Event("item", "p1", "TUNNEL"),
+              Event("item", "p1", "DECOHERENCE"), Event("turbo", "p1", 1),
+              Event("turbo", "p1", 2), Event("drift", "p1", 1), Event("hazard", "p1", "cloud"),
+              Event("hazard", "p1", "mine"), Event("collapse", "p1", "green"),
+              Event("decohered", "p1", "green"), Event("fizzle", "p1"),
+              Event("immune", "p1", "shot"), Event("tunnel_end", "p1")]:
         name = audio.sound_for(e)
         assert name in sfx, e
     assert audio.sounds_for([Event("bump", "p1", "a"), Event("bump", "p1", "b")]) == ["bump"]

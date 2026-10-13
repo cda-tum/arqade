@@ -7,6 +7,7 @@ from gate_prix.track import Segment
 TOP = config.TOP_SPEED
 DT = 1 / 60
 STRAIGHT = Segment(0, 0.0, 0.0, 0.0, 0.0, 0.0)
+LAP = 100_000.0
 
 
 def bend(curve: float) -> Segment:
@@ -192,22 +193,210 @@ def test_the_push_grows_with_speed_squared_and_the_curve():
     assert slow.steer_rate() == pytest.approx(fast.steer_rate() / 2)
 
 
-def test_a_brake_held_through_a_curve_drifts_the_push_down():
+def test_a_brake_held_through_a_curve_takes_some_push_away():
     plain = at_speed()
     plain.update(DT, 0.0, 0.0, bend(3.0))
-    drift = at_speed()
-    drift.update(DT, 0.0, 1.0, bend(3.0))
-    assert drift.drifting and not plain.drifting
+    braked = at_speed()
+    braked.update(DT, 0.0, 1.0, bend(3.0))
+    assert not braked.drifting and not plain.drifting  # straight back is the brake
     # less push, and not only because of the speed it shed
-    undrifted = -config.CURVE_PUSH * (drift.speed / TOP) ** 2 * 3.0 * DT
-    assert drift.x == pytest.approx(undrifted * (1 - config.DRIFT))
-    assert plain.x < undrifted < drift.x < 0
+    unbraked = -config.CURVE_PUSH * (braked.speed / TOP) ** 2 * 3.0 * DT
+    assert braked.x == pytest.approx(unbraked * (1 - config.BRAKE_PUSH))
+    assert plain.x < unbraked < braked.x < 0
 
 
-def test_no_drift_on_a_straight():
+def test_no_drift_on_a_straight_with_the_stick_straight_back():
     car = at_speed()
     car.update(DT, 0.0, 1.0, STRAIGHT)
     assert not car.drifting
+    assert car.speed == pytest.approx(TOP - config.BRAKE * DT)
+
+
+# --- Drifting -------------------------------------------------------------------------------
+
+
+def test_the_drift_thresholds():
+    assert config.DRIFT_STEER == 0.4
+    assert config.DRIFT_PULL == 0.0  # any pull past the stick's deadzone, as the brake
+    assert (config.DRIFT_MIN_SPEED, config.DRIFT_END_SPEED) == (0.6, 0.5)
+    assert config.DRIFT_SPEED == 0.92
+    assert config.DRIFT_LEVELS == (0.7, 1.5)
+    assert config.DRIFT_TURBOS == ((0.25, 0.6), (0.40, 1.0))
+    assert 0 < config.DRIFT_PUSH < 1
+
+
+def test_stick_back_and_steer_drifts_and_straight_back_brakes():
+    car = at_speed()
+    car.update(DT, 0.5, 1.0, bend(3.0))
+    assert car.drifting and car.drift_dir == 1
+    assert car.speed > TOP - config.BRAKE * DT  # a drift is not a brake
+    car = at_speed()
+    car.update(DT, -0.4, 0.3, bend(-3.0))
+    assert car.drifting and car.drift_dir == -1
+    car = at_speed()
+    car.update(DT, 0.39, 1.0, bend(3.0))  # not enough steer: the brake
+    assert not car.drifting
+    assert car.speed == pytest.approx(TOP - config.BRAKE * DT)
+    car = at_speed()
+    car.update(DT, 1.0, 0.0, bend(3.0))  # steering alone is steering
+    assert not car.drifting
+
+
+def test_a_drift_starts_only_at_60_percent_of_top_speed():
+    car = at_speed(speed=0.59 * TOP)
+    car.update(DT, 1.0, 1.0, bend(3.0))
+    assert not car.drifting
+    car = at_speed(speed=0.61 * TOP)
+    car.update(DT, 1.0, 1.0, bend(3.0))
+    assert car.drifting
+
+
+def test_a_drift_runs_at_92_percent_and_the_curve_pushes_less():
+    car = at_speed()
+    drive(car, 1.0, steer=0.5, brake=1.0, segment=bend(3.0))
+    assert car.drifting
+    assert car.speed == pytest.approx(config.DRIFT_SPEED * TOP)
+    assert car.push(3.0) == pytest.approx(
+        -config.CURVE_PUSH * config.DRIFT_SPEED ** 2 * 3.0 * config.DRIFT_PUSH)
+    # turning tighter: the same stick holds a tighter line than without the drift
+    plain = at_speed()
+    drive(plain, 1.0, steer=0.5, segment=bend(3.0))
+    assert car.x > plain.x
+
+
+def test_a_boosted_drift_runs_at_92_percent_of_the_boosted_speed():
+    car = at_speed(speed=1.3 * TOP)
+    car.give_boost(0.3, 5.0)
+    drive(car, 1.0, steer=0.5, brake=1.0, segment=bend(3.0))
+    assert car.speed == pytest.approx(config.DRIFT_SPEED * 1.3 * TOP)
+
+
+def drift_for(seconds, steer=0.6, segment=None):
+    car = at_speed()
+    drive(car, seconds, steer=steer, brake=1.0, segment=segment or bend(3.0))
+    return car
+
+
+@pytest.mark.parametrize("seconds, level", [(0.5, 0), (0.75, 1), (1.4, 1), (1.55, 2), (3.0, 2)])
+def test_the_charge_levels(seconds, level):
+    car = drift_for(seconds)
+    assert car.drifting and car.drift_level == level
+    assert car.drift_time == pytest.approx(seconds, abs=DT)
+
+
+@pytest.mark.parametrize("seconds, turbo", [(0.5, None), (0.75, (0.25, 0.6)), (1.55, (0.40, 1.0))])
+def test_letting_go_gives_the_mini_turbo_of_its_level(seconds, turbo):
+    car = drift_for(seconds)
+    car.update(DT, 0.6, 0.0, bend(3.0))  # the stick no longer back: let go
+    assert not car.drifting and car.drift_level == 0
+    if turbo is None:
+        assert car.boost == 0.0 and ("turbo", 1) not in car.cues
+    else:
+        assert car.boosts == ((turbo[0], pytest.approx(turbo[1])),)
+        level = 1 if turbo[0] == 0.25 else 2
+        assert ("turbo", level) in car.cues
+        assert car.turbo_level == level and car.turbo_flash == pytest.approx(config.TURBO_FLASH)
+
+
+def test_easing_the_steer_below_the_threshold_lets_go_too():
+    car = drift_for(0.8)
+    car.update(DT, 0.2, 1.0, bend(3.0))
+    assert not car.drifting and car.boost == pytest.approx(0.25)
+
+
+def test_steering_the_other_way_lets_go_and_starts_a_new_drift():
+    car = drift_for(0.8)
+    car.update(DT, -0.6, 1.0, bend(3.0))
+    assert car.boost == pytest.approx(0.25)
+    assert car.drifting and car.drift_dir == -1 and car.drift_time == pytest.approx(DT)
+
+
+def test_the_charge_cues_each_level_once():
+    car = at_speed()
+    cues = []
+    for _ in range(round(2.0 / DT)):
+        car.update(DT, 0.6, 1.0, bend(3.0))
+        cues += car.cues
+    assert cues == [("drift", 1), ("drift", 2)]
+
+
+def test_slowing_below_half_speed_ends_a_drift_with_no_turbo():
+    car = drift_for(1.0)
+    car.speed = 0.45 * TOP
+    car.update(DT, 0.6, 1.0, bend(3.0))
+    assert not car.drifting and car.boost == 0.0
+    car.update(DT, 0.6, 1.0, bend(3.0))  # and it cannot start again that slow
+    assert not car.drifting
+
+
+def test_a_bump_ends_a_drift_with_no_turbo():
+    a = drift_for(1.0)
+    b = at_speed(x=a.x + 0.1)
+    b.z = a.z
+    assert bump(a, b, LAP) == "side"
+    assert not a.drifting and a.drift_time == 0.0 and a.boost == 0.0
+
+
+def test_the_drift_angle_leans_into_the_slide_and_back():
+    car = drift_for(1.0)
+    assert car.drift_angle == pytest.approx(config.DRIFT_ANGLE)
+    left = drift_for(1.0, steer=-0.6, segment=bend(-3.0))
+    assert left.drift_angle == pytest.approx(-config.DRIFT_ANGLE)
+    drive(car, 1.0)
+    assert car.drift_angle == 0.0
+
+
+# --- Spin-outs, slowdowns and tunnelling ---------------------------------------------------
+
+
+def test_a_spin_out_drops_to_40_percent_and_the_stick_does_nothing_for_0_8_s():
+    car = drift_for(1.0)
+    speed = car.speed
+    car.spin()
+    assert car.speed == pytest.approx(config.SPIN_SPEED * speed)
+    assert not car.drifting and car.boost == 0.0  # no turbo
+    assert car.spinning and car.spin_time == config.SPIN_TIME == 0.8
+    x = car.x
+    for _ in range(round(config.SPIN_TIME / DT)):
+        car.update(DT, 1.0, 1.0, STRAIGHT)
+        assert car.x == x and not car.drifting
+    assert not car.spinning
+    car.update(DT, 1.0, 0.0, STRAIGHT)
+    assert car.x > x
+
+
+def test_a_slowdown_caps_the_speed_for_its_time():
+    car = at_speed()
+    car.slow(config.CLOUD_CAP, config.CLOUD_TIME)
+    assert car.speed == pytest.approx(0.7 * TOP)
+    drive(car, config.CLOUD_TIME - DT)
+    assert car.speed == pytest.approx(0.7 * TOP) and car.slow_time > 0
+    drive(car, 2 * DT)
+    assert car.slow_time == 0.0
+    drive(car, 1.0)
+    assert car.speed > 0.7 * TOP
+
+
+def test_clearing_the_boosts():
+    car = at_speed()
+    car.give_boost(0.5, 3.0)
+    car.give_boost(0.2, 6.0)
+    car.clear_boosts()
+    assert car.boosts == () and car.boost == 0.0
+
+
+def test_a_tunnelling_car_drives_off_road_at_full_speed_for_its_time():
+    car = at_speed(x=1.5)
+    car.tunnel(config.TUNNEL_TIME)
+    assert car.tunnelling and car.tunnel_time == 3.0
+    drive(car, 1.0)
+    assert car.offroad and car.speed == pytest.approx(TOP)
+    cues = []
+    for _ in range(round(2.5 / DT)):
+        car.update(DT, 0.0, 0.0, STRAIGHT)
+        cues += car.cues
+    assert not car.tunnelling and cues.count(("tunnel_end", None)) == 1
+    assert car.speed < TOP
 
 
 # --- Handling round THE FRIDGE ---------------------------------------------------------------
@@ -276,9 +465,6 @@ def test_aim_closes_on_its_goal_and_cancels_the_push():
 
 
 # --- Bumps ----------------------------------------------------------------------------------
-
-
-LAP = 100_000.0
 
 
 def test_side_by_side_cars_bump_apart():

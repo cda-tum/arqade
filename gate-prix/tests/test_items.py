@@ -59,16 +59,22 @@ def clear_of(row, x):
 # --- Boxes ---------------------------------------------------------------------------------
 
 
-def test_the_item_table_is_one_row_per_place_and_the_back_does_better():
-    assert config.ITEMS == ("SPLIT", "QEC")
+def test_the_item_table_is_one_row_per_place_over_the_five_items():
+    assert config.ITEMS == ("SPLIT", "QEC", "MEASURE", "TUNNEL", "DECOHERENCE")
+    assert config.GATE_ITEMS == ("SPLIT", "QEC")
     assert len(config.ITEM_ODDS) == config.CARS
     for odds in config.ITEM_ODDS:
-        assert len(odds) == len(config.ITEMS) + 1 and all(w >= 0 for w in odds)
-    share = [[w / sum(odds) for w in odds] for odds in config.ITEM_ODDS]
+        assert len(odds) == len(config.ITEMS) and all(w >= 0 for w in odds)
+        # never empty, on any lap: something is left once SPLIT and QEC are out
+        assert sum(w for item, w in zip(config.ITEMS, odds) if item not in config.GATE_ITEMS) > 0
+    share = [dict(zip(config.ITEMS, (w / sum(odds) for w in odds))) for odds in config.ITEM_ODDS]
     for front, back in zip(share, share[1:]):
-        assert back[0] >= front[0] and back[1] >= front[1]  # more SPLIT and more QEC
-        assert back[2] <= front[2]  # fewer empty boxes
-    assert share[-1][2] == 0  # last place always gets something
+        for item in ("MEASURE", "TUNNEL", "SPLIT"):  # the back gets more of these
+            assert back[item] >= front[item], item
+        for item in ("DECOHERENCE", "QEC"):  # the front more of these
+            assert back[item] <= front[item], item
+    assert share[-1]["MEASURE"] > share[0]["MEASURE"]
+    assert share[0]["DECOHERENCE"] > share[-1]["DECOHERENCE"]
 
 
 def test_driving_through_a_box_gives_an_item_and_cues_it():
@@ -154,14 +160,27 @@ def test_box_odds_by_place_statistically_over_seeds():
     for place, got in counts.items():
         odds = config.ITEM_ODDS[place - 1]
         total = sum(got.values())
-        for item, w in zip(config.ITEMS + (None,), odds):
+        assert got[None] == 0  # a box is never empty
+        for item, w in zip(config.ITEMS, odds):
             assert got[item] / total == pytest.approx(w / sum(odds), abs=0.03)
-    assert counts[config.CARS]["SPLIT"] > counts[1]["SPLIT"]
-    assert counts[config.CARS]["QEC"] > counts[1]["QEC"]
+    assert counts[config.CARS]["MEASURE"] > counts[1]["MEASURE"]
+    assert counts[1]["DECOHERENCE"] > counts[config.CARS]["DECOHERENCE"]
 
 
-def test_with_no_gate_left_a_box_never_gives_a_split():
-    """A SPLIT takes a second gate; on the gate-free final lap there is none to take."""
+def test_every_box_gives_an_item():
+    for seed in range(20):
+        for k in range(len(Race(seed=seed, players=1).track.boxes)):
+            for lap in range(config.LAPS):
+                race = Race(seed=seed, players=1)
+                p1 = race.racer("p1")
+                events = [e for e in through_box(race, p1, k=k, j=seed % 3, lap=lap)
+                          if e.kind == "box"]
+                assert len(events) == 1 and events[0].value in config.ITEMS
+
+
+def test_with_no_gate_left_a_box_never_gives_split_or_qec():
+    """SPLIT takes a second gate and QEC fixes one for the check; on the gate-free final
+    lap neither has anything to do, so the other three share the odds."""
     got = Counter()
     for seed in range(30):
         race = Race(seed=seed, players=1)
@@ -171,10 +190,15 @@ def test_with_no_gate_left_a_box_never_gives_a_split():
             p1.item = None
             events = through_box(race, p1, k=k, lap=config.LAPS - 1)
             got.update(e.value for e in events if e.kind == "box")
-    assert got["SPLIT"] == 0 and got["QEC"] > 0
+    assert got["SPLIT"] == got["QEC"] == 0 and sum(got.values()) == 60
     race = Race(seed=1, players=1)
-    assert {race.roll_item(config.CARS, split=False) for _ in range(50)} == {"QEC"}
-    assert "SPLIT" in {race.roll_item(config.CARS) for _ in range(50)}
+    rolls = Counter(race.roll_item(3, gates_left=False) for _ in range(3000))
+    assert set(rolls) == {"MEASURE", "TUNNEL", "DECOHERENCE"}
+    odds = dict(zip(config.ITEMS, config.ITEM_ODDS[2]))
+    rest = sum(odds[i] for i in rolls)
+    for item, n in rolls.items():  # renormalised over what is left
+        assert n / 3000 == pytest.approx(odds[item] / rest, abs=0.03)
+    assert "SPLIT" in {race.roll_item(config.CARS) for _ in range(200)}
 
 
 def test_a_box_rolls_with_the_drivers_place(monkeypatch):
@@ -336,6 +360,12 @@ def test_the_split_is_over_with_the_last_gate_row():
     p2 = Race(seed=3, players=1)
     q = p2.racer("p1")
     skip_to(p2, q, len(p2.rows) - 1)
+    q.item = "SPLIT"  # a SPLIT held, never used: it runs out of rows too, and says so
+    events = cross(p2, q, 1.9)
+    assert q.item is None and events.count(Event("split_end", "p1")) == 1
+    p2 = Race(seed=3, players=1)
+    q = p2.racer("p1")
+    skip_to(p2, q, len(p2.rows) - 1)
     q.item = "QEC"
     cross(p2, q, 1.9)
     assert q.item == "QEC"  # a QEC still fixes a gate on the final lap
@@ -375,6 +405,7 @@ def test_a_finished_car_cannot_use_an_item():
         events = race.update(DT, {"p1": USE})
         assert not [e for e in events if e.kind == "item"]
         assert not p1.split and p1.circuit.results[0] is False
+        assert not p1.car.tunnelling and race.shots == [] and race.clouds == []
 
 
 def test_an_item_held_at_the_finish_is_dropped():
@@ -383,6 +414,182 @@ def test_an_item_held_at_the_finish_is_dropped():
     p1.item = "QEC"
     finish(race, p1)
     assert p1.finished and p1.item is None
+
+
+# --- MEASURE --------------------------------------------------------------------------------
+
+
+def lineup(race, gaps, x=0.0):
+    """Put p1 on a straight at top speed and the cars in `gaps` (id: dz from p1) around it,
+    everyone else far behind; no rows or boxes near."""
+    p1 = race.racer("p1")
+    z = race.lap_length * 0.3
+    for i, r in enumerate(race.racers):
+        r.next_row, r.next_box = len(race.rows), len(race.box_lines)
+        r.car.speed, r.car.x = TOP, x
+        r.car.z = z + gaps.get(r.car.id, -200_000.0 - 1000.0 * i)
+    p1.car.z = z
+    return p1
+
+
+def fly(race, seconds, controls=None):
+    events = []
+    for _ in range(round(seconds / DT)):
+        events += race.update(DT, controls or {})
+    return events
+
+
+def test_the_item_constants():
+    assert config.MEASURE_RANGE == 30_000.0
+    assert config.TUNNEL_TIME == 3.0
+    assert config.DECO_TIME == 10.0
+    assert config.BLIND_TIME == 1.5
+    assert 0.2 <= config.MEASURE_FLIGHT <= 0.6  # a short flight you can see
+
+
+def test_measure_flies_to_the_nearest_car_ahead_and_collapses_it():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = lineup(race, {"green": 20_000.0, "white": 8_000.0, "lime": -3_000.0}, x=-0.5)
+    white = race.racer("white")
+    white.car.x = 0.5
+    white.circuit.streak = 4
+    white.car.give_boost(0.5, 3.0)
+    p1.item = "MEASURE"
+    events = race.update(DT, {"p1": USE})
+    assert Event("item", "p1", "MEASURE") in events
+    assert len(race.shots) == 1
+    shot = race.shots[0]
+    assert (shot.owner, shot.target) == ("p1", "white")
+    # in flight it is between the two cars, seen by the renderer
+    fly(race, config.MEASURE_FLIGHT / 2)
+    (z, x, kind), = race.shot_objects()
+    assert kind == "shot" and p1.car.z < z < white.car.z and -0.5 < x < 0.5
+    assert 0.3 < shot.progress < 0.7
+    assert not white.car.spinning
+    events = fly(race, config.MEASURE_FLIGHT / 2 + DT)
+    assert Event("collapse", "white", "p1") in events
+    assert race.shots == [] and race.shot_objects() == []
+    assert white.car.spinning and white.circuit.streak == 0 and white.car.boost == 0.0
+    assert white.car.speed < 0.5 * TOP
+    assert not race.racer("green").car.spinning
+
+
+def test_measure_with_no_car_ahead_in_range_fizzles():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = lineup(race, {"green": config.MEASURE_RANGE + 2_000.0, "white": -2_000.0})
+    p1.item = "MEASURE"
+    events = race.update(DT, {"p1": USE})
+    assert Event("item", "p1", "MEASURE") in events and Event("fizzle", "p1") in events
+    assert race.shots == [] and p1.item is None
+    assert race.measure_target("p1") is None
+    race.racer("green").car.z -= 4_000.0
+    assert race.measure_target("p1").car.id == "green"
+
+
+def test_a_tunnelling_car_is_immune_to_measure():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = lineup(race, {"green": 5_000.0})
+    green = race.racer("green")
+    p1.item = "MEASURE"
+    race.update(DT, {"p1": USE})
+    green.car.tunnel(config.TUNNEL_TIME)
+    events = fly(race, config.MEASURE_FLIGHT + 2 * DT)
+    assert Event("immune", "green", "shot") in events
+    assert not green.car.spinning and race.shots == []
+
+
+# --- TUNNEL ---------------------------------------------------------------------------------
+
+
+def test_tunnel_passes_through_cars_for_3_s():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = lineup(race, {"green": 100.0})
+    green = race.racer("green")
+    green.car.x = 0.05
+    p1.item = "TUNNEL"
+    events = race.update(DT, {"p1": USE})
+    assert Event("item", "p1", "TUNNEL") in events and p1.car.tunnelling
+    assert p1.effects["tunnel"] == pytest.approx(config.TUNNEL_TIME - DT, abs=DT)
+    events += fly(race, config.TUNNEL_TIME)
+    end = events.index(Event("tunnel_end", "p1"))
+    assert not p1.car.tunnelling
+    assert not [e for e in events[:end] if e.kind == "bump"]
+    assert [e for e in events[end:] if e.kind == "bump"]  # solid again, still side by side
+
+
+def test_tunnel_drives_off_road_at_full_speed():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = lineup(race, {}, x=1.6)
+    p1.item = "TUNNEL"
+    race.update(DT, {"p1": USE})
+    fly(race, 1.5)
+    assert p1.car.offroad and p1.car.speed == pytest.approx(TOP)
+
+
+# --- DECOHERENCE ----------------------------------------------------------------------------
+
+
+def drop_cloud(race, p1):
+    p1.item = "DECOHERENCE"
+    events = race.update(DT, {"p1": USE})
+    assert Event("item", "p1", "DECOHERENCE") in events
+    return race.clouds[-1]
+
+
+def test_decoherence_drops_a_cloud_just_behind_that_any_car_can_hit():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = lineup(race, {"green": -3_000.0}, x=0.2)
+    green = race.racer("green")
+    cloud = drop_cloud(race, p1)
+    assert cloud.owner == "p1" and cloud.x == pytest.approx(0.2)
+    assert p1.car.z - 1000.0 < cloud.z < p1.car.z - config.CAR_LENGTH
+    assert (cloud.z, cloud.x, "deco") in race.deco_objects()
+    green.car.give_boost(0.6, 4.0)
+    events = fly(race, 0.5)
+    assert Event("decohered", "green", "p1") in events
+    assert green.car.boost == 0.0
+    assert green.blind and green.effects["blind"] <= config.BLIND_TIME
+    assert race.clouds == []  # used up
+    fly(race, config.BLIND_TIME)
+    assert not green.blind and "blind" not in green.effects
+
+
+def test_a_cloud_on_the_final_lap_slows_instead_of_blinding():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = lineup(race, {"green": -3_000.0})
+    green = race.racer("green")
+    for r in (p1, green):
+        r.laps = config.LAPS - 1
+        r.car.z += (config.LAPS - 1) * race.lap_length
+    drop_cloud(race, p1)
+    events = fly(race, 0.5)
+    assert Event("decohered", "green", "p1") in events
+    assert not green.blind
+    assert green.car.slow_time > 0 and green.car.speed <= config.CLOUD_CAP * TOP + 1e-6
+
+
+def test_a_cloud_lasts_10_s_and_a_car_beside_it_or_tunnelling_is_untouched():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = lineup(race, {"green": -3_000.0, "white": -3_000.0})
+    green, white = race.racer("green"), race.racer("white")
+    green.car.x, white.car.x = -0.9, 0.0
+    white.car.tunnel(config.TUNNEL_TIME)
+    drop_cloud(race, p1)
+    events = fly(race, 1.0, {"green": Controls(steer=-0.0)})
+    assert not [e for e in events if e.kind == "decohered"]
+    assert Event("immune", "white", "deco") in events
+    assert len(race.clouds) == 1
+    fly(race, config.DECO_TIME - 1.0 + 2 * DT)
+    assert race.clouds == [] and race.deco_objects() == []
+
+
+def test_the_effects_and_blindness_show_what_is_running():
+    race = Race(seed=1, players=1)
+    p1 = race.racer("p1")
+    assert p1.effects == {} and not p1.blind
+    p1.car.spin()
+    p1.car.tunnel(1.0)
+    assert set(p1.effects) == {"spin", "tunnel"}
 
 
 # --- Pace and racing to the end ------------------------------------------------------------

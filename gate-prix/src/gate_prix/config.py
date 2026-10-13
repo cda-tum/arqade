@@ -52,6 +52,9 @@ CHECK_TIME_PER_SLOT = 0.25
 # The check's boost starts this long after the crossing: meanwhile that player's view is
 # frozen on the comparison panel, and the car drives straight on at its speed.
 CHECK_FREEZE = 1.0
+# A check whose boost is under this (3/16 right or fewer: +3.5% at most) is NO BOOST: no warp,
+# no LIGHT SPEED! show, and the boost is not given (it would be too small to feel).
+CHECK_SHOW_MIN = 0.05
 
 
 def streak_boost(streak: int) -> tuple[float, float]:
@@ -86,7 +89,32 @@ BRAKE_FLOOR = 0.4  # braking never slows the car below 40% of top speed
 # and the curves' outward push with speed squared, as OutRun does.
 STEER_RATE = 2.0  # full stick: across the whole road in a second
 CURVE_PUSH = 0.46  # outward push per unit of curve: the coax corner (4.4) just beats full stick
-DRIFT = 0.3  # a brake held through a curve takes up to 30% off the push
+BRAKE_PUSH = 0.3  # a brake held through a curve takes up to 30% off the push
+# Drifting: the stick pulled back *and* steered (pulled straight back is the brake). It starts
+# and holds with |steer| >= DRIFT_STEER and any pull past the stick's deadzone (the brake's
+# own: brake > DRIFT_PULL), from DRIFT_MIN_SPEED of the top speed. A drifting car runs at
+# DRIFT_SPEED of the speed it would have and the curve pushes it out with DRIFT_PUSH of the
+# push, so it turns tighter. DRIFT_LEVELS seconds of drifting charge levels 1 and 2; letting
+# go gives that level's mini-turbo (DRIFT_TURBOS, through give_boost). An uncharged drift
+# ends with nothing, and so does one ended by slowing below DRIFT_END_SPEED, a bump or a hit.
+DRIFT_STEER = 0.4
+DRIFT_PULL = 0.0
+DRIFT_MIN_SPEED = 0.6
+DRIFT_END_SPEED = 0.5
+DRIFT_SPEED = 0.92
+DRIFT_PUSH = 0.5
+DRIFT_LEVELS = (0.7, 1.5)
+DRIFT_TURBOS = ((0.25, 0.6), (0.40, 1.0))  # (strength, seconds) of levels 1 and 2
+DRIFT_ANGLE = 0.35  # radians: the slide's angle in a drift (the renderer's tilt)
+DRIFT_ANGLE_RATE = 2.5  # radians a second toward it, and back to straight after
+TURBO_FLASH = 0.3  # seconds of the mini-turbo's flash (the renderer's)
+# Hits. A spin-out (a bit-flip mine, a MEASURE) leaves SPIN_SPEED of the car's speed (of
+# the top speed at most: a boost's share is lost) and the stick does nothing for SPIN_TIME; a static cloud caps the speed at CLOUD_CAP of the top
+# speed for CLOUD_TIME (and takes the boosts).
+SPIN_SPEED = 0.4
+SPIN_TIME = 0.8
+CLOUD_CAP = 0.7
+CLOUD_TIME = 1.0
 X_LIMIT = 2.2  # the car never strays further than this from the centre line
 # Bumps. CAR_WIDTH (below) is a car's whole width in road half-widths.
 CAR_LENGTH = 400.0  # world units, two segments
@@ -105,20 +133,50 @@ GRID_GAP = 1000.0  # between the rows; a CPU in the right lane is half of it fur
 PACE_LIMITS = (0.9, 1.1)
 
 # --- Items -----------------------------------------------------------------------------------
-ITEMS = ("SPLIT", "QEC")
+ITEMS = ("SPLIT", "QEC", "MEASURE", "TUNNEL", "DECOHERENCE")
+GATE_ITEMS = ("SPLIT", "QEC")  # about gates: never from a box once a car's rows are over
 BOX_REACH = 0.2  # a car whose centre is within this of a box's offset drives through it
 BOX_RESPAWN = 3.0  # seconds before a taken box is back (the same box on every lap)
 SPLIT_ROWS = 2  # the clone lasts for this many gate rows
-# The odds of a box by place (1st to 6th), as weights of (SPLIT, QEC, nothing). The back gets
-# more of both items and the front more empty boxes; last place always gets something.
+# The odds of a box by place (1st to 6th), as weights of ITEMS. A box always gives one. The
+# back gets more MEASURE, TUNNEL and SPLIT, the front more DECOHERENCE and QEC; the leader
+# gets no MEASURE (there is nobody ahead to measure). Past a car's last row SPLIT and QEC are
+# left out and the rest share the odds.
+#            SPLIT QEC MEASURE TUNNEL DECOHERENCE
 ITEM_ODDS = (
-    (20, 30, 50),
-    (30, 30, 40),
-    (35, 35, 30),
-    (45, 35, 20),
-    (55, 35, 10),
-    (60, 40, 0),
+    (10, 35, 0, 10, 45),
+    (15, 30, 15, 15, 25),
+    (20, 25, 20, 17, 18),
+    (25, 20, 22, 20, 13),
+    (28, 15, 25, 24, 8),
+    (30, 10, 28, 27, 5),
 )
+MEASURE_RANGE = 30_000.0  # a MEASURE homes on the nearest car ahead within this (world units)
+MEASURE_FLIGHT = 0.4  # seconds the shot flies before it hits (and collapses) that car
+TUNNEL_TIME = 3.0  # through cars, off-road at full speed, immune to hazards, clouds, MEASURE
+DECO_TIME = 10.0  # a DECOHERENCE cloud stays this long, or until a car drives through it
+DECO_BEHIND = 600.0  # dropped this far behind the car (world units): just behind its tail
+DECO_SIZE = 0.3  # its radius, in road half-widths (a storm cloud's size)
+BLIND_TIME = 1.5  # laps 1-2: driving through one blanks the NEXT GATE badge and marker
+
+# --- The noise storm (the final lap) -----------------------------------------------------------
+# Each racer meets its own decoherence hazards on the final lap, set by its CIRCUIT CHECK:
+# STORM_BASE + STORM_PER_WRONG per wrong gate, at most STORM_MAX. They are spread from
+# STORM_START seconds (at top speed) after the line, past the check's freeze, to STORM_END
+# seconds before the finish, and always leave a clear line STORM_GAP wide (more than a car)
+# that half stick can follow.
+STORM_BASE = 4
+STORM_PER_WRONG = 2
+STORM_MAX = 24
+STORM_START = 3.0
+STORM_END = 1.0
+STORM_GAP = 0.52  # CAR_WIDTH (0.32) and 0.1 to spare either side
+STORM_LANE_MAX = 0.6  # the clear line's centre stays within this of the centre line
+STORM_LANE_STEER = 0.5  # and never needs more than this much stick to follow
+STORM_PAIRS_FROM = 8  # past this many hazards, some come in pairs, one either side of the line
+STORM_MINES = 0.4  # the share of bit-flip mines; the rest are static clouds
+HAZARD_SIZE = {"cloud": 0.28, "mine": 0.1}  # their radii (road half-widths): wide, and small
+HAZARD_X_MAX = 0.9  # a hazard's centre stays on the road, within this
 
 # --- The CPU racers --------------------------------------------------------------------------
 BOT_SKILL_BEST = 0.85  # the CPU skills spread evenly from the best down to the worst
@@ -134,8 +192,17 @@ BOT_YIELD_TIME = 0.5  # and it makes way for a faster car that would hit it with
 BOT_AVOID_CLEAR = 0.38  # passing, it aims this far beside the car (CAR_WIDTH and a margin)
 BOT_BRAKE_SKILL = 0.7  # bots below this skill brake into sharp curves; the rest never brake
 BOT_BRAKE = 0.5  # how hard
-BOT_BRAKE_LOOK = 800.0  # how far ahead they look for the curve
+BOT_BRAKE_LOOK = 3000.0  # how far ahead they look for the curve: braking before it, in line
 BOT_SPLIT_LEAD = 0.6  # seconds before a row with decoys a bot uses its SPLIT
+BOT_DRIFT_CURVE = 2.5  # a bot drifts (by its skill) through curves sharper than this
+BOT_HAZARD_LOOK = 1.2  # seconds ahead a bot looks for hazards and clouds to steer round
+BOT_HAZARD_CLEAR = 0.06  # steering round one, it keeps this far outside its reach
+BOT_HAZARD_WAVE = 1600.0  # and round any others within this of it (a staggered pair's half)
+BOT_TUNNEL_LOOK = 0.5  # a hazard or cloud still in its path this close: TUNNEL
+BOT_TRAFFIC = 2 * 400.0  # TUNNEL in traffic: a car this close ahead or alongside (CAR_LENGTH)
+BOT_DECO_BEHIND = 8000.0  # DECOHERENCE when a car is this close behind it, in line
+BOT_DECO_LINE = 0.6  # in line: within this sideways
+BOT_BLIND_SKILL = 0.5  # a bot picking its arch while blind does it at this times its skill
 BOT_PACE_WORST = 0.99  # the pace of the worst skill; the best drives at 1.0
 BOT_RUBBER_FIRST = 0.97  # rubber-banding: the pace multiplier in 1st place ...
 BOT_RUBBER_LAST = 1.03  # ... and in last, in a straight line between

@@ -298,6 +298,7 @@ def test_a_better_circuits_warp_passes_a_cpu_that_crossed_earlier():
     while race.time < 9.0 and passed is None:
         race.update(DT, {r.car.id: (hold(race, r, lanes[r.car.id]) if r.car.id in lanes
                                     else park(race, r)) for r in race.racers})
+        p1.hazards = green.hazards = []  # the warp alone: no storm in either lane
         if p1.car.z > green.car.z:
             passed = race.time
     assert passed is not None
@@ -313,6 +314,23 @@ def test_no_warp_without_a_check_boost():
         events += of(race.update(DT, {}), "p1")
     assert Event("check", "p1", 16) in events
     assert not [e for e in events if e.kind == "warp"] and p1.car.boost == 0.0
+
+
+def test_a_check_under_5_percent_is_no_boost_and_no_warp():
+    for right, none in ((3, True), (4, False), (16, False)):
+        race = Race(seed=3, players=1)
+        p1 = race.racers[0]
+        to_the_check(race, p1, slots_right=right)
+        events = []
+        for _ in range(round(2 * config.CHECK_FREEZE / DT)):
+            events += of(race.update(DT, {}), "p1")
+        assert p1.check_right == right
+        assert p1.check_boost_none is none
+        assert bool([e for e in events if e.kind == "warp"]) is not none
+        assert (p1.warp_time is None) is none
+    assert config.CHECK_SHOW_MIN == 0.05
+    assert config.check_boost(16 - 3)[0] < 0.05 <= config.check_boost(16 - 4)[0]
+    assert Race(seed=1, players=1).racers[0].check_right is None
 
 
 def test_a_right_gate_never_lowers_the_boost():
@@ -465,3 +483,45 @@ def test_the_same_seed_and_inputs_give_the_same_race(perfect_race):
     assert [(r.car.z, r.car.x, r.car.speed) for r in again.racers] == [
         (r.car.z, r.car.x, r.car.speed) for r in race.racers]
     assert Race(seed=8, players=1).target != race.target
+
+
+# --- Drifting in the race --------------------------------------------------------------------
+
+
+def test_drifting_comes_from_the_stick_and_cues_its_charge_and_turbo():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1 = race.racer("p1")
+    for r in race.racers[1:]:
+        put(r, -100_000.0 - 1000 * race.racers.index(r), 2.1)
+    p1.next_row, p1.next_box = len(race.rows), len(race.box_lines)
+    put(p1, race.lap_length * 0.3, 0.0)
+    events = []
+    for _ in range(round(1.6 / DT)):
+        events += of(race.update(DT, {"p1": Controls(steer=-0.5, brake=1.0)}), "p1")
+    assert p1.car.drifting
+    assert [e for e in events if e.kind == "drift"] == [Event("drift", "p1", 1),
+                                                          Event("drift", "p1", 2)]
+    events = of(race.update(DT, {"p1": Controls(steer=-0.5)}), "p1")
+    assert Event("turbo", "p1", 2) in events and p1.car.boost == pytest.approx(0.40)
+
+
+def test_a_bump_in_the_race_ends_a_drift_with_no_turbo():
+    race = Race(seed=1, players=1, finish_all=True)
+    p1, green = race.racer("p1"), race.racer("green")
+    for r in race.racers[2:]:
+        put(r, -100_000.0 - 1000 * race.racers.index(r), 2.1)
+    for r in (p1, green):
+        r.next_row, r.next_box = len(race.rows), len(race.box_lines)
+    put(p1, race.lap_length * 0.3, 0.0)
+    put(green, race.lap_length * 0.3 + 3000.0, 0.6)
+    drift = Controls(steer=0.5, brake=1.0)
+    for _ in range(round(1.0 / DT)):
+        race.update(DT, {"p1": drift})
+    assert p1.car.drift_level == 1
+    green.car.z, green.car.x = p1.car.z + 100.0, p1.car.x + 0.1
+    green.car.speed = p1.car.speed
+    events = race.update(DT, {"p1": drift})
+    assert [e for e in events if e.kind == "bump"]
+    assert not p1.car.drifting
+    events = race.update(DT, {"p1": Controls(steer=0.5)})
+    assert not [e for e in events if e.kind == "turbo"] and p1.car.boost == 0.0

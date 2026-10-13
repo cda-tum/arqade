@@ -11,6 +11,9 @@
     ✗ red, the next one ringed (on the final lap: SPRINT TO THE LINE and a flag);
   - top right, the place and the lap; beside them, while an item is held, its slot pulses
     with the item's name, a big A and one line saying what it does;
+  - while a racer is `blind` (a DECOHERENCE cloud), its NEXT GATE badge and the ▼ over
+    the right arch are left out (Task 5d draws the new rules' visuals: the storm, the
+    MEASURE shot, the clouds, the drift and the TUNNEL);
   - near the car, each row's flash: RIGHT GATE +BOOST, WRONG GATE or MISSED;
   - PRESS A TO USE SPLIT on the first pickup of each item, LAP 2, FINISH.
 - **The CIRCUIT CHECK**: for CHECK_FREEZE seconds after a player crosses into the final
@@ -66,8 +69,12 @@ FLASHES = {  # a row's outcome, near the car
 ITEM_LINES = {
     "SPLIT": "SPLIT: a clone takes a second gate",
     "QEC": "QEC: fixes your last wrong gate",
+    "MEASURE": "MEASURE: collapses the car ahead",
+    "TUNNEL": "TUNNEL: through cars and hazards",
+    "DECOHERENCE": "drops a noise cloud behind you",
 }
-ITEM_COLORS = {"SPLIT": GHOST_TEXT, "QEC": (120, 230, 160)}
+ITEM_COLORS = {"SPLIT": GHOST_TEXT, "QEC": (120, 230, 160), "MEASURE": (255, 200, 90),
+               "TUNNEL": (200, 170, 255), "DECOHERENCE": (180, 160, 210)}
 BADGE = 56  # the NEXT GATE badge, px
 DOT = 12  # a slot's dot under it
 DOT_STEP = 13
@@ -431,7 +438,8 @@ class Renderer:
                   depth=config.CAMERA_DEPTH / widen, ahead=ahead,
                   lift=shake(car.speed, self.frame, i))
         view.draw_sprites(self.surface, self._sprites, self.cache)
-        self._markers_over_right_arches(view)
+        if not (hud and racer.blind):  # decohered: the marker goes blank
+            self._markers_over_right_arches(view)
         h = view.height
         frame = (self.frame // 2) % LINE_FRAMES
         if warp > 0:
@@ -492,7 +500,8 @@ class Renderer:
             surf.blit(self._badges["flag"], (x + 12, y + 11))
         elif filled < len(circuit.target):
             self.put("NEXT GATE", 15, WHITE, midleft=(x + 96, y + 27))
-            surf.blit(self._badges[circuit.target[filled]], (x + 12, y + 11))
+            if not racer.blind:  # decohered: the badge goes blank
+                surf.blit(self._badges[circuit.target[filled]], (x + 12, y + 11))
         else:
             self.put("FINAL LAP: NO GATES", 14, GOLD, midleft=(x + 96, y + 27))
             surf.blit(self._badges["flag"], (x + 12, y + 11))
@@ -519,7 +528,8 @@ class Renderer:
             edge = mix((110, 116, 150), GOLD, k / (PULSE - 1))
             self.surface.blit(self.panel(w, h, edge, 225), (px, py))
             name = racer.item
-            self.put(name, 20, ITEM_COLORS[name], midleft=(px + 14, py + 20))
+            self.put(name, 20 if len(name) <= 7 else 14, ITEM_COLORS[name],
+                     midleft=(px + 14, py + 20))
             self.put("PRESS", 10, LABEL, midright=(px + w - 60, py + 20))
             self.put(ITEM_LINES[name], 12, WHITE, midleft=(px + 14, py + 46))
             self.surface.blit(self._buttons[k], (px + w - 54, py + 9))
@@ -585,7 +595,8 @@ class Renderer:
                 pygame.draw.rect(self.surface, BAD, (bx - 2, y + 56, SMALL + 4, 42), 2,
                                  border_radius=3)
         boost, seconds = racer.check_boost or config.check_boost(distance)
-        line = f"LIGHT SPEED: +{boost:.0%} FOR {seconds:.1f} S" if boost > 0 else "NO BOOST"
+        none = racer.check_boost_none or boost <= 0
+        line = "NO BOOST" if none else f"LIGHT SPEED: +{boost:.0%} FOR {seconds:.1f} S"
         self.put(line, 12, CYAN, center=(cx, y + 118))
 
     def _countdown(self, match: Match) -> None:
@@ -670,7 +681,7 @@ class Renderer:
         self.put(NAMES[row.car], 22, col, midleft=(x + 14, y + 26))
         acc = row.right / config.SLOTS
         self.put(f"{acc:.0%}", 16, WHITE, midleft=(x + 14, y + 54))
-        check = "-" if row.check is None else f"CHECK {row.check}"
+        check = "-" if row.check_right is None else f"CHECK {row.check_right}/{config.CHECK_SLOTS}"
         self.put(check, 10, LABEL, midleft=(x + 14, y + 76))
         self.put("TARGET", 9, LABEL, midleft=(x + 70, y + 26))
         self.put("YOU", 9, LABEL, midleft=(x + 70, y + 56))
