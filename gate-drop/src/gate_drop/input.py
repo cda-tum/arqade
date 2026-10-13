@@ -93,6 +93,7 @@ class Input:
         self.start_select = {p: (False, False) for p in PLAYERS}
         self.select_held_time = 0.0
         self.keyboard_quit = False
+        self._key_pressed = False  # a KEYDOWN since the last update (dev only)
         self.rescan()
 
     def rescan(self) -> None:
@@ -105,6 +106,8 @@ class Input:
     def handle(self, event: pygame.event.Event) -> None:
         if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
             self.rescan()
+        elif event.type == pygame.KEYDOWN and _keyboard_enabled:
+            self._key_pressed = True
 
     def _read_pad(self, player: str) -> tuple[set[int], int, int]:
         """(buttons down, stick x, stick y) with y positive = down."""
@@ -130,7 +133,8 @@ class Input:
         system = config.INPUT_CONFIG["system"]
         buttons = config.INPUT_CONFIG["buttons"]
         self.keyboard_quit = keyboard_quit_held(keys)
-        frame = FrameInput(activity=self.keyboard_quit)
+        frame = FrameInput(activity=self.keyboard_quit, any_button=self._key_pressed)
+        self._key_pressed = False
         for p in PLAYERS:
             down, dx, dy = self._read_pad(p)
             held_keys = {act for act, codes in self.keymap[p].items() if any(keys[k] for k in codes)}
@@ -151,6 +155,7 @@ class Input:
                 or "confirm" in new_keys
             frame.backs[p] = bool(pressed & set(system["back_buttons"])) or "back" in new_keys
             frame.pauses[p] = system["start_button"] in pressed or "pause" in new_keys
+            frame.any_button |= bool(pressed)
             self.start_select[p] = (system["start_button"] in down, system["select_button"] in down)
             if down or dx or dy or held_keys:
                 frame.activity = True

@@ -1,5 +1,6 @@
 """The 640x360 game: chunky GBA puppets on a quantum-lab stage, with the HUD,
-the hit effects and the match's screens (title, select, round calls, result, pause).
+the hit effects and the match's screens (title, select, stage select, HOW TO PLAY,
+round calls, result, pause).
 
 The puppets are drawn from poses.joints() every frame as thick capsules with a
 2 px ink outline (back limbs a darker shade, a highlight stripe on the torso,
@@ -114,6 +115,21 @@ CARD_LINES = (
     (("GREEN", GREEN), (" HITS ", P.WHITE), ("PURPLE", PURPLE), (": BOUNCES", P.WHITE)),
     (("Y", P.GOLD), (" SWITCHES YOUR COLOUR", P.WHITE)),
 )
+
+# the HOW TO PLAY card: the goal, the scene's steps (tutorial.SCRIPT's captions, lit in
+# turn) and the buttons, each as (printed label, what it does)
+GOAL_LINES = ("KNOCK YOUR RIVAL OUT. FIRST TO 2 ROUNDS WINS.", "ONLY A HIT IN THEIR BODY COLOUR HURTS.")
+LESSON_LINES = (
+    (("A: ", P.GOLD), ("GREEN", GREEN), (" HITS ", P.WHITE), ("GREEN", GREEN), (" - HURTS", P.WHITE)),
+    (("Y: ", P.GOLD), ("THEY SWITCH TO ", P.WHITE), ("PURPLE", PURPLE)),
+    (("A: ", P.GOLD), ("GREEN", GREEN), (" HITS ", P.WHITE), ("PURPLE", PURPLE), (" - BOUNCES", P.WHITE)),
+    (("B: ", P.GOLD), ("PURPLE", PURPLE), (" HITS ", P.WHITE), ("PURPLE", PURPLE), (" - HURTS", P.WHITE)),
+)
+CLUSTER = (("L", "X", "R"), ("Y", "B", "A"))     # the cabinet's buttons, as printed on the panel
+BUTTON_JOBS = (("A", "HIT, YOUR COLOUR"), ("B", "HIT, OTHER COLOUR"), ("X", "SPECIAL MOVE"),
+               ("Y", "SWITCH COLOUR"))
+LESSON_VIEW = pygame.Rect(156, 118, 300, 192)   # the part of the scene's stage the card shows
+ANY_BUTTON = "PRESS ANY BUTTON TO START"
 
 SHADOW = (32, 24, 64)
 
@@ -458,6 +474,7 @@ class Renderer:
         self.t = 0                  # frames drawn
         self.show_boxes = False     # debug: hurtboxes and live hitboxes
         self._fight: Fight | None = None
+        self._lesson: Renderer | None = None     # draws the HOW TO PLAY scene, off screen
         self._reset()
         # render the effects' text now, so the first hit doesn't stall a frame
         for e in (basis.X, basis.Y, basis.Z):
@@ -1032,11 +1049,13 @@ class Renderer:
                 self.draw_fight(match.attract, fight_events)
                 self._attract_overlay()
             else:
-                self._title()
+                self._title(match)
         elif state == M.SELECT:
             self._select(match)
         elif state == M.STAGE_SELECT:
             self._stage_select(match)
+        elif state == M.TUTORIAL:
+            self._tutorial(match, fight_events)
         else:
             self.draw_fight(match.fight, fight_events, match.wins)
             if state == M.ROUND_INTRO:
@@ -1085,20 +1104,33 @@ class Renderer:
         self.surface.blit(left, (x, y))
         self.surface.blit(right, (x + left.get_width(), y))
 
-    def _title(self) -> None:
+    def _title(self, match: M.Match) -> None:
         self._backdrop(dim=False)
         surf = self.surface
-        for char, key, x, facing in ((M.ROSTER[0], "p1", 236, 1), (M.ROSTER[-1], "p2", 404, -1)):
+        for char, key, x, facing in ((M.ROSTER[0], "p1", 180, 1), (M.ROSTER[-1], "p2", 460, -1)):
             rect = pygame.Rect(0, 0, 52, 8)
             rect.center = (x, FLOOR_Y + 2)
             pygame.draw.ellipse(surf, SHADOW, rect)
             body = GREEN if key == "p1" else PURPLE
             draw_puppet(surf, POSES["idle"], char.build, (x, FLOOR_Y), facing, body,
                         ACCENT.get(char.name, P.CREAM))
-        self._band(32, 156)
+        self._band(32, 132)
         self._logo(72)
         blit_center(surf, outlined("COLOUR MUST MATCH TO HURT", 8, P.MIST), (W / 2, 114))
-        self._prompt("PRESS START", 138, P.GOLD)
+        # PLAY / QUIT, in a box between the two fighters
+        box = pygame.Rect(0, 0, 132, 72)
+        box.center = (W // 2, 214)
+        pygame.draw.rect(surf, P.INK, box.inflate(4, 4), border_radius=8)
+        pygame.draw.rect(surf, P.NIGHT, box, border_radius=7)
+        pygame.draw.rect(surf, P.MIST, box, 2, border_radius=7)
+        for i, item in enumerate(M.TITLE_ITEMS):
+            on = i == match.title_index
+            y = box.y + 22 + 28 * i
+            img = outlined(item, 16, P.GOLD if on else P.MIST, thick=2)
+            blit_center(surf, img, (W / 2, y))
+            if on:
+                nudge = 2 if (self.t // 15) % 2 else 0
+                blit_center(surf, outlined(">", 16, P.GOLD, thick=2), (W / 2 - 44 - nudge, y))
 
     def _attract_overlay(self) -> None:
         self._band(H - 58, H)
@@ -1197,10 +1229,10 @@ class Renderer:
         img = outlined(text, 8, fill, outline=edge)
         self.surface.blit(img, img.get_rect(midright=_pt(right_mid)))
 
-    def _parts(self, parts, center) -> None:
-        """A line of differently coloured parts, centred."""
+    def _parts(self, parts, center, left: int | None = None) -> None:
+        """A line of differently coloured parts, centred (or starting at x = `left`)."""
         imgs = [outlined(text, 8, colour) for text, colour in parts]
-        x = round(center[0] - sum(i.get_width() for i in imgs) / 2)
+        x = round(center[0] - sum(i.get_width() for i in imgs) / 2) if left is None else left
         for img in imgs:
             self.surface.blit(img, img.get_rect(midleft=(x, round(center[1]))))
             x += img.get_width()
@@ -1252,6 +1284,78 @@ class Renderer:
                 text = "".join(t for t, _ in parts)
                 blit_center(surf, outlined(text, 8, P.SLATE), (W / 2, y))
         self._prompt("PRESS START", H - 14, P.GOLD)
+
+    def _tutorial(self, match: M.Match, events: list) -> None:
+        """HOW TO PLAY: the goal, the scene (a real fight, drawn off screen by a second
+        renderer and shown through a window) with its steps lit in turn, and the buttons."""
+        self._backdrop()
+        surf = self.surface
+        lesson = match.lesson
+        self._call("HOW TO PLAY", P.WHITE, y=20, size=16)
+        for i, line in enumerate(GOAL_LINES):
+            blit_center(surf, outlined(line, 8, P.MIST), (W / 2, 46 + 12 * i))
+        # the scene
+        panel = pygame.Rect(14, 72, LESSON_VIEW.w, LESSON_VIEW.h)
+        if lesson is not None:
+            if self._lesson is None:
+                self._lesson = Renderer(pygame.Surface((W, H), 0, surf))
+            self._lesson.use_stage(match.stage)     # the room the match is about to be fought in
+            self._lesson.draw_fight(lesson.fight, events)
+            surf.blit(self._lesson.surface, panel, LESSON_VIEW)
+        pygame.draw.rect(surf, P.INK, panel.inflate(8, 8), 4, border_radius=6)
+        pygame.draw.rect(surf, P.MIST, panel.inflate(4, 4), 2, border_radius=5)
+        # its steps, the one playing lit
+        steps = pygame.Rect(panel.x, panel.bottom + 8, panel.w, 56)
+        pygame.draw.rect(surf, P.INK, steps.inflate(4, 4), border_radius=8)
+        pygame.draw.rect(surf, P.NIGHT, steps, border_radius=7)
+        lit = lesson.caption if lesson is not None else 0
+        for i, parts in enumerate(LESSON_LINES):
+            y = steps.y + 10 + 12 * i
+            if i == lit:
+                self._parts(parts, (0, y), left=steps.x + 8)
+            else:
+                img = outlined("".join(t for t, _ in parts), 8, P.lighten(P.SLATE, 0.15))
+                surf.blit(img, img.get_rect(midleft=(steps.x + 8, y)))
+        self._controls(pygame.Rect(334, panel.y, W - 334 - 14, steps.bottom - panel.y))
+        self._prompt(ANY_BUTTON, H - 14, P.GOLD)
+
+    def _controls(self, box: pygame.Rect) -> None:
+        """The stick and the 2x3 buttons as on the cabinet (L X R over Y B A), the used
+        ones lit, and what each does. Both pads are the same."""
+        surf = self.surface
+        pygame.draw.rect(surf, P.INK, box.inflate(4, 4), border_radius=8)
+        pygame.draw.rect(surf, P.NIGHT, box, border_radius=7)
+        pygame.draw.rect(surf, P.SLATE, box, 2, border_radius=7)
+        blit_center(surf, outlined("CONTROLS", 8, P.GOLD), (box.centerx, box.y + 12))
+        # the stick: a ball on a shaft
+        sx, sy = box.x + 26, box.y + 52
+        pygame.draw.ellipse(surf, P.INK, (sx - 13, sy + 6, 26, 10))
+        pygame.draw.ellipse(surf, P.SLATE, (sx - 11, sy + 7, 22, 7))
+        pygame.draw.line(surf, P.INK, (sx, sy + 10), (sx, sy - 4), 4)
+        _ball(surf, (sx, sy - 6), 7, P.BAD)
+        pygame.draw.circle(surf, P.lighten(P.BAD, 0.5), (sx - 2, sy - 9), 2)
+        surf.blit(outlined("STICK", 8, P.GOLD), (box.x + 48, sy - 12))
+        surf.blit(outlined("WALK, JUMP, CROUCH", 8, P.WHITE), (box.x + 48, sy))
+        # the buttons
+        used = {b for b, _ in BUTTON_JOBS}
+        top = box.y + 112
+        for row, labels in enumerate(CLUSTER):
+            for col, label in enumerate(labels):
+                c = (box.x + 14 + 24 * col, top + 24 * row)
+                on = label in used
+                _ball(surf, c, 9, P.GOLD if on else P.SLATE)
+                blit_center(surf, font(8).render(label, False, P.INK if on else P.MIST), (c[0] + 1, c[1] + 1))
+        for i, (label, job) in enumerate(BUTTON_JOBS):
+            y = top - 8 + 14 * i
+            surf.blit(outlined(label, 8, P.GOLD), (box.x + 90, y))
+            surf.blit(outlined(job, 8, P.WHITE), (box.x + 108, y))
+        # Start, a pill of its own below the cluster
+        pill = pygame.Rect(box.x + 10, box.y + 180, 60, 16)
+        pygame.draw.rect(surf, P.INK, pill.inflate(4, 4), border_radius=8)
+        pygame.draw.rect(surf, P.GOLD, pill, border_radius=7)
+        blit_center(surf, font(8).render("START", False, P.INK), (pill.centerx + 1, pill.centery + 1))
+        surf.blit(outlined("PAUSE", 8, P.WHITE), (box.x + 90, pill.y + 4))
+        blit_center(surf, outlined("THE SAME ON BOTH PADS", 8, P.MIST), (box.centerx, box.bottom - 18))
 
     def _stamp(self, text: str, center, color) -> None:
         img = outlined(text, 16, color, thick=2)

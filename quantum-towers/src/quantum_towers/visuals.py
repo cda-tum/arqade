@@ -428,7 +428,7 @@ def draw_button_grid(
     would read as gates. A cell whose gate is None (no action mapped to
     that button) draws as an empty, dim outline instead of a filled box,
     so it visibly reads as "nothing here". RESET is too wide for a square,
-    so it is drawn as a reset arrow instead of text (see _draw_reset_icon).
+    so it is drawn as a reset arrow instead of text (see draw_reset_icon).
 
     `accent_color` tints the box borders (and, per-cell, the pressed fill)
     -- since each player has their own independent press state, this is what
@@ -469,13 +469,13 @@ def draw_button_grid(
                 pygame.draw.rect(surface, accent_color, box_rect, width=2, border_radius=3)
             ink = _contrasting_text_color(fill)
             if gate == "RESET":
-                _draw_reset_icon(surface, box_rect.center, ink)
+                draw_reset_icon(surface, box_rect.center, ink)
             else:
                 gate_surf = gate_font.render(gate, False, ink)
                 surface.blit(gate_surf, gate_surf.get_rect(center=box_rect.center))
 
 
-def _draw_reset_icon(surface: pygame.Surface, center: tuple[int, int], color: Color) -> None:
+def draw_reset_icon(surface: pygame.Surface, center: tuple[int, int], color: Color) -> None:
     """A circular "start over" arrow standing in for the word RESET, which
     doesn't fit a square button: a 2px ring open at the top right, with an
     arrowhead on the open end pointing clockwise."""

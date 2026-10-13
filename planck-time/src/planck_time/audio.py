@@ -207,9 +207,9 @@ def render_track(bpm: float, lead: str, tune: Tune = TUNES["main"]) -> array.arr
 
 
 def music_for(s) -> str:
-    """The track a session wants: the title's, the boss's while one is on (its
+    """The track a session wants: the title's (on the HOW TO PLAY card too), the boss's while one is on (its
     card, intro, fight and result), or the game's."""
-    if s.state == S.TITLE:
+    if s.state in (S.TITLE, S.TUTORIAL):
         return "title"
     if s.state == S.BOSS_CARD or (s.boss and s.state in (S.INTRO, S.PLAY, S.RESULT)):
         return "boss"
@@ -228,6 +228,8 @@ def build_sfx() -> dict[str, list[int]]:
     return {
         "blip": tone(880, 0.04, 0.22, "square"),
         "pause": tone(660, 0.08, 0.25, "square"),
+        "tick": tone(1320, 0.025, 0.12, "square"),  # a cursor step in a microgame
+        "tap": tone(990, 0.035, 0.16, "pulse", decay=30),  # an A press that didn't end it
         "start": _arp([c("C5"), c("G5"), c("C6")], 0.06, 0.3),
         "intro": concat(tone(c("G5"), 0.06, 0.25, "pulse"), tone(c("C6"), 0.12, 0.28, "pulse", decay=6)),
         "win": _arp([c("E5"), c("G5"), c("C6"), c("E6")], 0.05, 0.28),
@@ -239,8 +241,9 @@ def build_sfx() -> dict[str, list[int]]:
     }
 
 
-_CUE_SOUNDS = {"blip": "blip", "pause": "pause", "start": "start", "intro": "intro", "win": "win", "fail": "fail",
-               "speed_up": "speed_up", "boss": "boss", "game_over": "game_over", "match_won": "match", "draw": "match"}
+_CUE_SOUNDS = {"blip": "blip", "pause": "pause", "tick": "tick", "tap": "tap", "start": "start", "intro": "intro",
+               "win": "win", "fail": "fail", "speed_up": "speed_up", "boss": "boss", "game_over": "game_over",
+               "match_won": "match", "draw": "match"}
 
 
 def sounds_for(events: list) -> list[str]:

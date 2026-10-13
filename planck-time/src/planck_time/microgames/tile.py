@@ -91,6 +91,7 @@ def shape(surf: pygame.Surface, kind: str, centre, r: int, colour) -> None:
 class Tile(Microgame):
     VERB = "TILE!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "Each corner touches one tile of every colour"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

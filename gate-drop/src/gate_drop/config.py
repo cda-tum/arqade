@@ -54,6 +54,7 @@ DEFAULT_LEVEL = 1
 DEFAULT_SPEED = "MED"
 ROUNDS_TO_WIN = 2
 COUNTDOWN = 3.0
+TUTORIAL_LOCK = 0.3  # the HOW TO PLAY card ignores presses this long, so the A that readied up can't skip it
 ROUND_RESULT_TIME = 2.5
 MATCH_RESULT_LOCK = 1.0  # seconds before the result screen takes input
 LEVEL_CLEAR_TIME = 2.5  # single player

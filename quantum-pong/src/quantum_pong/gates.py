@@ -1,7 +1,11 @@
 """Gate pickups: spawning and deterministic per-ball effects.
 
 Gates never expire on their own -- they stay until a ball touches them -- and
-never overlap each other.
+never overlap each other. Each one is announced GATE_WARNING_SECONDS before it
+appears: it is already in the list, at its final spot, but its `spawned_at`
+lies in the future, and until then balls pass straight through it (the game
+draws it as a dashed outline). The spawn rate and the on-screen cap both ramp
+up over a match (`spawn_interval`, `gate_cap`).
 
 No probability: each gate applies a fixed transform to whichever ball touches
 it, consuming the gate. H is the only one that changes the ball count -- it
@@ -20,17 +24,22 @@ import random
 from dataclasses import dataclass
 
 from quantum_pong.config import (
+    GATE_CAP_STEP_SECONDS,
     GATE_MIN_GAP,
     GATE_RADIUS,
     GATE_SPAWN_CANDIDATES,
     GATE_SPAWN_INTERVAL,
+    GATE_SPAWN_INTERVAL_MIN,
     GATE_SPAWN_MARGIN_X,
     GATE_SPAWN_MARGIN_Y,
+    GATE_SPAWN_RAMP_SECONDS,
+    GATE_WARNING_SECONDS,
     GATE_WEIGHTS,
     INTERNAL_HEIGHT,
     INTERNAL_WIDTH,
     MAX_BALLS_ON_SCREEN,
     MAX_GATES_ON_SCREEN,
+    MAX_GATES_ON_SCREEN_LATE,
 )
 from quantum_pong.pong import Ball
 
@@ -43,7 +52,26 @@ class Gate:
     kind: str
     x: float
     y: float
-    spawned_at: float
+    spawned_at: float  # when it appears; announced (dashed, inert) before that
+
+
+def is_live(gate: Gate, now: float) -> bool:
+    """Whether `gate` has appeared yet -- before that it is only announced."""
+    return now >= gate.spawned_at
+
+
+def spawn_interval(match_time: float) -> float:
+    """Seconds between spawn attempts, `match_time` seconds into a match:
+    shrinks linearly from GATE_SPAWN_INTERVAL to GATE_SPAWN_INTERVAL_MIN."""
+    t = max(0.0, min(1.0, match_time / GATE_SPAWN_RAMP_SECONDS))
+    return GATE_SPAWN_INTERVAL + t * (GATE_SPAWN_INTERVAL_MIN - GATE_SPAWN_INTERVAL)
+
+
+def gate_cap(match_time: float) -> int:
+    """How many gates (announced ones included) may be on the field: one
+    more every GATE_CAP_STEP_SECONDS, up to MAX_GATES_ON_SCREEN_LATE."""
+    extra = int(max(0.0, match_time) // GATE_CAP_STEP_SECONDS)
+    return min(MAX_GATES_ON_SCREEN + extra, MAX_GATES_ON_SCREEN_LATE)
 
 
 def _pick_kind(rng: random.Random, weights: dict[str, int]) -> str:
@@ -105,12 +133,14 @@ def spawn_gate(
 def maybe_spawn_gate(
     gates: list[Gate], now: float, last_spawn_at: float, rng: random.Random
 ) -> tuple[list[Gate], float]:
-    """Spawn one gate if under the on-screen cap and the spawn interval has elapsed."""
-    if len(gates) >= MAX_GATES_ON_SCREEN:
+    """Announce one gate if under the on-screen cap and the spawn interval
+    has elapsed (both ramp with `now`, the match clock). The new gate is
+    placed and typed right away and appears GATE_WARNING_SECONDS later."""
+    if len(gates) >= gate_cap(now):
         return gates, last_spawn_at
-    if now - last_spawn_at < GATE_SPAWN_INTERVAL:
+    if now - last_spawn_at < spawn_interval(now):
         return gates, last_spawn_at
-    gate = spawn_gate(rng, now, existing_gates=gates)
+    gate = spawn_gate(rng, now + GATE_WARNING_SECONDS, existing_gates=gates)
     if gate is None:
         return gates, now  # no room right now -- try again next interval
     return [*gates, gate], now
@@ -144,12 +174,15 @@ def _touches(ball: Ball, gate: Gate, ball_radius: float) -> bool:
 
 
 def check_gate_collisions(
-    balls: list[Ball], gates: list[Gate], ball_radius: float
+    balls: list[Ball], gates: list[Gate], ball_radius: float, now: float = math.inf
 ) -> tuple[list[Ball], list[Gate]]:
-    """If any ball touches a gate, apply it and consume the gate. At most one
-    gate is consumed per call. An H touch while at the ball cap does nothing
-    (gate stays, ball is untouched)."""
+    """If any ball touches a gate that has appeared by `now`, apply it and
+    consume the gate (announced gates are ignored). At most one gate is
+    consumed per call. An H touch while at the ball cap does nothing (gate
+    stays, ball is untouched)."""
     for gate in gates:
+        if not is_live(gate, now):
+            continue
         for i, ball in enumerate(balls):
             if not _touches(ball, gate, ball_radius):
                 continue

@@ -38,7 +38,8 @@ def test_every_sound_an_event_can_ask_for_exists():
         rules.Collapse("p1", "decoherence", ((1, 1),), (), ()),
         rules.Measured("p1", "p2", (1, 1)), rules.PickedUp("p1", "H", (1, 1)),
         rules.PickedUp("p1", "Z", (1, 1)), rules.Teleported("p1", (1, 1), (9, 1)),
-        Cue("beep"), Cue("go"), Cue("blip"), Cue("round_won", "p1"), Cue("draw"), Cue("match_won", "p1"),
+        Cue("beep"), Cue("go"), Cue("blip"), Cue("start"), Cue("ready"), Cue("pause"),
+        Cue("round_won", "p1"), Cue("draw"), Cue("match_won", "p1"),
     ]
     for name in sound.event_sounds(events):
         assert name in sound.EFFECTS
@@ -47,3 +48,8 @@ def test_every_sound_an_event_can_ask_for_exists():
 def test_loading_never_raises_even_without_a_sound_card():
     sounds = sound.load_sounds()
     sounds.play_events([Cue("beep")])
+
+
+def test_starting_from_the_title_and_dismissing_how_to_play_both_confirm():
+    assert sound.event_sounds([Cue("start")]) == ["confirm"]
+    assert sound.event_sounds([Cue("ready"), Cue("beep")]) == ["confirm", "beep"]

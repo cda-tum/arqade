@@ -47,6 +47,7 @@ class Microgame:
     BOSS = False  # bosses are longer, come after every BOSS_EVERY wins, and score more
     appearance = 0  # how many times this microgame has already come up this session (see spawn)
     POINTS = 1  # scored for a success
+    STEPS = False  # the stick moves something in steps (a cursor, a lane): each step ticks
 
     @classmethod
     def spawn(cls, seed: int, level: int, duration: float, appearance: int = 0) -> "Microgame":

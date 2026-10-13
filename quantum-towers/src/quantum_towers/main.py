@@ -21,10 +21,11 @@ from dataclasses import fields, replace
 import pygame
 import pygame.gfxdraw
 
-from quantum_towers import config, fonts, screens, solo, sound, visuals
+from quantum_towers import config, fonts, screens, solo, sound, tutorial, visuals
 from quantum_towers.display import make_display, present
 from quantum_towers.input import (
     PlayerRawInput,
+    keyboard_enabled,
     keyboard_quit_held,
     read_keys,
     pressed_edge,
@@ -132,6 +133,17 @@ def _menu_held(raw: PlayerRawInput, keys: pygame.key.ScancodeWrapper) -> tuple[i
     )
 
 
+def _update_pause(pause_menu: PauseMenu, buttons: PauseButtons, sounds: sound.Sounds) -> str:
+    """pause_menu.update, with a sound for opening it, moving and picking."""
+    was_paused, was_selected = pause_menu.paused, pause_menu.selected
+    state = pause_menu.update(buttons)
+    if pause_menu.paused != was_paused or state == "title":
+        sounds.select.play()
+    elif pause_menu.selected != was_selected:
+        sounds.move.play()
+    return state
+
+
 def _camera_step(
     anim: tuple[float, float, float] | None, visual_floor: float, floor: int, game_time: float
 ) -> tuple[tuple[float, float, float] | None, float, float | None]:
@@ -157,12 +169,22 @@ def _camera_step(
     return (None if progress >= 1.0 else anim), visual_floor, progress
 
 
+TITLE_ROWS = tuple(key for key, _label in screens.PLAYER_CHOICES)  # "1p", "2p", "quit"
+
+
 def run_title_screen(
-    surface: pygame.Surface, window: pygame.Surface | None, selected: str = "2p"
+    surface: pygame.Surface,
+    window: pygame.Surface | None,
+    selected: str = "2p",
+    sounds: sound.Sounds | None = None,
 ) -> str:
-    """Attract/title screen. The stick picks 1 PLAYER or 2 PLAYERS (starting
-    on `selected`), and A or Start begins. Returns '1p', '2p' or 'quit'."""
+    """Attract/title screen. The stick moves between 1 PLAYER, 2 PLAYERS and
+    QUIT (starting on `selected`) and A picks the row: A on QUIT leaves the
+    game. Start always starts a match, never quits: with QUIT highlighted it
+    starts the player count highlighted last. Returns '1p', '2p' or 'quit'."""
     internal = surface
+    sounds = sounds or sound.silent()
+    mode = selected if selected in ("1p", "2p") else "2p"
     clock = pygame.time.Clock()
     title_font = fonts.load_font(22)
     legend_font = fonts.load_font(9)
@@ -192,14 +214,24 @@ def run_title_screen(
             return "quit"
         up = p1_raw.up_held or p2_raw.up_held
         down = p1_raw.down_held or p2_raw.down_held
+        row = TITLE_ROWS.index(selected)
         if pressed_edge(prev_up, up):
-            selected = "1p"
+            row = max(0, row - 1)
         if pressed_edge(prev_down, down):
-            selected = "2p"
+            row = min(len(TITLE_ROWS) - 1, row + 1)
+        if TITLE_ROWS[row] != selected:
+            selected = TITLE_ROWS[row]
+            mode = selected if selected != "quit" else mode
+            sounds.move.play()
         prev_up, prev_down = up, down
         wants_start = _wants_start(p1_raw, p2_raw, keys)
         if armed and wants_start:
-            return selected
+            # A picks the highlighted row; Start (or Enter/Space) always plays.
+            start = p1_raw.start_held or p2_raw.start_held or keys[pygame.K_SPACE]
+            choice = mode if start else selected
+            if choice != "quit":
+                sounds.select.play()
+            return choice
         armed = armed or not wants_start
 
         screens.draw_title_screen(
@@ -213,7 +245,11 @@ def run_title_screen(
 
 
 def run_winner_screen(
-    surface: pygame.Surface, window: pygame.Surface | None, winner: str, floors: dict[str, int]
+    surface: pygame.Surface,
+    window: pygame.Surface | None,
+    winner: str,
+    floors: dict[str, int],
+    sounds: sound.Sounds | None = None,
 ) -> str:
     """Returns 'continue' (back to title) or 'quit'."""
     internal = surface
@@ -222,6 +258,7 @@ def run_winner_screen(
     small_font = fonts.load_font(12)
     label = "PLAYER 1" if winner == "p1" else "PLAYER 2"
     t = 0.0
+    (sounds or sound.silent()).win.play()
 
     while True:
         dt = clock.tick(config.FPS) / 1000.0
@@ -240,6 +277,58 @@ def run_winner_screen(
             return "continue"
 
         screens.draw_winner_screen(internal, big_font, small_font, label, floors)
+        present(internal, window)
+        pygame.display.flip()
+
+
+def run_tutorial(
+    surface: pygame.Surface,
+    window: pygame.Surface | None,
+    mode: str,
+    sounds: sound.Sounds | None = None,
+) -> str:
+    """HOW TO PLAY (tutorial.py), before a match picked on the title. Any
+    button press on either pad closes it, once it has been up for
+    tutorial.GRACE seconds; so does any key, unless --no-keyboard. The stick
+    doesn't. Returns 'play', 'quit' (Start + Select, or the window closed) or
+    'idle' (the idle timeout: back to the title)."""
+    internal = surface
+    clock = pygame.time.Clock()
+    sounds = sounds or sound.silent()
+    card = tutorial.Card(mode)
+    dismissal = tutorial.Dismissal()
+    t = 0.0
+    idle_seconds = 0.0
+    # Only presses from now on count: anything queued before the card opened
+    # is the title's own A or Start.
+    pygame.event.clear((pygame.JOYBUTTONDOWN, pygame.KEYDOWN))
+
+    while True:
+        dt = clock.tick(config.FPS) / 1000.0
+        t += dt
+
+        pressed = False
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.JOYBUTTONDOWN or (
+                event.type == pygame.KEYDOWN and keyboard_enabled()
+            ):
+                pressed = True
+
+        keys = read_keys()
+        p1_raw, p2_raw = _poll_players(keys)
+        if _wants_quit(p1_raw, p2_raw, keys):
+            return "quit"
+
+        idle_seconds = 0.0 if pressed else idle_seconds + dt
+        if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
+            return "idle"
+        if dismissal.update(dt, pressed):
+            sounds.select.play()
+            return "play"
+
+        tutorial.draw_tutorial(internal, card, t, screens.blink_visible(t, config.TITLE_BLINK_PERIOD))
         present(internal, window)
         pygame.display.flip()
 
@@ -357,8 +446,10 @@ def run_game(
     # can still look up its own next_target without running off the end.
     target_sequence = generate_target_sequence(rng, config.TOWER_HEIGHT + 2)
     players = {"p1": new_player(target_sequence), "p2": new_player(target_sequence)}
-    prev_held = {"p1": {name: False for name in ACTIONS}, "p2": {name: False for name in ACTIONS}}
-    prev_up_held = {"p1": False, "p2": False}
+    # Everything counts as held at first: the button that closed HOW TO
+    # PLAY (any button, gates included) must be let go before it acts.
+    prev_held = {"p1": {name: True for name in ACTIONS}, "p2": {name: True for name in ACTIONS}}
+    prev_up_held = {"p1": True, "p2": True}
     game_time = 0.0
     idle_seconds = 0.0
     attack_flash: tuple[str, float] | None = None  # (attacker_key, started_at)
@@ -413,7 +504,7 @@ def run_game(
         if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
             return "idle", players
 
-        pause_state = pause_menu.update(pause_buttons)
+        pause_state = _update_pause(pause_menu, pause_buttons, sounds)
         if pause_state == "title":
             return "title", players
         if pause_state == "paused":
@@ -446,6 +537,7 @@ def run_game(
                 for name in ACTIONS:
                     if pressed_edge(prev_held[player_key][name], raw.button_held[name]):
                         players[player_key] = apply_action(players[player_key], name)
+                        sounds.gate.play()
 
                 if pressed_edge(prev_up_held[player_key], raw.up_held):
                     before = players[player_key]
@@ -458,6 +550,7 @@ def run_game(
                             sounds.perfect.play()
                     else:
                         stun_until[player_key] = game_time + config.STUN_DURATION
+                        sounds.stun.play()
 
             for name in ACTIONS:
                 prev_held[player_key][name] = raw.button_held[name]
@@ -673,7 +766,7 @@ def run_solo(
             return "idle", timer.seconds
 
         # Once the top is reached there is nothing left to pause.
-        pause_state = pause_menu.update(pause_buttons) if finished_at is None else "play"
+        pause_state = _update_pause(pause_menu, pause_buttons, sounds) if finished_at is None else "play"
         if pause_state == "title":
             return "title", timer.seconds
         timer.paused = pause_state == "paused"
@@ -697,6 +790,12 @@ def run_solo(
             continue
         frozen_frame = None
         previous_time, game_time = game_time, game_time + dt
+        # 3, 2, 1 and GO!: a beep as each one appears.
+        for beep_at in (0.0, 1.0, 2.0):
+            if previous_time <= beep_at < game_time:
+                sounds.tick.play()
+        if previous_time <= config.SOLO_COUNTDOWN < game_time:
+            sounds.go.play()
 
         playing = finished_at is None and game_time >= config.SOLO_COUNTDOWN
         if playing:
@@ -706,6 +805,7 @@ def run_solo(
                 for name in ACTIONS:
                     if pressed_edge(prev_held[name], raw.button_held[name]):
                         player = apply_action(player, name)
+                        sounds.gate.play()
                 if pressed_edge(prev_up_held, raw.up_held):
                     after, advanced = confirm_climb(player, target_sequence)
                     if advanced:
@@ -718,12 +818,14 @@ def run_solo(
                         player = after
                         if player.floor >= config.TOWER_HEIGHT:
                             finished_at = game_time
+                            sounds.win.play()
                             finish_note = (
                                 "A TOP 10 TIME!" if times.qualifies(timer.seconds)
                                 else f"BEST {solo.format_time(times.entries[0].seconds)}"
                             )
                     else:
                         stun_until = game_time + config.STUN_DURATION
+                        sounds.stun.play()
         for name in ACTIONS:
             prev_held[name] = raw.button_held[name]
         prev_up_held = raw.up_held
@@ -929,6 +1031,45 @@ def run_solo_flow(
     return run_times_table(surface, window, times, new_rank)
 
 
+def run_flow(
+    surface: pygame.Surface,
+    window: pygame.Surface | None,
+    sounds: sound.Sounds,
+    show_fps: bool,
+    times: Times,
+) -> None:
+    """Title, HOW TO PLAY, a match, and back to the title, until someone
+    quits. Every match picked on the title gets the tutorial first; there is
+    no rematch that skips it."""
+    mode = "2p"  # the title starts on whichever was played last
+
+    while True:
+        action = run_title_screen(surface, window, mode, sounds)
+        if action == "quit":
+            return
+        mode = action
+
+        result = run_tutorial(surface, window, mode, sounds)
+        if result == "quit":
+            return
+        if result == "idle":
+            continue
+
+        if mode == "1p":
+            if run_solo_flow(surface, window, sounds, show_fps, times) == "quit":
+                return
+            continue
+
+        result, players = run_game(surface, window, sounds, show_fps)
+        if result == "quit":
+            return
+        if result in ("p1", "p2"):
+            floors = {"p1": players["p1"].floor, "p2": players["p2"].floor}
+            if run_winner_screen(surface, window, result, floors, sounds) == "quit":
+                return
+        # result == "idle" or "title" falls straight back to the title screen
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     set_keyboard_enabled(not args.no_keyboard)
@@ -945,28 +1086,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         sounds = sound.load_sounds()
         show_fps = args.fps or config.SHOW_FPS_DEFAULT
-        times = Times(config.TIMES_FILE)
-        mode = "2p"  # the title starts on whichever was played last
-
-        while True:
-            action = run_title_screen(surface, window, mode)
-            if action == "quit":
-                break
-            mode = action
-
-            if action == "1p":
-                if run_solo_flow(surface, window, sounds, show_fps, times) == "quit":
-                    break
-                continue
-
-            result, players = run_game(surface, window, sounds, show_fps)
-            if result == "quit":
-                break
-            if result in ("p1", "p2"):
-                floors = {"p1": players["p1"].floor, "p2": players["p2"].floor}
-                if run_winner_screen(surface, window, result, floors) == "quit":
-                    break
-            # result == "idle" or "title" falls straight back to the title screen
+        run_flow(surface, window, sounds, show_fps, Times(config.TIMES_FILE))
 
     pygame.quit()
     sys.exit(0)

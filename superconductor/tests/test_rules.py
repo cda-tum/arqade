@@ -9,7 +9,7 @@ from superconductor.rules import Board, Spawn, meet
 
 def scripted(*spawns):
     """Replace the random schedule with a fixed list of (t, a, b) spawns."""
-    def schedule(lattice, seed, rate=1.0):
+    def schedule(lattice, seed, rate=1.0, head_start=0.0):
         for t, a, b in spawns:
             yield Spawn(t, a, b, 20.0)
         yield Spawn(float("inf"), (0, 0), (4, 4), 20.0)  # never arrives
@@ -267,6 +267,28 @@ def test_difficulty_ramps_up():
     assert s[-1].t - s[-2].t == pytest.approx(config.SPAWN_INTERVAL_MIN)
 
 
+def test_an_idle_chip_speeds_its_schedule_up_to_a_limit(board_with):
+    b = board_with()  # nothing ever arrives: the chip is idle throughout
+    start = b.pace
+    for _ in range(100):
+        b.update(0.1)
+    assert b.pace == pytest.approx(start + 10 * config.PACE_GAIN)
+    assert b.clock > b.time  # the schedule ran ahead of the real time
+    for _ in range(1000):
+        b.update(0.1)
+    assert b.pace == config.PACE_MAX
+
+
+def test_a_chip_with_a_pair_waiting_keeps_its_pace(board_with):
+    b = board_with((0.0, (0, 0), (0, 3)))
+    pace, clock, time = b.pace, b.clock, b.time
+    for _ in range(50):
+        b.update(0.1)
+    assert b.waiting_pairs()
+    assert b.pace == pace
+    assert b.clock - clock == pytest.approx((b.time - time) * pace)
+
+
 # ---------------------------------------------------------------- crossing
 
 
@@ -469,6 +491,26 @@ def test_new_pair_goes_to_whoever_did_not_route_last(board_with):
     b.update(1.5)  # third pair arrives
     assert b.cursors["p2"].path == [(2, 0)]
     assert b.cursors["p1"].pair_id is None
+
+
+def test_head_start_shortens_only_the_spawn_interval():
+    lat = Lattice("square")
+    plain = list(itertools.islice(rules.spawn_schedule(lat, 4), 30))
+    ahead = list(itertools.islice(rules.spawn_schedule(lat, 4, head_start=30.0), 30))
+    assert [(s.a, s.b) for s in plain] == [(s.a, s.b) for s in ahead]  # same pairs
+    assert ahead[-1].t < plain[-1].t
+    first_gap = ahead[config.INITIAL_PAIRS].t - ahead[config.INITIAL_PAIRS - 1].t
+    assert first_gap == pytest.approx(rules.ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, 30.5))
+    assert ahead[0].coherence == plain[0].coherence  # coherence keeps its own ramp
+
+
+def test_one_router_chips_get_the_head_start(monkeypatch):
+    seen = []
+    real = rules.spawn_schedule
+    monkeypatch.setattr(rules, "spawn_schedule", lambda *a: seen.append(a[2:]) or real(*a))
+    Board(Lattice("square"), 1, ("p1",))
+    Board(Lattice("square"), 1, ("p1", "p2"))
+    assert seen == [(1.0, config.SOLO_SPAWN_HEAD_START), (config.COOP_SPAWN_RATE, 0.0)]
 
 
 def test_coop_pairs_come_more_often():

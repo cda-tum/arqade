@@ -30,6 +30,7 @@ GAMES_PER_LEVEL = 4
 BOSS_EVERY = 12  # a boss after every this many wins
 BOSS_CARD_TIME = 2.0  # the BOSS! warning before it
 BOSS_LINGER = 1.2  # a boss ends this long after everyone is done, not at the timer
+WIN_LINGER = 0.4  # a microgame ends this long after its last success (failures at once), not at the timer
 SPEED_PER_LEVEL = 0.15  # objects move this much faster per level
 
 # --- Lives, scores, the rest of the flow ------------------------------------------
@@ -37,6 +38,8 @@ LIVES = 4
 GAME_OVER_TIME = 2.5
 HISCORES_TIME = 8.0
 MATCH_RESULT_LOCK = 1.0  # seconds before a result screen takes input
+TUTORIAL_LOCK = 0.3  # the HOW TO PLAY card ignores presses this long (the one that opened it)
+PAUSE_GRACE = 0.5  # Start doesn't pause this early in the first intro (a mashed dismiss)
 ATTRACT_DELAY = 3.0  # untouched seconds on the title before the bots play
 IDLE_TIMEOUT = 60.0
 BACK_HOLD_TO_QUIT = 2.0  # hold Select this long on the title to quit

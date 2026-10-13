@@ -126,10 +126,27 @@ class _NullSound:
         pass
 
 
+_NULL = _NullSound()
+
+
 class Sounds(NamedTuple):
     climb: object
     perfect: object
     shot: object
+    # The rest default to silence, so a Sounds(climb, perfect, shot) built by
+    # a test still works.
+    gate: object = _NULL  # any gate press
+    stun: object = _NULL  # a wrong confirm
+    move: object = _NULL  # a menu's selection moves
+    select: object = _NULL  # a menu item picked, the tutorial dismissed
+    tick: object = _NULL  # 3, 2, 1 before a time trial
+    go: object = _NULL  # ...and GO!
+    win: object = _NULL  # the top reached
+
+
+def silent() -> Sounds:
+    """Every sound a no-op: the default for screens a test drives."""
+    return Sounds(_NULL, _NULL, _NULL)
 
 
 def load_sounds() -> Sounds:
@@ -164,11 +181,40 @@ def load_sounds() -> Sounds:
             820.0, 160.0, 0.14, actual_freq, 0.6, waveform="sawtooth"
         )
 
+        # Gate: the softest, shortest blip of the set -- it plays on every
+        # press, from two players at once, so it must stay out of the way.
+        gate_samples = generate_tone_samples(660.0, 0.03, actual_freq, 0.25, waveform="triangle")
+        # Stun: a low falling buzz, the "wrong!" to the climb's "step up".
+        stun_samples = generate_sweep_samples(220.0, 90.0, 0.25, actual_freq, 0.5, waveform="square")
+        # Menus: a tick for moving, a rising pair for picking.
+        move_samples = generate_tone_samples(880.0, 0.03, actual_freq, 0.3, waveform="square")
+        select_samples = generate_sequence_samples(
+            [(659.25, 0.05), (987.77, 0.08)], actual_freq, 0.45, waveform="square"
+        )
+        # Countdown: three short beeps, then a higher, longer GO.
+        tick_samples = generate_tone_samples(440.0, 0.09, actual_freq, 0.45, waveform="square")
+        go_samples = generate_tone_samples(880.0, 0.25, actual_freq, 0.45, waveform="square")
+        # Win: a longer fanfare than PERFECT's, ending on a held high C.
+        win_samples = generate_sequence_samples(
+            [(523.25, 0.1), (659.25, 0.1), (783.99, 0.1), (659.25, 0.1), (783.99, 0.1),
+             (1046.50, 0.4)],
+            actual_freq, 0.55, waveform="square",
+        )
+
+        def make(samples: list[int]) -> pygame.mixer.Sound:
+            return _samples_to_sound(samples, channels)
+
         return Sounds(
-            climb=_samples_to_sound(climb_samples, channels),
-            perfect=_samples_to_sound(perfect_samples, channels),
-            shot=_samples_to_sound(shot_samples, channels),
+            climb=make(climb_samples),
+            perfect=make(perfect_samples),
+            shot=make(shot_samples),
+            gate=make(gate_samples),
+            stun=make(stun_samples),
+            move=make(move_samples),
+            select=make(select_samples),
+            tick=make(tick_samples),
+            go=make(go_samples),
+            win=make(win_samples),
         )
     except (pygame.error, ValueError):
-        null = _NullSound()
-        return Sounds(climb=null, perfect=null, shot=null)
+        return silent()

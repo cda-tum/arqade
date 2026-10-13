@@ -14,7 +14,10 @@ set as a metro terminus on a white disc; the yellow rings are already
 running down.
 
 The title is a white enamel station sign below, with the two lines'
-roundels on it. The marquee is that same sign on its own.
+roundels on it. The marquee is that same sign on its own. The wide tile
+(wide(), for the cabinet's 2:1 game list) keeps the map above the sign, on a
+4x9 chip instead of 4x6: the same two routes with longer runs either side of
+the clash, which sits in the middle, the map as wide as the sign.
 """
 
 from __future__ import annotations
@@ -45,6 +48,16 @@ ROUTES = [
     ([(3, 0), (3, 3), (1, 3), (1, 5)], YELLOW, 0.7),
     ([(0, 0), (0, 2), (2, 2), (2, 5)], GREEN, 1.0),
 ]
+
+# The wide tile's chip: the same two crossing lines on a chip three columns
+# wider, the clash in the middle and the map as wide as the sign below it
+WIDE_LATTICE = Lattice("square", 4, 9)
+WIDE_ROUTES = [
+    ([(3, 0), (3, 4), (1, 4), (1, 8)], YELLOW, 0.7),
+    ([(0, 0), (0, 3), (2, 3), (2, 8)], GREEN, 1.0),
+]
+WIDE_SIGN = 0.68  # the sign's width, of the wide tile's
+STATION_R = 0.41  # a terminus disc's radius (with its casing), in lattice spacings
 
 
 def _stops(corners):
@@ -79,33 +92,34 @@ def _polyline(surf: pygame.Surface, col, pts, width: float) -> None:
         pygame.draw.circle(surf, col, p, h)
 
 
-def _map(sp: float, origin: tuple[float, float]) -> pygame.Surface:
+def _map(sp: float, origin: tuple[float, float], lattice: Lattice = LATTICE,
+         routes=ROUTES) -> pygame.Surface:
     """The chip at spacing `sp` px, on a transparent surface (drawn at 2x by art())."""
     ox, oy = origin
 
     def xy(n):
         return ox + n[1] * sp, oy + n[0] * sp
 
-    size = (round(ox * 2 + (LATTICE.cols - 1) * sp), round(oy * 2 + (LATTICE.rows - 1) * sp))
+    size = (round(ox * 2 + (lattice.cols - 1) * sp), round(oy * 2 + (lattice.rows - 1) * sp))
     surf = pygame.Surface(size, pygame.SRCALPHA)
-    ends = {n for corners, _, _ in ROUTES for n in (corners[0], corners[-1])}
+    ends = {n for corners, _, _ in routes for n in (corners[0], corners[-1])}
     # the faint chip underneath: the game's couplers and idle qubits
-    for e in LATTICE.edges:
+    for e in lattice.edges:
         a, b = tuple(e)
         pygame.draw.line(surf, kit.shade(COUPLER, 0.75), xy(a), xy(b), round(sp * 0.035))
-    for n in LATTICE.nodes:
+    for n in lattice.nodes:
         if n not in ends:
             game.draw_xmon(surf, *xy(n), sp * 0.62, kit.shade(QUBIT_IDLE, 0.6))
 
     line_w = round(sp * 0.2)
-    for corners, col, _ in ROUTES:
+    for corners, col, _ in routes:
         pts = _chamfer([xy(n) for n in corners], sp * 0.4)
         # casing first, in the background colour, so a later line cuts cleanly over an earlier one
         for w, c in ((line_w + round(sp * 0.14), BG), (line_w, col)):
             _polyline(surf, c, pts, w)
     # where the two lines claim the same qubit: the game's collision warning
     # (draw_board: draw_x at sp*0.2 plus a ring at sp*0.34, both RED)
-    shared = set(_stops(ROUTES[0][0])) & set(_stops(ROUTES[1][0]))
+    shared = set(_stops(routes[0][0])) & set(_stops(routes[1][0]))
     for n in shared:
         x, y = xy(n)
         pygame.draw.circle(surf, BG, (x, y), sp * 0.42)
@@ -115,7 +129,7 @@ def _map(sp: float, origin: tuple[float, float]) -> pygame.Surface:
     # the stations: the game's waiting station (draw_board) -- an Xmon inside
     # its coherence ring, in the pair's colour -- set as a metro terminus:
     # white disc, thick coloured ring
-    for corners, col, frac in ROUTES:
+    for corners, col, frac in routes:
         for n in (corners[0], corners[-1]):
             x, y = xy(n)
             r = sp * 0.34
@@ -180,6 +194,24 @@ def art(size: int) -> pygame.Surface:
     kit.blit_center(big, chip, (ss / 2, ss * 0.375))
     kit.blit_center(big, _shadowed(_sign(round(ss * 0.86)), round(ss * 0.008)), (ss / 2, ss * 0.805))
     return pygame.transform.smoothscale(big, (size, size))
+
+
+def wide(width: int, height: int) -> pygame.Surface:
+    """The map above the sign again, for a 2:1 tile: the chip is wider, so
+    the two lines run longer before and after their clash."""
+    sw, sh = width * 2, height * 2  # drawn at double size, like art()
+    big = pygame.Surface((sw, sh))
+    big.fill(BG)
+    margin = sh * 0.05
+    sign = _shadowed(_sign(round(sw * WIDE_SIGN)), round(sw * WIDE_SIGN * 0.0093))
+    gap = sh * 0.06
+    lat = WIDE_LATTICE
+    room = sh - 2 * margin - sign.get_height() - gap  # height left for the map
+    sp = room / (lat.rows - 1 + 2 * STATION_R)
+    chip = _map(sp, (sp * 0.6, sp * 0.6), lat, WIDE_ROUTES)
+    kit.blit_center(big, chip, (sw / 2, margin + room / 2))
+    big.blit(sign, sign.get_rect(midbottom=(round(sw / 2), round(sh - margin))))
+    return pygame.transform.smoothscale(big, (width, height))
 
 
 def marquee() -> pygame.Surface:

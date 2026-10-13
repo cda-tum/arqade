@@ -1,4 +1,5 @@
-"""Tests for the match flow: title, select, rounds, result, pause, idle and attract."""
+"""Tests for the match flow: title, select, stage select, HOW TO PLAY, rounds, result, pause,
+idle and attract."""
 
 from __future__ import annotations
 
@@ -19,6 +20,8 @@ from brawl_ket.match import (
     STAGE_LOCK,
     STAGE_SELECT,
     TITLE,
+    TITLE_ITEMS,
+    TUTORIAL,
     Cue,
     FrameInput,
     Match,
@@ -42,6 +45,20 @@ def press(kind: str, player: str = "p1", **extra) -> FrameInput:
 
 def idle() -> FrameInput:
     return FrameInput()
+
+
+def any_button(**extra) -> FrameInput:
+    """Any button at all (on the HOW TO PLAY card, L or Select counts as much as A)."""
+    return FrameInput(activity=True, any_button=True, **extra)
+
+
+def past_tutorial(m: Match) -> list:
+    """Read the HOW TO PLAY card for its lock, then press a button."""
+    assert m.state == TUTORIAL
+    run(m, config.TUTORIAL_LOCK)
+    events = m.update(any_button())
+    assert m.state == ROUND_INTRO
+    return events
 
 
 def run(m: Match, frames: int, inp: FrameInput | None = None) -> list:
@@ -75,7 +92,7 @@ def to_fight(m: Match, p1: int = 0, p2: int = 0, stage: str | None = None) -> No
     while m.stage_pick != want:
         m.update(press("right", "p2"))
     m.update(press("confirm"))
-    assert m.state == ROUND_INTRO
+    past_tutorial(m)
     run(m, config.ROUND_INTRO_FRAMES)
     assert m.state == FIGHT
 
@@ -95,9 +112,47 @@ def ko(m: Match, loser: str) -> list:
 def test_a_or_start_on_the_title_goes_to_select() -> None:
     for kind in ("confirm", "start"):
         m = Match(random.Random(1))
-        assert m.state == TITLE
+        assert m.state == TITLE and TITLE_ITEMS[m.title_index] == "PLAY"
         events = m.update(press(kind, "p2"))
-        assert m.state == SELECT and "blip" in cues(events)
+        assert m.state == SELECT and "confirm" in cues(events)
+
+
+def test_the_title_menu_ends_with_quit_and_the_stick_moves_through_it() -> None:
+    assert TITLE_ITEMS == ("PLAY", "QUIT")
+    m = Match(random.Random(1))
+    assert "blip" in cues(m.update(press("down", "p2")))
+    assert TITLE_ITEMS[m.title_index] == "QUIT"
+    m.update(press("down"))                 # round again
+    assert TITLE_ITEMS[m.title_index] == "PLAY"
+    m.update(press("up"))
+    assert TITLE_ITEMS[m.title_index] == "QUIT" and not m.quit
+
+
+def test_a_on_quit_quits_at_once() -> None:
+    m = Match(random.Random(1))
+    m.update(press("down"))
+    m.update(press("confirm", "p2"))
+    assert m.quit and m.state == TITLE
+
+
+def test_start_always_plays_and_b_never_quits() -> None:
+    m = Match(random.Random(1))
+    m.update(press("down"))
+    m.update(press("back"))
+    assert not m.quit and m.state == TITLE
+    m.update(press("start"))                # QUIT is selected, but Start starts
+    assert not m.quit and m.state == SELECT
+
+
+def test_the_demo_puts_the_title_back_on_play() -> None:
+    """Whoever stops the demo with A must not find QUIT under it."""
+    m = Match(random.Random(1))
+    m.update(press("down"))
+    run(m, config.ATTRACT_DELAY + 1)
+    assert m.attract is not None
+    m.update(press("confirm"))              # stops the demo
+    m.update(press("confirm"))
+    assert m.state == SELECT and not m.quit
 
 
 def test_select_starts_the_fight_with_the_picked_fighters() -> None:
@@ -141,8 +196,9 @@ def test_b_unreadies_then_goes_back_to_the_title() -> None:
 def test_the_round_intro_calls_the_round_then_fight() -> None:
     m = Match(random.Random(1))
     to_stage_select(m)
-    events = m.update(press("confirm", "p2"))
-    assert m.state == ROUND_INTRO and "round" in cues(events)
+    m.update(press("confirm", "p2"))
+    events = past_tutorial(m)
+    assert "round" in cues(events)
     frames_left = m.fight.frames_left
     events = run(m, config.ROUND_INTRO_FRAMES)
     assert cues(events).count("fight") == 1
@@ -186,7 +242,9 @@ def test_a_or_start_on_the_stage_select_starts_the_match(kind) -> None:
     m = Match(random.Random(1))
     to_stage_select(m)
     events = m.update(press(kind, "p1"))
-    assert m.state == ROUND_INTRO and not m.paused and "round" in cues(events)
+    assert m.state == TUTORIAL and not m.paused and "confirm" in cues(events)
+    events = past_tutorial(m)
+    assert not m.paused and "round" in cues(events)
     assert m.round_no == 1 and m.hint
 
 
@@ -568,7 +626,8 @@ def test_only_a_matchs_first_round_intro_shows_the_hint() -> None:
     m = Match(random.Random(1))
     to_stage_select(m)
     m.update(press("confirm", "p2"))
-    assert m.state == ROUND_INTRO and m.hint
+    past_tutorial(m)
+    assert m.hint
     run(m, config.ROUND_INTRO_FRAMES)
     assert m.state == FIGHT
     ko(m, "p2")
@@ -585,4 +644,85 @@ def test_a_mashed_a_cannot_skip_the_stage_screen():
     assert m.state == STAGE_SELECT
     run(m, STAGE_LOCK)
     m.update(press("confirm"))
-    assert m.state == ROUND_INTRO
+    assert m.state == TUTORIAL
+
+
+# --- HOW TO PLAY -------------------------------------------------------------------------
+
+
+def to_tutorial(m: Match, stage: str | None = None) -> None:
+    to_stage_select(m)
+    want = STAGE_OPTIONS.index(stage) if stage else 0
+    while m.stage_pick != want:
+        m.update(press("right", "p2"))
+    m.update(press("confirm"))
+
+
+def test_a_stage_picked_shows_how_to_play_in_that_room_before_the_round() -> None:
+    m = Match(random.Random(1))
+    to_tutorial(m, stage="cryo")
+    assert m.state == TUTORIAL and m.lesson is not None and m.fight is None and m.stage == "cryo"
+    past_tutorial(m)
+    assert m.stage == "cryo"
+
+
+def test_on_random_the_card_shows_the_room_the_match_is_fought_in() -> None:
+    for seed in range(8):
+        m = Match(random.Random(seed))
+        to_tutorial(m)
+        shown = m.stage
+        past_tutorial(m)
+        assert m.stage == shown
+
+
+def test_how_to_play_ignores_buttons_at_first_then_any_button_goes_on() -> None:
+    m = Match(random.Random(1))
+    to_tutorial(m)
+    for _ in range(config.TUTORIAL_LOCK - 1):   # the A that picked the stage, bouncing
+        m.update(any_button())
+    assert m.state == TUTORIAL
+    m.update(idle())
+    events = m.update(any_button())
+    assert m.state == ROUND_INTRO and "confirm" in cues(events) and "round" in cues(events)
+    assert m.lesson is None and m.wins == {"p1": 0, "p2": 0} and m.hint
+
+
+def test_the_stick_and_holding_do_not_take_how_to_play_away() -> None:
+    m = Match(random.Random(1))
+    to_tutorial(m)
+    run(m, config.TUTORIAL_LOCK + 1)
+    for kind in ("left", "right", "up", "down"):
+        m.update(press(kind, "p2"))
+    m.update(FrameInput(activity=True, held=True))
+    assert m.state == TUTORIAL
+
+
+def test_how_to_play_plays_its_scene_and_cannot_be_paused() -> None:
+    m = Match(random.Random(1))
+    to_tutorial(m)
+    events = run(m, 60)
+    assert any(getattr(e, "kind", None) == "hit" for e in events)   # the scene's first jab
+    m.update(press("start", held=True))
+    assert m.state == TUTORIAL and not m.paused
+
+
+def test_idle_on_how_to_play_returns_to_the_title() -> None:
+    m = Match(random.Random(1))
+    to_tutorial(m)
+    run(m, config.IDLE_TIMEOUT)
+    assert m.state == TITLE and m.lesson is None
+
+
+def test_a_rematch_skips_how_to_play_but_a_new_match_shows_it_again() -> None:
+    m = Match(random.Random(1))
+    to_fight(m, stage="optics")
+    finish(m)
+    m.update(press("confirm"))              # rematch: the same people, the same room, straight in
+    assert m.state == ROUND_INTRO and m.stage == "optics"
+    m.update(press("start"))                # QUIT TO TITLE
+    m.update(press("down"))
+    m.update(press("confirm"))
+    assert m.state == TITLE
+    m.update(idle())
+    to_tutorial(m)
+    assert m.state == TUTORIAL

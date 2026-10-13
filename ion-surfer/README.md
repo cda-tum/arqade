@@ -30,6 +30,43 @@ Your score is the distance transported plus bonuses.
 
 Levels are generated from a seed. You can enter a seed in the menu to replay a level.
 
+### Main menu and the HOW TO PLAY card
+
+The main menu is 1 PLAYER, 2 PLAYERS: VERSUS, 2 PLAYERS: CO-OP, SANDBOX, SEED and
+QUIT. The stick moves the selection and A picks a row. **QUIT** exits the game at once,
+back to the cabinet's game list (the same clean exit as Start + Select). **Start**
+always starts a match and never quits: the selected mode, or 1 PLAYER from the SEED or
+QUIT row. B does nothing on the main menu.
+
+Every match picked in the main menu (the sandbox too) starts behind a full-screen
+**HOW TO PLAY** card (`tutorial.py`): the goal in three lines, the controls with the
+cabinet's printed labels (the stick and the `L X R / Y B A` cluster, used buttons lit;
+in the sandbox both pads, P1 blue and P2 red, since their L and R differ), and a demo
+that loops every 6 s. The demo is a second, private `Game` running the real physics,
+its cursor driven by a short script and drawn with the real draw code: the ion is
+pushed off, rolls right and picks up photons; in co-op red pushes and blue clears the
+way; in the sandbox the packet is kicked, sloshes and is cooled back down. It has its
+own random state, so the match's footage doesn't depend on how long the card was up.
+
+Any button on either pad dismisses it, once it has been up 0.3 s (so the press that
+picked the mode, or its bounce, can't skip it unseen); the stick doesn't. Buttons still
+held at that moment are used up until released (`Controls.consume_buttons`), so the
+dismissing A doesn't also move a cursor. Start + Select still quits from the card.
+RESTART in the pause menu and SAME SEED / NEW SEED after a match skip it, as does the
+`--sandbox` dev shortcut; QUIT TO TITLE and a new match shows it again.
+
+### Sound
+
+`sound.py` builds a small set of effects in code at start-up (no audio files, no
+numpy), in surf-guitar style: plucked strings (Karplus-Strong) in E minor pentatonic
+with a spring-reverb-like echo. Menu moves and confirms, pause, the cursor stepping to
+another electrode, photons, hard landings, a lost ion, the match start (dismissing the
+card), and a tremolo-picked fanfare for a versus win or a new record (a falling riff
+otherwise). The sandbox has its own: the laser kick, adding and removing an ion,
+cooling, passive cooling on/off and the ANHARMONIC warning coming on. Holding a voltage
+is silent on purpose: it would drone through the whole match. Without a working mixer
+every effect is a silent no-op.
+
 ## Sandbox
 
 The sandbox is the **SANDBOX** entry in the game's own main menu, alongside the three
@@ -149,7 +186,8 @@ and axis mappings live there.
   selection, A picks, Start or B resumes. Select does not pause; it is reserved for
   the quit combo (and fires the laser kick in the sandbox).
 - **Quit:** hold Start and Select together on either controller (1+5 or 2+6 on the
-  keyboard), paused or not, or choose QUIT in the main menu.
+  keyboard), paused or not, also on the HOW TO PLAY card, or pick QUIT in the main menu
+  with A.
 - The keyboard keys are a dev fallback only. The cabinet loader runs the game with `--no-keyboard`: Batocera also turns P1's pad into keystrokes (arrow keys, numpad, letters, Enter/Space — see `../AGENTS.md`), which would otherwise let P1's stick or buttons drive P2 or fire two actions at once.
 
 Records (solo and co-op) are saved to `~/.ion_surfer_scores.json`. On Batocera that is
@@ -177,14 +215,19 @@ uv run pytest
 The tests cover the pure input functions, `Pad`'s hold/press/auto-repeat logic, the
 config (every key name exists, and start/select aren't action buttons),
 `display.py`'s scaling math, the pause menu (`tests/test_game.py`, which drives
-`Game` with the cabinet's raw joystick events), and the sandbox physics:
+`Game` with the cabinet's raw joystick events), the main menu's QUIT and Start rows and
+the HOW TO PLAY card (`tests/test_tutorial.py`: menu -> card -> play for every mode,
+the 0.3 s guard, stick vs buttons, the used-up dismissing press, the quit combo, which
+starts skip the card, the demo looping and leaving the global random state alone),
+the sound builders and their silent fallback (`tests/test_sound.py`), and the sandbox
+physics:
 - `quantum.py`: norm conservation, a stationary ground state, coherent-state
   oscillation, squeezed-state breathing with even-only Fock populations, kicks and
   cooling.
 - `crystal.py`: the Coulomb spacing, COM at ω and stretch at √3·ω, three-ion mode
   ratios, kicks that excite only COM vs COM and stretch, and following a moving trap.
 
-Apart from the pause menu, the game loop and rendering (`game.py`, `sandbox.py`) are
+Apart from the menus and the card, the game loop and rendering (`game.py`, `sandbox.py`) are
 integration glue. They are verified by running the game.
 
 ## Tuning

@@ -71,3 +71,34 @@ def test_b_goes_back_and_a_confirms_per_the_cabinet_convention():
     assert inp.confirm() and not inp.back()
     inp.pressed = {"p1": {"start"}, "p2": set()}
     assert inp.confirm()
+
+
+def test_any_button_comes_from_button_down_events_for_one_frame():
+    # The HOW TO PLAY card is dismissed by any button, mapped or not (X, L, R).
+    pygame.init()
+    inp = inp_mod.Input()
+    inp.handle(pygame.event.Event(pygame.JOYBUTTONDOWN, joy=1, instance_id=1, button=0))
+    inp.update(1 / 60)
+    assert inp.any_button and inp.activity
+    inp.update(1 / 60)
+    assert not inp.any_button
+    inp.handle(pygame.event.Event(pygame.JOYAXISMOTION, joy=0, instance_id=0, axis=1, value=-1.0))
+    inp.handle(pygame.event.Event(pygame.JOYBUTTONUP, joy=0, instance_id=0, button=1))
+    inp.update(1 / 60)
+    assert not inp.any_button
+
+
+def test_any_button_counts_keys_only_with_the_keyboard_on():
+    pygame.init()
+    key = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_q, mod=0, unicode="q", scancode=0)
+    inp = inp_mod.Input()
+    inp.handle(key)
+    inp.update(1 / 60)
+    assert inp.any_button
+    inp_mod.set_keyboard_enabled(False)
+    try:
+        inp.handle(key)
+        inp.update(1 / 60)
+        assert not inp.any_button
+    finally:
+        inp_mod.set_keyboard_enabled(True)

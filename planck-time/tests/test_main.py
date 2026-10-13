@@ -56,3 +56,24 @@ def test_the_default_window_is_a_whole_multiple_of_the_internal_size():
     w, h = (int(v) for v in parse_args([]).window_size.split("x"))
     assert w % config.INTERNAL_WIDTH == 0 and h % config.INTERNAL_HEIGHT == 0
     assert w // config.INTERNAL_WIDTH == h // config.INTERNAL_HEIGHT
+
+
+def test_quit_on_the_title_ends_the_game_loop(monkeypatch):
+    """Down to QUIT, A: run() returns, the same clean exit as Start + Select."""
+    from planck_time import game
+    from planck_time.input import Input
+    from planck_time.session import FrameInput
+
+    script = iter([{"nav": {"p1": (0, 1), "p2": (0, 0)}}, {"nav": {"p1": (0, 1), "p2": (0, 0)}},
+                   {"confirms": {"p1": True, "p2": False}}])
+    frames = {"n": 0}
+
+    def frame_input(self):
+        frames["n"] += 1
+        assert frames["n"] < 100, "QUIT didn't quit"
+        return FrameInput(activity=True, **next(script, {}))
+
+    monkeypatch.setattr(Input, "frame_input", frame_input)
+    monkeypatch.setattr(game.config, "SCORE_FILE", None)
+    game.run(fullscreen=False, window_size="640x360", show_fps=False)
+    assert frames["n"] == 3

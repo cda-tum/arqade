@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
-`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, more later) built for the same
+`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, `qircuit/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
 Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. (`launcher/`
 runs them all from one menu on an ordinary PC instead.) This file
@@ -30,6 +30,13 @@ specifics (gameplay, architecture, tests) belong in each game's own
   cabinet's actual address is if mDNS isn't resolving) reliably works once
   keys are set up. A benign `X11 forwarding request failed on channel 0`
   warning shows up on every connection — ignore it, the session still works.
+- **From WSL on a laptop with a direct LAN cable** (2026-10-06): there is no
+  DHCP on the cable, so both ends take a link-local 169.254.x.x address, and
+  WSL can't resolve `batocera.local` itself. Windows can:
+  `ping.exe -4 batocera.local` prints the address, and WSL's own `ssh` reaches
+  it. That laptop's key is not on the cabinet, so it logs in with Batocera's
+  default root password. The cabinet's clock is wrong without NTP (1980), so
+  file timestamps from it mean nothing.
 
 ### Display: pick an internal resolution that divides 1080
 
@@ -91,21 +98,32 @@ underscores and all. Display names, descriptions and icons all come from
   <path>./quantum_towers.pygame</path>   <!-- relative to the system's rom dir -->
   <name>Qlimbers</name>
   <desc>…</desc>
-  <image>./images/quantum_towers-image.png</image>
+  <image>./images/quantum_towers-wide.png</image>
 </game>
 ```
 
-The repo's copy lives in `batocera/gamelist.xml`, with the matching icons in
-`batocera/icons/` (regenerate them with `batocera/icons/generate_icons.py`;
-it's standalone and only needs pygame). Copy the icons to
-`/userdata/roms/pygame/images/` and the XML over the cabinet's own.
+The repo's copy lives in `batocera/gamelist.xml`. The images are the game
+logos in `batocera/logos/` (see "Game logos" below); `batocera/icons/` holds
+the older, title-less set they replaced. `batocera/deploy_ui.sh` puts both on
+the cabinet: it copies every image the gamelist names to
+`/userdata/roms/pygame/images/` and has `install_ui.py` *merge* the XML into
+the cabinet's own, with ES stopped (see the first point below).
+
+**The game list's tiles are about 2:1, so `<image>` is the wide tile,
+`<rom>-wide.png` (1024x512), not the square logo.** The theme's "Icons" view
+draws `{game:image}` with `minSize` set to the whole tile, which scales an
+image to *cover* the tile. A square logo therefore lost its top and bottom,
+title included. The square `<rom>-logo.png` stays for everything else: the PC
+launcher's carousel, social posts, slides.
 
 Two things to be careful about:
 
 - **ES owns this file too.** It writes play statistics (`<playcount>`,
   `<lastplayed>`, `<gametime>`) back into it as games are played, so back it
   up and preserve those fields rather than clobbering the whole file — you'd
-  otherwise wipe the play history.
+  otherwise wipe the play history. `install_ui.py` only sets `<name>`,
+  `<desc>`, `<image>` and `<marquee>` (and adds missing games), and keeps the
+  previous file as `gamelist.xml.arqade-bak`.
 - The display name is *only* this `<name>` field. Renaming a game for the
   menu (e.g. Quantum Towers → **Qlimbers**) needs no change to the ROM
   filename, the Python package, or the deploy script.
@@ -119,7 +137,7 @@ There are three separate splashes, and they come from different places:
 | Boot (at power-on) | `/etc/init.d/S28splash` | a file in `/userdata/splash/` |
 | ES start-up (logo + progress bar) | sway wallpaper behind ES | `/etc/sway/config` → `/usr/share/emulationstation/resources/logo.png` |
 | Game start/exit (brief flash) | sway wallpaper, in the gap | same `logo.png` |
-| Menu start/reload | EmulationStation | theme's `_splash.xml` |
+| Menu start/reload | EmulationStation | theme's `splash.xml` (see below) |
 | Game launch ("loading…") | EmulationStation | theme's `gamesplash.xml` |
 
 **The sway wallpaper is the sneaky one.** `/etc/sway/config` has
@@ -164,6 +182,23 @@ The theme in use is `mqt` (`ThemeSet` in
 `/userdata/system/configs/emulationstation/es_settings.cfg`), and the two
 XML files are patched by `quantum-pong/batocera/arqade-theme/install.py` to
 point at `./art/mqt_splash.png`.
+
+Not yet checked on the cabinet: batocera-emulationstation's source
+(`es-core/src/Splash.cpp`, unchanged since 2020) loads the start-up splash
+from `<theme>/splash.xml` and the launch splash from `<theme>/gamesplash.xml`.
+Nothing reads `_splash.xml`, the file `install.py` patches, so that patch is
+probably a no-op. The start-up splash shows our logo anyway: its default image
+is `:/logo.png`, and that is the `/usr/share/emulationstation/resources/logo.png`
+the boot hook swaps.
+
+**None of these splashes can animate.** ES draws both of its splashes as
+single frames and never updates their components, so a `<video>` or animated
+GIF there shows one frame. The spinning logo plays where video does work:
+the boot splash and the screensaver (see "Attract reels" below). Every still
+(`splash/arqade_splash.png`, `art/mqt_splash.png`) is the spin's first frame,
+the logo face on, so all the loading screens show one picture.
+`batocera/attract/build_splash.py` makes the boot video and the stills from
+`logos/animation/arqade_loading_v3_1080p.webm`.
 
 `install.py` also patches `views/system.xml` (the main menu / system
 carousel): it blanks the three metadata labels top left — they come from
@@ -216,6 +251,50 @@ script would actually pick with the script's own matcher:
 find /userdata/splash -maxdepth 1 -regex '.*\.\(mp4\|MP4\)' -type f
 find /userdata/splash -maxdepth 1 -regex '.*\.\(jpg\|jpeg\|png\)' -type f
 ```
+
+### Attract reels (ES screensaver, `batocera/attract/`)
+
+After 15 s without input, on the main menu or in the game list, ES plays the
+reels in `batocera/attract/reels/` as its screensaver: the logo turning three
+times, then about 20 s of fast gameplay cuts on a CRT tube, with a PRESS ANY
+BUTTON badge. Then another reel at random. Any button brings back the screen
+you were on. The footage is recorded headless from the games' own code,
+driven by per-game bots, and `batocera/attract/README.md` explains how to
+re-cut it. `deploy_ui.sh` copies the reels to `/userdata/screensaver/` and runs
+`kiosk.py --screensaver`, which sets these ES settings with ES stopped. All of
+them were checked against batocera-emulationstation's source (v39 and master):
+
+- **The custom video folder** (`SlideshowScreenSaverCustomVideoSource`,
+  `…VideoDir`), not `<video>` tags in the gamelist. "random video" picks from
+  every system's games, *hidden systems included*, and Batocera's bundled
+  freeware ROMs have videos of their own. From the folder ES picks uniformly
+  at random, every time.
+- **`ScreenSaverControls=false`.** It defaults to true, and then stick-right
+  and Select skip to the next video instead of waking the screensaver.
+- **`StopMusicOnScreenSaver=false`.** It defaults to true, which stops the
+  menu music for as long as the screensaver runs. Off, the song plays on
+  under the reels. The reels have no audio track, so ES doesn't turn the
+  music down for them either.
+- **Any joystick button wakes it, mapped or not.** Buttons go to the
+  screensaver before any mapping lookup, so the kiosk lockdown's unmapped
+  Start still works, and the waking press is swallowed. The stick has to
+  cross ~70% deflection.
+- **Waking never navigates**, and the idle timer runs in every view. Nothing
+  extra is needed for "screensaver on both menus, back where you were".
+- **`ScreenSaverSwapVideoTimeout` is an hour.** A shorter timeout cuts a
+  reel off mid-play. At the end of a file ES shows ~0.5 s of black and fades
+  the next in, which is why every reel opens on the logo fading up from black.
+- **720p, not 1080p.** libVLC decodes in software on the Pi 4 and every frame
+  is uploaded as an RGBA texture.
+- **`StartupSystem=pygame`.** The default, `lastsystem`, reopens whatever ES
+  showed when it exited, and if that was SNES while unlocked, the next locked
+  boot starts on a hidden system. (`StartupOnGameList=true` would boot
+  straight into the game list; B still goes back to the carousel. There is
+  no setting that removes the carousel; `HideSystemView` does not exist.)
+- **Trap:** ES's menu shows `ScreenSaverTime` in whole minutes, so 15 s
+  reads as 0, and merely opening and closing Screensaver Settings saves that 0
+  and switches the screensaver off. The kiosk lockdown hides that menu; if it
+  happens anyway, re-run `kiosk.py --screensaver`.
 
 ### The black-screen incident (be careful with ES config)
 
@@ -305,6 +384,8 @@ as long as it keeps to what the existing ones do:
   `batocera/gamelist.xml`.
 - **`main(argv)` accepts the shared flags**: `--fullscreen`, `--window-size`,
   `--no-keyboard` and `--fps`.
+- **A bot in `batocera/attract/bots/<rom>.py`** gets the game into the attract
+  reels (the launcher plays the same reels after 15 s on its menu).
 - **New dependencies also go into `launcher/pyproject.toml`.** All games run
   in the launcher's one interpreter, and a launcher test fails when one is
   missing.
@@ -370,13 +451,60 @@ Where the games stand (2026-10-01): every game follows it except
 Superconductor, whose pause screen goes to its menu with Select rather than
 through a menu item. That one is deliberately left as it is.
 
-- Gate Drop, Planck Time, Brawl-Ket, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
+- Gate Drop, Planck Time, Brawl-Ket, Qircuit, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
   RESUME and QUIT TO TITLE.
 - Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
   from Start to Select, so that Start can pause there too.
 - A title screen reached from QUIT TO TITLE must wait for the buttons to be
   let go, or the A that picked the item starts a new match on its first frame
   (Quantum Pong and Qlimbers do this).
+
+### QUIT on the title menu (all games must follow this)
+
+Playtesters (2026-10-12) asked for one obvious way out of every game. So
+every game's title or main menu has a `QUIT` row, the last row of its first
+page, which exits the process. That returns to the game list on the cabinet
+and to the launcher's menu on a PC. It uses the same exit path as
+Start + Select.
+
+- **A on QUIT quits at once**, with no confirmation step.
+- **Start never quits.** Start begins play from the title whatever row is
+  selected (see the button convention above), and B on the first page does
+  nothing.
+- The older quit routes stay: Start + Select, holding Select on the title,
+  and Esc without `--no-keyboard`.
+- Attract bots and title demos never pick QUIT.
+
+### HOW TO PLAY card before every match (all games must follow this)
+
+Also from the 2026-10-12 feedback: a visitor who walks up to a game should
+learn its controls and its goal in a few seconds, or be able to mash past
+them. Every game therefore shows a full-screen card after the match is set
+up (players, mode, map, …) and right before play or the countdown starts:
+
+- It is drawn in the **game's own look** (font, palette, sprites), not as a
+  generic overlay. It has a `HOW TO PLAY` heading, a 1–3 line **goal** in
+  plain words, an **animated demo** of the core mechanic drawn with the
+  game's own code, the **controls** (printed labels STICK/A/B/X/Y/L/R/START,
+  ideally as a small drawing of the `L X R / Y B A` cluster with the buttons
+  the game uses lit up, P1 and P2 shown separately if they differ), and a
+  blinking `PRESS ANY BUTTON TO START` at the bottom.
+- **Any button on either pad dismisses it, and the stick doesn't.** Presses
+  in the first ~0.3 s are ignored, so the A or Start that confirmed the menu
+  can't skip it unseen. After that, mashing gets past it at once. The press
+  that dismisses the card does nothing in the game.
+- It shows on every match started from the title, but not on an in-match
+  RESTART or on a rematch from the game-over screen.
+- Start + Select still quits from it, and the game's idle timeout keeps
+  running.
+- The attract bot has to press a button to get past it.
+
+Where the games stand (2026-10-12): all eleven games have the QUIT row and the
+card. The card lives in `<package>/tutorial.py`, except in Overquqed, where
+`tutorial.py` was already taken by the playable Training Day level and the
+card is `howto.py`. Each demo runs the game's own rules and draw code on a
+small scripted scene. Every game also has synthesized sound effects now (Ion
+Surfer was the last to get them, in `ion_surfer/sound.py`).
 
 ## Player colours: left is blue, right is red (a taste)
 
@@ -398,10 +526,62 @@ like the button convention: new games follow it from the start.
   chips, Pong's white paddles) don't need to change, but blue and red is the
   natural choice there too.
 
+## AI opponents: one AI per game, three levels (a precedent)
+
+Qircuit is the first game with computer opponents, and it sets the pattern
+for any game that gets them later.
+
+- **Three levels, named the same everywhere: EASY, TOUGH, BRUTAL.**
+  - EASY: a first-time visitor can beat it.
+  - TOUGH: a decent player has to work for the win.
+  - BRUTAL: as close to perfect as the game allows. It also knows everything
+    the game state tells it: items, hazards, where every rival is.
+- **A level is a handful of numbers, not separate code.** Qircuit's `ai.py`
+  has one `Skill` dataclass and a `SKILLS` dict keyed by level (how hard it
+  corners, how early it brakes, how often it thinks, whether it reads the
+  gates). One driver class runs all three.
+- **One AI per game, in the game's package (`<package>/ai.py`).** It is pure:
+  it reads the game's own state and returns the same controls a person's
+  input becomes (Qircuit: gas, brake, a wire change), never more. So it plays
+  by the same rules and is unit tested like the rules.
+- **Everything that plays the game without a person uses that one AI:**
+  - the in-game opponents;
+  - any demo racing behind the title (Qircuit's title shows four bots);
+  - the attract-reel bot, `batocera/attract/bots/<rom>.py`, which turns the
+    AI's controls into virtual pad presses (`bots/qircuit.py` is short:
+    menus, then stick moves).
+
+  The older games' reel bots predate this and keep their own logic. A game
+  that gets opponents later moves that logic into its `ai.py`, and its reel
+  bot calls it.
+- **The title picks people, bots and level.** PLAYERS (people), BOTS (how
+  many) and LEVEL (one level for all the bots in a race) are rows of the
+  title menu. One person gets bots by default, so a lone visitor always has
+  a race. Bots take the places people leave free.
+  - At most four people: the cabinet has two sticks and two button clusters.
+  - Bots can push the field past four (Qircuit allows 8 cars in all) where
+    the game has room for it.
+- **Bots never wear a player's colour**, nor a hue leaning towards one. P1–P4
+  are blue, red, green and purple, and orange, pink, cyan and teal lean
+  towards them (see "Player colours"), so bots get neutral colours (yellow,
+  white, grey, tan, ...) and are labelled CPU1, CPU2, and so on. People's
+  cars or cursors are marked as well (Qircuit outlines them in white), so you
+  find your own among many.
+- **Bots don't make every sound.** What happens to them (a bump, a crash)
+  sounds as it does for people. Continuous or personal cues (Qircuit's drift
+  and red warning, being put back in, taking the lead) sound only for
+  people, or eight cars turn into noise.
+- **Test the ladder:** alone on the same track, BRUTAL is faster than TOUGH,
+  TOUGH than EASY, and EASY clearly slower (`qircuit/tests/test_ai.py`).
+  None of them should make the mistakes the game punishes, unless a level
+  makes them on purpose.
+
 ## Game logos: app icons, each with its own look (a taste)
 
 `batocera/logos/` renders every game's logo with `generate_logos.py`: a
-1024x1024 `<rom>-logo.png` and a transparent `<rom>-marquee.png`. Each game
+1024x1024 `<rom>-logo.png`, a 1024x512 `<rom>-wide.png` for the cabinet's
+game list (the same identity re-laid out, not a crop) and a transparent
+`<rom>-marquee.png`. Each game
 has its own `logo_<rom>.py`, which imports the game's package and draws with
 the game's own sprite and draw functions. `kit.py` has the shared lettering
 and light effects. A new game gets a module there too. These preferences were
@@ -422,7 +602,12 @@ worked out with the cabinet's owners over several rounds:
   - Overquqed: the one light, warm pixel kitchen.
   - Qlimbers: the title carved into the tower.
   - Qurves: neon tubes over a synthwave floor.
+  - Gate Drop: an SNES puzzle-game box, a teal sunburst and bouncy
+    candy-coloured letters.
   - Brawl-Ket: a comic-book impact panel (halftone, speed lines, a POW burst).
+  - Planck Time: die-cut vinyl stickers on the title screen's purple checker:
+    a handheld mid-MEASURE!, its fuse lit, and the rainbow wordmark with its
+    stopwatch.
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really

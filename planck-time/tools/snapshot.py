@@ -3,7 +3,7 @@ look without a cabinet.
 
     cd planck-time && uv run python tools/snapshot.py OUT_DIR
 
-Writes one full frame per screen (title, attract, intro, play, result, speed
+Writes one full frame per screen (title, attract, how to play, intro, play, result, speed
 up, game over, initials, high scores, versus result, pause), and per
 microgame a sheet of its screen at the start, mid-game and after the end,
 played by its bot.
@@ -85,6 +85,9 @@ def screens(out_dir: str) -> None:
             sh.shot("attract")
             sh.press(nav={"p1": (0, 0), "p2": (0, 0)})
         sh.press(confirms={"p1": True, "p2": False})
+        sh.run(2.5)
+        sh.shot("how_to_play")
+        sh.press(presses={"p1": True, "p2": False})
         sh.run(0.9)
         sh.shot("intro")
         sh.until(S.PLAY)

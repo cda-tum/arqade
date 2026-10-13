@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pygame
 import pytest
 
@@ -13,9 +15,11 @@ class FakeRunner:
     def __init__(self, code=0):
         self.code = code
         self.calls = []
+        self.configs = []  # (the input config, whether the menu's display was still up)
 
-    def __call__(self, game, s, size):
+    def __call__(self, game, s, size, config=None):
         self.calls.append((game.package, s.fullscreen, size))
+        self.configs.append((config, pygame.display.get_init()))
         return runner.Result(self.code, ["Traceback", "ValueError: boom"])
 
 
@@ -64,7 +68,10 @@ def test_carousel_wraps_around(make_app):
 def test_input_right_after_a_game_is_ignored(make_app):
     a, run = make_app()
     a.step([key(pygame.K_RETURN)], 1 / 60)
-    run_frames(a)
+    for _ in range(300):  # until the game has run; the grace period is real time
+        if run.calls:
+            break
+        a.step([], 1 / 30)
     a.step([key(pygame.K_RETURN)], 1 / 60)  # e.g. still held from the game
     assert isinstance(a.screens[-1], appmod.MenuScreen)
 
@@ -107,7 +114,7 @@ def test_rebinding_a_key_saves_it(make_app, tmp_path):
     a.step([key(pygame.K_TAB)], 1 / 60)
     settings_screen = a.screens[-1]
     assert isinstance(settings_screen, appmod.SettingsScreen)
-    settings_screen.index = 3  # PLAYER 1 KEYS
+    settings_screen.index = [item[0] for item in settings_screen.items].index("PLAYER 1 KEYS")
     a.step([key(pygame.K_RETURN)], 1 / 60)
     keys_screen = a.screens[-1]
     assert isinstance(keys_screen, appmod.KeysScreen) and keys_screen.player == "p1"
@@ -141,6 +148,15 @@ def test_escape_cannot_be_bound(make_app):
     screen.start_capture("a", False)
     a.step([key(pygame.K_ESCAPE)], 1 / 60)
     assert screen.capture is None and a.settings.keys["p1"]["a"] == "n"
+
+
+def test_the_input_config_is_worked_out_before_the_menu_lets_go_of_the_display(make_app):
+    a, run = make_app()
+    a.play(a.games[0])
+    config, display_up = run.configs[0]
+    assert config == runner.input_config(a.settings)
+    assert config["exit_key"] == pygame.K_ESCAPE and config["pads"]
+    assert not display_up  # the game gets the display to itself
 
 
 def test_f11_switches_display_and_remembers_it(make_app, tmp_path):
@@ -179,3 +195,87 @@ def test_no_games_found(tmp_path):
     a.push(appmod.MenuScreen(a))
     a.step([key(pygame.K_RETURN), key(pygame.K_RIGHT)], 1 / 60)
     assert len(a.screens) == 1
+
+
+class FakePlayer:
+    def __init__(self, path, size, crop=None, loop=True):
+        self.path = path
+        self.size = size
+        self.closed = False
+        self.done = False
+
+    def frame(self):
+        return pygame.Surface(self.size)
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def reel(monkeypatch):
+    from arqade_launcher import video
+
+    monkeypatch.setattr(video, "available", lambda path: True)
+    monkeypatch.setattr(video, "reels", lambda: [Path("reel_1.mp4"), Path("reel_2.mp4")])
+    monkeypatch.setattr(video, "Player", FakePlayer)
+
+
+def idle(a, seconds):
+    for _ in range(int(seconds * 10)):
+        a.step([], 0.1)
+
+
+def test_attract_reel_after_idle_and_any_key_ends_it(make_app, reel):
+    a, run = make_app()
+    idle(a, appmod.ATTRACT_DELAY - 1)
+    assert isinstance(a.screens[-1], appmod.MenuScreen)
+    idle(a, 1.5)
+    attract = a.screens[-1]
+    assert isinstance(attract, appmod.AttractScreen)
+    a.step([key(pygame.K_RETURN)], 1 / 60)
+    # The key that woke the menu does nothing else: no game starts.
+    assert isinstance(a.screens[-1], appmod.MenuScreen) and attract.player.closed
+    run_frames(a)
+    assert run.calls == []
+
+
+def test_attract_plays_another_reel_when_one_ends(make_app, reel):
+    a, _ = make_app()
+    idle(a, appmod.ATTRACT_DELAY + 1)
+    attract = a.screens[-1]
+    first = attract.player
+    first.done = True
+    a.step([], 1 / 30)
+    assert first.closed and attract.player is not first
+    assert attract.player.path != first.path  # never the same reel twice in a row
+
+
+def test_input_restarts_the_attract_countdown(make_app, reel):
+    a, _ = make_app()
+    idle(a, appmod.ATTRACT_DELAY - 5)
+    a.step([key(pygame.K_RIGHT)], 1 / 60)
+    idle(a, appmod.ATTRACT_DELAY - 5)
+    assert isinstance(a.screens[-1], appmod.MenuScreen)
+
+
+def test_attract_mode_can_be_switched_off(make_app, reel):
+    a, _ = make_app()
+    a.settings.attract = False
+    idle(a, appmod.ATTRACT_DELAY + 5)
+    assert isinstance(a.screens[-1], appmod.MenuScreen)
+
+
+def test_no_attract_reel_without_video(make_app):
+    a, _ = make_app()
+    idle(a, appmod.ATTRACT_DELAY + 5)
+    assert isinstance(a.screens[-1], appmod.MenuScreen)
+
+
+def test_loading_card_spins_the_logo_and_stops_it(make_app, reel):
+    a, run = make_app()
+    a.step([key(pygame.K_RETURN)], 1 / 60)
+    a.step([], 1 / 60)
+    loading = a.screens[-1]
+    assert isinstance(loading, appmod.LoadingScreen) and loading.spin is not None
+    run_frames(a)
+    assert run.calls and loading.spin.closed

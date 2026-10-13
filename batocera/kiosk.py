@@ -4,6 +4,7 @@ Run on the arcade:
     python3 /userdata/kiosk.py --lock      # public-facing
     python3 /userdata/kiosk.py --unlock    # back to normal
     python3 /userdata/kiosk.py --status
+    python3 /userdata/kiosk.py --screensaver   # the attract reels after 15 s idle
 
 Why not ES's own UI Mode? Kiosk and Kid only *hide* menu entries -- START
 still opens a menu and some settings are still reachable. There is no
@@ -81,6 +82,53 @@ ADMIN_SYSTEMS = ("snes",)
 LOCKED_HIDDEN_SYSTEMS = ";".join(OTHER_SYSTEMS)
 UNLOCKED_HIDDEN_SYSTEMS = ";".join(s for s in OTHER_SYSTEMS if s not in ADMIN_SYSTEMS)
 
+# The attract reels (batocera/attract/) as ES's screensaver: after 15 s without
+# input, on the main menu or in the game list alike, ES plays one .mp4 from
+# SCREENSAVER_DIR at random, then another, and any button -- even one the
+# lockdown unmapped -- brings back the screen you were on without doing
+# anything else. Checked against batocera-emulationstation's source
+# (SystemScreenSaver.cpp, Window.cpp):
+#   - The custom video folder, not the games' <video> tags: "random video"
+#     picks from every system's gamelist, *hidden systems included*, and
+#     Batocera's bundled freeware ROMs ship videos of their own.
+#   - The swap timeout cuts a video off and starts another pick; an hour means
+#     a reel always plays to its end. At the end ES picks again, uniformly at
+#     random (so the same reel can come twice), after ~0.5 s of black and a
+#     fade-in.
+#   - ScreenSaverControls (on by default) makes stick-right and Select skip to
+#     the next video *without* waking up, which on a cabinet just looks broken.
+#   - Trap: ES's menu shows ScreenSaverTime in whole minutes, so 15 s shows as
+#     0, and merely opening and closing Screensaver Settings saves that 0 --
+#     which switches the screensaver off. Re-run --screensaver after doing so.
+#   - Waking never navigates: nothing on that code path touches the views.
+#   - StopMusicOnScreenSaver (on by default) shuts the menu music down while
+#     the screensaver runs. Off, the song carries on under the reels and after
+#     waking. The reels have no audio track, so they never duck it either
+#     (VideoVlcComponent only lowers the music for a video with sound).
+SCREENSAVER_DIR = "/userdata/screensaver"
+SCREENSAVER_SETTINGS = (
+    ("int", "ScreenSaverTime", "15000"),
+    ("string", "ScreenSaverBehavior", "random video"),
+    ("bool", "SlideshowScreenSaverCustomVideoSource", "true"),
+    ("string", "SlideshowScreenSaverVideoDir", SCREENSAVER_DIR),
+    ("string", "SlideshowScreenSaverVideoFilter", ".mp4"),
+    ("bool", "SlideshowScreenSaverVideoRecurse", "false"),
+    ("int", "ScreenSaverSwapVideoTimeout", "3600000"),
+    ("bool", "ScreenSaverControls", "false"),
+    ("bool", "ScreenSaverVideoMute", "true"),
+    ("bool", "StopMusicOnScreenSaver", "false"),
+    ("string", "ScreenSaverGameInfo", "never"),
+)
+
+# Always start on the MQT system's carousel. The default, "lastsystem", is
+# whatever ES showed when it last exited -- which, if that was SNES while
+# unlocked, is a system the lockdown hides, and ES then starts on a system it
+# cannot show. B from the game list still goes back to the carousel; add
+# ("bool", "StartupOnGameList", "true") to boot straight into the game list.
+MENU_SETTINGS = (
+    ("string", "StartupSystem", "pygame"),
+)
+
 _CONFIG_OPEN = re.compile(r"<inputConfig\b[^>]*type=\"joystick\"")
 _CONFIG_CLOSE = re.compile(r"</inputConfig>")
 _MENU_INPUT = re.compile(r"<input\s+name=\"(%s)\"" % "|".join(MENU_INPUTS))
@@ -132,14 +180,36 @@ def es_running() -> bool:
     return bool(es_pids())
 
 
+def game_running() -> str | None:
+    """The ROM of the game ES has running, if any (ES starts every game through
+    emulatorlauncher, whatever the system)."""
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            args = (entry / "cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        if any(a.endswith(b"emulatorlauncher") for a in args[:2]) and b"-rom" in args[:-1]:
+            return args[args.index(b"-rom") + 1].decode("utf-8", "replace")
+    return None
+
+
 def stop_es() -> bool:
     """Stop ES and its wrapper; report whether anything had been running.
 
     ES rewrites es_settings.cfg from memory when it exits, so it has to be
     down *before* we touch that file or our edit is thrown away on quit.
+
+    Refuses while a game is running: the game outlives ES, and the new ES then
+    draws over it, with the game still running unseen and unreachable behind
+    it (that happened once, mid-round of Ion Surfer).
     """
     if not es_pids():
         return False
+    rom = game_running()
+    if rom:
+        raise SystemExit(f"a game is running ({rom}): quit it first, then run this again")
     for sig in (signal.SIGTERM, signal.SIGKILL):
         for pid in es_pids():
             try:
@@ -273,6 +343,22 @@ def controls() -> None:
         print("restarted EmulationStation")
 
 
+def set_screensaver_settings() -> None:
+    """Write SCREENSAVER_SETTINGS and MENU_SETTINGS. ES must already be stopped."""
+    for kind, name, value in SCREENSAVER_SETTINGS + MENU_SETTINGS:
+        set_setting(kind, name, value)
+
+
+def screensaver() -> None:
+    """Play the attract reels after 15 s idle (the videos themselves are
+    copied to SCREENSAVER_DIR by install_ui.py)."""
+    was_running = stop_es()
+    set_screensaver_settings()
+    if was_running:
+        start_es()
+        print("restarted EmulationStation")
+
+
 def status() -> None:
     live = INPUT_CFG.read_text(encoding="utf-8")
     _, would_drop = strip_menu_inputs(live)
@@ -280,26 +366,38 @@ def status() -> None:
     print(f"locked: {would_drop == 0}")
     for name in ("ShowHelpPrompts", "UIMode", "UIMode_passkey", "HiddenSystems"):
         print(f"{name}: {get_setting(name)}")
+    for _, name, wanted in SCREENSAVER_SETTINGS + MENU_SETTINGS:
+        value = get_setting(name)
+        print(f"{name}: {value}{'' if value == wanted else f'   (attract reel wants {wanted})'}")
     print(f"backup present: {INPUT_BACKUP.exists()}")
     print(f"the L R L R X sequence would: {'unlock' if would_drop == 0 else 'lock'}")
 
 
-parser = argparse.ArgumentParser(description=__doc__)
-group = parser.add_mutually_exclusive_group(required=True)
-group.add_argument("--lock", action="store_true", help="public-facing: no menus from the pads")
-group.add_argument("--unlock", action="store_true", help="restore normal menu access")
-group.add_argument("--status", action="store_true", help="report the current state")
-group.add_argument("--toggle", action="store_true", help="lock if unlocked, unlock if locked")
-group.add_argument("--controls", action="store_true", help="A confirms / B goes back in ES")
-args = parser.parse_args()
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--lock", action="store_true", help="public-facing: no menus from the pads")
+    group.add_argument("--unlock", action="store_true", help="restore normal menu access")
+    group.add_argument("--status", action="store_true", help="report the current state")
+    group.add_argument("--toggle", action="store_true", help="lock if unlocked, unlock if locked")
+    group.add_argument("--controls", action="store_true", help="A confirms / B goes back in ES")
+    group.add_argument("--screensaver", action="store_true", help="the attract reels after 15 s idle")
+    args = parser.parse_args()
 
-if args.lock:
-    lock()
-elif args.unlock:
-    unlock()
-elif args.toggle:
-    toggle()
-elif args.controls:
-    controls()
-else:
-    status()
+    if args.lock:
+        lock()
+    elif args.unlock:
+        unlock()
+    elif args.toggle:
+        toggle()
+    elif args.controls:
+        controls()
+    elif args.screensaver:
+        screensaver()
+    else:
+        status()
+
+
+# install_ui.py imports this file for its ES helpers, so only run as a script.
+if __name__ == "__main__":
+    main()

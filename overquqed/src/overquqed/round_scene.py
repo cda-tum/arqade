@@ -27,8 +27,13 @@ class Floater:
 
 
 class RoundScene(Scene):
-    def __init__(self, app, level: Level, players: list[int], seed: int | None = None) -> None:
+    def __init__(self, app, level: Level, players: list[int], seed: int | None = None,
+                 consumed: dict[str, set[str]] | None = None) -> None:
         super().__init__(app)
+        # Buttons still down from the press that dismissed the HOW TO PLAY
+        # card: they count as released until they really are, so holding B
+        # through the card doesn't start working a station.
+        self.consumed = {p: set((consumed or {}).get(p, ())) for p in PLAYERS}
         self.level = level
         self.players = sorted(players)
         self.solo = len(self.players) == 1
@@ -77,18 +82,19 @@ class RoundScene(Scene):
                 out[chef_idx] = self._read(inp, p)
         return out
 
-    @staticmethod
-    def _read(inp: Input, p: str) -> ChefInput:
+    def _read(self, inp: Input, p: str) -> ChefInput:
         return ChefInput(
             move=inp.move(p),
             pick=inp.was_pressed(p, "pick"),
-            use=inp.is_held(p, "use"),
+            use=inp.is_held(p, "use") and "use" not in self.consumed[p],
             use_pressed=inp.was_pressed(p, "use"),
         )
 
     # --- update -----------------------------------------------------------------
     def update(self, dt: float, inp: Input) -> None:
         self.clock += dt
+        for p in PLAYERS:
+            self.consumed[p] &= inp.held[p]
         if self.paused:
             self._pause_menu(inp)
             return
@@ -145,6 +151,7 @@ class RoundScene(Scene):
             self.app.sfx("blip")
         if inp.back():
             self.paused = False
+            self.app.sfx("back")
             return
         if inp.confirm():
             choice = PAUSE_ITEMS[self.pause_index]
@@ -170,6 +177,7 @@ class RoundScene(Scene):
         sfx = {
             "pick": "pick", "put": "put", "fridge": "fridge", "bin": "bin", "nope": "nope",
             "fridge_empty": "nope", "no_order": "nope", "jammed": "nope", "too_big": "nope",
+            "press_needs_two": "nope",
             "dirty_back": "put", "order": "order", "sink": "sink",
         }.get(kind)
         if sfx:

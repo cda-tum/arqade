@@ -9,6 +9,15 @@ import pytest  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def no_video(monkeypatch):
+    """No ffmpeg in the tests: the menu behaves as without imageio-ffmpeg.
+    Tests of the attract mode put a stand-in player back."""
+    from arqade_launcher import video
+
+    monkeypatch.setattr(video, "available", lambda path: False)
+
+
+@pytest.fixture(autouse=True)
 def pygame_display():
     pygame.display.init()
     pygame.font.init()

@@ -8,7 +8,8 @@ colour and a hard drop-shadow; a sparse starfield of single pixels sits
 behind it. Below it PAULI over INVADERS in Press Start 2P, red over blue as
 on the game's title screen, each letter in flat colour bands (light top,
 base, dark foot) with a solid pixel shadow like an old arcade marquee. The
-marquee is the title on one line with a small invader in front.
+marquee is the title on one line with a small invader in front; the wide
+tile puts the invader beside the title, on the same coarse grid.
 
 Built from the game's own SPR, COL and BG (error_invaders.game); the letter
 sits where enemy_sprite() puts it, at a whole number of grid pixels per
@@ -75,12 +76,12 @@ def word(text: str, col: str, k: int, d: int) -> pygame.Surface:
     return shadowed(kit.tint(shape, paint), kit.tint(shape, SHADOW[col]), d)
 
 
-def stars(S: pygame.Surface, keep_out: list[pygame.Rect]) -> None:
+def stars(S: pygame.Surface, keep_out: list[pygame.Rect], count: int = 46) -> None:
     """A sparse starfield of single grid pixels, a few brighter crosses."""
     rng = random.Random(3)
     w, h = S.get_size()
     placed = 0
-    while placed < 46:
+    while placed < count:
         x, y = rng.randrange(6, w - 6), rng.randrange(6, h - 6)
         if any(r.inflate(10, 10).collidepoint(x, y) for r in keep_out):
             continue
@@ -106,6 +107,30 @@ def art(size: int) -> pygame.Surface:
     S.blit(pauli, pauli_r)
     S.blit(invaders, invaders_r)
     return pygame.transform.scale(S, (size, size))
+
+
+def wide(width: int, height: int) -> pygame.Surface:
+    """The same screen laid out sideways: the invader on the left, PAULI over
+    INVADERS on the right, on a grid as coarse as the square icon's (256
+    across), so the pixels are the same size at the same width."""
+    S = pygame.Surface((GRID, round(GRID * height / width)))
+    S.fill(BG)
+    gw, gh = S.get_size()
+    hero = shadowed(invader("X", 8), invader("X", 8, color=SHADOW["X"], letter=False), 3)
+    pauli = word("PAULI", "X", 3, 2)
+    invaders = word("INVADERS", "Z", 2, 1)
+    gap_lines, gap_cols = 5, 13
+    title = pygame.Surface((max(pauli.get_width(), invaders.get_width()),
+                            pauli.get_height() + gap_lines + invaders.get_height()), pygame.SRCALPHA)
+    title.blit(pauli, ((title.get_width() - pauli.get_width()) // 2, 0))
+    title.blit(invaders, ((title.get_width() - invaders.get_width()) // 2, pauli.get_height() + gap_lines))
+    x = (gw - (hero.get_width() + gap_cols + title.get_width())) // 2
+    hero_r = hero.get_rect(midleft=(x, gh // 2))
+    title_r = title.get_rect(midleft=(hero_r.right + gap_cols, gh // 2))
+    stars(S, [hero_r, title_r], count=round(46 * gw * gh / GRID ** 2))
+    S.blit(hero, hero_r)
+    S.blit(title, title_r)
+    return pygame.transform.scale(S, (width, height))
 
 
 def marquee() -> pygame.Surface:

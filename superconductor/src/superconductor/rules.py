@@ -85,8 +85,10 @@ def ramp(start: float, end: float, t: float) -> float:
     return start + (end - start) * frac
 
 
-def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0) -> Iterator[Spawn]:
-    """Endless pairs; `rate` > 1 makes them come that much more often."""
+def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0,
+                   head_start: float = 0.0) -> Iterator[Spawn]:
+    """Endless pairs; `rate` > 1 makes them come that much more often, and
+    `head_start` seconds start the spawn interval that far along its ramp."""
     rng = random.Random(seed)
     t = 0.5
     count = 0
@@ -97,7 +99,7 @@ def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0) -> Iterator[S
         yield Spawn(t, a, b, ramp(config.COHERENCE_START, config.COHERENCE_MIN, t))
         count += 1
         if count >= config.INITIAL_PAIRS:  # the first few all arrive at once
-            t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t) / rate
+            t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t + head_start) / rate
 
 
 @dataclass
@@ -213,7 +215,10 @@ class Board:
     """One chip and everything happening on it (one per chip, so two in VERSUS)."""
 
     def __init__(self, lattice: Lattice, seed: int, players: tuple[str, ...],
-                 lives: int = config.LIVES, specials: bool = True):
+                 lives: int = config.LIVES, specials: bool = True,
+                 schedule: Iterator[Spawn] | None = None):
+        """`schedule` replaces the seeded random pairs (the scripted scenes
+        of tutorial.py); it should end with a Spawn at t=inf."""
         self.lattice = lattice
         self.players = players
         self.cursors = {p: Cursor(p) for p in players}
@@ -221,9 +226,13 @@ class Board:
         self.endpoint_owner: dict[Node, int] = {}  # stations, exclusive
         self.specials: list[Special] = []
         self.queue: list[Spawn] = []
-        # Two routers on one chip get pairs more often (CO-OP).
-        rate = config.COOP_SPAWN_RATE if len(players) > 1 else 1.0
-        self._schedule = spawn_schedule(lattice, seed, rate)
+        # Two routers on one chip get pairs more often (CO-OP); one router
+        # starts a little way along the ramp instead.
+        if len(players) > 1:
+            rate, head_start = config.COOP_SPAWN_RATE, 0.0
+        else:
+            rate, head_start = 1.0, config.SOLO_SPAWN_HEAD_START
+        self._schedule = schedule if schedule is not None else spawn_schedule(lattice, seed, rate, head_start)
         self.last_router: str | None = None  # who committed the latest route
         self._next = next(self._schedule)
         self._next_id = 0
@@ -231,6 +240,7 @@ class Board:
         self._next_special = config.SPECIAL_FIRST if specials else float("inf")
         self.time = 0.0  # real play time on this board
         self.clock = 0.0  # schedule time (runs ahead when the board is idle)
+        self.pace = 1.0  # how fast the clock runs (PACE_GAIN)
         self.score = 0
         self.lives = lives
         self.gates = 0
@@ -578,10 +588,13 @@ class Board:
         if self.over:
             return
         self.time += dt
-        self.clock += dt
+        idle = not self.waiting_pairs() and not self.queue
+        if idle:
+            self.pace = min(config.PACE_MAX, self.pace + config.PACE_GAIN * dt)
+        self.clock += dt * self.pace
         # Never leave the player with nothing to do. (A spawn at t=inf, as
         # scripted test schedules end with, never arrives.)
-        if not self.waiting_pairs() and not self.queue and self._next.t != float("inf"):
+        if idle and self._next.t != float("inf"):
             self.clock = max(self.clock, self._next.t - config.IDLE_SPAWN_DELAY)
         while self._next.t <= self.clock:
             self.queue.append(self._next)

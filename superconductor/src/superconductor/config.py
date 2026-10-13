@@ -30,13 +30,23 @@ INITIAL_PAIRS = 2            # pairs already waiting when the game starts
 # Spawn interval and coherence time both shrink linearly from START to MIN
 # over RAMP_SECONDS of (board) play time.
 SPAWN_INTERVAL_START = 5.0
-SPAWN_INTERVAL_MIN = 2.2
+SPAWN_INTERVAL_MIN = 2.0
 COOP_SPAWN_RATE = 1.25             # CO-OP: pairs come 25% more often throughout
+# One router per chip (1 PLAYER, and each chip in VERSUS) starts the spawn
+# interval this far along its ramp, so the first pairs don't drag.
+SOLO_SPAWN_HEAD_START = 30.0
 COHERENCE_START = 30.0
 COHERENCE_MIN = 16.0
 RAMP_SECONDS = 150.0
 # If nothing is waiting, the next pair is pulled forward to arrive this soon.
 IDLE_SPAWN_DELAY = 1.0
+# A quick player keeps the chip empty, so the ramp alone never catches up with
+# them. Every second the chip has nothing to route raises its pace by
+# PACE_GAIN, up to PACE_MAX, and it never comes back down. The schedule (and
+# with it the ramp) runs at that pace: pairs come sooner and decohere sooner,
+# for whoever keeps up.
+PACE_GAIN = 0.015
+PACE_MAX = 1.4
 # Scoring: a gate is worth BASE * DETOUR_FIDELITY ** (extra hops over the
 # shortest possible route), plus up to TIME_BONUS for coherence left.
 GATE_BASE_POINTS = 100

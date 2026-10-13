@@ -146,6 +146,10 @@ class Input:
         self.select_held_time = 0.0
         self.keyboard_quit = False
         self.activity = False  # any input at all this frame (for the idle timer)
+        # Any joystick button (or, without --no-keyboard, any key) that went
+        # down this frame, mapped or not: what dismisses the HOW TO PLAY card.
+        self.any_button = False
+        self._button_down = False
         self.rescan()
 
     def rescan(self) -> None:
@@ -158,6 +162,8 @@ class Input:
     def handle(self, event: pygame.event.Event) -> None:
         if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
             self.rescan()
+        elif event.type == pygame.JOYBUTTONDOWN or (event.type == pygame.KEYDOWN and _keyboard_enabled):
+            self._button_down = True
 
     def _pad_state(self, player: str) -> set[str]:
         index = INPUT_CONFIG[player]["joystick_index"]
@@ -177,7 +183,8 @@ class Input:
     def update(self, dt: float) -> None:
         keys = read_keys()
         self.keyboard_quit = keyboard_quit_held(keys)
-        self.activity = self.keyboard_quit
+        self.activity = self.keyboard_quit or self._button_down
+        self.any_button, self._button_down = self._button_down, False
         for p in PLAYERS:
             held = self._pad_state(p)
             for act, codes in self.keymap[p].items():

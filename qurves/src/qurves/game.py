@@ -10,7 +10,7 @@ from qurves import config
 from qurves.display import make_display, present
 from qurves.fonts import load_font
 from qurves.input import Input
-from qurves.match import TITLE, Match
+from qurves.match import TITLE, Cue, Match
 from qurves.render import Renderer
 from qurves.sound import load_sounds
 
@@ -43,6 +43,10 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
             break
 
         events = match.update(dt, inp.frame_input())
+        if match.quit_requested:  # QUIT on the title: the same clean exit as Start + Select
+            break
+        if Cue("ready") in events:  # the press that dismissed HOW TO PLAY must not steer
+            inp.consume_held()
         sounds.play_events(events)
         renderer.draw(match, events, dt)
         if show_fps:

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pygame
 
-from superconductor import config
+from superconductor import config, tutorial
 from superconductor.display import make_display, present
 from superconductor.input import Input, keyboard_enabled
 from superconductor.lattice import LAYOUTS, Lattice
@@ -89,6 +89,12 @@ LATTICE_DESC = {
 }
 
 
+MENU_ROWS = ("mode", "chip", "quit")  # the title's rows, QUIT always last
+# what the HOW TO PLAY card and the title's legend call each caption colour
+CAPTION_COL = {"pair": PAIR_COLORS[1], "cyan": CYAN, "red": RED, "gold": GOLD,
+               "miscal": MISCAL_COL, "bell": BELL_COL}
+
+
 def clamp(v, a, b):
     return max(a, min(b, v))
 
@@ -115,6 +121,12 @@ def font(size):
         except Exception:
             _fonts[size] = pygame.font.Font(None, int(size * 1.9))
     return _fonts[size]
+
+
+def crisp(size):
+    """A design text size that renders at a whole multiple of the font's
+    native 8 px, so Press Start 2P stays sharp (used by the newer screens)."""
+    return max(8, round(size * U / 8) * 8) / U
 
 
 def text(S, s, size, col, x, y, align="center", valign="middle", alpha=1.0):
@@ -302,6 +314,7 @@ def build_sounds():
     SFX["decohere"] = synth_noise(0.6, 0.18)
     SFX["menu_move"] = synth(520, 0.05, "square", 0.04)
     SFX["menu_ok"] = synth(780, 0.07, "square", 0.05)
+    SFX["pause"] = synth(660, 0.12, "triangle", 0.05, -260)
     SFX["over"] = synth(300, 0.9, "triangle", 0.08, -220)
     SFX["teleport"] = synth(400, 0.25, "sine", 0.07, 1200)
     SFX["boost"] = synth(700, 0.15, "square", 0.04, 700)
@@ -328,6 +341,9 @@ def pump_sfx():
             play(item[1])
 
 
+_play = play  # View.consume_events wraps it to stay quiet in the demo scenes
+
+
 # =====================================================================
 # Board view: where a chip sits on screen, plus its eye candy
 # =====================================================================
@@ -348,6 +364,7 @@ class View:
     shake: float = 0.0
     flash: float = 0.0
     hurt: float = 0.0  # 1 -> 0 after a life is lost
+    quiet: bool = False  # the title legend and HOW TO PLAY scenes make no sound
 
     PAD = 0.62  # substrate margin around the outer qubits, in spacings
 
@@ -402,6 +419,10 @@ class View:
         self.popups.append([x, y + (dy - 30) * U, txt, col, size, life, life])
 
     def consume_events(self):
+        def play(name, delay=0.0):
+            if not self.quiet:
+                _play(name, delay)
+
         for e in self.board.events:
             pair = e.pair
             col = PAIR_COLORS[pair.color] if pair else WHITE
@@ -760,6 +781,76 @@ def draw_board_hud(S, v: View, title: str, t: float = 0.0):
 
 
 # =====================================================================
+# Scripted scenes (title legend, HOW TO PLAY) and the cabinet's buttons
+# =====================================================================
+class SceneView:
+    """A tutorial.ScenePlayer on screen: a small chip in a box, captioned."""
+
+    def __init__(self, order, cx, cy, box_w, box_h):
+        self.player = tutorial.ScenePlayer(order)
+        self.box = (cx, cy, box_w, box_h)
+        self.view = None
+        self._fit()
+
+    def _fit(self):
+        self.view = View(self.player.board, *self.box, quiet=True)
+
+    def update(self, dt):
+        self.player.update(dt)
+        if self.view.board is not self.player.board:  # the next scene began
+            self._fit()
+        self.view.consume_events()
+        self.view.update_fx(dt)
+
+    def draw(self, S, t, caption_y, dots=True):
+        """The chip, then the scene's name and two lines under it, centred."""
+        draw_board(S, self.view, t)
+        scene = self.player.scene
+        cx = self.box[0]
+        # fade the caption in with each new scene
+        alpha = min(1.0, self.player.time * 3)
+        text(S, scene.name, crisp(16), CAPTION_COL[scene.color], cx, caption_y, alpha=alpha)
+        for i, line in enumerate(scene.lines):
+            text(S, line, crisp(11), WHITE if i == 0 else GREY, cx, caption_y + (34 + i * 22) * U, alpha=alpha)
+        if dots and len(self.player.order) > 1:
+            n = len(self.player.order)
+            for i in range(n):
+                x = cx + (i - (n - 1) / 2) * 16 * U
+                on = i == self.player.index
+                pygame.draw.circle(S, WHITE if on else (40, 46, 66), (int(x), int(caption_y + 92 * U)), px(3))
+
+
+# The pad's printed 2x3 cluster, as on the cabinet: top row L X R, bottom Y B A.
+PAD_LAYOUT = (("L", "X", "R"), ("Y", "B", "A"))
+# what each button does in a match (Y is not used)
+PAD_ACTIONS = ((("STICK",), "DRAW ROUTE"), (("A", "R"), "NEXT PAIR"), (("L",), "PREVIOUS PAIR"),
+               (("B",), "OTHER END"), (("X",), "UNDO A STEP"), (("START",), "PAUSE"))
+BUTTON_COL = {"A": PAIR_COLORS[1], "R": PAIR_COLORS[1], "L": PAIR_COLORS[4], "B": GOLD, "X": MISCAL_COL}
+
+
+def draw_button(S, x, y, label, col, r=None):
+    """One round cabinet button with its printed letter; `col` None = unused."""
+    r = r or 17 * U
+    if col is None:
+        pygame.draw.circle(S, (40, 46, 66), (int(x), int(y)), int(r), px(2))
+        text(S, label, crisp(11), (60, 66, 90), x + U, y + U)
+        return
+    pygame.draw.circle(S, mix(col, SUBSTRATE, 0.35), (int(x), int(y)), int(r))
+    pygame.draw.circle(S, col, (int(x), int(y)), int(r), px(3))
+    text(S, label, crisp(11), BG, x + U, y + U)
+
+
+def draw_stick(S, x, y, t, r=None):
+    """The joystick from above, nudged round the four directions."""
+    r = r or 22 * U
+    pygame.draw.circle(S, (30, 38, 62), (int(x), int(y)), int(r))
+    pygame.draw.circle(S, SUBSTRATE_EDGE, (int(x), int(y)), int(r), px(2))
+    dx, dy = ((1, 0), (0, 1), (-1, 0), (0, -1))[int(t * 1.5) % 4]
+    k = r * 0.45 if (t * 1.5) % 1 < 0.6 else 0.0
+    pygame.draw.circle(S, WHITE, (int(x + dx * k), int(y + dy * k)), int(r * 0.5))
+
+
+# =====================================================================
 # The game
 # =====================================================================
 class Game:
@@ -786,6 +877,7 @@ class Game:
         self.mode = "single"
         self.lattice_kind = "square"
         self.menu_row = 0
+        self.quit_requested = False  # QUIT on the title: leave like Start + Select
         self.t = 0.0
         self.state_t = 0.0
         self.views: list[View] = []
@@ -793,6 +885,8 @@ class Game:
         self.new_best = False
         self._load_hiscores()
         self._make_demo()
+        # the title's legend: what each thing on the chip is, one at a time
+        self.legend = SceneView(tutorial.LEGEND, 900 * U, 318 * U, 420 * U, 236 * U)
 
     # ------------------------------------------------------------ hiscores
     def _hiscore_key(self):
@@ -832,7 +926,9 @@ class Game:
                                "CO-OP" if self.mode == "coop" else "")]
         self.player_view = {p: v for v in self.views for p in v.board.players}
         self.new_best = False
-        self.set_state("play")
+        # every match from the title opens on the HOW TO PLAY card
+        self.how_to = SceneView(tutorial.HOW_TO_PLAY, 350 * U, 382 * U, 470 * U, 250 * U)
+        self.set_state("tutorial")
         play("menu_ok")
 
     def set_state(self, state):
@@ -843,21 +939,30 @@ class Game:
     def update_title(self, dt):
         inp = self.inp
         move = inp.any_move()
+        row = MENU_ROWS[self.menu_row]
         if move in ("up", "down"):
-            self.menu_row = 1 - self.menu_row
-            play("menu_move")
-        elif move in ("left", "right"):
+            new = clamp(self.menu_row + (1 if move == "down" else -1), 0, len(MENU_ROWS) - 1)
+            if new != self.menu_row:
+                self.menu_row = new
+                play("menu_move")
+        elif move in ("left", "right") and row != "quit":
             step = 1 if move == "right" else -1
-            if self.menu_row == 0:
+            if row == "mode":
                 self.mode = MODES[(MODES.index(self.mode) + step) % len(MODES)]
             else:
                 kinds = LAYOUTS
                 self.lattice_kind = kinds[(kinds.index(self.lattice_kind) + step) % len(kinds)]
                 self._make_demo()
             play("menu_move")
-        if inp.confirm or inp.any_hit("next"):
+        # Start always plays, whatever row is picked; A plays too, or quits on QUIT
+        if inp.confirm or (inp.any_hit("next") and row != "quit"):
             self.start_game()
             return
+        if inp.any_hit("next"):
+            self.quit_requested = True
+            return
+        if row != "chip":
+            self.legend.update(dt)
         # the title chip plays itself
         demo = self.demo.board
         demo.update(dt)
@@ -873,10 +978,21 @@ class Game:
         demo.events.clear()
         self.demo.update_fx(dt)
 
+    def update_tutorial(self, dt):
+        """The HOW TO PLAY card: any button after MIN_SHOW starts the match."""
+        self.how_to.update(dt)
+        kb = keyboard_enabled()
+        if any(tutorial.dismisses(kind, self.state_t, kb) for kind in self.inp.presses):
+            # The buttons held now count as already pressed (Input's edges),
+            # so this press does nothing in the match itself.
+            play("menu_ok")
+            self.set_state("play")
+
     def update_play(self, dt):
         inp = self.inp
         if inp.pause or inp.back:
             self.set_state("paused")
+            play("pause")
             return
         for player, view in self.player_view.items():
             b = view.board
@@ -911,6 +1027,9 @@ class Game:
                 self.new_best = True
                 self._save_hiscores()
         play("over")
+        if self.new_best:
+            for i, f in enumerate((523, 659, 784, 1047)):
+                play(f"n{f}", 0.9 + i * 0.08)
         self.set_state("over")
 
     def update_paused(self, dt):
@@ -921,6 +1040,7 @@ class Game:
             # B resumes rather than leaving: it is also the in-game "other end"
             # button, so a stray press must not throw the round away.
             self.set_state("play")
+            play("menu_ok")
 
     def update_over(self, dt):
         for v in self.views:
@@ -932,20 +1052,30 @@ class Game:
     def to_menu(self):
         self.set_state("title")
         self._make_demo()
+        if MENU_ROWS[self.menu_row] == "quit":
+            self.menu_row = 0  # a stray A must not quit the next visitor out
+        play("back")
 
     # ------------------------------------------------------------ drawing
     def draw_title(self, S):
         t = self.t
-        draw_board(S, self.demo, t)
         glow(S, W / 2, 84 * U, 260 * U, CYAN, 0.25)
         text(S, "SUPERCONDUCTOR", 44, WHITE, W / 2, 84 * U)
         text(S, "Route the two-qubit gates before they decohere", 10, GREY, W / 2, 132 * U)
+
+        # Right: what the picked chip looks like while CHIP is picked, and
+        # otherwise the legend, one thing on the chip at a time.
+        row = MENU_ROWS[self.menu_row]
+        if row == "chip":
+            draw_board(S, self.demo, t)
+        else:
+            self.legend.draw(S, t, 478 * U)
 
         mx = 340 * U
         rows = [("MODE", MODE_LABEL[self.mode], MODE_DESC[self.mode]),
                 ("CHIP", LATTICE_LABEL[self.lattice_kind], LATTICE_DESC[self.lattice_kind])]
         for i, (label, value, desc) in enumerate(rows):
-            y = (260 + i * 110) * U
+            y = (245 + i * 105) * U
             sel = i == self.menu_row
             col = WHITE if sel else DIM
             text(S, label, 10, GREY if sel else DIM, mx, y - 26 * U)
@@ -954,14 +1084,66 @@ class Game:
                 text(S, "<", 20, GOLD, mx - 160 * U, y + 4 * U)
                 text(S, ">", 20, GOLD, mx + 160 * U, y + 4 * U)
             text(S, desc, 8, GREY if sel else DIM, mx, y + 34 * U)
+        # QUIT: back to the cabinet's game list (A; Start still plays)
+        y = 440 * U
+        sel = row == "quit"
+        text(S, "QUIT", 20, WHITE if sel else DIM, mx, y)
+        if sel:
+            if int(t * 3) % 2 == 0:
+                text(S, ">", 20, GOLD, mx - 80 * U, y)
+                text(S, "<", 20, GOLD, mx + 80 * U, y)
+            text(S, "A: back to the game list", 8, GREY, mx, y + 30 * U)
 
         if self.mode != "versus":
             best = self.hiscores.get(self._hiscore_key(), 0)
-            text(S, f"BEST {best:06d}", 10, GOLD, mx, 500 * U)
+            text(S, f"BEST {best:06d}", 10, GOLD, mx, 530 * U)
         if int(t * 2) % 2 == 0:
-            text(S, "PRESS A OR START", 14, WHITE, W / 2, 640 * U)
-        text(S, "STICK: DRAW ROUTE   A/R: NEXT PAIR   L: PREVIOUS   B: OTHER END   X: UNDO",
-             8, DIM, W / 2, 690 * U)
+            text(S, "PRESS START TO PLAY", 14, WHITE, W / 2, 640 * U)
+        text(S, "STICK: CHOOSE    A: OK    START: PLAY", 8, DIM, W / 2, 690 * U)
+
+    def draw_tutorial(self, S):
+        """HOW TO PLAY: the goal, a scene playing it, the buttons, then go."""
+        t = self.t
+        glow(S, W / 2, 62 * U, 220 * U, CYAN, 0.22)
+        text(S, "HOW TO PLAY", crisp(32), WHITE, W / 2, 62 * U)
+        goal = ("Each pair of same-colour qubits is a gate to run.",
+                "Join them with a route before the ring runs out.",
+                "Two qubits that meet crash: both gates are lost.")
+        for i, line in enumerate(goal):
+            text(S, line, crisp(11), WHITE if i < 2 else mix(RED, WHITE, 0.35), W / 2, (118 + i * 24) * U)
+
+        # left: the scenes, played by the game's own rules
+        self.how_to.draw(S, t, 540 * U)
+
+        # right: the stick and the printed 2x3 cluster, the used buttons lit
+        x0 = 760 * U
+        text(S, "CONTROLS", crisp(11), CYAN, x0, 226 * U, "left")
+        cy = 276 * U
+        draw_stick(S, x0 + 24 * U, cy + 22 * U, t)
+        bx = x0 + 110 * U
+        for r, letters in enumerate(PAD_LAYOUT):
+            for c, letter in enumerate(letters):
+                draw_button(S, bx + c * 44 * U, cy + r * 44 * U, letter, BUTTON_COL.get(letter))
+        if self.mode != "single":
+            text(S, "BOTH PADS", crisp(11), GREY, bx + 124 * U, cy + 22 * U, "left")
+        y = 384 * U
+        for names, action in PAD_ACTIONS:
+            for k, name in enumerate(names):
+                x = x0 + (16 + 32 * k) * U
+                if name == "STICK":
+                    draw_stick(S, x, y, 0.0, 13 * U)
+                elif name == "START":
+                    rect = pygame.Rect(0, 0, int(70 * U), int(22 * U))
+                    rect.midleft = (int(x0), int(y))
+                    pygame.draw.rect(S, WHITE, rect, px(2), px(11))
+                    text(S, "START", crisp(11), WHITE, rect.centerx + U, y + U)
+                else:
+                    draw_button(S, x, y, name, BUTTON_COL[name], 13 * U)
+            text(S, action, crisp(11), WHITE, x0 + 78 * U, y, "left")
+            y += 36 * U
+
+        if self.state_t >= tutorial.MIN_SHOW and int(t * 2.5) % 2 == 0:
+            text(S, "PRESS ANY BUTTON TO START", crisp(16), WHITE, W / 2, 668 * U)
 
     def draw_play(self, S):
         t = self.t
@@ -1069,8 +1251,18 @@ class Game:
                     running = False
                 else:
                     self.update_title(dt)
+                if self.quit_requested:
+                    break  # QUIT: the same clean exit as Start + Select
                 if self.state == "title":
                     self.draw_title(S)
+                elif self.state == "tutorial":
+                    self.draw_tutorial(S)
+            elif self.state == "tutorial":
+                self.update_tutorial(dt)
+                if self.state == "tutorial":
+                    self.draw_tutorial(S)
+                else:
+                    self.draw_play(S)
             elif self.state == "play":
                 self.update_play(dt)
                 self.draw_play(S)

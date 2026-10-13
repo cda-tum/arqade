@@ -18,8 +18,8 @@ Writes:
 - bohr_measure.png: MEASURE connecting on a purple ROBERT, 3 frames on (the collapse into green);
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
-- screen_*.png: the match flow: the title, the attract demo, select (and with P1 ready), the
-  stage select (on RANDOM, and on QUANTUM WEEK),
+- screen_*.png: the match flow: the title (and with QUIT picked), the attract demo, select (and
+  with P1 ready), the stage select (on RANDOM, and on QUANTUM WEEK), HOW TO PLAY,
   the ROUND 1 and FIGHT! calls, the pause menu, a K.O. with PERFECT, and the result;
 - fight_start.png (the fighters walking in), fight_hit.png, fight_bot_block.png, fight_bot_switch.png,
   fight_crouch.png, fight_shot.png, fight_knockdown.png: bot-against-bot frames at those moments (fight_boxes.png
@@ -272,6 +272,9 @@ def screen_frames(out_dir: str) -> None:
 
     step(4)
     save(surface, out_dir, "screen_title.png")
+    step(1, press(nav=("p1", (0, 1))))
+    save(surface, out_dir, "screen_title_quit.png")
+    step(1, press(nav=("p1", (0, -1))))
     step(config.ATTRACT_DELAY + 200)
     save(surface, out_dir, "screen_attract.png")
     step(1, press(confirms=("p1", True)))      # stops the demo
@@ -289,6 +292,9 @@ def screen_frames(out_dir: str) -> None:
     step(4)
     save(surface, out_dir, "screen_stage_select_toronto.png")
     step(1, press(confirms=("p1", True)))
+    step(30)
+    save(surface, out_dir, "screen_how_to_play.png")
+    step(1, M.FrameInput(activity=True, any_button=True))
     step(8)
     save(surface, out_dir, "screen_round.png")
     step(M.FIGHT_CALL)

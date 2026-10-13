@@ -13,10 +13,12 @@ from pathlib import Path
 
 import pygame
 
+from ion_surfer import sound
 from ion_surfer.config import FPS, INTERNAL_HEIGHT, INTERNAL_WIDTH, SCORE_FILE
 from ion_surfer.display import make_display, present
 from ion_surfer.input import Controls, keyboard_enabled
 from ion_surfer.sandbox import SANDBOX_RATE, Sandbox, start_voltages
+from ion_surfer.sound import Sounds
 
 # ============================== TUNING ==============================
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT   # logical resolution (scaled to the display)
@@ -170,11 +172,13 @@ SANDBOX = 4  # mode number of the sandbox, picked from the main menu
 
 
 class Game:
-    def __init__(self, screen, sandbox_only=False):
+    def __init__(self, screen, sandbox_only=False, sounds=None):
         self.screen = screen
         self.sandbox_only = sandbox_only
         self.running = True
         self.controls = Controls()
+        self.sounds = sounds or Sounds()  # silent unless run() built real ones
+        self.tutorial = None
         self.f_title = load_font("Bungee-Regular.ttf", 54)
         self.f_big = load_font("Bungee-Regular.ttf", 22)
         self.f_hud = load_font("Bungee-Regular.ttf", 20)
@@ -424,6 +428,8 @@ class Game:
                 b.vx, b.vy = rx, ry + vs
                 if vn < -320:
                     self.burst(b.x, b.y - R, b.color, 6)
+                    if isinstance(b, Ion):
+                        self.sounds.play("bounce")
 
         if not b.inv > 0:
             for k in self.ents:
@@ -462,6 +468,7 @@ class Game:
             if e.type == "photon" and not e.got and math.hypot(ion.x - e.x, ion.y - e.y) < R + 14:
                 e.got = True
                 ion.bonus += 50
+                self.sounds.play("photon")
                 self.burst(e.x, e.y, (255, 243, 168), 10)
                 self.texts.append([e.x, e.y + 20, "+50", 0.8, (255, 243, 168)])
         ion.max_x = max(ion.max_x, ion.x)
@@ -486,6 +493,7 @@ class Game:
 
     def lose(self, ion, msg):
         ion.lives -= 1
+        self.sounds.play("lost")
         self.burst(ion.x, ion.y, ion.color, 24)
         self.texts.append([clamp(ion.x, self.cam_x + 160, self.cam_x + W - 160),
                            clamp(ion.y, 60, GROUND - 60), msg, 1.6, ion.color])
@@ -593,7 +601,10 @@ class Game:
         self.state = "over"
         self.menu_sel = 0
         self.record = False
-        if self.mode != 2:
+        if self.mode == 2:
+            a, b = (self.score(i) for i in self.ions)
+            self.sounds.play("over" if a == b else "win")
+        else:
             key = "solo" if self.mode == 1 else "coop"
             sc = self.score(self.ions[0])
             if sc > self.best.get(key, 0):
@@ -604,6 +615,7 @@ class Game:
                         json.dump(self.best, fh)
                 except Exception:
                     pass
+            self.sounds.play("win" if self.record else "over")
 
     # ---------- per-frame update / menus ----------
     def seed_string(self):
@@ -632,10 +644,13 @@ class Game:
         return self.controls.any_pressed("back")
 
     def nav(self, n):
+        old = self.menu_sel
         if self.controls.any_pressed("up"):
             self.menu_sel = (self.menu_sel - 1) % n
         if self.controls.any_pressed("down"):
             self.menu_sel = (self.menu_sel + 1) % n
+        if self.menu_sel != old:
+            self.sounds.play("move")
 
     MAIN_ITEMS = ["1 PLAYER", "2 PLAYERS: VERSUS", "2 PLAYERS: CO-OP", "SANDBOX", "SEED", "QUIT"]
     # The first three items start modes 1..3. These two are named because both
@@ -652,36 +667,59 @@ class Game:
         return ["RESUME", "RESTART", "QUIT" if self.sandbox_only else "QUIT TO TITLE"]
     OVER_ITEMS = ["SAME SEED", "NEW SEED", "MAIN MENU"]
 
+    def open_tutorial(self, mode, seed=None):
+        """A match picked in the main menu starts behind the HOW TO PLAY
+        card. RESTART and the game-over screen's rematches skip it: the
+        same people just played."""
+        from ion_surfer.tutorial import Tutorial  # it builds on this module
+
+        self.start(mode, seed)
+        self.tutorial = Tutorial(mode, self)
+        self.state = "tutorial"
+
     def update(self, dt):
         c = self.controls
         if self.state == "play":
             if c.pause_pressed():
                 self.state = "pause"
                 self.menu_sel = 0
+                self.sounds.play("pause")
                 return
             for cu in self.cursors:
                 for p in cu.pads:
                     if "left" in c.pads[p].pressed:
                         cu.sel -= 1
+                        self.sounds.play("electrode")
                     if "right" in c.pads[p].pressed:
                         cu.sel += 1
+                        self.sounds.play("electrode")
             self.acc += dt
             if self.mode == SANDBOX:
                 # blue: L/R remove/add an ion; red: L cools while held, R
                 # toggles passive cooling; SELECT on either pad: laser kick
                 # (Start pauses, as in every other mode)
+                sb = self.sandbox
                 blue, red = c.pads
                 if "add_ion" in blue.pressed:
-                    self.sandbox.add_ion()
+                    if sb.add_ion():
+                        self.sounds.play("ion_add")
                 elif "remove_ion" in blue.pressed:
-                    self.sandbox.remove_ion()
+                    if sb.remove_ion():
+                        self.sounds.play("ion_remove")
                 if "passive_cool" in red.pressed:
-                    self.sandbox.passive_cooling = not self.sandbox.passive_cooling
+                    sb.passive_cooling = not sb.passive_cooling
+                    self.sounds.play("toggle_on" if sb.passive_cooling else "toggle_off")
+                if "cool" in red.pressed:
+                    self.sounds.play("cool")
                 for pi, p in enumerate(c.pads):
                     if "select" in p.pressed:
-                        self.sandbox.kick(pi)
+                        sb.kick(pi)
+                        self.sounds.play("kick")
                 self.sandbox_frame()
-                self.sandbox.measure()
+                was = sb.anharmonic
+                sb.measure()
+                if sb.anharmonic and not was:
+                    self.sounds.play("warn")
                 return
             while self.acc >= STEP and self.state == "play":
                 self.step(STEP)
@@ -692,42 +730,63 @@ class Game:
                     if len(ion.trail) > 16:
                         ion.trail.pop(0)
 
+        elif self.state == "tutorial":
+            # Any button dismisses the card, once it has been up long enough
+            # to be seen. The stick doesn't. Buttons still held are used up,
+            # so that press doesn't also move a cursor in the match.
+            self.tutorial.update(dt)
+            if c.any_button and self.tutorial.can_dismiss():
+                c.consume_buttons()
+                self.tutorial = None
+                self.state = "play"
+                self.acc = 0.0
+                self.sounds.play("start")
+
         elif self.state == "pause":
             self.acc = 0
             # Start or B resumes; only A picks an item (so not confirm(),
             # which would let Start pick one too).
             if c.pause_pressed() or self.back():
                 self.state = "play"
+                self.sounds.play("pause")
                 return
             self.nav(len(self.PAUSE_ITEMS))
             if c.any_pressed("confirm"):
                 if self.menu_sel == 0:
                     self.state = "play"
+                    self.sounds.play("pause")
                 elif self.menu_sel == 1:
                     self.start(self.mode, self.current_seed)
+                    self.sounds.play("start")
                 elif self.sandbox_only:
                     self.running = False
                 else:
                     self.to_menu()
+                    self.sounds.play("back")
 
         elif self.state == "over":
             if self.back():
                 self.to_menu()
+                self.sounds.play("back")
                 return
             self.nav(3)
             if self.confirm():
                 if self.menu_sel == 0:
                     self.start(self.mode, self.current_seed)
+                    self.sounds.play("start")
                 elif self.menu_sel == 1:
                     self.start(self.mode)
+                    self.sounds.play("start")
                 else:
                     self.to_menu()
+                    self.sounds.play("back")
 
         elif self.state == "menu":
             self.t += dt
             if self.seed_edit:
                 if self.confirm() or self.back() or c.pause_key:
                     self.seed_edit = False
+                    self.sounds.play("confirm")
                     return
                 sl = self.seed_slot
                 idx = SEED_CHARS.index(self.seed_chars[sl])
@@ -739,26 +798,41 @@ class Game:
                     self.seed_slot = max(0, sl - 1)
                 if c.any_pressed("right"):
                     self.seed_slot = min(SEED_LEN - 1, sl + 1)
+                if any(c.any_pressed(d) for d in ("up", "down", "left", "right")):
+                    self.sounds.play("move")
                 return
             if self.back():
                 return
             self.nav(len(self.MAIN_ITEMS))
-            if self.confirm():
-                seed = self.seed_string() or None
+            seed = self.seed_string() or None
+            if c.any_pressed("start"):
+                # Start always starts a match, whatever row is picked: that
+                # row's mode, or 1 PLAYER from SEED or QUIT. It never quits.
+                mode = (self.menu_sel + 1 if self.menu_sel < self.SANDBOX_ITEM
+                        else SANDBOX if self.menu_sel == self.SANDBOX_ITEM else 1)
+                self.sounds.play("confirm")
+                self.open_tutorial(mode, None if mode == SANDBOX else seed)
+            elif c.any_pressed("confirm"):
                 if self.menu_sel in (0, 1, 2):
-                    self.start(self.menu_sel + 1, seed)
+                    self.sounds.play("confirm")
+                    self.open_tutorial(self.menu_sel + 1, seed)
                 elif self.menu_sel == self.SANDBOX_ITEM:
-                    self.start(SANDBOX)
+                    self.sounds.play("confirm")
+                    self.open_tutorial(SANDBOX)
                 elif self.menu_sel == self.SEED_ITEM:
                     self.seed_edit = True
                     self.seed_slot = 0
+                    self.sounds.play("confirm")
                 else:
+                    # QUIT: back to the cabinet's game list, the same clean
+                    # exit as Start + Select
                     self.running = False
 
     def to_menu(self):
         self.state = "menu"
         self.menu_sel = 0
         self.sandbox = None
+        self.tutorial = None
         self.new_world(random_seed())
 
     # ---------- drawing ----------
@@ -1059,6 +1133,9 @@ class Game:
         self.draw_items(self.OVER_ITEMS, 370)
 
     def draw(self):
+        if self.state == "tutorial":
+            self.tutorial.draw(self.screen)  # a full-screen card of its own
+            return
         self.draw_world()
         if self.state != "menu" and self.mode == SANDBOX:
             self.sandbox.draw(self.screen, sy)
@@ -1073,13 +1150,14 @@ class Game:
 
 
 def run(*, fullscreen=False, window_size="1200x640", show_fps=False, sandbox_only=False):
+    sound.pre_init()
     pygame.init()
     pygame.joystick.init()
     surface, window = make_display(fullscreen, window_size)
     pygame.display.set_caption("Ion Trap Sandbox" if sandbox_only else "Ion Surfer")
     pygame.mouse.set_visible(not fullscreen)
     clock = pygame.time.Clock()
-    game = Game(surface, sandbox_only=sandbox_only)
+    game = Game(surface, sandbox_only=sandbox_only, sounds=sound.load_sounds())
     fps_font = load_font("Rubik-Medium.ttf", 15)
     while game.running:
         dt = min(0.1, clock.tick(FPS) / 1000)

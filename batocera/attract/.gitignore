@@ -1,0 +1,5 @@
+clips/
+# checks of the cut, rebuilt with the reels
+*-sheet.png
+# tracks to listen to while picking the trailer music (~60 MB): not for git
+trailer_assets/music_candidates/

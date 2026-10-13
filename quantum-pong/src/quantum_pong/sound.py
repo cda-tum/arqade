@@ -57,8 +57,11 @@ class _NullSound:
 class Sounds(NamedTuple):
     bounce: object
     score: object
-    gate: object
+    gate: object  # a ball runs into a gate
     win: object
+    announce: object  # a gate is announced (dashed outline), soft and short
+    move: object  # a menu selection moves
+    confirm: object  # a menu pick, pausing/resuming, leaving HOW TO PLAY
 
 
 def load_sounds() -> Sounds:
@@ -78,7 +81,10 @@ def load_sounds() -> Sounds:
             score=_make_sound(180.0, 0.22, actual_freq, channels),
             gate=_make_sound(880.0, 0.10, actual_freq, channels),
             win=_make_sound(660.0, 0.45, actual_freq, channels),
+            announce=_make_sound(1320.0, 0.04, actual_freq, channels, volume=0.2),
+            move=_make_sound(520.0, 0.04, actual_freq, channels, volume=0.35),
+            confirm=_make_sound(780.0, 0.09, actual_freq, channels, volume=0.45),
         )
     except (pygame.error, ValueError):
         null = _NullSound()
-        return Sounds(bounce=null, score=null, gate=null, win=null)
+        return Sounds(*(null for _ in Sounds._fields))

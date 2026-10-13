@@ -23,6 +23,8 @@ class ScriptedInput(Input):
             self.pressed[p] = held - self.held[p]
             self.held[p] = held
             self.nav[p] = {d for d in ("left", "right", "up", "down") if d in self.pressed[p]}
+        # a button (not a stick direction) that went down this frame
+        self.any_button = any(self.pressed[p] - {"left", "right", "up", "down"} for p in ("p1", "p2"))
         self.select_held_time = self.select_held_time + dt if any("select" in h for h in self.held.values()) else 0.0
 
 
@@ -56,6 +58,9 @@ def test_full_menu_flow_into_every_level_and_out(app):
         frames(app, 20)
         app.scene.index = i
         frames(app, 2, p1={"pick"})
+        assert type(app.scene).__name__ == "HowToPlayScene"
+        frames(app, 30)
+        frames(app, 2, p2={"pick"})
         assert type(app.scene).__name__ == "RoundScene" and app.scene.level is lv
         frames(app, 240, p1={"down"}, p2={"up"})
         if lv.tutorial:
@@ -138,3 +143,150 @@ def test_start_skips_the_tutorial(app):
     frames(app, 10)
     frames(app, 2, p1={"start"})
     assert type(app.scene).__name__ == "ResultsScene"
+
+
+# --- title menu: PLAY / QUIT -------------------------------------------------------
+
+
+def test_a_on_quit_leaves_the_game(app):
+    frames(app, 10)
+    frames(app, 2, p2={"down"})
+    assert app.scene.index == 1  # QUIT, the last row
+    frames(app, 2, p1={"use"})  # B on the title does not quit
+    assert app.running
+    frames(app, 1, p1={"pick"})
+    assert not app.running
+
+
+def test_start_plays_even_with_quit_selected(app):
+    app.scene.index = 1
+    frames(app, 2, p2={"start"})
+    assert app.running and type(app.scene).__name__ == "JoinScene"
+    assert app.scene.joined == [1]
+
+
+def test_a_on_play_joins_and_the_stick_wraps(app):
+    frames(app, 2, p1={"up"})
+    assert app.scene.index == 1
+    frames(app, 2, p1={"down"})
+    assert app.scene.index == 0
+    frames(app, 2, p1={"pick"})
+    assert type(app.scene).__name__ == "JoinScene"
+
+
+def test_attract_demo_resets_the_title_to_play(app):
+    app.scene.index = 1
+    for _ in range(int((config.ATTRACT_DELAY + 1) * 60)):
+        app.step(1 / 60, [])
+    assert app.scene.demo is not None and app.scene.index == 0
+    frames(app, 1, p1={"pick"})  # waking it with A never quits
+    assert app.running and type(app.scene).__name__ == "JoinScene"
+
+
+# --- HOW TO PLAY card ---------------------------------------------------------------
+
+
+def _to_card(app, level=levels.SNACK_BAR, players=(0, 1)):
+    from overquqed.scenes import LevelSelectScene
+
+    app.switch(LevelSelectScene(app, list(players)))
+    frames(app, 20)
+    app.scene.index = levels.LEVELS.index(level)
+    frames(app, 1, p1={"pick"})
+    assert type(app.scene).__name__ == "HowToPlayScene"
+    return app.scene
+
+
+def test_card_ignores_presses_in_its_first_moments(app):
+    card = _to_card(app)
+    frames(app, 1, p1={"start"})  # the confirm's bounce, at ~0.03 s
+    assert app.scene is card
+    frames(app, 30)
+    frames(app, 1, p2={"swap"})  # any button, even one the menus don't use
+    assert type(app.scene).__name__ == "RoundScene"
+
+
+def test_stick_does_not_dismiss_the_card(app):
+    card = _to_card(app)
+    frames(app, 60)
+    for d in ("up", "down", "left", "right"):
+        frames(app, 3, p1={d}, p2={d})
+    assert app.scene is card
+
+
+def test_card_comes_before_every_kitchen_including_training_day(app):
+    for lv in levels.LEVELS:
+        card = _to_card(app, lv)
+        assert card.level is lv
+        frames(app, 30)
+        frames(app, 1, p1={"pick"})
+        assert app.scene.level is lv and type(app.scene).__name__ == "RoundScene"
+
+
+def test_dismissing_press_does_not_act_in_the_round(app):
+    _to_card(app)
+    frames(app, 30)
+    # dismiss with B and keep holding it: no station work until it is let go
+    app.inp.next_held = {"p1": {"use"}, "p2": set()}
+    app.step(1 / 60, [])
+    rs = app.scene
+    assert type(rs).__name__ == "RoundScene"
+    for _ in range(5):
+        app.step(1 / 60, [])
+        assert not rs.chef_inputs(app.inp)[0].use
+    app.inp.next_held = {"p1": set(), "p2": set()}
+    app.step(1 / 60, [])
+    app.inp.next_held = {"p1": {"use"}, "p2": set()}
+    app.step(1 / 60, [])
+    assert rs.chef_inputs(app.inp)[0].use
+    assert not rs.paused
+
+
+def test_start_on_the_card_starts_and_does_not_pause(app):
+    _to_card(app)
+    frames(app, 30)
+    app.inp.next_held = {"p1": {"start"}, "p2": set()}
+    for _ in range(10):
+        app.step(1 / 60, [])
+    assert type(app.scene).__name__ == "RoundScene" and not app.scene.paused
+
+
+def test_restart_skips_the_card(app):
+    _to_card(app)
+    frames(app, 30)
+    frames(app, 1, p1={"pick"})
+    rs = app.scene
+    frames(app, 2, p1={"start"})
+    assert rs.paused
+    frames(app, 2, p1={"down"})
+    frames(app, 2, p1={"pick"})  # RESTART
+    assert type(app.scene).__name__ == "RoundScene" and app.scene is not rs
+
+
+def test_quit_combo_and_idle_timeout_work_on_the_card(app):
+    _to_card(app)
+    for _ in range(int((config.IDLE_TIMEOUT + 1) * 60)):
+        app.step(1 / 60, [])
+        app.inp.next_held = {"p1": set(), "p2": set()}
+    assert type(app.scene).__name__ == "TitleScene"
+    _to_card(app)
+    app.inp.next_held = {"p1": set(), "p2": {"start", "select"}}
+    app.step(1 / 60, [])
+    assert not app.running
+
+
+def test_card_demo_kitchen_serves_both_orders_and_loops():
+    from overquqed.howto import DEMO_LOOP, DemoKitchen
+
+    pygame.init()
+    demo = DemoKitchen()
+    captions = set()
+    served = 0
+    for _ in range(int(DEMO_LOOP * 60) - 1):
+        demo.update(1 / 60)
+        captions.add(demo.caption()[0])
+        served = demo.world.stats.delivered
+    assert served == 2  # the bot cooks both orders well inside one loop
+    assert {"A", "B"} <= captions
+    demo.update(2 / 60)
+    assert demo.t < 0.1 and len(demo.world.orders.orders) == 2  # and it starts over

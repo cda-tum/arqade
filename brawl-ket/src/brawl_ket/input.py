@@ -3,7 +3,9 @@
 Per pad: the analog stick (axes 0 and 1, deadzoned; the hat only as a fallback,
 which the cabinet never needs because it has none) and the A, B, X and Y buttons
 as edge-triggered presses. Start confirms, pauses and starts; Select only joins
-Start for the quit combo. The pure helpers are unit tested; reading real pads
+Start for the quit combo. Any button at all (L, R and Select too) going down is
+`any_button`, which takes the HOW TO PLAY card away; with the keyboard on, so does
+any key but the stick's. The pure helpers are unit tested; reading real pads
 is verified on the cabinet with --input-test.
 """
 
@@ -93,6 +95,9 @@ class Input:
         self.start_select = {p: (False, False) for p in PLAYERS}
         self.select_held_time = 0.0     # seconds Select has been held on either pad
         self.keyboard_quit = False
+        self._button_event = False      # a JOYBUTTONDOWN (or, with the keyboard on, a KEYDOWN)
+        self._stick_keys = {k for p in PLAYERS for act in ("left", "right", "up", "down")
+                            for k in self.keymap[p][act]}
         self.rescan()
 
     def rescan(self) -> None:
@@ -105,6 +110,9 @@ class Input:
     def handle(self, event: pygame.event.Event) -> None:
         if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
             self.rescan()
+        elif event.type == pygame.JOYBUTTONDOWN or (event.type == pygame.KEYDOWN and _keyboard_enabled
+                                                     and event.key not in self._stick_keys):
+            self._button_event = True
 
     def _read_pad(self, player: str) -> tuple[set[int], int, bool, bool]:
         """(buttons down, dx, up, down) for one pad."""
@@ -131,7 +139,8 @@ class Input:
                                       system["y_button"])
         start = system["start_button"]
         self.keyboard_quit = keyboard_quit_held(keys)
-        frame = FrameInput(activity=self.keyboard_quit)
+        frame = FrameInput(activity=self.keyboard_quit, any_button=self._button_event)
+        self._button_event = False
         for p in PLAYERS:
             down, dx, up, dn = self._read_pad(p)
             held_keys = {act for act, codes in self.keymap[p].items() if any(keys[k] for k in codes)}
@@ -158,6 +167,8 @@ class Input:
             self._stick_prev[p] = (dx, dn - up)
             if down or (held_keys - {"left", "right", "up", "down"}):
                 frame.held = True
+            if pressed or (new_keys - {"left", "right", "up", "down"}):
+                frame.any_button = True
             self.start_select[p] = (start in down, system["select_button"] in down)
             if down or dx or up or dn or held_keys:
                 frame.activity = True

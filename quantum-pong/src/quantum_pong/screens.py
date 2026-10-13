@@ -11,6 +11,7 @@ import pygame
 
 from quantum_pong import config
 from quantum_pong.pause import PAUSE_ITEMS
+from quantum_pong.title import TITLE_ITEMS
 
 LEGEND_LINES = [
     "H: split the ball in two",
@@ -25,28 +26,52 @@ def blink_visible(t: float, period: float) -> bool:
     return (t % period) < (period / 2)
 
 
+def _draw_items(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    items: tuple[str, ...],
+    selected: int,
+    center_x: int,
+    top_y: int,
+) -> None:
+    """A vertical menu, the selected row in the highlight colour with a '>'."""
+    for i, item in enumerate(items):
+        active = i == selected
+        color = config.COLOR_FPS if active else config.COLOR_TEXT
+        item_surf = font.render(item, False, color)
+        rect = item_surf.get_rect(center=(center_x, top_y + i * 18))
+        surface.blit(item_surf, rect)
+        if active:
+            arrow = font.render(">", False, color)
+            surface.blit(arrow, arrow.get_rect(midright=(rect.left - 8, rect.centery)))
+
+
 def draw_title_screen(
     surface: pygame.Surface,
     title_font: pygame.font.Font,
     legend_font: pygame.font.Font,
+    item_font: pygame.font.Font,
     prompt_font: pygame.font.Font,
+    selected: int,
     show_prompt: bool,
 ) -> None:
     surface.fill(config.COLOR_BACKGROUND)
 
     title = title_font.render("QUANTUM PONG", False, config.COLOR_TEXT)
-    surface.blit(title, title.get_rect(center=(config.INTERNAL_WIDTH // 2, 46)))
+    surface.blit(title, title.get_rect(center=(config.INTERNAL_WIDTH // 2, 40)))
 
-    y = 110
+    y = 88
     for line in LEGEND_LINES:
         line_surf = legend_font.render(line, False, config.COLOR_TEXT)
         surface.blit(line_surf, line_surf.get_rect(center=(config.INTERNAL_WIDTH // 2, y)))
-        y += 20
+        y += 18
+
+    _draw_items(surface, item_font, TITLE_ITEMS, selected, config.INTERNAL_WIDTH // 2, 182)
 
     if show_prompt:
-        prompt = prompt_font.render("PRESS A OR START", False, config.COLOR_FPS)
+        prompt = prompt_font.render("PRESS START", False, config.COLOR_FPS)
         surface.blit(
-            prompt, prompt.get_rect(center=(config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT - 28))
+            prompt, prompt.get_rect(center=(config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT - 22))
         )
 
 
@@ -91,15 +116,7 @@ def draw_pause_menu(
     title = big_font.render("PAUSED", False, config.COLOR_TEXT)
     surface.blit(title, title.get_rect(center=(box.centerx, box.y + 20)))
 
-    for i, item in enumerate(PAUSE_ITEMS):
-        active = i == selected
-        color = config.COLOR_FPS if active else config.COLOR_TEXT
-        item_surf = item_font.render(item, False, color)
-        rect = item_surf.get_rect(center=(box.centerx, box.y + 48 + i * 18))
-        surface.blit(item_surf, rect)
-        if active:
-            arrow = item_font.render(">", False, color)
-            surface.blit(arrow, arrow.get_rect(midright=(rect.left - 8, rect.centery)))
+    _draw_items(surface, item_font, PAUSE_ITEMS, selected, box.centerx, box.y + 48)
 
     hint = hint_font.render("A: PICK   START / B: RESUME", False, config.COLOR_HINT)
     surface.blit(hint, hint.get_rect(center=(box.centerx, box.bottom - 14)))

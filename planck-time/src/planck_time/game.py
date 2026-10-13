@@ -44,6 +44,8 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
             break
 
         events = session.update(dt, inp.frame_input())
+        if session.quit_requested:  # QUIT on the title: the same clean exit as Start + Select
+            break
         audio.music(music_for(session))
         audio.tempo(session.level)
         audio.update()

@@ -117,6 +117,9 @@ class Input:
         self.pressed: dict[str, set[str]] = {p: set() for p in PLAYERS}
         self.last_key_dir: dict[str, str | None] = {p: None for p in PLAYERS}
         self.ev_keys: set[int] = set()
+        # this frame's presses: "button" (any joystick button, either pad)
+        # and "key" -- what closes the HOW TO PLAY card
+        self.presses: set[str] = set()
         self.last_keys: list[str] = []
         self.confirm = self.back = self.pause = False
         self.back_held = 0.0
@@ -139,6 +142,7 @@ class Input:
             self.last_keys = (self.last_keys + [pygame.key.name(e.key)])[-8:]
             if not _keyboard_enabled:
                 return
+            self.presses.add("key")
             self.ev_keys.add(e.key)
             self.confirm |= e.key in CONFIRM_KEYS
             self.back |= e.key in BACK_KEYS
@@ -148,6 +152,7 @@ class Input:
                     if e.key in KEY_CODES[p][d]:
                         self.last_key_dir[p] = d
         elif e.type == pygame.JOYBUTTONDOWN:
+            self.presses.add("button")
             if e.button == system["start_button"]:
                 self.confirm = self.pause = True
             if e.button == system["select_button"]:
@@ -215,6 +220,7 @@ class Input:
 
     def end_frame(self) -> None:
         self.ev_keys.clear()
+        self.presses.clear()
         self.confirm = self.back = self.pause = False
 
     def hit(self, p: str, action: str) -> bool:

@@ -47,6 +47,12 @@ class Shooter:
             fi.nav[p] = d
         self.frame(fi)
 
+    def skip_tutorial(self) -> None:
+        self.run(config.TUTORIAL_LOCK)
+        fi = FrameInput(activity=True)
+        fi.any_button = True
+        self.frame(fi)
+
     def play(self, seconds: float) -> None:
         def pick():
             return PlayerInput(move=self.rng.choice((-1, 0, 0, 0, 0, 1)), cw=self.rng.random() < 0.04,
@@ -83,6 +89,9 @@ def versus(out_dir: str) -> None:
     sh.run(0.3)
     sh.shot("02-setup.png")
     sh.press("p2")
+    sh.run(1.6)
+    sh.shot("03-how-to-play.png")
+    sh.skip_tutorial()
     sh.run(0.5)
     sh.shot("03-countdown.png")
     sh.run(config.COUNTDOWN)
@@ -107,12 +116,13 @@ def versus(out_dir: str) -> None:
 
 def single(out_dir: str) -> None:
     sh = Shooter(out_dir, seed=9)
-    sh.press(nav={"p1": (0, 1)})
+    sh.press(nav={"p1": (0, -1)})  # 1 PLAYER
     sh.press("p1")
     sh.press(nav={"p1": (1, 0)})  # level 2
     sh.run(0.3)
     sh.shot("08-setup-1p.png")
     sh.press("p2")  # either pad readies single player
+    sh.skip_tutorial()
     sh.run(config.COUNTDOWN + 0.1)
     sh.play(18)
     sh.shot("09-single-player.png")
