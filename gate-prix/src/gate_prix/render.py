@@ -617,8 +617,11 @@ class Renderer:
         discs = self._lights[colour]
         ox, oy = view.rect.topleft
         for kind, x, y, scale, clip_y in found:
-            if kind != "gantry" or scale > sprites.GANTRY_MAX_SCALE * 1.1:
+            if kind != "gantry":
                 continue
+            size = self.cache.index(scale)
+            if size is None or self.cache.images["gantry"][size] is None:
+                continue  # too near for the gantry to be drawn: no lights without it
             ly = y - sprites.LIGHT_Y * scale
             if ly > clip_y:
                 continue
@@ -697,8 +700,8 @@ class Renderer:
                 badge = self._badges[circuit.target[filled]]
         else:
             final = racer.lap >= config.LAPS
-            words = "FINAL LAP: NO GATES" if final else "TO THE LINE"
-            self.put(words, 10 if narrow and final else 14, GOLD, midleft=(lx, label_y))
+            words = ("NO GATES" if narrow else "FINAL LAP: NO GATES") if final else "TO THE LINE"
+            self.put(words, 14, GOLD, midleft=(lx, label_y))
             badge = self._badges["flag"]
         surf.blit(badge, (x + 12, y + 11))
         rows = config.ROWS_PER_LAP
@@ -726,7 +729,7 @@ class Renderer:
         """The held item, pulsing: its icon, its name and A (in 1P one line on what it does)."""
         x, y = rect.topleft
         if narrow:
-            px, py, w, h = x + rect.width - 166, y + 78, 158, 56
+            px, py, w, h = x + rect.width - 174, y + 78, 166, 56
         else:
             px, py, w, h = x + W - 452, y + 8, 330, 64
         if racer.item is not None:
@@ -736,9 +739,9 @@ class Renderer:
             name = racer.item
             self.surface.blit(icons.icon(name, ICON), (px + 6, py + (h - ICON) // 2))
             if narrow:
-                self.put(name, 15 if len(name) <= 7 else 11, ITEM_COLORS[name],
-                         midleft=(px + 56, py + 18))
-                self.put("PRESS A", 13, GOLD, midleft=(px + 56, py + 39))
+                self.put(name, 15 if len(name) <= 7 else 14, ITEM_COLORS[name],
+                         midleft=(px + 54, py + 18))
+                self.put("PRESS A", 13, GOLD, midleft=(px + 54, py + 39))
             else:
                 self.put(name, 20 if len(name) <= 7 else 14, ITEM_COLORS[name],
                          midleft=(px + 58, py + 20))

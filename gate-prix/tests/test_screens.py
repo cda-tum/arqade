@@ -128,6 +128,24 @@ def test_a_race_with_every_new_effect_draws_from_caches_only(renderer, monkeypat
         renderer.draw(m)
 
 
+def test_the_start_lights_go_with_the_gantry_too_near_to_draw(renderer):
+    """Between the gantry's last cached size and the cut-off of the nearest-size pick
+    there is no gantry: no lights either."""
+    from gate_prix.road import RoadView
+
+    view = RoadView((0, 0, 960, 540))
+    cache = renderer.cache
+    surface = pygame.Surface((960, 540), pygame.SRCALPHA)
+    for scale in [s for s in cache.scales if s > sprites.GANTRY_MAX_SCALE][:2] + [600.0]:
+        surface.fill((0, 0, 0, 0))
+        renderer._gantry_lights(surface, view, [("gantry", 480, 530, scale, 540)], ("red", 5))
+        drawn = cache.images["gantry"][cache.index(scale)] is not None
+        assert (surface.get_bounding_rect().w > 0) == drawn, scale
+    surface.fill((0, 0, 0, 0))
+    renderer._gantry_lights(surface, view, [("gantry", 480, 530, 200.0, 540)], ("red", 5))
+    assert surface.get_bounding_rect().w > 0
+
+
 def test_the_title_the_card_and_quit_draw(renderer):
     m = Match(random.Random(3))
     m.update(DT, FrameInput())

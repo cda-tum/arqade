@@ -9,10 +9,12 @@ the HUD use both).
       |                                     A/Start rematches (no HOWTO card) |
       +----------------- B, QUIT TO TITLE, or 60 s untouched ------------------+
 
-- **The title:** three rows, 1 PLAYER / 2 PLAYERS / QUIT (`title_index`), moved one step at
-  a time by the stick's up/down and clamped at both ends (no wrap), so a held stick stays
-  on the last row it reaches. Only the up/down steps of the first pad whose stick is held
-  count: sideways does nothing, and when the pads disagree P1's wins. A begins the
+- **The title:** three rows, 1 PLAYER / 2 PLAYERS / QUIT (`title_index`), moved one row per
+  push of the stick up or down (a held stick's auto-repeats don't count, so a push for
+  2 PLAYERS never runs on to QUIT) and clamped at both ends (no wrap). Only the first pad
+  whose stick is up or down counts: sideways does nothing, and when the pads disagree P1's
+  wins. Whenever the attract race starts or is stopped the row goes back to the mode, so
+  the visitor who stops it finds a mode under A, never QUIT. A begins the
   highlighted mode, or on QUIT quits at once (`quit_requested`, the main loop's clean exit).
   Start begins, never quits: the highlighted mode, or 1 PLAYER on QUIT. B does nothing.
   After ATTRACT_DELAY seconds untouched an attract race plays behind it:
@@ -155,6 +157,7 @@ class Match:
         self.state = TITLE
         self.mode = 1  # 1 or 2 PLAYERS
         self.title_index = 0  # the title's highlighted row (config.TITLE_ITEMS)
+        self._title_push = 0  # the up/down direction the title's stick is held in now
         self.quit_requested = False  # QUIT picked on the title: the main loop exits
         self.t = 0.0  # seconds in the current state
         self.idle = 0.0
@@ -239,6 +242,7 @@ class Match:
         stopped = inp.activity and self.attract
         if stopped:
             self.race, self.bots, self.attract = None, {}, False
+            self.title_index = self.mode - 1  # never QUIT under the A that stopped it
         step = self._title_step(inp)
         index = max(0, min(len(config.TITLE_ITEMS) - 1, self.title_index + step))
         if not stopped and index != self.title_index:
@@ -266,15 +270,18 @@ class Match:
         elif self.idle >= config.ATTRACT_DELAY:
             self._attract()
 
-    @staticmethod
-    def _title_step(inp: FrameInput) -> int:
-        """The title's up/down step (-1, 0 or 1) from the first pad (P1 first) whose stick
-        is held up or down, or tapped: its auto-repeated steps, never the sideways axis,
-        whose repeats run on their own timer. Another pad held the other way is ignored."""
+    def _title_step(self, inp: FrameInput) -> int:
+        """The title's up/down step (-1, 0 or 1): one per push of the first pad (P1 first)
+        whose stick is up or down, on the frame the push begins (or a tap's one step), never
+        its auto-repeats, nor the sideways axis. Another pad held the other way is ignored."""
         for p in PLAYERS:
             i = inp.players[p]
             if i.stick[1] or i.nav[1]:
-                return i.nav[1]
+                d = i.stick[1] or i.nav[1]
+                step = d if d != self._title_push else 0
+                self._title_push = i.stick[1]  # a tap holds nothing: the next tap counts
+                return step
+        self._title_push = 0
         return 0
 
     # --- The HOW TO PLAY card ----------------------------------------------------------------
@@ -284,6 +291,7 @@ class Match:
             self._new_race(events)
 
     def _attract(self) -> None:
+        self.title_index = self.mode - 1  # whoever stops the demo finds a mode under A
         self.seed = self.rng.randrange(1 << 30)
         self.race = Race(self.seed, 2, finish_all=True)
         self.bots = bot.field(self.race, self.seed, players=config.ATTRACT_SKILL)

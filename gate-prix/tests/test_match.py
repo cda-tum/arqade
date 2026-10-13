@@ -118,11 +118,11 @@ def held_diagonal(dx: int, dy: int, lag: int, seconds: float = 2.0):
                         "steer": float(x)})
 
 
-@pytest.mark.parametrize("dx, dy, start, want", [(1, -1, 1, 0), (-1, 1, 1, 2), (1, 1, 0, 2),
-                                                  (-1, -1, 2, 0)])
+@pytest.mark.parametrize("dx, dy, start, want", [(1, -1, 1, 0), (-1, 1, 1, 2), (1, 1, 0, 1),
+                                                  (-1, -1, 2, 1)])
 @pytest.mark.parametrize("lag", [0, 2, 5])
-def test_a_held_diagonal_moves_only_up_or_down_and_stops_at_the_end(dx, dy, start, want, lag):
-    """The sideways repeats never move the menu; the up/down ones step to the end row."""
+def test_a_held_diagonal_moves_one_row_up_or_down(dx, dy, start, want, lag):
+    """The sideways repeats never move the menu, and a held push moves it one row."""
     m = fresh(1)
     for _ in range(start):
         m.update(DT, DOWN)
@@ -145,16 +145,39 @@ def test_two_pads_held_opposite_ways_follow_p1():
     assert set(rows) == {2}
 
 
-def test_a_held_stick_stays_on_the_last_row():
-    """Auto-repeated steps of a held stick go to the end and stay there: no wrap."""
+def held_down(m: Match, seconds: float) -> int:
+    """Hold P1's stick down through the real auto-repeat; returns the blips."""
+    from gate_prix.input import AutoRepeat
+
+    rep, blips = AutoRepeat(), 0
+    for _ in range(round(seconds / DT)):
+        blips += len(cues(m.update(DT, frame(p1={"nav": (0, rep.update(DT, 1)),
+                                                 "stick": (0, 1)})), "blip"))
+    m.update(DT, IDLE)  # let go
+    return blips
+
+
+def test_a_held_stick_moves_one_row_per_push():
+    """A push held for 2 s from 1 PLAYER lands on 2 PLAYERS, never runs on to QUIT; a
+    second push reaches QUIT, and a third stays there (no wrap)."""
     m = fresh(1)
-    rows, blips = [], 0
-    for k in range(60):  # a second held down, a step every few frames
-        events = m.update(DT, frame(p1={"nav": (0, 1) if k % 7 == 0 else (0, 0),
-                                        "stick": (0, 1)}))
-        rows.append(m.title_index)
-        blips += len(cues(events, "blip"))
-    assert rows[-1] == 2 and rows == sorted(rows) and blips == 2
+    assert held_down(m, 2.0) == 1 and m.title_index == 1 and m.mode == 2
+    assert held_down(m, 2.0) == 1 and m.title_index == 2
+    assert held_down(m, 2.0) == 0 and m.title_index == 2
+
+
+@pytest.mark.parametrize("button", [A, START])
+def test_a_title_left_on_quit_offers_a_mode_once_the_attract_race_runs(button):
+    """The next visitor's first press (A, most likely) starts a match, never quits."""
+    m = fresh(1)
+    m.update(DT, DOWN)
+    m.update(DT, DOWN)
+    assert m.title_index == 2 and m.mode == 2
+    run(m, config.ATTRACT_DELAY + 1.0)
+    assert m.attract and m.title_index == 1  # back on the mode: 2 PLAYERS
+    events = m.update(DT, button)
+    assert not m.quit_requested and not cues(events, "quit")
+    assert m.state == HOWTO and m.mode == 2
 
 
 def test_a_on_quit_quits_at_once():
