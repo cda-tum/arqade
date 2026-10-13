@@ -259,6 +259,19 @@ def test_game_starts_with_several_pairs():
     assert len(b.pairs) == config.INITIAL_PAIRS
 
 
+def test_the_first_pairs_never_share_an_endpoint():
+    """They all arrive at once, so a shared qubit would leave one queued."""
+    from superconductor.lattice import LAYOUTS
+    for kind in LAYOUTS:
+        for seed in range(50):
+            first = list(itertools.islice(rules.spawn_schedule(Lattice(kind), seed), config.INITIAL_PAIRS))
+            ends = [n for s in first for n in (s.a, s.b)]
+            assert len(set(ends)) == len(ends), (kind, seed)
+            b = Board(Lattice(kind), seed, ("p1",), specials=False)
+            b.update(0.6)
+            assert len(b.pairs) == config.INITIAL_PAIRS, (kind, seed)
+
+
 def test_difficulty_ramps_up():
     lat = Lattice("square")
     s = list(itertools.islice(rules.spawn_schedule(lat, 1), 200))

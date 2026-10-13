@@ -92,12 +92,18 @@ def spawn_schedule(lattice: Lattice, seed: int, rate: float = 1.0,
     rng = random.Random(seed)
     t = 0.5
     count = 0
+    used: set[Node] = set()  # the first pairs' endpoints, so they all fit at once
     while True:
-        a = rng.choice(lattice.nodes)
-        far = [n for n in lattice.nodes if lattice.distance(a, n) >= config.MIN_PAIR_DISTANCE]
+        free = [n for n in lattice.nodes if n not in used]
+        a = rng.choice(free)
+        far = [n for n in free if lattice.distance(a, n) >= config.MIN_PAIR_DISTANCE]
         b = rng.choice(far)
         yield Spawn(t, a, b, ramp(config.COHERENCE_START, config.COHERENCE_MIN, t))
         count += 1
+        if count < config.INITIAL_PAIRS:
+            used |= {a, b}
+        else:
+            used.clear()
         if count >= config.INITIAL_PAIRS:  # the first few all arrive at once
             t += ramp(config.SPAWN_INTERVAL_START, config.SPAWN_INTERVAL_MIN, t + head_start) / rate
 
