@@ -3,9 +3,10 @@
 One AI drives every car that has no person in it: the opponents in a race,
 the bots racing behind the title menu, and the attract-reel bot
 (../../../batocera/attract/bots/qircuit.py), which turns the same Controls
-into pad presses. It returns exactly what a person's input becomes (gas,
-brake, a wire change), so it plays by the same rules and can do nothing a
-person can't.
+into pad presses. It returns exactly what a person's input becomes (up or
+down on the cruise speed, a wire change), and the race's cruise control
+(race.py) turns that into speed for bots and people alike, so it plays by
+the same rules and can do nothing a person can't.
 
 A level is a Skill, a handful of numbers; the code is the same for all three.
 
@@ -19,8 +20,11 @@ A level is a Skill, a handful of numbers; the code is the same for all three.
   launcher with a rival ahead on that wire), aims its error bugs at a rival
   while they hover, and dodges bugs about to catch it and Zeno traps.
 
-Pedals: each frame it brakes for the tightest corner within braking
-distance, for every one of its copies (they share one input). Wire: every
+Speed: each frame it works out the speed it wants (its pace, or less for
+the tightest corner within braking distance, for every one of its copies:
+they share one input). Too fast for a corner, or set higher than it wants,
+it pushes down, which brakes; set lower, it pushes up until the setting
+gets there; otherwise it lets the cruise control hold. Wire: every
 `think` seconds it estimates the time each reachable wire costs over the
 next stretch (shorter inner wires against their lower corner speeds, slower
 cars in the way, slipstreams, and for BRUTAL the gates and hazards) and
@@ -68,12 +72,12 @@ SKILLS = {
 
 def allowed_speed(race: Race, body: Body, skill: Skill) -> float:
     """The fastest this body may go now and still brake in time for every
-    corner within its braking distance, at this skill's corner load."""
+    corner within its braking distance, at this skill's corner load (inf
+    with no corner in reach)."""
     stats = race.racers[body.player].stats
     brake = stats.brake * skill.brake_plan
     s = race.s_of(body.p)
-    # on a straight, its pace; over that (off a boost pad) it keeps what it has
-    allowed = max(stats.max_speed * (1 + config.DRAFT_TOP * body.draft) * skill.pace, body.v)
+    allowed = math.inf
     look = body.v * body.v / (2 * brake) + 40
     d = 0.0
     while d <= look:
@@ -96,13 +100,21 @@ class Driver:
         bodies = race.bodies_of(self.player)
         if not bodies:
             return Controls()
-        margin = min(allowed_speed(race, b, self.skill) - b.v for b in bodies)
-        if margin > 3:
-            c = Controls(throttle=True)
-        elif margin < -3:
-            c = Controls(brake=True)
+        stats = race.racers[self.player].stats
+        corner = [allowed_speed(race, b, self.skill) for b in bodies]
+        # the speed it wants: its pace, or less for a corner
+        want = [min(a, stats.max_speed * (1 + config.DRAFT_TOP * b.draft) * self.skill.pace)
+                for a, b in zip(corner, bodies)]
+        setting = [race.cruise_speed(b, stats) for b in bodies]
+        if any(b.v > a + 3 for a, b in zip(corner, bodies)):
+            c = Controls(brake=True)  # too fast for a corner: down brakes, and the setting comes down with it
+        elif any(s > w + 3 and b.v <= w + 3 for s, w, b in zip(setting, want, bodies)):
+            c = Controls(brake=True)  # set too high: down brings it to what it does now (over its pace, off a
+            # boost pad, it waits until it has eased down to it)
+        elif min(w - max(s, b.v) for w, s, b in zip(want, setting, bodies)) > 3:
+            c = Controls(throttle=True)  # the setting can go up (up starts from the speed it does now, if higher)
         else:
-            c = Controls()
+            c = Controls()  # the cruise control holds it
         self.wait -= dt
         if self.wait <= 0:
             self.wait = self.skill.think * self.rng.uniform(0.7, 1.3)

@@ -597,8 +597,8 @@ for any game that gets them later.
   gates). One driver class runs all three.
 - **One AI per game, in the game's package (`<package>/ai.py`).** It is pure:
   it reads the game's own state and returns the same controls a person's
-  input becomes (Qircuit: gas, brake, a wire change), never more. So it plays
-  by the same rules and is unit tested like the rules.
+  input becomes (Qircuit: up or down on its cruise speed, a wire change),
+  never more. So it plays by the same rules and is unit tested like the rules.
 - **Everything that plays the game without a person uses that one AI:**
   - the in-game opponents;
   - any demo racing behind the title (Qircuit's title shows four bots);

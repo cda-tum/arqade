@@ -76,14 +76,24 @@ def apply(m: list[float], p: Vec) -> tuple[float, float, float, float]:
     return tuple(m[r * 4] * x + m[r * 4 + 1] * y + m[r * 4 + 2] * z + m[r * 4 + 3] for r in range(4))
 
 
-def model_matrix(x: float, y: float, z: float, heading: float, scale: float = 1.0) -> list[float]:
+def model_matrix(x: float, y: float, z: float, heading: float, scale: float = 1.0,
+                 roll: float = 0.0) -> list[float]:
     """Place a model (x forward, y to its right, z up, in voxels) at world
-    (x, y, z) facing heading (world radians, 0 east, turning towards south)."""
+    (x, y, z) facing heading (world radians, 0 east, turning towards south).
+    roll leans it about its own x axis at its feet (z = 0): positive tips
+    its top to its right."""
     c, s = math.cos(heading), math.sin(heading)
     # model x -> world (c, s); model y (its right) -> world (-s, c); then gl() flips y
-    return [c * scale, -s * scale, 0, x,
-            -s * scale, -c * scale, 0, -y,
-            0, 0, scale, z,
+    if not roll:
+        return [c * scale, -s * scale, 0, x,
+                -s * scale, -c * scale, 0, -y,
+                0, 0, scale, z,
+                0, 0, 0, 1]
+    cr, sr = math.cos(roll), math.sin(roll)
+    # its right tips down and its up towards its right
+    return [c * scale, -s * scale * cr, -s * scale * sr, x,
+            -s * scale, -c * scale * cr, -c * scale * sr, -y,
+            0, -scale * sr, scale * cr, z,
             0, 0, 0, 1]
 
 

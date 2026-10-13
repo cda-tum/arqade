@@ -35,6 +35,29 @@ def test_every_racer_has_a_voxel_model_of_a_sensible_size():
         assert all(len(c) == 3 and all(0 <= v <= 255 for v in c) for c in model.values()), key
 
 
+def test_robert_is_fast_and_light_and_grinds_the_wire_side_on():
+    """Brawl-Ket's ROBERT: FAST AND LIGHT, as Brawl-Ket calls him, and in
+    his own colours, standing on the wire with no car: feet apart along it,
+    one ahead and one behind, arms out for balance, and his head on top."""
+    robert = racers.BY_KEY["robert"]
+    assert (robert.name, robert.game) == ("ROBERT", "BRAWL-KET")
+    assert robert.speed == max(r.speed for r in racers.ROSTER)
+    assert robert.weight == min(r.weight for r in racers.ROSTER)
+    model = voxels.robert()
+    assert "robert" in voxels.RIDERS and voxels.RIDERS <= set(voxels.RACERS)
+    colors = set(model.values())
+    assert voxels.ROBERT_BODY in colors and voxels.ROBERT_ACCENT in colors
+    body = {k for k, c in model.items() if c in (voxels.ROBERT_BODY, voxels.shade(voxels.ROBERT_BODY, 0.65))}
+    feet = {x for x, y, z in body if z == 0 and abs(y) <= 1}
+    assert max(feet) >= 5 and min(feet) <= -5  # one foot ahead, one behind, both on the wire
+    assert not any(z == 0 and -2 <= x <= 2 for x, y, z in body)  # and apart: the legs make an A
+    cream = (voxels.ROBERT_ACCENT, voxels.shade(voxels.ROBERT_ACCENT, 0.8))
+    fists = [x for (x, y, z), c in model.items() if z >= 7 and c in cream]
+    assert max(fists) >= 9 and min(fists) <= -7  # arms out, fore and aft
+    top = max(z for x, y, z in model)
+    assert any(c == voxels.ROBERT_ACCENT for (x, y, z), c in model.items() if z >= top - 3)  # the visor
+
+
 @pytest.mark.parametrize("track_def", tracks.ALL, ids=lambda d: d.name)
 def test_alone_every_racer_laps_within_a_few_percent_of_the_others(track_def):
     """Balance: the ratings trade off, so no racer is simply faster (weight

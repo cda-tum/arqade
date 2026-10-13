@@ -14,7 +14,7 @@ put back in at the back of the pack, already moving.
 
 **Status:** prototype, played locally only. It covers:
 - three tracks in three scenes;
-- nine racers with a racer select;
+- ten racers with a racer select;
 - 1 to 4 players plus bots at three levels;
 - the lead as the score, and resets for whoever falls off the screen;
 - boost pads, jumps, and gates that come and go;
@@ -42,10 +42,12 @@ list (see "On the cabinet" below).
 
   The default is one player against 3 EASY bots, first to 60 s in front.
 - **Racer select:** like Mario Kart's. Everyone moves their own cursor over
-  the roster with their own stick or buttons, and sees their racer turning
-  in 3D, with its ratings.
-  - With one or two people, each locks in with A on their own pad (B
-    unlocks). The match starts once everyone has.
+  the roster (a 5 x 2 grid) with their own stick or buttons, and sees their
+  racer turning in 3D, with its ratings.
+  - With one or two people, each moves with the stick and locks in with A
+    on their own pad (B unlocks). The match starts once everyone has. The
+    buttons don't move the cursor then: A is also "right" on the buttons in
+    a race, and once moved the cursor to the next racer before locking in.
   - With three or four, the button players have no A to spare (it steers
     them), so Start starts with whatever everyone is on.
   - Start always starts at once. B with nobody locked in goes back to the
@@ -71,13 +73,33 @@ list (see "On the cabinet" below).
 
 | | Stick | Buttons |
 |---|---|---|
-| Gas | up | X |
-| Brake | down | B |
+| Faster (raise the cruise speed) | up | X |
+| Slower (lower it, braking) | down | B |
 | Change to the wire on your racer's left / right | left / right | Y / A |
 
-With neither gas nor brake, the racer slowly coasts down. Left and right
-always mean the racer's own left and right, whichever way it heads on the
-screen.
+Speed is a **cruise control**, so you never have to hold the stick up while
+you steer:
+- **Let go and your racer keeps its speed.** At GO it sets off flat out.
+- **Up raises the speed it holds**, quickly (from half to full speed in half
+  a second of holding). A short push is enough: the racer then gets there
+  on its own, at its own acceleration.
+- **Down lowers it and brakes at once**, at the racer's full braking, even
+  while it is still speeding up. Let go when it is slow enough for the
+  corner, and it holds that speed through it.
+- Down goes no lower than a quarter of top speed: a crawl, slower than any
+  corner needs, never a stop.
+- **Knocked back** by a bump, a bug or a Zeno trap, it gets back up to its
+  speed by itself. Off a boost pad it eases back down to it.
+- **After a spin-out** it gets going again no faster than the corner it is
+  in allows, not straight back to the speed that spun it.
+- **Put back in** after falling off the screen, it cruises on at the speed
+  it comes back with, which the corners just ahead allow.
+
+Your panel in the HUD shows your speed as a bar, with a white tick where the
+cruise control is set.
+
+Left and right always mean the racer's own left and right, whichever way it
+heads on the screen.
 
 Who drives with what depends on the number of people:
 
@@ -138,6 +160,7 @@ ratings from 1 to 5 that add up to 15, so none is better at everything.
 | CHEF | Overquqed | P1's teal chef on a steel trolley with a Bloch Bowl | 2 | 5 | 3 | 3 | 2 |
 | TOWER | Qlimbers | the stone tower on wheels, gold band, the cyan climber on its side | 3 | 3 | 3 | 5 | 1 |
 | PHOTON | Qlinko | the gold photon with its wave packet rippling out behind | 4 | 4 | 2 | 1 | 4 |
+| ROBERT | Brawl-Ket | the lean green puppet grinding the wire side on, arms out, sparks off his back foot | 5 | 3 | 2 | 1 | 4 |
 
 - **SPEED** is top speed and **ACCEL** how fast it gets there.
 - **GRIP** is how fast it can take a corner before it drifts (and spins).
@@ -170,7 +193,7 @@ so their limit is lower.
 - Over the limit, your racer **drifts**: it turns into the corner and slides
   out, scrubbing a little speed.
 - Further over, it **flashes red** (with a beep) and its spin meter fills.
-  Brake now.
+  Push down now.
 - A full meter **spins it out**: it keeps 15% of its speed and is stuck for
   0.7 s while the pack streams past, and it may well drop off the screen.
 
@@ -286,6 +309,10 @@ matching `#version` line.
   units across (`CAM_*` in `config.py`).
 - **Racers and props:** the voxel models become lit meshes of cubes, with
   only the faces that show (`mesh.py`).
+- **Riders:** ROBERT has no car: he stands on the wire, feet apart along
+  it, like Sonic grinding a rail. He leans into corners over his feet, more
+  the harder he corners, and sways a little all the time (`voxels.RIDERS`,
+  `RIDER_*` in `config.py`).
 - **Track:** one mesh, built once per track. It holds the slab, the glowing
   wires, kerbs, walls, pillars, start line, chevrons and kicker lips.
 - **Flat things:** shadows, rings, error bugs, gate glyphs, items and smoke
@@ -345,11 +372,14 @@ Short synthesized effects, as in Qurves (`sound.py`, no audio files):
   HOW TO PLAY card and out of it;
 - the countdown, locking in a racer, taking the lead, the last seconds
   before a win, and the win;
-- drifting, the red warning beep and the spin-out;
+- a soft tyre squeal while you drift (a loop that fades in, louder the
+  harder you slide, and out again), the red warning beep and the spin-out;
 - boost pads, take-off and landing;
 - bumps and pushes;
-- every gate and item: SWAP, the CNOT copy and losing it or its collapse,
-  the error bug arming and launching, bit and phase flips, the Zeno trap;
+- the gates and items: the CNOT copy and losing it or its collapse, the
+  error bug arming and launching, bit and phase flips, the Zeno trap. The
+  pickups (copy, ERR, ZENO) are kept low and soft, as they come by often;
+  a SWAP makes no sound at all;
 - being put back in after falling off the screen.
 
 What happens to a bot sounds too. Drifting, the warning, boosts, jumps,
@@ -365,12 +395,16 @@ hum on purpose: it would grate on a public cabinet.
   - leading and resets: how long off the screen counts, where and how fast
     a racer comes back, the lead margin and the targets;
   - the base car (`CAR`) and what each rating step is worth (`STAT_*`);
+  - the cruise control (`CRUISE_*`): the start, how fast up raises it, and
+    the crawl down stops at;
   - the corner thresholds (`DRIFT_LOAD`, `WARN_LOAD`, `SLIP_*`, `SPIN_*`);
   - slipstream, bumps, boosts, jumps, gates, items and timings;
   - the numbers of people and bots, and the bots' colours.
 - `racers.py`: the roster's ratings. Re-run `tools/balance.py` after changing
   them.
 - `ai.py`: the bots' levels (`SKILLS`).
+- `sound.py`: the effects, their levels (`VOLUME`, `SOFT`), and the drift
+  squeal (`DRIFT_*`).
 - `scenes.py`: each scene's colours, light, fog and props.
 
 ## Code

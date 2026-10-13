@@ -8,7 +8,7 @@ import pygame
 
 from qircuit import config, gfx
 from qircuit.input import Input
-from qircuit.match import Match
+from qircuit.match import RACE, Match
 from qircuit.render import Renderer
 from qircuit.sound import load_sounds
 
@@ -42,6 +42,8 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
         if match.quit:  # QUIT on the title: back to the cabinet's menu
             break
         sounds.play_events(events, match.people)
+        racing = match.state == RACE and not match.paused
+        sounds.update_drift(match.race if racing else None, match.people, dt)
         renderer.show_fps = clock.get_fps() if show_fps else None
         renderer.draw(match, events, dt)
         renderer.present()

@@ -52,6 +52,16 @@ def test_a_model_matrix_points_the_model_along_its_heading():
     assert right[:3] == pytest.approx((5, -20, 0))  # its right is west when it heads south
 
 
+def test_a_roll_leans_the_model_over_its_feet_towards_its_right():
+    still = camera.model_matrix(10, 20, 0, math.pi / 2, 1.0)
+    assert camera.model_matrix(10, 20, 0, math.pi / 2, 1.0, 0.0) == still
+    m = camera.model_matrix(10, 20, 0, math.pi / 2, 1.0, 0.3)  # heading south: its right is west
+    assert camera.apply(m, (0, 0, 0))[:3] == pytest.approx((10, -20, 0))  # the feet stay put
+    assert camera.apply(m, (5, 0, 0))[:3] == pytest.approx((10, -25, 0))  # so does the nose
+    head = camera.apply(m, (0, 0, 10))
+    assert head[0] == pytest.approx(10 - 10 * math.sin(0.3)) and head[2] == pytest.approx(10 * math.cos(0.3))
+
+
 def test_pixels_put_the_middle_of_the_screen_in_the_middle():
     d = Director()
     d.snap(0, 0, 0, 0.0)

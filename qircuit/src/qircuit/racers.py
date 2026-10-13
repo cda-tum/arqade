@@ -62,5 +62,6 @@ ROSTER = (
     Racer("chef", "CHEF", "OVERQUQED", speed=2, accel=5, grip=3, weight=3, handling=2),
     Racer("rook", "TOWER", "QLIMBERS", speed=3, accel=3, grip=3, weight=5, handling=1),
     Racer("photon", "PHOTON", "QLINKO", speed=4, accel=4, grip=2, weight=1, handling=4),
+    Racer("robert", "ROBERT", "BRAWL-KET", speed=5, accel=3, grip=2, weight=1, handling=4),
 )
 BY_KEY = {r.key: r for r in ROSTER}

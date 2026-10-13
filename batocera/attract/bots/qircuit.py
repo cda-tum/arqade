@@ -3,9 +3,10 @@
 The first bot built on its game's own AI (qircuit/src/qircuit/ai.py) rather
 than its own logic: the in-game opponents, the bots behind Qircuit's title
 and this reel bot are one driver. Here it sits in P1's and P2's seats at
-BRUTAL and its Controls become stick moves (up gas, down brake, a one-frame
-push left or right to change wires), while the match's own bots race at
-TOUGH around them. See "AI opponents" in ../../../AGENTS.md.
+BRUTAL and its Controls become stick moves (up to raise the cruise speed,
+down to lower it, a one-frame push left or right to change wires), exactly
+what a person's stick does, while the match's own bots race at TOUGH
+around them. See "AI opponents" in ../../../AGENTS.md.
 
 Not yet recordable: capture.py reads a 2D display after its flip, and
 Qircuit draws with OpenGL; it needs SDL's offscreen driver and a read of the
@@ -19,7 +20,8 @@ the match it goes back to the title for the next track.
 """
 
 from qircuit.ai import Driver
-from qircuit.match import MATCH_END, RACE, SELECT, SETTINGS_ROWS, TITLE, TUTORIAL
+from qircuit.match import MATCH_END, RACE, SELECT, SELECT_COLS, SETTINGS_ROWS, TITLE, TUTORIAL
+from qircuit.racers import ROSTER
 
 SECONDS = 90.0
 SKIP = 4.0
@@ -86,7 +88,8 @@ class Bot:
 
     def select(self, match, t):
         """Each person's cursor a few racers on from last time, then Start."""
-        want = {"p1": (self.races * 2) % 9, "p2": (self.races * 2 + 4) % 9}
+        n = len(ROSTER)
+        want = {"p1": (self.races * 2) % n, "p2": (self.races * 2 + 5) % n}
         off = [p for p in want if match.picks.get(p) != want[p]]
         if not off:
             if match.t > 1.2:
@@ -94,7 +97,7 @@ class Bot:
             return
         if self.pads.frame % 2 == 0:
             p = off[0]
-            down = want[p] // 3 != match.picks[p] // 3  # the grid is 3 wide: rows first
+            down = want[p] // SELECT_COLS != match.picks[p] // SELECT_COLS  # rows first
             self.pads.stick(SEATS[p], 0.0 if down else 1.0, 1.0 if down else 0.0)
 
     def drive(self, match):

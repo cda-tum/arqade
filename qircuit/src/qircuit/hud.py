@@ -25,7 +25,7 @@ GOLD_TEXT = (255, 220, 80)
 SUFFIX = {1: "ST", 2: "ND", 3: "RD"}
 OFF = (34, 38, 64)  # an unused button, an empty bar
 # The cabinet's 2x3 buttons as printed, and what each does in a race (None: unused)
-CLUSTER = (("L", None), ("X", "GAS"), ("R", None), ("Y", "LEFT"), ("B", "BRAKE"), ("A", "RIGHT"))
+CLUSTER = (("L", None), ("X", "FASTER"), ("R", None), ("Y", "LEFT"), ("B", "SLOWER"), ("A", "RIGHT"))
 
 
 def ordinal(i: int) -> str:
@@ -38,9 +38,9 @@ def shade(color, k: float):
 
 
 def select_layout(n: int) -> tuple[list[pygame.Rect], list[pygame.Rect]]:
-    """The racer select's boxes: one per roster racer (3 x 3), and one per
+    """The racer select's boxes: one per roster racer (5 x 2), and one per
     person along the bottom. The renderer draws racers into them."""
-    tw, th, gap = 150, 92, 8
+    tw, th, gap = 168, 142, 8
     gx = W // 2 - (SELECT_COLS * tw + (SELECT_COLS - 1) * gap) // 2
     tiles = [pygame.Rect(gx + (i % SELECT_COLS) * (tw + gap), 36 + (i // SELECT_COLS) * (th + gap), tw, th)
              for i in range(len(racers.ROSTER))]
@@ -182,6 +182,7 @@ class Hud:
             else:
                 status, tone = ordinal(standings.index(player)), config.COLOR_DIM
             s.blit(self.text(status, self.font8, tone, False), (x + 10, y + 17))
+            self.speedo(s, race, player, pygame.Rect(x + 48, y + 18, pw - 96, 6), color)
             share = min(1.0, match.lead_time.get(player, 0.0) / match.target)
             s.fill((34, 38, 64), (x + 10, y + ph - 6, pw - 20, 3))
             s.fill(color, (x + 10, y + ph - 6, round((pw - 20) * share), 3))
@@ -199,6 +200,17 @@ class Hud:
                 pygame.draw.rect(s, WHITE, r.inflate(2, 2), 1)
             img = self.text(str(int(match.lead_time.get(player, 0.0))), self.font8, INK, False)
             s.blit(img, img.get_rect(center=r.center))
+
+    def speedo(self, s: pygame.Surface, race, player: str, rect: pygame.Rect, color) -> None:
+        """A person's speed as a bar (full: top speed), and a white tick where
+        their cruise control is set: up and down move the tick, and the bar
+        follows it."""
+        b = race.front(player)
+        stats = race.racers[player].stats
+        s.fill(OFF, rect)
+        s.fill(shade(color, 0.8), (rect.x, rect.y, round(rect.w * min(1.0, b.v / stats.max_speed)), rect.h))
+        tick = rect.x + round((rect.w - 1) * min(1.0, race.cruise_speed(b, stats) / stats.max_speed))
+        s.fill(WHITE, (tick - 1, rect.y - 2, 2, rect.h + 4))
 
     def match_end(self, s: pygame.Surface, match: Match) -> None:
         winner = match.winner
@@ -252,7 +264,8 @@ class Hud:
         y += 6
         for line in ("LEAD THE PACK: EVERY SECOND IN FRONT COUNTS",
                      "OFF THE SCREEN: BACK IN AT THE BACK OF THE PACK",
-                     "STICK: UP GAS  DOWN BRAKE  LEFT / RIGHT: CHANGE WIRE",
+                     "STICK UP / DOWN: FASTER / SLOWER, AND IT STAYS",
+                     "LEFT / RIGHT: CHANGE WIRE",
                      "3-4 PLAYERS: P3 + P4 USE X Y B A"):
             self.center(s, self.text(line, self.font8, config.COLOR_DIM, False), y)
             y += 13
@@ -320,7 +333,7 @@ class Hud:
         s.blit(self.text("CONTROLS", self.font16, GOLD_TEXT, False), (x0, y))
         y += 28
         self.stick(s, x0 + 24, y + 22)
-        for i, line in enumerate(("UP: GAS", "DOWN: BRAKE", "LEFT/RIGHT: CHANGE WIRE")):
+        for i, line in enumerate(tutorial.STICK_LINES):
             s.blit(self.text(line, self.font8, config.COLOR_TEXT, False), (x0 + 64, y + 4 + 15 * i))
         y += 62
         for i, (label, action) in enumerate(CLUSTER):
@@ -329,7 +342,7 @@ class Hud:
             pygame.draw.circle(s, GOLD_TEXT if action else OFF, c, 11)
             img = self.text(label, self.font8, INK if action else config.COLOR_DIM, False)
             s.blit(img, img.get_rect(center=(c[0] + 1, c[1] + 1)))
-        for i, line in enumerate(("X: GAS   B: BRAKE", "Y / A: WIRE LEFT / RIGHT")):
+        for i, line in enumerate(tutorial.BUTTON_LINES):
             s.blit(self.text(line, self.font8, config.COLOR_TEXT, False), (x0 + 88, y + 8 + 15 * i))
         y += 66
         img = self.text("START", self.font8, GOLD_TEXT, False)
