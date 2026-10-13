@@ -65,6 +65,21 @@ def test_every_cue_has_a_sound_and_the_effects_build():
     assert len(sfx["warp"]) == max(len(v) for v in sfx.values())
 
 
+def test_the_shooter_and_the_victim_of_a_hit_hear_different_sounds():
+    hit = Event("collapse", "green", "p1")  # P1's MEASURE collapsed a CPU
+    assert audio.sound_for(hit, ("p1",)) == "scored"
+    assert audio.sound_for(Event("collapse", "p1", "green"), ("p1",)) == "collapsed"
+    assert audio.sound_for(Event("decohered", "white", "p2"), ("p1", "p2")) == "deco_scored"
+    assert audio.sound_for(Event("decohered", "p2", "white"), ("p1", "p2")) == "static"
+    # P1 measures P2: both sounds, once each
+    both = audio.sounds_for([Event("collapse", "p2", "p1")], ("p1", "p2"))
+    assert set(both) == {"collapsed", "scored"}
+    # every item has a sound of its own
+    names = {audio.sound_for(Event("item", "p1", item)) for item in config.ITEMS}
+    assert len(names) == len(config.ITEMS)
+    assert audio.sound_for(Event("hazard", "p1", "mine")) != audio.sound_for(Event("hazard", "p1", "cloud"))
+
+
 def test_the_engine_rises_with_speed_and_loops_whole_periods():
     assert audio.engine_step(0.0) == 0 and audio.engine_step(5.0) == audio.ENGINE_STEPS - 1
     assert audio.engine_step(1.0) < audio.engine_step(1.5)

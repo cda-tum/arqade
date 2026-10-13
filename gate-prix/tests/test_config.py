@@ -18,7 +18,7 @@ def test_race_shape():
 def test_resolution_divides_the_panel_exactly():
     assert (config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT) == (960, 540)
     assert 1920 % config.INTERNAL_WIDTH == 0 and 1080 % config.INTERNAL_HEIGHT == 0
-    assert config.VIEW_2P == (960, 270)
+    assert config.VIEW_2P == (480, 540)  # side by side: two of them fill the screen
 
 
 @pytest.mark.parametrize(

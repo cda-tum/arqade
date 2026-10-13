@@ -3,7 +3,7 @@ import random
 import pygame
 import pytest
 
-from gate_prix import circuit, config, sprites, track
+from gate_prix import circuit, config, road, sprites, track
 from gate_prix.road import RoadView
 from gate_prix.sprites import Background, SpriteCache
 from gate_prix.track import SEG, Track
@@ -182,9 +182,23 @@ def test_the_sprite_cache_holds_every_kind_at_every_size(cache):
     expected |= {f"flame:{i}" for i in range(sprites.FLAME_FRAMES)}
     expected |= {f"arch:{g}" for g in circuit.GATES} | {f"arch:{g}:lit" for g in circuit.GATES}
     expected |= {f"car:{name}" for name in config.CAR_COLORS}
-    assert set(cache.images) == expected
+    expected |= {"gantry", "shot", "turbo:1", "turbo:2"}
+    expected |= {f"spark:{lv}:{f}" for lv in range(3) for f in range(sprites.SPARK_FRAMES)}
+    expected |= {f"{k}:{f}" for k in ("static", "deco") for f in range(sprites.STATIC_FRAMES)}
+    expected |= {f"mine:{f}" for f in range(sprites.MINE_FRAMES)}
+    derived = set()
+    for name in config.CAR_COLORS:
+        derived |= {f"car:{name}:t{k}" for k in range(-sprites.TILTS, sprites.TILTS + 1) if k}
+        derived |= {f"car:{name}:ghost{f}" for f in range(sprites.GHOST_FRAMES)}
+    assert set(cache.images) == expected | derived
     for kind, images in cache.images.items():
         assert len(images) == config.SPRITE_SIZES
+        if kind in derived:
+            continue
+        cap = sprites.MAX_SCALE.get(kind)
+        if cap is not None:  # never drawn nearer than its cap: no image for those sizes
+            assert all((e is None) == (s > cap) for e, s in zip(images, cache.scales)), kind
+            images = [e for e in images if e is not None]
         heights = [img.get_height() for img, _, _ in images]
         # within a pixel: far away an arch's badge keeps a minimum size, so it barely grows
         assert all(b >= a - 1 for a, b in zip(heights, heights[1:])), kind
@@ -213,7 +227,8 @@ def test_the_sprite_cache_builds_once(cache, monkeypatch):
     surface = pygame.Surface((960, 270))
     for kind in cache.images:
         for scale in (18, 25, 77, 300, 999, 1080):
-            assert cache.blit(surface, kind, 480, 200, scale)
+            cap = sprites.MAX_SCALE.get(kind)
+            assert cache.blit(surface, kind, 480, 200, scale) == (cap is None or scale < cap), kind
 
 
 def test_blit_picks_the_nearest_size_and_skips_what_is_too_near(cache):
@@ -288,6 +303,49 @@ def test_a_decoy_is_dimmer_than_the_right_arch(cache):
     for g in circuit.GATES:
         assert brightness(cache.images[f"arch:{g}"][i][0]) < 0.75 * brightness(
             cache.images[f"arch:{g}:lit"][i][0]), g
+
+
+def test_a_drifting_car_is_tilted_about_its_foot_and_a_tunnelling_one_is_see_through(cache):
+    i = cache.index(300)
+    img, ax, ay = cache.images["car:p1"][i]
+    for k in (1, -1, 2, -2):
+        tilted, tx, ty = cache.images[f"car:p1:t{k}"][i]
+        box, tbox = img.get_bounding_rect(), tilted.get_bounding_rect()
+        # turned about its foot: it stays centred on its x and on the road
+        assert tilted is not img and abs((tbox.centerx - tx) - (box.centerx - ax)) <= 3, k
+        assert abs((tbox.bottom - ty) - (box.bottom - ay)) <= 0.1 * box.w, k
+    assert sprites.tilt_kind("car:p1", 0.5) == "car:p1"
+    assert sprites.tilt_kind("car:p1", sprites.TILT_STEP) == "car:p1:t1"
+    assert sprites.tilt_kind("car:p1", -99) == f"car:p1:t-{sprites.TILTS}"
+    ghost, gx, gy = cache.images["car:p1:ghost0"][i]
+    assert (gx, gy) == (ax, ay)
+
+    def mean_alpha(s):
+        return sum(s.get_at((x, y))[3] for x in range(s.get_width()) for y in range(s.get_height()))
+
+    assert mean_alpha(ghost) < 0.7 * mean_alpha(img)
+
+
+def test_the_finish_line_is_chequered_across_the_road():
+    fridge = track.fridge()
+    view = RoadView((0, 0, 480, 540), spread=config.VIEW_2P_SPREAD)
+    surface = pygame.Surface((480, 540))
+    view.draw(surface, fridge, -1200.0, 0.0, [])
+    # the band, just ahead: both of its colours along a line across the road
+    y = round(view.place(1200.0, 0.0)[1])
+    row = {tuple(surface.get_at((x, y)))[:3] for x in range(120, 360)}
+    assert road.CHEQUER[0] in row and road.CHEQUER[1] in row
+
+
+def test_a_wider_spread_keeps_the_road_and_cars_their_size_in_a_narrow_view():
+    fridge = track.fridge()
+    wide = RoadView((0, 0, 960, 540))
+    narrow = RoadView((0, 0, 480, 540), spread=480)
+    for v in (wide, narrow):
+        v.project(fridge, 0.0, 0.0)
+    a, b = wide.place(config.CAR_AHEAD, 0.3), narrow.place(config.CAR_AHEAD, 0.3)
+    assert a[2] == pytest.approx(b[2]) and a[1] == pytest.approx(b[1])
+    assert a[0] - 480 == pytest.approx(b[0] - 240)
 
 
 def test_the_right_arch_marker_is_built_once_at_a_few_sizes():

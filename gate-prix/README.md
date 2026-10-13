@@ -12,14 +12,19 @@ lap, a simpler HUD, items that explain themselves, the CIRCUIT CHECK as an event
 sense of speed). The race, items, CPU racers, title with an attract race, pause, results,
 sound, `--input-test` and the Batocera deploy script are in; the screens get the look
 file's polish next (Task 6 of the plan). Button numbers follow the ones confirmed on the
-cabinet. The second playtest's rules are in (drifting, the noise storm, MEASURE, TUNNEL and
-DECOHERENCE); their visuals come next (Task 5d), so until then the storm, the shots and
-the clouds are not drawn.
+cabinet. The second playtest's changes are in: drifting, the noise storm, MEASURE, TUNNEL
+and DECOHERENCE (the rules), and the screens: the vertical split, the finish line and its
+gantry, the minimap, item icons, the drift and item effects, the QUIT row and the HOW TO
+PLAY card.
 
 ## The race
 
-- **6 cars, 3 laps** of about 40 s. 2 PLAYERS race in split screen (P1 on top, blue; P2
-  below, red) against 4 CPU racers; 1 PLAYER gets the full screen against 5.
+- **6 cars, 3 laps** of about 40 s. 2 PLAYERS race in a vertical split screen (P1 on the
+  left, blue; P2 on the right, red) against 4 CPU racers; 1 PLAYER gets the full screen
+  against 5.
+- **The start and finish line** is a chequered band across the road under a gantry with
+  a "GATE PRIX" banner and five start lights: red one by one in the 3-2-1 countdown, all
+  green at GO. Crossing it shows LAP 2/3, and FINAL LAP with STORM AHEAD.
 - **The target circuit** is 16 random gates from H, X, Y and Z (never the same gate twice
   in a row), one per **gate row**: 8 rows a lap, on **laps 1 and 2 only**. A row has 1 to
   3 arches spread across the road. The right one, the slot's gate, glows brightly under a
@@ -41,35 +46,49 @@ the clouds are not drawn.
   so a better circuit's warp passes them.
   A check under +5% (3/16 or fewer) is **NO BOOST**: no warp at all.
 - **The final lap** has no gates, but a **noise storm**: your own decoherence hazards, that
-  only you see and hit (the CPUs get theirs). There are 4 + 2 per wrong gate of the check
+  only you see (drawn in your view only) and hit (the CPUs get theirs). There are 4 + 2 per wrong gate of the check
   (a perfect circuit 4, 8/16 20, at most 24), spread over the lap, never within 1 s of the
   finish, and they always leave a clear line more than a car wide:
-  - a **static cloud** (wide) takes your boosts and caps you at 70% for 1 s;
-  - a **bit-flip mine** (small) spins you out: 40% speed, and no steering for 0.8 s.
+  - a **static cloud** (wide, crackling grey-violet) takes your boosts and caps you at 70%
+    for 1 s;
+  - a **bit-flip mine** (a small spiked orb marked X) spins you out: 40% speed, and no
+    steering for 0.8 s.
 - **Drifting:** pull the stick back *and* steer (at least 40% of the stick, from 60% of the
   top speed). The car slides, turns tighter and runs at 92% speed. After 0.7 s it is
-  charged to level 1, after 1.5 s to level 2; letting go gives a **mini-turbo**, +25% for
-  0.6 s or +40% for 1 s. Slowing below half speed, a bump or a hit ends it with nothing.
+  charged to level 1, after 1.5 s to level 2 (the charge only grows in a bend); letting go
+  gives a **mini-turbo**, +25% for 0.6 s or +40% for 1 s. Slowing below half speed, a bump
+  or a hit ends it with nothing. A drifting car tilts, with sparks at its rear wheels:
+  white, then blue at level 1 and gold at level 2, and the mini-turbo flashes as it fires.
 - **Off the road** (on the copper plate) the top speed drops to 60%. Cars bump.
 - **Item boxes** (two lines a lap, every lap) always give an item: the back of the field
   gets more MEASURE, TUNNEL and SPLIT, the front more DECOHERENCE and QEC, and on the final
-  lap there is no SPLIT or QEC. You hold one; its slot pulses with its name, a big A and
-  what it does, and the first time you get each one a banner says "PRESS A TO USE ...":
-  - **SPLIT** ("a clone takes a second gate"): for the next 2 gate rows a translucent
+  lap there is no SPLIT or QEC. A box's item pops up over your car as you take it. You hold
+  one; its slot pulses with its icon, its name and A (in 1P also what it does), and the
+  first time you get each one a banner says "PRESS A TO USE ...". The icons:
+  - **SPLIT** (two overlapping cars, "a clone takes a second gate"): for the next 2 gate rows a translucent
     clone drives mirrored across the centre line; if either of you takes the right arch,
     the slot is right. It is over with the last gate row: one still held is dropped;
-  - **QEC** ("fixes your last wrong gate"): error correction, your most recent wrong or
+  - **QEC** (a shield with a check mark, "fixes your last wrong gate"): error correction, your most recent wrong or
     empty slot becomes right (for the check and the results, not the streak);
-  - **MEASURE:** a homing shot at the nearest car ahead within 30,000 units (about 2.7 s).
-    It flies 0.4 s and **collapses** that car: a spin-out, its streak reset, its boosts
+  - **MEASURE** (a meter, its needle swung over): a homing shot at the nearest car ahead
+    within 30,000 units (about 2.7 s). A gold orb flies 0.4 s on a beam from your car and
+    **collapses** that car: a spin-out, its streak reset, its boosts
     gone. With nobody in range it fizzles;
-  - **TUNNEL:** for 3 s you pass through cars, drive off-road at full speed, and are
+  - **TUNNEL** (a see-through car passing through a wall): for 3 s, see-through and
+    shimmering, you pass through cars, drive off-road at full speed, and are
     immune to the storm, clouds and MEASURE;
-  - **DECOHERENCE:** drops a noise cloud just behind you for 10 s. Whoever drives through
-    it loses their boosts and, on laps 1-2, their NEXT GATE badge and arch marker go blank
-    for 1.5 s (on the final lap it is a storm cloud's slowdown instead).
-- **The HUD:** one big NEXT GATE badge with a dot under it for each of the 16 slots (✓
-  green, ✗ red), the place and the lap, and the held item.
+  - **DECOHERENCE** (a static cloud): drops a violet noise cloud on the road just behind
+    you for 10 s. Whoever drives through it loses their boosts and, on laps 1-2, their
+    NEXT GATE badge turns to static (NO SIGNAL) and the arch marker goes for 1.5 s (on the
+    final lap it is a storm cloud's slowdown instead). The shooter of a MEASURE that lands
+    and the dropper of a cloud that is hit get a sound of their own.
+- **The HUD:** top left one big NEXT GATE badge with a dot for each of the 16 slots (✓
+  green, ✗ red; in 2P two rows of 8, a lap each); past the last row "TO THE LINE", and on
+  the final lap "FINAL LAP: NO GATES". Top right the place and the lap, and the held item
+  under them (beside them in 1P).
+- **The minimap:** the lap from above with a dot per car (yours bigger, ringed), small
+  ticks for the gate rows (gold) and boxes (blue) and the finish line. 1P: bottom left;
+  2P: one map for both, straddling the divider at the bottom.
 - **Speed you can feel:** the top speed is 12% up from the first build, the roadside
   stands close to the road, speed lines show at top speed, the camera shakes a little,
   and a boost widens the field of view, lights the exhaust and whooshes.
@@ -91,9 +110,16 @@ the clouds are not drawn.
 | Select (only for the quit) | Select | 3 | 4 |
 | Quit | Start + Select on one pad | 1 + 3, or Esc | 2 + 4, or Esc |
 
-- **Title:** the stick picks 1 PLAYER (up) or 2 PLAYERS (down), A or Start begins (a
-  button already held when the game starts must be let go first). Untouched for 3 s, an
-  attract race of 6 CPU-driven cars plays behind it.
+- **Title:** 1 PLAYER / 2 PLAYERS / QUIT. The stick moves up and down one row at a time,
+  stopping at the ends (no wrap). A begins the highlighted mode, and on **QUIT** quits the
+  game at once. Start always begins (1 PLAYER when QUIT is highlighted) and never quits;
+  B does nothing. A button already held when the game starts must be let go first.
+  Untouched for 3 s, an attract race of 6 CPU-driven cars plays behind it.
+- **HOW TO PLAY:** every match begun from the title (not a rematch) opens on a card: the
+  goal, a demo of a car steering through the glowing arch and boosting (the real race and
+  CPU driver), and the controls (the stick: steer, brake, STICK BACK + STEER: DRIFT; the
+  L X R / Y B A buttons with A lit; START). Any button on either pad goes on, after its
+  first 0.3 s; the stick doesn't. Start + Select still quits and the idle timeout runs.
 - **Pause:** Start, on either pad. The stick moves, A picks, B or Start resumes.
 - **Idle:** 60 s untouched anywhere (paused too) returns to the title, at 1 PLAYER.
 - With 1 PLAYER either pad drives. The accelerator is automatic.
@@ -119,9 +145,11 @@ uv run python -m gate_prix --selftest 600 --shots /tmp/gate-prix-shots
 From the repo root, `./arqade.sh` runs it from the ARQADE launcher's menu too.
 
 `--selftest SECONDS` plays a scripted session through the real loop and renderer, as fast
-as the machine draws: the title and the attract race, a 1P race steered by a bot with the
-stick mashed on top (pause and resume, the result, a rematch, QUIT TO TITLE with A held),
-a 2P race to the result, and a race left alone until the idle timeout. On the way it checks
+as the machine draws: the title and the attract race, the menu held down onto QUIT and
+back, Start on QUIT (a 1P match) and its HOW TO PLAY card (a press in its first 0.3 s
+ignored), a 1P race steered by a bot with the stick mashed on top (pause and resume, the
+result, a rematch, QUIT TO TITLE with A held), the 2P card and a 2P race to the result, a
+race left alone until the idle timeout, and finally A on QUIT, which must quit the game. On the way it checks
 that all 16 gates come before the final lap and none on it, and that the CIRCUIT CHECK's
 freeze lasts about a second while the car drives on. It checks the
 match at every step and exits 0 if all held (it stops early, still 0, after SECONDS of game
@@ -131,15 +159,16 @@ races.
 ## Tests
 
 ```bash
-uv run pytest -q                                            # about 20 s
+uv run pytest -q                                            # about 40 s
 uvx --from 'ruff==0.15.22' ruff check src tests tools
 ```
 
 The tests cover the circuit, the track and its gate rows, the car's handling, the race
 rules, items, the CPU racers (over many seeds), the road projection and sprite cache, the
 match flow (title, attract, countdown, pause, idle, finish, result), the input (axes,
-presses, the armed Start + Select quit, keyboard fallbacks, `--no-keyboard`), the sound
-table, and a short scripted session of the real loop.
+presses, the armed Start + Select quit, keyboard fallbacks, `--no-keyboard`), the QUIT row
+and the HOW TO PLAY card, the demo, the minimap, the renderer drawing every effect from its
+caches only, the sound table, and a short scripted session of the real loop.
 
 ## Tools
 
@@ -147,7 +176,7 @@ table, and a short scripted session of the real loop.
 |---|---|
 | `tools/road_demo.py` | Drive the camera round the track (`--screenshot` for one frame). |
 | `tools/drive_demo.py` | A real race with debug text; `--auto` drives P1 perfectly. |
-| `tools/benchmark.py` | Times the road renderer (2 views, then 1; plain, then with the warp's effects); runs headless, also on the cabinet. |
+| `tools/benchmark.py` | Times the road renderer (2 views of 480x540, then 1; plain, then with the warp's and the drift, storm, gantry and minimap effects); runs headless, also on the cabinet. |
 | `tools/handling.py` | How the track drives, piece by piece, for tuning the handling. |
 | `tools/race_stats.py` | Races the CPUs over many seeds: gate rates, finish gaps and P1's margin, bumps, items, turbos and hits. |
 
@@ -161,16 +190,20 @@ table, and a short scripted session of the real loop.
 | `race.py` | The race: cars, arches, items (shots, clouds), laps, the CIRCUIT CHECK, the storm, places, the finish. Pure. |
 | `storm.py` | The final lap's noise storm: one racer's hazards, laid out from its check. Pure. |
 | `bot.py` | The CPU racers (and the attract race's drivers, and a finished player's autopilot). Pure. |
-| `match.py` | Title, attract, countdown, race, pause, result, idle. Pure. |
-| `road.py` | The pseudo-3D projection and road drawing for one view. |
-| `sprites.py` | Every sprite pre-rendered at 24 sizes at start-up; the backgrounds per view size. |
+| `match.py` | Title (and QUIT), the HOW TO PLAY card, attract, countdown, race, pause, result, idle. Pure. |
+| `road.py` | The pseudo-3D projection and road drawing (and the chequered lap line) for one view. |
+| `sprites.py` | Every sprite pre-rendered at 24 sizes at start-up (cars tilted and see-through too, the gantry, sparks, the storm, shots); the backgrounds per view size. |
+| `icons.py` | The five item icons, drawn once per size. |
+| `minimap.py` | The lap from above, drawn once; a dot per car per frame. |
+| `tutorial.py` | The HOW TO PLAY card and its demo (a real race, the CPU driver on P1's car). |
 | `render.py` | The views, the HUD, the banners and the screens. |
 | `audio.py` | Synthesised effects and the engine hum (pitch follows speed); silent without a mixer. |
 | `input.py`, `display.py` | Pads and dev keys; the 960x540 surface scaled onto the screen. |
 | `game.py`, `main.py` | The fixed 60 Hz loop; the command line. `selftest.py`: the scripted session. |
 | `input_test.py`, `config.py` | The input diagnostic; every number, colour and button. |
 
-Rendering is 960x540 (each 2P view 960x270), scaled exactly 2x by `pygame.SCALED` on the
+Rendering is 960x540 (each 2P view 480x540, projecting the road as if 640 wide so the cars
+keep their size), scaled exactly 2x by `pygame.SCALED` on the
 cabinet's 1920x1080 panel. Smooth, anti-aliased art, not pixel art: nothing is rescaled
 per frame, only blitted from the start-up caches.
 

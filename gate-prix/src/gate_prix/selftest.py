@@ -1,15 +1,19 @@
 """`--selftest SECONDS`: a scripted session through the real loop, renderer and match.
 
 It plays, as a visitor would, and checks the match at every turn:
-1. the title, untouched until the attract race starts, then a while of it;
-2. 1 PLAYER: the countdown, a race steered by a bot with the stick mashed on top (A
+1. the title, untouched until the attract race starts, then a while of it; the menu moved
+   down onto QUIT (a held stick stays there) and back up;
+2. Start on QUIT: a 1 PLAYER match (Start never quits), its HOW TO PLAY card (a press in
+   its first 0.3 s ignored, then X goes on), the countdown, a race steered by a bot with the stick mashed on top (A
    pressed at random, Select tapped, Start to pause, the pause menu moved and B to
    resume), through the CIRCUIT CHECK (all 16 gates before it, a freeze of about a
    second while the car drives on, no gate after it), to the finish and the result; a
    mashed A in the result's lock is ignored, then A rematches; in the rematch, pause and
    QUIT TO TITLE with A held on: the title must wait for it to be let go;
-3. 2 PLAYERS (picked with the stick, held: it must not flicker): a race with both pads driven the same way, to the result, B to the title;
-4. a race left untouched: 60 s later it is back on the title, at 1 PLAYER.
+3. 2 PLAYERS (picked with the stick): the card, then a race with both pads driven the same
+   way, to the result, B to the title;
+4. a race left untouched: 60 s later it is back on the title, at 1 PLAYER;
+5. QUIT, with A: the game exits (the script fails if it is still running a frame later).
 
 It stops after SECONDS of game time (exit 0 if every check held until then) or at the
 end of the script. With --shots DIR it saves a screenshot of every screen on the way.
@@ -25,7 +29,8 @@ import time
 import pygame
 
 from gate_prix import bot, config
-from gate_prix.match import COUNTDOWN, PAUSED, RACE, RESULT, TITLE, FrameInput, PlayerInput
+from gate_prix.match import (COUNTDOWN, HOWTO, PAUSED, RACE, RESULT, TITLE, FrameInput,
+                             PlayerInput)
 
 DT = 1.0 / config.FPS
 
@@ -119,6 +124,7 @@ class Script:
 
     def _press(self, player="p1", **kw) -> FrameInput:
         held = any(kw.get(k) for k in ("a", "b", "start"))
+        kw.setdefault("button", held)
         players = {p: PlayerInput() for p in ("p1", "p2")}
         players[player] = PlayerInput(held=held, **kw)
         return FrameInput(players, activity=True)
@@ -159,20 +165,32 @@ class Script:
         yield from self.idle(DT)
         check(m.race.time > 7.0, "the attract race drives")
 
-        # 1 PLAYER: down and up again, then Start
+        # the menu: down onto QUIT and back up, then Start on QUIT
         yield from self.tap(nav=(0, 1))
-        check(m.mode == 1 and not m.attract, "the stick stops the demo, and only that")
-        for k in range(40):  # the stick held down, auto-repeating: 2 PLAYERS, no flicker
-            yield self._press(nav=(0, 1) if k == 0 or self.rng.random() < 0.2 else (0, 0))
-            check(m.mode == 2, "a held stick stays on 2 PLAYERS")
-        for k in range(60):  # held up-right, the y axis two frames late: 1 PLAYER, steady
+        check(m.title_index == 0 and not m.attract, "the stick stops the demo, and only that")
+        yield from self.tap(nav=(0, 1))
+        check(m.mode == 2 and m.title_index == 1, "down: 2 PLAYERS")
+        for k in range(40):  # the stick held down, auto-repeating: QUIT, and it stays there
+            yield self._press(nav=(0, 1) if k == 0 or self.rng.random() < 0.2 else (0, 0),
+                              stick=(0, 1))
+            check(m.title_index == 2, "a held stick stops on QUIT, the last row")
+        yield from self.snap("title-quit")
+        for k in range(60):  # held up-right, the y axis two frames late: one step up
             yield self._press(nav=(1 if k % 9 == 0 else 0, -1 if k == 2 else 0),
                               stick=(1, -1 if k >= 2 else 0))
-            check(m.mode == (2 if k < 2 else 1), "a held diagonal picks one mode")
-        yield from self.idle(0.1)
-        check(m.mode == 1, "up: back to 1 PLAYER")
+            check(m.title_index == (2 if k < 2 else 1), "a held diagonal steps once")
+        yield from self.tap(nav=(0, 1))
+        check(m.title_index == 2, "back on QUIT")
         yield from self.tap("p2", start=True)
-        check(m.state == COUNTDOWN and m.race.players == 1, "Start begins a 1P countdown")
+        check(m.state == HOWTO and m.mode == 1 and not m.quit_requested,
+              "Start on QUIT begins 1 PLAYER, with the HOW TO PLAY card")
+        yield from self.idle(0.1)
+        yield from self.tap(a=True)
+        check(m.state == HOWTO, "the card ignores a press in its first 0.3 s")
+        yield from self.idle(0.6)
+        yield from self.snap("howto-1p")
+        yield from self.tap("p2", button=True)  # X: any button goes on
+        check(m.state == COUNTDOWN and m.race.players == 1, "any button: the 1P countdown")
         yield from self.idle(1.4)
         yield from self.snap("countdown")
         yield from self.idle(config.COUNTDOWN - 1.4 + 0.1)
@@ -227,8 +245,14 @@ class Script:
         yield from self.tap("p2", nav=(0, 1))
         check(m.mode == 2, "2 PLAYERS")
         yield from self.tap(a=True)
-        check(m.state == COUNTDOWN and m.race.players == 2, "A begins a 2P countdown")
-        yield from self.idle(config.COUNTDOWN + 0.1)
+        check(m.state == HOWTO, "A: the HOW TO PLAY card")
+        yield from self.idle(0.5)
+        yield from self.snap("howto-2p")
+        yield from self.tap("p2", b=True)
+        check(m.state == COUNTDOWN and m.race.players == 2, "B on the card: a 2P countdown")
+        yield from self.idle(0.5)
+        yield from self.snap("countdown-2p")
+        yield from self.idle(config.COUNTDOWN - 0.4)
         yield from self.drive_until(lambda: m.frozen("p1") or m.frozen("p2"), 200,
                                     shots=((8.0, "race-2p"),))
         yield from self.idle(DT)
@@ -245,7 +269,17 @@ class Script:
 
         # a race left alone: back to the title at 1 PLAYER
         yield from self.tap(start=True)
+        yield from self.idle(0.4)
+        yield from self.tap(start=True)
+        check(m.state == COUNTDOWN, "Start on the card goes on, never pauses it")
         yield from self.idle(config.IDLE_TIMEOUT + 0.5)
         check(m.state == TITLE and m.mode == 1, "60 s untouched: the title, 1 PLAYER")
         yield from self.snap("idle-title")
         yield from self.idle(0.5)
+
+        # QUIT: down twice, then A
+        yield from self.tap(nav=(0, 1))
+        yield from self.tap(nav=(0, 1))
+        check(m.title_index == 2, "QUIT")
+        yield self._press(a=True)
+        check(False, "A on QUIT quits the game")

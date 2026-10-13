@@ -304,6 +304,176 @@ def draw_car(surf, x, y, u, col, ghost=False):
 
 GHOST = (170, 230, 255)
 
+
+# --- The second playtest's sprites: the gantry, drifting, the storm, the items --------------
+
+GANTRY_POST = 1.3  # the gantry's posts stand this far out (road half-widths), past the rumble
+GANTRY_TOP = 1.62  # its banner's top, above the road
+GANTRY_BANNER = 1.18  # and its bottom
+LIGHT_Y = 1.07  # the start lights' centres, above the road
+LIGHT_X = (-0.3, -0.15, 0.0, 0.15, 0.3)
+LIGHT_R = 0.055
+GANTRY_MAX_SCALE = 560.0  # nearer than this its banner is above the view: not drawn
+
+
+def draw_gantry(surf, x, y, u):
+    """The start and finish gantry over the lap line: two posts, a "GATE PRIX" banner and
+    a dark housing hanging under it with five unlit start lights (lit by the renderer)."""
+    post = 0.07 * u
+    for side in (-1, 1):
+        px = x + side * GANTRY_POST * u
+        _ellipse(surf, (0, 0, 0, 100), px - post * 1.6, y - post * 0.3, post * 3.2, post * 0.6)
+        _rect(surf, (90, 96, 116), px - post / 2, y - GANTRY_TOP * u, post, GANTRY_TOP * u)
+        _rect(surf, (200, 206, 224), px - post / 2, y - GANTRY_TOP * u, post * 0.3, GANTRY_TOP * u)
+        _rect(surf, (220, 170, 60), px - post * 0.8, y - 0.06 * u, post * 1.6, 0.06 * u)
+    left, right = x - (GANTRY_POST + 0.08) * u, x + (GANTRY_POST + 0.08) * u
+    top, bottom = y - GANTRY_TOP * u, y - GANTRY_BANNER * u
+    _rect(surf, (18, 22, 44), left, top, right - left, bottom - top, rad=0.03 * u)
+    _rect(surf, (220, 170, 60), left, top, right - left, 0.03 * u)
+    _rect(surf, (220, 170, 60), left, bottom - 0.03 * u, right - left, 0.03 * u)
+    for k in range(14):  # chequer strips at both ends of the banner
+        cx0 = left + 0.05 * u
+        cy0 = top + 0.05 * u + (k % 2) * 0.17 * u
+        for end in (0, 1):
+            ox = cx0 + end * (right - left - 0.44 * u) + (k // 2) * 0.05 * u
+            if ox < cx0 + end * (right - left - 0.44 * u) + 0.34 * u:
+                _rect(surf, (240, 240, 246) if (k // 2) % 2 == 0 else (30, 30, 40),
+                      ox, cy0, 0.05 * u, 0.17 * u)
+    _text(surf, "GATE PRIX", max(5, round(0.3 * u)), (255, 230, 120), x, (top + bottom) / 2)
+    # the start lights' housing, under the middle of the banner
+    hx0, hx1 = x + (LIGHT_X[0] - 0.09) * u, x + (LIGHT_X[-1] + 0.09) * u
+    _rect(surf, (12, 12, 20), hx0, bottom, hx1 - hx0, (GANTRY_BANNER - LIGHT_Y + 0.08) * u, rad=0.03 * u)
+    for lx in LIGHT_X:
+        _circle(surf, (50, 30, 34), x + lx * u, y - LIGHT_Y * u, LIGHT_R * u)
+        _circle(surf, (90, 70, 74), x + lx * u, y - LIGHT_Y * u, LIGHT_R * u, max(1, 0.012 * u))
+
+
+SPARK_COLOURS = ((255, 250, 225), (90, 170, 255), (255, 200, 60))  # drift charge 0, 1, 2
+SPARK_FRAMES = 3
+
+
+def draw_sparks(surf, x, y, u, level, frame):
+    """A drifting car's sparks, a fan rising out and up from both rear wheels: white, then
+    blue at charge 1 and gold at charge 2. Drawn just in front of the car."""
+    col = SPARK_COLOURS[level]
+    w = config.CAR_WIDTH * u
+    rnd = random.Random(frame * 31 + level * 7 + 3)
+    for side in (-1, 1):
+        wx, wy = x + side * w * 0.47, y - w * 0.06
+        _glow(surf, wx, wy, w * (0.13 + 0.05 * level), col, 170)
+        for _ in range(8 + 4 * level):
+            a = rnd.uniform(0.1, 1.1)  # radians from straight up, outwards
+            n = rnd.uniform(0.12, 0.26 + 0.08 * level) * w
+            ex, ey = wx + side * math.sin(a) * n, wy - math.cos(a) * n * 0.8
+            pygame.draw.line(surf, (*mix(col, WHITE, 0.25), 255), (round(wx), round(wy)),
+                             (round(ex), round(ey)), max(1, round(w * 0.016)))
+            _circle(surf, mix(col, WHITE, 0.6), ex, ey, max(1.0, w * 0.014))
+
+
+def draw_turbo(surf, x, y, u, level):
+    """The mini-turbo's flash at the exhaust as a drift pays out: blue (1) or gold (2)."""
+    col = SPARK_COLOURS[level]
+    w = config.CAR_WIDTH * u
+    cy = y - w * 0.16
+    _glow(surf, x, cy, w * 0.55, col, 190)
+    for k in range(10):
+        a = math.pi * (0.1 + 0.8 * k / 9)
+        r0, r1 = w * 0.12, w * (0.42 + 0.12 * (k % 2))
+        pygame.draw.line(surf, (*mix(col, WHITE, 0.4), 230),
+                         (round(x + r0 * math.cos(a)), round(cy + r0 * 0.5 * math.sin(a))),
+                         (round(x + r1 * math.cos(a)), round(cy + r1 * 0.5 * math.sin(a))),
+                         max(1, round(w * 0.02)))
+    _ellipse(surf, (255, 255, 255, 230), x - w * 0.12, cy - w * 0.04, w * 0.24, w * 0.08)
+
+
+STATIC_FRAMES = 3
+STORM_CLOUD = ((150, 140, 190), (225, 215, 255))  # the storm's static: grey-violet, crackling
+DECO_CLOUD = ((150, 80, 190), (255, 170, 240))  # a DECOHERENCE cloud: deeper, pinker
+
+
+def draw_static(surf, x, y, u, frame, palette=STORM_CLOUD, radius=None):
+    """A static cloud hanging over the road: soft blobs with crackling bolts through them."""
+    body, crackle = palette
+    r = (radius or config.HAZARD_SIZE["cloud"]) * u
+    cy = y - r * 0.55
+    rnd = random.Random(17 + frame)
+    _ellipse(surf, (0, 0, 0, 70), x - r, y - r * 0.08, 2 * r, r * 0.16)
+    _glow(surf, x, cy, r * 1.05, crackle, 90)
+    lay = _layer(surf)
+    for k in range(9):
+        a = k / 9 * 2 * math.pi
+        bx, by = x + 0.55 * r * math.cos(a), cy + 0.3 * r * math.sin(a)
+        br = r * (0.36 + 0.12 * ((k * 7 + frame) % 3) / 2)
+        pygame.draw.circle(lay, (*body, 175), (round(bx), round(by)), max(1, round(br)))
+    pygame.draw.circle(lay, (*mix(body, crackle, 0.35), 200), (round(x), round(cy)), max(1, round(r * 0.45)))
+    surf.blit(lay, (0, 0))
+    for _ in range(4):  # crackle: short zigzag bolts, different every frame
+        px, py = x + rnd.uniform(-0.6, 0.6) * r, cy + rnd.uniform(-0.3, 0.3) * r
+        pts = [(px, py)]
+        for _ in range(4):
+            px += rnd.uniform(-0.18, 0.18) * r
+            py += rnd.uniform(-0.12, 0.12) * r
+            pts.append((px, py))
+        pygame.draw.lines(surf, (*crackle, 255), False, [(round(a), round(b)) for a, b in pts],
+                          max(1, round(r * 0.025)))
+    for _ in range(14):  # static speckles
+        _circle(surf, (*crackle, 255), x + rnd.uniform(-0.75, 0.75) * r,
+                cy + rnd.uniform(-0.35, 0.35) * r, max(1.0, r * 0.018))
+
+
+MINE_FRAMES = 2
+
+
+def draw_mine(surf, x, y, u, frame):
+    """A bit-flip mine: a small dark spiked orb, a red glow and a white X on it."""
+    r = config.HAZARD_SIZE["mine"] * u
+    cy = y - r * 1.4
+    _ellipse(surf, (0, 0, 0, 110), x - r, y - r * 0.12, 2 * r, r * 0.24)
+    _glow(surf, x, cy, r * 2.0, (255, 60, 90), 120)
+    for k in range(10):
+        a = (k + 0.5 * frame) / 10 * 2 * math.pi
+        tip = (x + 1.45 * r * math.cos(a), cy + 1.45 * r * math.sin(a))
+        b1 = (x + 0.8 * r * math.cos(a - 0.22), cy + 0.8 * r * math.sin(a - 0.22))
+        b2 = (x + 0.8 * r * math.cos(a + 0.22), cy + 0.8 * r * math.sin(a + 0.22))
+        pygame.draw.polygon(surf, (200, 205, 220), [tip, b1, b2])
+    _circle(surf, (40, 30, 52), x, cy, r)
+    _circle(surf, (230, 60, 80), x, cy, r, max(1, r * 0.12))
+    d = r * 0.45
+    for a, b in (((x - d, cy - d), (x + d, cy + d)), ((x - d, cy + d), (x + d, cy - d))):
+        pygame.draw.line(surf, WHITE, (round(a[0]), round(a[1])), (round(b[0]), round(b[1])),
+                         max(1, round(r * 0.2)))
+
+
+def draw_shot(surf, x, y, u):
+    """A MEASURE shot: a bright gold orb with a ring, flying at the height of a car."""
+    r = 0.05 * u
+    cy = y - 0.12 * u
+    _glow(surf, x, cy, r * 3.2, (255, 200, 90), 200)
+    _circle(surf, (255, 240, 190), x, cy, r)
+    _circle(surf, (255, 200, 90), x, cy, r * 1.7, max(1, r * 0.25))
+
+
+def _kinds_v2(kinds):
+    kinds["gantry"] = (draw_gantry, (-(GANTRY_POST + 0.1), -GANTRY_TOP - 0.02, GANTRY_POST + 0.1, 0.03))
+    for level in range(3):
+        for f in range(SPARK_FRAMES):
+            kinds[f"spark:{level}:{f}"] = (lambda s, x, y, u, lv=level, f=f: draw_sparks(s, x, y, u, lv, f),
+                                           (-0.26, -0.18, 0.26, 0.02))
+    for level in (1, 2):
+        kinds[f"turbo:{level}"] = (lambda s, x, y, u, lv=level: draw_turbo(s, x, y, u, lv),
+                                   (-0.2, -0.2, 0.2, 0.03))
+    c = config.HAZARD_SIZE["cloud"]
+    d = config.DECO_SIZE
+    for f in range(STATIC_FRAMES):
+        kinds[f"static:{f}"] = (lambda s, x, y, u, f=f: draw_static(s, x, y, u, f),
+                                (-1.15 * c, -1.6 * c, 1.15 * c, 0.1 * c))
+        kinds[f"deco:{f}"] = (lambda s, x, y, u, f=f: draw_static(s, x, y, u, f, DECO_CLOUD, d),
+                              (-1.15 * d, -1.6 * d, 1.15 * d, 0.1 * d))
+    m = config.HAZARD_SIZE["mine"]
+    for f in range(MINE_FRAMES):
+        kinds[f"mine:{f}"] = (lambda s, x, y, u, f=f: draw_mine(s, x, y, u, f), (-2.1 * m, -3.5 * m, 2.1 * m, 0.2 * m))
+    kinds["shot"] = (draw_shot, (-0.17, -0.3, 0.17, 0.0))
+
 # kind: (draw(surf, x, y, u), extents (left, top, right, bottom) in road half-widths)
 _A = config.ARCH_HALF_WIDTH
 _D = config.DECOY_HALF_WIDTH
@@ -326,11 +496,65 @@ def _kinds():
         kinds[f"arch:{g}:lit"] = (lambda s, x, y, u, g=g: draw_arch(s, x, y, u, g, True), _LIT_EXT)
     for name, col in config.CAR_COLORS.items():
         kinds[f"car:{name}"] = (lambda s, x, y, u, col=col: draw_car(s, x, y, u, col), (-0.21, -0.15, 0.21, 0.03))
+    _kinds_v2(kinds)
     return kinds
 
 
 _KIND_TABLE = _kinds()
 KINDS = tuple(_KIND_TABLE)
+MAX_SCALE = {"gantry": GANTRY_MAX_SCALE}  # kinds never drawn nearer than this
+
+# Every car also comes tilted (a drift: TILT_STEP degrees a step, TILTS steps either way) and
+# as a tunnelling ghost (translucent, with GHOST_FRAMES of a shimmer). These are made from the
+# finished car sprites at start-up, so they cost nothing per frame either.
+TILTS = 2
+TILT_STEP = 4.0  # degrees
+TILT_MAX_SCALE = 850.0  # nearer than this (a car beside the camera) the car stays upright
+GHOST_FRAMES = 2
+CAR_KINDS = tuple(f"car:{name}" for name in config.CAR_COLORS)
+
+
+def tilt_kind(kind: str, degrees: float) -> str:
+    """The car sprite tilted nearest to `degrees` (positive: its top to the right)."""
+    k = max(-TILTS, min(TILTS, round(degrees / TILT_STEP)))
+    return kind if k == 0 else f"{kind}:t{k}"
+
+
+def _tilted(entry, degrees):
+    """A sprite rotated about its foot (anchor), smoothly, once."""
+    img, ax, ay = entry
+    out = pygame.transform.rotozoom(img, -degrees, 1.0)
+    w, h = img.get_size()
+    w2, h2 = out.get_width() / 2, out.get_height() / 2
+    vx, vy = ax - w / 2, ay - h / 2
+    a = math.radians(-degrees)  # rotozoom turns counter-clockwise for positive angles
+    rx = vx * math.cos(a) + vy * math.sin(a)
+    ry = -vx * math.sin(a) + vy * math.cos(a)
+    box = out.get_bounding_rect()
+    if box.w and box.h:  # rotozoom pads the corners: crop to what is drawn
+        out = out.subsurface(box).copy()
+    else:
+        box = pygame.Rect(0, 0, 0, 0)
+    _rle(out)
+    return out, round(w2 + rx) - box.x, round(h2 + ry) - box.y
+
+
+def _ghost(entry, frame):
+    """A tunnelling car: see-through and violet, with bright shimmer lines across it."""
+    img, ax, ay = entry
+    out = img.copy()
+    out.fill((215, 200, 255, 120), special_flags=pygame.BLEND_RGBA_MULT)
+    out.fill((80, 50, 120, 0), special_flags=pygame.BLEND_RGBA_ADD)  # lit violet
+    lines = pygame.Surface(out.get_size(), pygame.SRCALPHA)
+    step = max(3, out.get_height() // 6)
+    for y in range(frame * step // 2, out.get_height(), step):
+        pygame.draw.line(lines, (230, 220, 255, 255), (0, y), (out.get_width(), y), max(1, step // 4))
+    mask = img.copy()
+    mask.fill((255, 255, 255, 150), special_flags=pygame.BLEND_RGBA_MULT)
+    lines.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    out.blit(lines, (0, 0))
+    _rle(out)
+    return out, ax, ay
 
 
 def sprite_scales() -> list[float]:
@@ -379,9 +603,19 @@ class SpriteCache:
         self.scales = sprite_scales()
         self._log_lo = math.log(self.scales[0])
         self._log_step = math.log(self.scales[1] / self.scales[0])
-        self.images: dict[str, list[tuple[pygame.Surface, int, int]]] = {
-            kind: [render_sprite(kind, s) for s in self.scales] for kind in KINDS
+        self.images: dict[str, list[tuple[pygame.Surface, int, int] | None]] = {
+            kind: [render_sprite(kind, s) if s <= MAX_SCALE.get(kind, s) else None
+                   for s in self.scales] for kind in KINDS
         }
+        for kind in CAR_KINDS:
+            base = self.images[kind]
+            for k in range(1, TILTS + 1):
+                for sign in (-1, 1):
+                    self.images[f"{kind}:t{sign * k}"] = [
+                        _tilted(e, sign * k * TILT_STEP) if sc <= TILT_MAX_SCALE else e
+                        for e, sc in zip(base, self.scales)]
+            for f in range(GHOST_FRAMES):
+                self.images[f"{kind}:ghost{f}"] = [_ghost(e, f) for e in base]
 
     @classmethod
     def shared(cls) -> SpriteCache:
@@ -403,7 +637,10 @@ class SpriteCache:
         i = self.index(scale)
         if i is None:
             return False
-        img, ax, ay = self.images[kind][i]
+        entry = self.images[kind][i]
+        if entry is None:
+            return False
+        img, ax, ay = entry
         left, top = round(x) - ax, round(y) - ay
         if clip_y is not None:
             visible = round(clip_y) - top

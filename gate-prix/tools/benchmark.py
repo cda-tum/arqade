@@ -1,5 +1,5 @@
-"""Time the road renderer: two 960x270 views, then one 960x540 view, each plain and then
-with the boost and warp effects at their heaviest.
+"""Time the road renderer: two 480x540 views side by side, then one 960x540 view, each plain
+and then with the boost, warp and Task 5d effects at their heaviest.
 
     uv run python tools/benchmark.py [--frames 3000] [--profile]
 
@@ -10,7 +10,9 @@ race's arches and item boxes, a row of 3 arches always coming up, and 6 cars. Th
 runs add what a player sees in the LIGHT SPEED! warp, in every view at once (the worst
 case): the field of view widened (a projection constant and the camera pulled in), the
 camera shake, exhaust flames on every car, the marker over the right arch, the
-star-streak tunnel and the edge tint. It prints the mean, 95th percentile and worst
+star-streak tunnel and the edge tint; and the second playtest's: every car tilted in a
+drift with its sparks, a noise storm of clouds and mines ahead, a DECOHERENCE cloud, the
+gantry and its lights, and the minimap. It prints the mean, 95th percentile and worst
 milliseconds per frame. Desktop guide: worst <= 4 ms.
 """
 
@@ -27,9 +29,10 @@ import time
 import pygame
 
 from gate_prix import circuit, config, track
-from gate_prix.render import Renderer, fov, shake
+from gate_prix.minimap import Minimap
+from gate_prix.render import MAP, Renderer, fov, shake
 from gate_prix.road import RoadView
-from gate_prix.sprites import SpriteCache
+from gate_prix.sprites import SpriteCache, tilt_kind
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 CPU = ("green", "white", "lime", "steel")
@@ -64,8 +67,15 @@ def run(views, frames: int, fridge, statics, cache, renderer=None) -> list[float
             cam[1] = 0.9 * math.sin(frame / 70 + i)
         objects = objects_for(fridge, statics, cams, frame)
         if renderer:
-            objects += [(z - 1.0, x, f"flame:{frame // 3 % 4}") for z, x, kind in objects
-                        if kind.startswith("car:")]
+            cars = [(z, x, kind) for z, x, kind in objects if kind.startswith("car:")]
+            objects = [o for o in objects if not o[2].startswith("car:")]
+            objects += [(z, x, tilt_kind(kind, 9 * math.sin(frame / 20))) for z, x, kind in cars]
+            objects += [(z - 1.0, x, f"flame:{frame // 3 % 4}") for z, x, _ in cars]
+            objects += [(z - 0.5, x, f"spark:2:{frame // 3 % 3}") for z, x, _ in cars]
+            lead = cams[0][0]
+            objects += [(lead + 3000 + 2500 * k, 0.5 * math.sin(k), ("static:1", "mine:0", "deco:2")[k % 3])
+                        for k in range(8)]
+            objects += [(n * fridge.lap_length(), 0.0, "gantry") for n in range(config.LAPS + 1)]
         start = time.perf_counter()
         for i, (view, (cam_z, cam_x)) in enumerate(zip(views, cams)):
             if renderer is None:
@@ -80,10 +90,15 @@ def run(views, frames: int, fridge, statics, cache, renderer=None) -> list[float
             renderer._sprites = sprites
             renderer.frame = frame
             renderer._markers_over_right_arches(view)
-            k = (frame // 2) % len(renderer._tunnel[view.height])
-            screen.blit(renderer._tunnel[view.height][k], view.rect.topleft)
-            for strip, (x, y) in renderer._tint[view.height][-1]:
+            renderer._gantry_lights(screen, view, sprites, ("red", 5))
+            k = (frame // 2) % len(renderer._tunnel[view.rect.size])
+            screen.blit(renderer._tunnel[view.rect.size][k], view.rect.topleft)
+            for strip, (x, y) in renderer._tint[view.rect.size][-1]:
                 screen.blit(strip, (view.rect.x + x, view.rect.y + y))
+        if renderer:
+            Minimap.for_track(fridge, MAP).draw(screen, (10, H - MAP[1] - 10),
+                                                [(f"{c}", cams[0][0] + 900 * i) for i, c in
+                                                 enumerate(config.CAR_COLORS)], ("p1", "p2"))
         times.append((time.perf_counter() - start) * 1000)
     return times
 
@@ -104,7 +119,9 @@ def main(argv=None) -> None:
     pygame.font.init()
     start = time.perf_counter()
     cache = SpriteCache.shared()
-    views2 = [RoadView((0, 0, W, 270)), RoadView((0, 270, W, 270))]
+    vw, vh = config.VIEW_2P
+    views2 = [RoadView((0, 0, vw, vh), spread=config.VIEW_2P_SPREAD),
+              RoadView((W - vw, 0, vw, vh), spread=config.VIEW_2P_SPREAD)]
     views1 = [RoadView((0, 0, W, H))]
     print(f"start-up (sprites + backgrounds): {(time.perf_counter() - start) * 1000:.0f} ms")
     fridge = track.fridge()
@@ -130,7 +147,7 @@ def main(argv=None) -> None:
     times1 = run(views1, args.frames, fridge, statics, cache)
     warp2 = run(views2, args.frames, fridge, statics, cache, renderer)
     warp1 = run(views1, args.frames, fridge, statics, cache, renderer)
-    report("2 views of 960x270", times2)
+    report("2 views of 480x540", times2)
     report("1 view of 960x540", times1)
     report("2 views, warp", warp2)
     report("1 view, warp", warp1)

@@ -312,3 +312,21 @@ def test_stick_is_the_held_direction_without_repeats(rig):
     assert set(sticks) == {(1, -1)}
     pads[0].axis = [0.3, 0.0]  # past the deadzone, not half way: no direction
     assert step(inp).players["p1"].stick == (0, 0)
+
+
+def test_any_button_is_a_press_for_the_how_to_play_card(rig):
+    """X, Y, L and R (raw 0, 3, 4, 5) do nothing else, but they count as a press."""
+    pads, _ = rig
+    pads += [FakePad(), FakePad()]
+    inp = Input()
+    for raw in (0, 3, 4, 5, A, START):
+        pads[0].down = {raw}
+        f = step(inp)
+        assert f.players["p1"].button and not f.players["p2"].button, raw
+        f = step(inp)
+        assert not f.players["p1"].button, raw  # held, not pressed again
+        pads[0].down = set()
+        step(inp)
+    pads[1].down = set()
+    f = step(inp)
+    assert not f.players["p1"].button and not f.players["p2"].button

@@ -5,7 +5,9 @@ step, switched as the car speeds up or slows down); a right gate rings higher th
 the streak, with a boost whoosh on top; a wrong or missed one buzzes; the CIRCUIT CHECK
 plays a fanfare (a bigger one for a perfect circuit) as the view freezes, and the LIGHT
 SPEED! warp after it is a long rising whoosh; the countdown beeps, items and boxes chime and cars
-thud when they bump.
+thud when they bump. Each item has its own sound as it is used; a MEASURE that lands zaps
+its victim and rings for its shooter, and a DECOHERENCE cloud crackles for whoever drives
+through it and chimes for its dropper; a mine spins you out with a falling whine.
 
 Everything is rendered in a background thread at start-up (a second or two on the Pi), so
 the game starts at once and a sound not ready yet is simply skipped. If the mixer can't
@@ -149,6 +151,19 @@ def build_sfx() -> dict[str, list[int]]:
         "bump": mix(tone(90, 0.12, 0.4, "sine", decay=25, slide=0.6),
                     noise(0.08, 0.25, decay=40, hold=4, seed=3)),
         "result": _arp(("C5", "E5", "G5", "C6"), 0.09, 0.25, "triangle"),
+        # the second playtest's items and hazards
+        "zap": mix(tone(1400, 0.18, 0.2, "square", slide=0.35), tone(2100, 0.1, 0.1, "sine", decay=20)),
+        "collapsed": mix(tone(700, 0.35, 0.24, "saw", decay=5, slide=0.2),
+                         noise(0.3, 0.16, decay=8, hold=3, seed=11)),
+        "scored": _arp(("G5", "D6", "G6"), 0.05, 0.24, "pulse", decay=8),
+        "static": noise(0.32, 0.26, decay=7, hold=6, seed=5),
+        "deco_scored": _arp(("D6", "A5", "D6"), 0.05, 0.2, "triangle", decay=8),
+        "spin": mix(tone(520, 0.4, 0.22, "square", slide=0.3), noise(0.15, 0.2, decay=20, seed=9)),
+        "tunnel": mix(tone(300, 0.3, 0.16, "sine", slide=2.5), tone(450, 0.3, 0.1, "triangle", slide=2.5)),
+        "drop": tone(260, 0.2, 0.22, "triangle", slide=0.5),
+        "drift": tone(1200, 0.05, 0.14, "pulse", decay=20),
+        "turbo": mix(whoosh, tone(500, 0.2, 0.15, "saw", slide=2.0)),
+        "fizzle": tone(240, 0.22, 0.18, "saw", decay=10, slide=0.5),
     }
     for i, name in enumerate(RIGHT_NOTES):
         ring = concat(tone(note(name), 0.05, 0.26, "pulse"),
@@ -177,8 +192,16 @@ def engine_step(speed: float) -> int:
     return max(0, min(ENGINE_STEPS - 1, round(speed / ENGINE_TOP * (ENGINE_STEPS - 1))))
 
 
-def sound_for(event) -> str | None:
-    """The sound one of the match's events asks for, if any."""
+ITEM_SOUNDS = {"SPLIT": "split", "QEC": "qec", "MEASURE": "zap", "TUNNEL": "tunnel",
+               "DECOHERENCE": "drop"}
+SCORED = {"collapse": "scored", "decohered": "deco_scored"}  # for the shooter or dropper
+
+
+def sound_for(event, players=()) -> str | None:
+    """The sound one of the match's events asks for, if any. A MEASURE hit ("collapse") and
+    a cloud driven through ("decohered") reach both sides: the victim (`event.car`) hears
+    its own sound, the shooter or dropper (`event.value`, one of `players` and not the
+    victim) a scoring one."""
     if isinstance(event, Cue):
         return {"blip": "blip", "select": "select", "count": "count", "go": "go",
                 "pause": "pause", "resume": "blip", "title": "blip",
@@ -194,23 +217,33 @@ def sound_for(event) -> str | None:
         if kind == "box":
             return "box" if value else "box_empty"
         if kind == "item":
-            return "split" if value == "SPLIT" else "qec"
-        # the new rules' cues borrow the existing effects until they get their own (5d)
+            return ITEM_SOUNDS.get(value, "qec")
+        if kind in SCORED and event.car not in players and value in players:
+            return SCORED[kind]
+        if kind == "hazard":
+            return "spin" if value == "mine" else "static"
         return {"wrong": "wrong", "miss": "miss", "lap": "lap", "finish": "finish",
                 "bump": "bump", "box_full": "box_full", "split_end": "split_end",
-                "turbo": "boost", "drift": "blip", "hazard": "bump", "collapse": "wrong",
-                "decohered": "miss", "fizzle": "box_empty", "immune": "box_full",
+                "turbo": "turbo", "drift": "drift", "collapse": "collapsed",
+                "decohered": "static", "fizzle": "fizzle", "immune": "box_full",
                 "tunnel_end": "split_end"}.get(kind)
     return None
 
 
-def sounds_for(events: list) -> list[str]:
-    """The frame's sounds, each at most once."""
-    return list(dict.fromkeys(s for s in map(sound_for, events) if s))
+def sounds_for(events: list, players=()) -> list[str]:
+    """The frame's sounds, each at most once (`players`: the cars people drive). When both
+    sides of a hit are players (P1 MEASUREs P2), both sounds play."""
+    names = []
+    for e in events:
+        names.append(sound_for(e, players))
+        if (isinstance(e, Event) and e.kind in SCORED and e.car in players
+                and e.value in players and e.value != e.car):
+            names.append(SCORED[e.kind])
+    return list(dict.fromkeys(n for n in names if n))
 
 
 class NullAudio:
-    def play_events(self, events: list) -> None:
+    def play_events(self, events: list, players=()) -> None:
         pass
 
     def engines(self, speeds: dict[str, float]) -> None:
@@ -267,8 +300,8 @@ class Audio:
     def ready(self) -> bool:
         return self._done
 
-    def play_events(self, events: list) -> None:
-        for name in sounds_for(events):
+    def play_events(self, events: list, players=()) -> None:
+        for name in sounds_for(events, players):
             with self._lock:
                 snd = self.sounds.get(name)
             if snd is not None:

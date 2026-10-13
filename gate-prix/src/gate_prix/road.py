@@ -35,17 +35,24 @@ RUMBLE = ((220, 170, 60), (250, 240, 220))  # gold and white
 ROAD = ((40, 42, 62), (34, 36, 54))  # dark anodised, a faint sheen
 CENTRE = (120, 220, 255)  # thin cyan dashes, like a waveguide
 CENTRE_HALF_WIDTH = 0.015  # in road half-widths
+CHEQUER = ((18, 18, 26), (240, 240, 246))  # the finish line's squares
+CHEQUER_COLUMNS = 10
 AA_ROWS = 2  # segments at least this many rows tall get anti-aliased edges
 
 Sprite = tuple[str, float, float, float, float]  # kind, x, y (its foot), scale, clip y
 
 
 class RoadView:
-    """One view rectangle (960x270 for 2P, 960x540 for 1P) and its projection."""
+    """One view rectangle (480x540 for each of 2P's two, 960x540 for 1P) and its projection.
 
-    def __init__(self, rect) -> None:
+    `spread` is the horizontal projection's half-width in pixels: by default half the view's
+    width. A narrow view sets it wider than that, so its road and cars are not squeezed to
+    half their width (the view then shows the middle of a wider picture)."""
+
+    def __init__(self, rect, spread: float | None = None) -> None:
         self.rect = pygame.Rect(rect)
         self.width, self.height = self.rect.size
+        self.spread = self.width / 2 if spread is None else float(spread)
         self.horizon = round(self.height * config.HORIZON)
         self.background = Background.for_size(self.rect.size)
         n = config.DRAW_SEGMENTS
@@ -87,7 +94,8 @@ class RoadView:
         ahead = config.CAR_AHEAD if ahead is None else ahead
         cam_y = config.CAMERA_HEIGHT + lift + track.height_at(cam_z + ahead)
         cam_w = cam_x * config.ROAD_HALF_WIDTH
-        hw = self.width / 2
+        cx = self.width / 2
+        hw = self.spread
         hh = self.height / 2
         hz = self.horizon
         depth = self.depth = config.CAMERA_DEPTH if depth is None else depth
@@ -104,11 +112,11 @@ class RoadView:
             wys[k] = y
             if z > NEAR:
                 p = depth / z
-                sxs[k] = hw + p * (x - cam_w) * hw
+                sxs[k] = cx + p * (x - cam_w) * hw
                 sys_[k] = hz - p * (y - cam_y) * hh
                 sws[k] = p * road
             else:
-                sxs[k] = hw
+                sxs[k] = cx
                 sys_[k] = _FAR
                 sws[k] = _FAR
             x += dx
@@ -143,10 +151,9 @@ class RoadView:
         f = (rel_z - zs[k]) / SEG
         wx = self.wx[k] + (self.wx[k + 1] - self.wx[k]) * f
         wy = self.wy[k] + (self.wy[k + 1] - self.wy[k]) * f
-        hw = self.width / 2
         p = self.depth / rel_z
-        scale = p * config.ROAD_HALF_WIDTH * hw
-        x = hw + p * (wx - self.cam_x) * hw + offset * scale
+        scale = p * config.ROAD_HALF_WIDTH * self.spread
+        x = self.width / 2 + p * (wx - self.cam_x) * self.spread + offset * scale
         y = self.horizon - p * (wy - self.cam_y) * self.height / 2
         return x, y, scale, self.clip[k]
 
@@ -198,9 +205,27 @@ class RoadView:
                 aaline(view, RUMBLE[ring], (x1 + r1, y1), (x2 + r2, y2))
                 aaline(view, ROAD[ring], (x1 - w1, y1), (x2 - w2, y2))
                 aaline(view, ROAD[ring], (x1 + w1, y1), (x2 + w2, y2))
-            if ring:
+            if (bi + k) % count in (0, count - 1):  # the lap line: a chequered band
+                self._chequer(view, x1, y1, w1, x2, y2, w2)
+            elif ring:
                 c1, c2 = w1 * centre, w2 * centre
                 polygon(view, CENTRE, ((x1 - c1, y1), (x2 - c2, y2), (x2 + c2, y2), (x1 + c1, y1)))
+
+    @staticmethod
+    def _chequer(view, x1, y1, w1, x2, y2, w2) -> None:
+        """The finish line over the segments either side of the lap line: CHEQUER_COLUMNS
+        squares across in two rows each, white on black (a dozen polygons a segment, only
+        while it is in sight)."""
+        polygon = pygame.draw.polygon
+        polygon(view, CHEQUER[0], ((x1 - w1, y1), (x2 - w2, y2), (x2 + w2, y2), (x1 + w1, y1)))
+        ym, xm, wm = (y1 + y2) / 2, (x1 + x2) / 2, (w1 + w2) / 2
+        n = CHEQUER_COLUMNS
+        for row, (ya, xa, wa, yb, xb, wb) in enumerate(((y1, x1, w1, ym, xm, wm),
+                                                        (ym, xm, wm, y2, x2, w2))):
+            for i in range(row % 2, n, 2):
+                u0, u1 = -1 + 2 * i / n, -1 + 2 * (i + 1) / n
+                polygon(view, CHEQUER[1], ((xa + u0 * wa, ya), (xb + u0 * wb, yb),
+                                           (xb + u1 * wb, yb), (xa + u1 * wa, ya)))
 
     def _collect(self, track, cam_z: float, sprites_out: list[Sprite], objects) -> None:
         found: list[tuple[float, Sprite]] = []

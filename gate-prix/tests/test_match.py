@@ -1,12 +1,13 @@
-"""The match flow: title, attract, countdown, race, pause, result, idle."""
+"""The match flow: title (and QUIT), the HOW TO PLAY card, attract, countdown, race, pause,
+result, idle."""
 
 import random
 
 import pytest
 
 from gate_prix import config
-from gate_prix.match import (COUNTDOWN, PAUSED, RACE, RESULT, TITLE, Cue, FrameInput, Match,
-                             PlayerInput)
+from gate_prix.match import (COUNTDOWN, HOWTO, PAUSED, RACE, RESULT, TITLE, Cue, FrameInput,
+                             Match, PlayerInput)
 
 DT = 1 / 60
 
@@ -23,6 +24,8 @@ B = frame(p1={"b": True, "held": True})
 START = frame(p1={"start": True, "held": True})
 DOWN = frame(p1={"nav": (0, 1)})
 HELD = frame(p1={"held": True})
+X = frame(p2={"button": True})  # a button that is none of A, B, Start, Select
+UP = frame(p1={"nav": (0, -1)})
 
 
 def run(m: Match, seconds: float, inp: FrameInput = IDLE) -> list:
@@ -43,12 +46,28 @@ def fresh(seed=1) -> Match:
     return m
 
 
-def started(mode=1, seed=1) -> Match:
-    """A match whose race has just begun (after the countdown)."""
+def through_card(m: Match, inp: FrameInput = X) -> list:
+    """Past the HOW TO PLAY card: its guard, then a press."""
+    assert m.state == HOWTO
+    events = run(m, config.HOWTO_GUARD + DT)
+    events += m.update(DT, inp)
+    assert m.state == COUNTDOWN
+    return events
+
+
+def begun(mode=1, seed=1) -> Match:
+    """A match whose countdown has just begun (past the title and the card)."""
     m = fresh(seed)
     if mode == 2:
         m.update(DT, DOWN)
     m.update(DT, START)
+    through_card(m)
+    return m
+
+
+def started(mode=1, seed=1) -> Match:
+    """A match whose race has just begun (after the countdown)."""
+    m = begun(mode, seed)
     run(m, config.COUNTDOWN + DT)
     assert m.state == RACE
     return m
@@ -68,17 +87,23 @@ def finish(m: Match, car_id: str) -> None:
 # --- The title -------------------------------------------------------------------------------
 
 
-def test_the_title_starts_at_one_player_and_the_stick_picks_up_or_down():
+def test_the_title_starts_at_one_player_and_the_stick_steps_through_three_rows():
     m = fresh(1)
-    assert m.state == TITLE and m.mode == 1
+    assert m.state == TITLE and m.mode == 1 and m.title_index == 0
+    assert config.TITLE_ITEMS == ("1 PLAYER", "2 PLAYERS", "QUIT")
     events = m.update(DT, DOWN)
-    assert m.mode == 2 and cues(events, "blip")
-    events = m.update(DT, frame(p2={"nav": (0, 1), "stick": (0, 1)}))  # down again: still 2
-    assert m.mode == 2 and not cues(events, "blip")
-    events = m.update(DT, frame(p2={"nav": (0, -1)}))  # up, on either pad: 1 PLAYER
-    assert m.mode == 1 and cues(events, "blip")
-    m.update(DT, frame(p1={"nav": (1, 0), "stick": (1, 0)}))  # sideways: no choice
-    assert m.mode == 1
+    assert m.mode == 2 and m.title_index == 1 and cues(events, "blip")
+    events = m.update(DT, frame(p2={"nav": (0, 1), "stick": (0, 1)}))  # down again: QUIT
+    assert m.title_index == 2 and m.mode == 2 and cues(events, "blip")
+    events = m.update(DT, DOWN)  # clamped: no wrap round to the top
+    assert m.title_index == 2 and not cues(events, "blip")
+    events = m.update(DT, frame(p2={"nav": (0, -1)}))  # up, on either pad
+    assert m.title_index == 1 and cues(events, "blip")
+    m.update(DT, UP)
+    m.update(DT, UP)  # clamped at the top too
+    assert m.title_index == 0 and m.mode == 1
+    m.update(DT, frame(p1={"nav": (1, 0), "stick": (1, 0)}))  # sideways: nothing
+    assert m.title_index == 0
 
 
 def held_diagonal(dx: int, dy: int, lag: int, seconds: float = 2.0):
@@ -93,37 +118,76 @@ def held_diagonal(dx: int, dy: int, lag: int, seconds: float = 2.0):
                         "steer": float(x)})
 
 
-@pytest.mark.parametrize("dx, dy, want", [(1, -1, 1), (-1, 1, 2), (1, 1, 2), (-1, -1, 1)])
+@pytest.mark.parametrize("dx, dy, start, want", [(1, -1, 1, 0), (-1, 1, 1, 2), (1, 1, 0, 2),
+                                                  (-1, -1, 2, 0)])
 @pytest.mark.parametrize("lag", [0, 2, 5])
-def test_a_held_diagonal_picks_one_mode(dx, dy, want, lag):
+def test_a_held_diagonal_moves_only_up_or_down_and_stops_at_the_end(dx, dy, start, want, lag):
+    """The sideways repeats never move the menu; the up/down ones step to the end row."""
     m = fresh(1)
-    modes, blips = [], 0
+    for _ in range(start):
+        m.update(DT, DOWN)
+    rows = []
     for inp in held_diagonal(dx, dy, lag):
-        blips += len(cues(m.update(DT, inp), "blip"))
-        modes.append(m.mode)
-    changes = sum(1 for a, b in zip(modes, modes[1:]) if a != b)
-    assert modes[-1] == want and changes <= 1 and blips <= 1, (modes[:12], blips)
+        m.update(DT, inp)
+        rows.append(m.title_index)
+    steps = [b - a for a, b in zip(rows, rows[1:]) if a != b]
+    assert rows[-1] == want and all(d == (1 if dy > 0 else -1) for d in steps), rows[:20]
 
 
-def test_two_pads_held_opposite_ways_settle_on_p1s_choice():
+def test_two_pads_held_opposite_ways_follow_p1():
     m = fresh(1)
-    modes = []
-    for _ in range(120):
-        m.update(DT, frame(p1={"stick": (0, 1)}, p2={"stick": (0, -1), "nav": (0, -1)}))
-        modes.append(m.mode)
-    assert set(modes) == {2}
+    m.update(DT, DOWN)
+    rows = []
+    for k in range(120):
+        m.update(DT, frame(p1={"stick": (0, 1), "nav": (0, 1) if k % 7 == 0 else (0, 0)},
+                           p2={"stick": (0, -1), "nav": (0, -1) if k % 5 == 0 else (0, 0)}))
+        rows.append(m.title_index)
+    assert set(rows) == {2}
 
 
-def test_a_held_stick_stays_on_its_choice():
-    """Auto-repeated steps of a held stick must not flicker between the two modes."""
+def test_a_held_stick_stays_on_the_last_row():
+    """Auto-repeated steps of a held stick go to the end and stay there: no wrap."""
     m = fresh(1)
-    modes, blips = [], 0
+    rows, blips = [], 0
     for k in range(60):  # a second held down, a step every few frames
         events = m.update(DT, frame(p1={"nav": (0, 1) if k % 7 == 0 else (0, 0),
-                                        "steer": 0.0}) if k % 7 else DOWN)
-        modes.append(m.mode)
+                                        "stick": (0, 1)}))
+        rows.append(m.title_index)
         blips += len(cues(events, "blip"))
-    assert set(modes) == {2} and blips == 1
+    assert rows[-1] == 2 and rows == sorted(rows) and blips == 2
+
+
+def test_a_on_quit_quits_at_once():
+    m = fresh(1)
+    m.update(DT, DOWN)
+    m.update(DT, DOWN)
+    assert not m.quit_requested
+    events = m.update(DT, A)
+    assert m.quit_requested and cues(events, "quit") and m.state == TITLE
+
+
+def test_start_never_quits_it_begins_one_player_from_quit():
+    m = fresh(1)
+    m.update(DT, DOWN)  # 2 PLAYERS
+    m.update(DT, DOWN)  # QUIT
+    events = m.update(DT, START)
+    assert not m.quit_requested and not cues(events, "quit")
+    assert m.state == HOWTO and m.mode == 1 and m.title_index == 0
+    through_card(m)
+    assert m.race.players == 1
+
+
+def test_b_on_the_title_does_nothing():
+    m = fresh(1)
+    m.update(DT, DOWN)
+    events = m.update(DT, B)
+    assert m.state == TITLE and m.title_index == 1 and not m.quit_requested and not events
+
+
+def test_the_attract_race_never_picks_quit():
+    m = fresh(1)
+    run(m, config.ATTRACT_DELAY + 30.0)
+    assert m.attract and m.title_index == 0 and not m.quit_requested
 
 
 def test_the_input_that_stops_the_attract_race_does_not_change_the_mode():
@@ -137,14 +201,59 @@ def test_the_input_that_stops_the_attract_race_does_not_change_the_mode():
 
 
 @pytest.mark.parametrize("button", ["a", "start"])
-def test_a_or_start_begins_the_countdown_with_the_chosen_players(button):
+def test_a_or_start_shows_the_card_then_the_countdown_with_the_chosen_players(button):
     for mode in (1, 2):
         m = fresh(1)
         if mode == 2:
             m.update(DT, DOWN)
-        m.update(DT, frame(p2={button: True, "held": True}))
-        assert m.state == COUNTDOWN
+        events = m.update(DT, frame(p2={button: True, "held": True}))
+        assert m.state == HOWTO and m.race is None and cues(events, "select")
+        through_card(m)
         assert m.race.players == mode and not m.attract
+
+
+# --- The HOW TO PLAY card --------------------------------------------------------------------
+
+
+def test_the_card_ignores_presses_in_its_first_moment_then_any_button_goes_on():
+    m = fresh(1)
+    m.update(DT, START)
+    for inp in (A, START, B, X):  # mashed during the guard: nothing
+        m.update(DT, inp)
+        assert m.state == HOWTO
+    run(m, config.HOWTO_GUARD)
+    for inp in (frame(p1={"steer": 1.0, "nav": (1, 0), "stick": (1, 0)}),
+                frame(p2={"brake": 1.0, "nav": (0, 1), "stick": (0, 1)})):
+        m.update(DT, inp)  # the stick doesn't
+        assert m.state == HOWTO
+    events = m.update(DT, frame(p2={"select": True, "held": True}))  # any button, either pad
+    assert m.state == COUNTDOWN and cues(events, "count")
+    assert not cues(events, "pause") and m.t == 0.0  # the press did nothing else
+
+
+@pytest.mark.parametrize("name", ["a", "b", "start", "select", "button"])
+def test_every_button_dismisses_the_card(name):
+    m = fresh(1)
+    m.update(DT, START)
+    run(m, config.HOWTO_GUARD + DT)
+    m.update(DT, frame(p1={name: True, "held": True}))
+    assert m.state == COUNTDOWN
+
+
+def test_the_idle_timeout_runs_on_the_card():
+    m = fresh(1)
+    m.update(DT, DOWN)
+    m.update(DT, A)
+    run(m, config.IDLE_TIMEOUT + DT)
+    assert m.state == TITLE and m.mode == 1 and m.title_index == 0
+
+
+def test_a_rematch_skips_the_card():
+    m = started()
+    finish(m, "p1")
+    run(m, config.FINISH_DELAY + config.RESULT_LOCK + 0.2)
+    m.update(DT, A)
+    assert m.state == COUNTDOWN
 
 
 def test_the_attract_race_runs_after_3_s_untouched_and_any_input_stops_it():
@@ -167,7 +276,9 @@ def test_start_during_the_attract_race_begins_a_real_race():
     m = fresh(1)
     run(m, config.ATTRACT_DELAY + 1)
     m.update(DT, START)
-    assert m.state == COUNTDOWN and not m.attract and m.race.players == 1
+    assert m.state == HOWTO and not m.attract and m.race is None
+    through_card(m)
+    assert m.race.players == 1
 
 
 def test_a_finished_attract_race_is_followed_by_another():
@@ -184,7 +295,8 @@ def test_a_finished_attract_race_is_followed_by_another():
 
 def test_the_countdown_beeps_3_2_1_then_go_and_the_cars_wait_for_it():
     m = fresh(1)
-    events = m.update(DT, START)
+    m.update(DT, START)
+    events = through_card(m)
     assert [c.value for c in cues(events, "count")] == [3]
     assert m.countdown == 3
     events = run(m, config.COUNTDOWN - 2 * DT)
@@ -297,8 +409,7 @@ def test_a_resumed_a_press_does_not_use_an_item():
 
 
 def test_start_also_pauses_the_countdown():
-    m = fresh(1)
-    m.update(DT, START)
+    m = begun()
     m.update(DT, IDLE)
     m.update(DT, START)
     assert m.state == PAUSED
@@ -319,7 +430,7 @@ def test_the_title_waits_for_the_buttons_to_be_let_go_after_quit_to_title():
     assert m.state == TITLE
     m.update(DT, IDLE)
     m.update(DT, A)
-    assert m.state == COUNTDOWN
+    assert m.state == HOWTO
 
 
 # --- Idle ------------------------------------------------------------------------------------
@@ -580,6 +691,7 @@ def test_the_first_pickup_of_each_item_shows_how_to_use_it_once_a_session():
     run(m, config.IDLE_TIMEOUT + 0.1)
     assert m.state == TITLE
     m.update(DT, START)
+    through_card(m)
     run(m, config.COUNTDOWN + DT)
     m.race.roll_item = lambda place, **kw: "SPLIT"
     through_box(m)
@@ -603,7 +715,7 @@ def test_a_button_held_at_launch_does_not_start_a_match():
         assert m.state == TITLE
     m.update(DT, IDLE)  # let go
     m.update(DT, A)
-    assert m.state == COUNTDOWN
+    assert m.state == HOWTO
 
 
 def test_a_held_input_has_no_presses():
@@ -611,5 +723,36 @@ def test_a_held_input_has_no_presses():
                     "steer": 0.4, "brake": 1.0, "held": True})
     held = inp.held_only()
     p = held.players["p1"]
-    assert not (p.a or p.b or p.start or p.select) and p.nav == (0, 0)
+    assert not (p.a or p.b or p.start or p.select or p.button) and p.nav == (0, 0)
     assert p.steer == 0.4 and p.brake == 1.0 and p.held and held.activity
+
+
+def test_every_box_pops_its_item_up_over_the_car():
+    m = started()
+    m.race.roll_item = lambda place, **kw: "MEASURE"
+    through_box(m)
+    reveal = m.banner("p1", "reveal")
+    assert reveal is not None and reveal.value == "MEASURE"
+    run(m, config.REVEAL_TIME)
+    assert m.banner("p1", "reveal") is None
+    run(m, config.TIP_TIME)
+    m.race.racer("p1").item = None
+    through_box(m)  # seen before: no tip, but the item still pops up
+    assert m.banner("p1", "reveal").value == "MEASURE" and m.banner("p1", "tip") is None
+
+
+def test_lap_2_and_the_final_lap_get_their_banners():
+    m = started()
+    r = m.race.racer("p1")
+    r.next_row = config.ROWS_PER_LAP
+    r.next_box = m.race.box_index(m.race.lap_length)
+    r.car.z = m.race.lap_length - 20
+    run(m, 0.1)
+    assert m.banner("p1", "lap").value == 2 and m.banner("p1", "final") is None
+    to_the_check(m)
+    run(m, 0.1)
+    final = m.banner("p1", "final")
+    assert final is not None and final.value == config.LAPS and m.banner("p1", "lap") is None
+    assert m.frozen("p1")  # the renderer shows it once the check's freeze is over
+    run(m, config.CHECK_FREEZE + config.FINAL_BANNER)
+    assert m.banner("p1", "final") is None

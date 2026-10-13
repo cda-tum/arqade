@@ -4,7 +4,8 @@ The match always steps by exactly 1/60 s. When a frame took longer (the Pi falli
 it steps up to MAX_STEPS times to catch up, the presses going to the first step only, so
 the game keeps its speed instead of slowing down; it never steps less than once a frame.
 
-Start + Select on one pad (or Esc on the keyboard) quits, as does closing the window. Both
+Start + Select on one pad (or Esc on the keyboard) quits, as do QUIT on the title and
+closing the window. Both
 are armed (see input.py), so nothing held at launch can quit the game at once.
 """
 
@@ -73,7 +74,9 @@ def run(fullscreen: bool, window_size: str, show_fps: bool, seed: int | None = N
         events: list = []
         for k in range(steps):
             events += match.update(DT, frame if k == 0 else frame.held_only())
-        audio.play_events(events)
+        if match.quit_requested:  # QUIT on the title: the same clean exit as Start + Select
+            return script.finish() if script is not None else 0
+        audio.play_events(events, match.players)
         racing = match.state == RACE and not match.attract and match.race is not None
         audio.engines({p: match.race.racer(p).car.speed / config.TOP_SPEED
                        for p in match.players} if racing else {})

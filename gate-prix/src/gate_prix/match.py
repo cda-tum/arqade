@@ -4,17 +4,25 @@
 and the countdown, plus the race's own `race.Event`s for the players' cars (the sound and
 the HUD use both).
 
-    TITLE --A/Start--> COUNTDOWN (3-2-1-GO) --> RACE --all players finished--> RESULT
+    TITLE --A/Start--> HOWTO --any button--> COUNTDOWN (3-2-1-GO) --> RACE --> RESULT
       ^  \\_ 3 s untouched: an attract race of 6 bots plays behind the title      |
-      |                                                      A/Start rematches  |
+      |                                     A/Start rematches (no HOWTO card) |
       +----------------- B, QUIT TO TITLE, or 60 s untouched ------------------+
 
-- **The title:** the stick's up/down picks 1 or 2 PLAYERS (as the menu stands), from the
-  direction it is held in, not its repeated steps: a held stick, a diagonal too, stays on
-  its choice. Sideways does nothing. When the pads disagree P1's wins. A or Start begins. After ATTRACT_DELAY
-  seconds untouched an attract race plays behind it: `Race(seed, 2, finish_all=True)`, all
-  six cars driven by bots, silently. Any input stops it (and that frame's stick changes
-  nothing); A or Start still begins at once.
+- **The title:** three rows, 1 PLAYER / 2 PLAYERS / QUIT (`title_index`), moved one step at
+  a time by the stick's up/down and clamped at both ends (no wrap), so a held stick stays
+  on the last row it reaches. Only the up/down steps of the first pad whose stick is held
+  count: sideways does nothing, and when the pads disagree P1's wins. A begins the
+  highlighted mode, or on QUIT quits at once (`quit_requested`, the main loop's clean exit).
+  Start begins, never quits: the highlighted mode, or 1 PLAYER on QUIT. B does nothing.
+  After ATTRACT_DELAY seconds untouched an attract race plays behind it:
+  `Race(seed, 2, finish_all=True)`, all six cars driven by bots, silently (the bots drive,
+  they never touch the menu). Any input stops it (and that frame's stick changes nothing);
+  A or Start still begins at once.
+- **The HOW TO PLAY card** (HOWTO) comes before every match begun from the title, never
+  before a rematch. Its first HOWTO_GUARD seconds ignore the buttons; after that any button
+  of either pad (the stick doesn't count) goes on to the countdown, and that press does
+  nothing else. The idle timeout runs on it; Start + Select quits, as everywhere.
   At launch, and reached through QUIT TO TITLE or B, the title waits for every button to be
   let go, so a button held as the game starts, or the press that left the race, doesn't
   start the next one.
@@ -32,7 +40,9 @@ the HUD use both).
   (value ("right", streak), ("wrong", slot) or ("miss", slot); one at a time), "tip" says how
   to use an item on its first pickup (value the item; once per item and player each
   session, a session ending when the idle timeout sends the cabinet back to the title),
-  "lap" (LAP 2) and "finish" (the place, until the result).
+  "lap" (LAP 2/3), "final" (FINAL LAP and STORM AHEAD, shown once the check's freeze is
+  over), "reveal" (the item a box just gave, popping up over the car) and "finish" (the
+  place, until the result).
 - **Pause:** Start (either pad) pauses the countdown or the race: RESUME / QUIT TO TITLE.
   The stick moves, A picks, B or Start resumes. Nothing moves meanwhile.
 - **The end:** once every player has finished (or, with 2 players, FINISH_GRACE seconds
@@ -56,6 +66,7 @@ from gate_prix.race import Event, Race
 PLAYERS = ("p1", "p2")
 TITLE = "title"
 COUNTDOWN = "countdown"
+HOWTO = "howto"
 RACE = "race"
 PAUSED = "paused"
 RESULT = "result"
@@ -67,7 +78,7 @@ AIMED = ("bump", "collapse", "decohered")
 @dataclass(frozen=True)
 class Cue:
     """A match-level event: blip, select, count (3, 2, 1), go, pause, resume, title,
-    finish (the race is over), result."""
+    finish (the race is over), result, quit (QUIT picked on the title)."""
 
     kind: str
     player: str | None = None
@@ -86,6 +97,7 @@ class PlayerInput:
     b: bool = False
     start: bool = False
     select: bool = False  # (only the main loop's Start + Select quit uses Select)
+    button: bool = False  # any button at all pressed this frame (X, Y, L and R too)
     held: bool = False  # any of A, B, Start or Select held down
 
 
@@ -100,12 +112,17 @@ class FrameInput:
 
     def held_only(self) -> FrameInput:
         """The same input without its presses: for a second logic step in one frame."""
-        still = {"nav": (0, 0), "a": False, "b": False, "start": False, "select": False}
+        still = {"nav": (0, 0), "a": False, "b": False, "start": False, "select": False,
+                 "button": False}
         return FrameInput({p: replace(i, **still) for p, i in self.players.items()},
                           self.activity)
 
     def any(self, name: str) -> bool:
         return any(getattr(i, name) for i in self.players.values())
+
+    def pressed(self) -> bool:
+        """Whether any button of any pad went down this frame."""
+        return any(i.button or i.a or i.b or i.start or i.select for i in self.players.values())
 
     def nav(self) -> tuple[int, int]:
         """The first stick step of any pad."""
@@ -137,6 +154,8 @@ class Match:
         self.rng = rng or random.Random()
         self.state = TITLE
         self.mode = 1  # 1 or 2 PLAYERS
+        self.title_index = 0  # the title's highlighted row (config.TITLE_ITEMS)
+        self.quit_requested = False  # QUIT picked on the title: the main loop exits
         self.t = 0.0  # seconds in the current state
         self.idle = 0.0
         self.race: Race | None = None
@@ -183,7 +202,7 @@ class Match:
         self.idle = 0.0 if inp.activity else self.idle + dt
         if self.state != TITLE and self.idle >= config.IDLE_TIMEOUT:
             self._to_title(wait=False)
-            self.mode = 1
+            self.mode, self.title_index = 1, 0
             self.tips_seen = {p: set() for p in PLAYERS}  # someone new: tips again
             return [Cue("title")]
         events: list = []
@@ -220,13 +239,24 @@ class Match:
         stopped = inp.activity and self.attract
         if stopped:
             self.race, self.bots, self.attract = None, {}, False
-        choice = self._title_choice(inp)
-        if choice is not None and not stopped and choice != self.mode:
-            self.mode = choice
+        step = self._title_step(inp)
+        index = max(0, min(len(config.TITLE_ITEMS) - 1, self.title_index + step))
+        if not stopped and index != self.title_index:
+            self.title_index = index
+            if index < 2:
+                self.mode = index + 1
             events.append(Cue("blip"))
+        quitting = self.title_index == len(config.TITLE_ITEMS) - 1
+        if inp.any("a") and quitting:
+            self.quit_requested = True
+            events.append(Cue("quit"))
+            return
         if inp.any("a") or inp.any("start"):
+            if quitting:  # Start never quits: it races, 1 PLAYER
+                self.mode, self.title_index = 1, 0
             events.append(Cue("select"))
-            self._new_race(events)
+            self._set(HOWTO)
+            self.race, self.bots, self.attract = None, {}, False
             return
         if self.attract:
             if self.race.over:
@@ -237,16 +267,21 @@ class Match:
             self._attract()
 
     @staticmethod
-    def _title_choice(inp: FrameInput) -> int | None:
-        """1 or 2 PLAYERS from the first pad (P1 first) whose stick is up or down: the
-        direction held (or a tap's step), never the sideways axis, whose repeats run on
-        their own timer and would make a diagonal flicker."""
+    def _title_step(inp: FrameInput) -> int:
+        """The title's up/down step (-1, 0 or 1) from the first pad (P1 first) whose stick
+        is held up or down, or tapped: its auto-repeated steps, never the sideways axis,
+        whose repeats run on their own timer. Another pad held the other way is ignored."""
         for p in PLAYERS:
             i = inp.players[p]
-            dy = i.stick[1] or i.nav[1]
-            if dy:
-                return 1 if dy < 0 else 2
-        return None
+            if i.stick[1] or i.nav[1]:
+                return i.nav[1]
+        return 0
+
+    # --- The HOW TO PLAY card ----------------------------------------------------------------
+
+    def _on_howto(self, dt: float, inp: FrameInput, events: list) -> None:
+        if self.t - dt >= config.HOWTO_GUARD and inp.pressed():
+            self._new_race(events)
 
     def _attract(self) -> None:
         self.seed = self.rng.randrange(1 << 30)
@@ -327,14 +362,19 @@ class Match:
         if e.kind in ("right", "wrong", "miss"):
             banners[:] = [b for b in banners if b.kind != "gate"]
             banners.append(Banner("gate", (e.kind, e.value), config.FLASH_TIME))
-        elif e.kind == "box" and e.value is not None and e.value not in self.tips_seen[e.car]:
-            self.tips_seen[e.car].add(e.value)
-            banners[:] = [b for b in banners if b.kind != "tip"]
-            banners.append(Banner("tip", e.value, config.TIP_TIME))
+        elif e.kind == "box" and e.value is not None:
+            banners[:] = [b for b in banners if b.kind != "reveal"]
+            banners.append(Banner("reveal", e.value, config.REVEAL_TIME))
+            if e.value not in self.tips_seen[e.car]:
+                self.tips_seen[e.car].add(e.value)
+                banners[:] = [b for b in banners if b.kind != "tip"]
+                banners.append(Banner("tip", e.value, config.TIP_TIME))
         elif e.kind == "check":
             banners[:] = [b for b in banners if b.kind not in ("lap", "gate")]
-        elif e.kind == "lap" and e.value != config.LAPS:  # the final lap has the check's
+        elif e.kind == "lap" and e.value != config.LAPS:
             banners.append(Banner("lap", e.value, config.LAP_BANNER))
+        elif e.kind == "lap":  # the final lap: shown after the check's freeze
+            banners.append(Banner("final", e.value, config.CHECK_FREEZE + config.FINAL_BANNER))
         elif e.kind == "finish":
             banners[:] = [Banner("finish", e.value, None)]
             self.bots[e.car] = bot.Bot(e.car, config.AUTOPILOT_SKILL, self.seed)

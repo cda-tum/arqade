@@ -1,6 +1,6 @@
 """Single source of truth for resolution, race rules, colours and input.
 
-Joystick 0 = P1 (blue, top view), joystick 1 = P2 (red, bottom view). The raw button
+Joystick 0 = P1 (blue, left view), joystick 1 = P2 (red, right view). The raw button
 numbers are the ones confirmed on the cabinet (see ../../../AGENTS.md): printed A = 1,
 B = 2, Select = 8, Start = 9. The stick is an analog axis, never a hat: axis 0 steers,
 axis 1 brakes (pulled back, positive) and drives the menus.
@@ -14,7 +14,10 @@ INTERNAL_HEIGHT = 540  # exactly x2 onto the cabinet's 1920x1080 panel
 FPS = 60
 SHOW_FPS_DEFAULT = False
 VIEW_1P = (960, 540)
-VIEW_2P = (960, 270)  # P1 on top, P2 below
+VIEW_2P = (480, 540)  # side by side: P1 on the left, P2 on the right, a thin divider between
+# A 2P view projects the road as if it were VIEW_2P_SPREAD * 2 wide and shows its middle 480:
+# at half the width the cars and the road would be squeezed to half their size.
+VIEW_2P_SPREAD = 320
 
 # --- The race --------------------------------------------------------------------------
 CARS = 6
@@ -270,9 +273,14 @@ SHAKE = 7.0  # the camera's height jitter (world units) at top speed ...
 SHAKE_BOOST = 14.0  # ... and at +100%
 LIGHT_SPEED_TEXT = 1.3  # seconds the LIGHT SPEED! title stays up
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
+TITLE_ITEMS = ("1 PLAYER", "2 PLAYERS", "QUIT")  # the title's rows; QUIT exits the game
+HOWTO_GUARD = 0.3  # the HOW TO PLAY card ignores the buttons this long (the A that chose)
+REVEAL_TIME = 0.9  # a box's item pops up over the car this long
+FINAL_BANNER = 2.4  # FINAL LAP / STORM AHEAD stays up this long after the check's freeze
+GANTRY_LIGHTS = 5  # the start lights: red one by one in the countdown, all green at GO
 
 # --- Colours ---------------------------------------------------------------------------
-# The one source of the players' colours (the look's): P1 blue on top, P2 red below.
+# The one source of the players' colours (the look's): P1 blue on the left, P2 red on the right.
 PLAYER_COLORS = {"p1": (80, 170, 255), "p2": (255, 80, 90)}
 # The CPU racers, best first: never a player's hue (P1's blue, cyan and teal; P2's red,
 # orange and pink) and clear of the gates' (H gold, X red, Z blue, Y purple). Only greens are

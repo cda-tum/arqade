@@ -2,8 +2,9 @@
 
 Per player: the stick's axis 0 steers (deadzoned, rescaled to -1..1) and axis 1 pulled
 back (positive) brakes; pushed forward it does nothing in a race. In menus the stick gives
-auto-repeated steps. A, B and Start come as presses (the frame they go down) and `held`
-says whether any button is down at all. Raw button numbers are the cabinet's
+auto-repeated steps. A, B and Start come as presses (the frame they go down), `button` is
+any button at all going down (for the HOW TO PLAY card) and `held` says whether A, B, Start
+or Select is down. Raw button numbers are the cabinet's
 (config.INPUT_CONFIG): A = 1, B = 2, Select = 8, Start = 9. The stick is read from the
 axes, never a hat (the cabinet has none).
 
@@ -224,6 +225,7 @@ class Input:
                 b=b in pressed or "back" in new_keys,
                 start=start in pressed or "start" in new_keys,
                 select=select in pressed or "select" in new_keys,
+                button=bool(pressed) or bool(new_keys & buttons),
                 held=held,
             )
             combo = ((start in down or "start" in held_keys)
