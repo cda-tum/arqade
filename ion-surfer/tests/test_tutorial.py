@@ -30,6 +30,12 @@ class FakeSounds:
     def play(self, name):
         self.played.append(name)
 
+    def impact(self, speed):
+        self.played.append("bounce")
+
+    def ambient(self, sources, dt):
+        pass
+
 
 @pytest.fixture
 def make_menu(tmp_path, monkeypatch):

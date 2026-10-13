@@ -36,6 +36,7 @@ LASER_UP, LASER_DOWN = 3400, 2600
 COULOMB = 5.5e6
 BEAM_W0, BEAM_ZR = EW * 0.17, 119
 HOLE_PULL, HOLE_CAPTURE, HOLE_RANGE = 1.6e6, 20, 150
+BEAM_HEAR, STRAY_HEAR = 280, 360   # px from an ion at which a beam / stray starts to get louder
 
 FONT_DIR = Path(__file__).parent / "assets" / "fonts"
 # ======================================================================
@@ -428,8 +429,10 @@ class Game:
                 b.vx, b.vy = rx, ry + vs
                 if vn < -320:
                     self.burst(b.x, b.y - R, b.color, 6)
-                    if isinstance(b, Ion):
-                        self.sounds.play("bounce")
+                if isinstance(b, Ion):
+                    # how hard it hit: its speed into the wave, relative to
+                    # the wave (a curve pushed up under it counts too)
+                    self.sounds.impact(-vn)
 
         if not b.inv > 0:
             for k in self.ents:
@@ -678,6 +681,29 @@ class Game:
         self.state = "tutorial"
 
     def update(self, dt):
+        self.update_state(dt)
+        self.sounds.ambient(self.ambient_sources(), dt)
+
+    def ambient_sources(self):
+        """What hums and pings in the background: every laser beam and active
+        stray ion in a running match, as (kind, key, screen x, nearness to the
+        closest ion). Nothing in menus, while paused or in the sandbox, so
+        the ambience fades out there."""
+        if self.state != "play" or self.mode == SANDBOX:
+            return []
+        ions = [i for i in self.ions if i.alive]
+        out = []
+        for e in self.ents:
+            if e.type == "laser":
+                d = min((abs(i.x - e.x) for i in ions), default=math.inf)
+                kind = "beam_up" if e.dir > 0 else "beam_down"
+                out.append((kind, id(e), e.x - self.cam_x, sound.nearness(d, BEAM_HEAR)))
+            elif e.type == "stray" and e.active:
+                d = min((math.hypot(i.x - e.x, i.y - e.y) for i in ions), default=math.inf)
+                out.append(("stray", id(e), e.x - self.cam_x, sound.nearness(d, STRAY_HEAR)))
+        return out
+
+    def update_state(self, dt):
         c = self.controls
         if self.state == "play":
             if c.pause_pressed():
@@ -1157,7 +1183,7 @@ def run(*, fullscreen=False, window_size="1200x640", show_fps=False, sandbox_onl
     pygame.display.set_caption("Ion Trap Sandbox" if sandbox_only else "Ion Surfer")
     pygame.mouse.set_visible(not fullscreen)
     clock = pygame.time.Clock()
-    game = Game(surface, sandbox_only=sandbox_only, sounds=sound.load_sounds())
+    game = Game(surface, sandbox_only=sandbox_only, sounds=sound.load_sounds(W))
     fps_font = load_font("Rubik-Medium.ttf", 15)
     while game.running:
         dt = min(0.1, clock.tick(FPS) / 1000)
