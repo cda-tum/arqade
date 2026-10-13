@@ -462,6 +462,32 @@ def test_a_blind_bot_picks_its_arch_at_half_its_skill():
     assert right / picks == pytest.approx(0.8 * config.BOT_BLIND_SKILL, abs=0.08)
 
 
+def test_a_bot_queueing_behind_a_car_brakes_rather_than_drifts():
+    race = Race(seed=3, players=1, finish_all=True)
+    b = Bot("green", 0.85, 3)
+    green = ahead_of(race, "green", {}, x=-0.5)
+    b._avoid = lambda race, me, goal, arch: (0.9, 0.6)  # far to the side, and easing off
+    c = b.controls(race)
+    assert c.brake == pytest.approx(0.6) and abs(c.steer) < config.DRIFT_STEER
+    race.update(DT, {"green": c})
+    assert not green.car.drifting
+
+
+def test_the_curves_are_kept_per_track_object():
+    import gc
+
+    from gate_prix.track import Track
+    gentle = Track([0.0] * 50 + [3.0] * 20 + [0.0] * 30, [0.0] * 100)
+    assert bot._curves(gentle) == {i: 0 for i in range(50, 70)}
+    assert gentle in bot._CURVES
+    other = Track([3.0] * 10 + [0.0] * 90, [0.0] * 100)
+    assert bot._curves(other) == {i: 0 for i in range(10)}
+    n = len(bot._CURVES)
+    del gentle
+    gc.collect()
+    assert len(bot._CURVES) == n - 1  # held weakly: a new track can't inherit its map
+
+
 # --- Whole races, 20 seeds ------------------------------------------------------------------
 
 

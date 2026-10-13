@@ -12,7 +12,9 @@ away, on top of the speed it sheds.
 **Drifting** comes from the same two controls: the stick pulled back *and* steered
 (|steer| >= DRIFT_STEER, from DRIFT_MIN_SPEED) is a drift, pulled straight back is the brake.
 A drift runs at DRIFT_SPEED of the speed the car would have, with DRIFT_PUSH of the curve's
-push, and charges by its length (DRIFT_LEVELS); letting go of it gives that level's
+push, and charges by its length (DRIFT_LEVELS), but only while the road bends its way by
+more than DRIFT_CHARGE_CURVE: on a straight (or against the bend) the charge holds and does
+not grow, so weaving on a straight earns nothing. Letting go of it gives that level's
 mini-turbo through `give_boost`. Steering the other way lets go too (and may start a new
 one). Slowing below DRIFT_END_SPEED, a bump or a hit ends it with nothing.
 
@@ -64,7 +66,7 @@ class Car:
         self.steer = 0.0  # the stick as last applied, for a lean
         self.drifting = False  # in a drift: stick back and steered (see the top)
         self.drift_dir = 0  # its direction: 1 right, -1 left, 0 when not drifting
-        self.drift_time = 0.0  # seconds into it: its charge
+        self.drift_time = 0.0  # its charge: seconds of it into a bend (DRIFT_CHARGE_CURVE)
         self.drift_angle = 0.0  # the slide's angle now, radians (positive: nose to the right)
         self.turbo_level = 0  # the level of the last mini-turbo ...
         self.turbo_flash = 0.0  # ... and the seconds its flash has left
@@ -212,8 +214,8 @@ class Car:
         elif self.speed < top:
             accel = config.BOOST_ACCEL if self.boost else config.ACCEL
             self.speed = min(top, self.speed + accel * dt)
-        if self.drifting:
-            self.drift_time += dt
+        if self.drifting and self.drift_dir * segment.curve > config.DRIFT_CHARGE_CURVE:
+            self.drift_time += dt  # charging only into a real bend
             level = self.drift_level
             if level and self.drift_time - dt < config.DRIFT_LEVELS[level - 1] - 1e-9:
                 self.cues.append(("drift", level))

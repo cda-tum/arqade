@@ -65,8 +65,9 @@ Rules decided here:
   - A SPLIT is over with the car's last gate row: a clone still out goes and a SPLIT still
     held is dropped, as no gate is left to take (either cues "split_end", once).
   - MEASURE: a shot (`shots`) homes on the nearest car ahead in the race (not finished)
-    within MEASURE_RANGE at the moment it is fired, flying MEASURE_FLIGHT seconds. It
-    then **collapses** that car: a spin-out, its streak reset, its boosts cleared. With
+    within MEASURE_RANGE at the moment it is fired, flying MEASURE_FLIGHT seconds (and, on
+    a car frozen on its CIRCUIT CHECK, waiting on it until the freeze is over). It then
+    **collapses** that car: a spin-out, its streak reset, its boosts cleared. With
     nobody in range it fizzles. A car tunnelling when the shot arrives is immune.
   - TUNNEL: TUNNEL_TIME seconds through cars (no bumps either way), off-road at full
     speed, and immune to its storm, clouds and MEASURE.
@@ -426,6 +427,9 @@ class Race:
             target = self._by_id[shot.target]
             if target.finished:
                 continue  # over the line first: nothing to collapse
+            if target.check_wait > 0:
+                flying.append(shot)  # frozen on the CIRCUIT CHECK: it waits for the freeze
+                continue
             if target.car.tunnelling:
                 events.append(Event("immune", target.car.id, "shot"))
                 continue

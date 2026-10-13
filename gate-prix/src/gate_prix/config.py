@@ -94,7 +94,8 @@ BRAKE_PUSH = 0.3  # a brake held through a curve takes up to 30% off the push
 # and holds with |steer| >= DRIFT_STEER and any pull past the stick's deadzone (the brake's
 # own: brake > DRIFT_PULL), from DRIFT_MIN_SPEED of the top speed. A drifting car runs at
 # DRIFT_SPEED of the speed it would have and the curve pushes it out with DRIFT_PUSH of the
-# push, so it turns tighter. DRIFT_LEVELS seconds of drifting charge levels 1 and 2; letting
+# push, so it turns tighter. DRIFT_LEVELS seconds of drifting into a bend charge levels 1
+# and 2; letting
 # go gives that level's mini-turbo (DRIFT_TURBOS, through give_boost). An uncharged drift
 # ends with nothing, and so does one ended by slowing below DRIFT_END_SPEED, a bump or a hit.
 DRIFT_STEER = 0.4
@@ -104,6 +105,11 @@ DRIFT_END_SPEED = 0.5
 DRIFT_SPEED = 0.92
 DRIFT_PUSH = 0.5
 DRIFT_LEVELS = (0.7, 1.5)
+# The charge only grows while the road bends the drift's way by more than this (|curve|):
+# on a straight, or drifting against the bend, a drift slides but its charge holds, so
+# weaving on a straight earns nothing (THE FRIDGE's sweepers bend 2.0-2.4, the s-bend 3.2,
+# the coax corner 4.4).
+DRIFT_CHARGE_CURVE = 1.0
 DRIFT_TURBOS = ((0.25, 0.6), (0.40, 1.0))  # (strength, seconds) of levels 1 and 2
 DRIFT_ANGLE = 0.35  # radians: the slide's angle in a drift (the renderer's tilt)
 DRIFT_ANGLE_RATE = 2.5  # radians a second toward it, and back to straight after

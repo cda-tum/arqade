@@ -308,7 +308,48 @@ def test_steering_the_other_way_lets_go_and_starts_a_new_drift():
     car = drift_for(0.8)
     car.update(DT, -0.6, 1.0, bend(3.0))
     assert car.boost == pytest.approx(0.25)
-    assert car.drifting and car.drift_dir == -1 and car.drift_time == pytest.approx(DT)
+    assert car.drifting and car.drift_dir == -1
+    assert car.drift_time == 0.0  # against the bend: no charge
+
+
+def test_the_charge_threshold():
+    assert config.DRIFT_CHARGE_CURVE == 1.0
+
+
+def test_a_drift_charges_only_into_a_real_bend():
+    for segment, steer in ((STRAIGHT, 0.6), (bend(0.9), 0.6), (bend(3.0), -0.6)):
+        car = at_speed()
+        drive(car, 2.0, steer=steer, brake=1.0, segment=segment)
+        assert car.drifting and car.drift_time == 0.0 and car.drift_level == 0
+        car.update(DT, steer, 0.0, segment)
+        assert car.boost == 0.0  # let go: nothing
+    car = at_speed()
+    drive(car, 0.8, steer=-0.6, brake=1.0, segment=bend(-1.2))
+    assert car.drift_level == 1
+
+
+def test_a_charge_built_in_a_bend_is_held_on_a_straight_but_does_not_grow():
+    car = drift_for(0.8)
+    charge = car.drift_time
+    drive(car, 1.0, steer=0.6, brake=1.0, segment=STRAIGHT)
+    assert car.drifting and car.drift_time == charge and car.drift_level == 1
+    drive(car, 0.75, steer=0.6, brake=1.0, segment=bend(3.0))
+    assert car.drift_level == 2
+
+
+def test_snaking_on_a_straight_earns_no_turbo_and_loses_ground():
+    """Weaving with the stick back (a drift each way, over and over) on a straight is no
+    way to go faster: no charge, so no turbo, and the drift's 92% speed."""
+    snake, plain = at_speed(), at_speed()
+    cues = []
+    for i in range(round(10.0 / DT)):
+        side = 1.0 if (i // 48) % 2 else -1.0  # 0.8 s each way: past level 1's 0.7 s
+        snake.update(DT, side, 1.0, STRAIGHT)
+        cues += snake.cues
+        plain.update(DT, 0.0, 0.0, STRAIGHT)
+    assert not [c for c in cues if c[0] in ("drift", "turbo")]
+    assert snake.boost == 0.0 and snake.z < plain.z
+
 
 
 def test_the_charge_cues_each_level_once():

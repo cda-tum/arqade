@@ -494,14 +494,16 @@ def test_drifting_comes_from_the_stick_and_cues_its_charge_and_turbo():
     for r in race.racers[1:]:
         put(r, -100_000.0 - 1000 * race.racers.index(r), 2.1)
     p1.next_row, p1.next_box = len(race.rows), len(race.box_lines)
-    put(p1, race.lap_length * 0.3, 0.0)
+    segs = race.track.segments  # the long sweeper: a right bend of more than 3 s
+    start = next(s for s in segs if s.index > 1300 and s.curve > config.DRIFT_CHARGE_CURVE)
+    put(p1, start.z + 400.0, 0.3)
     events = []
     for _ in range(round(1.6 / DT)):
-        events += of(race.update(DT, {"p1": Controls(steer=-0.5, brake=1.0)}), "p1")
+        events += of(race.update(DT, {"p1": Controls(steer=0.5, brake=1.0)}), "p1")
     assert p1.car.drifting
     assert [e for e in events if e.kind == "drift"] == [Event("drift", "p1", 1),
                                                           Event("drift", "p1", 2)]
-    events = of(race.update(DT, {"p1": Controls(steer=-0.5)}), "p1")
+    events = of(race.update(DT, {"p1": Controls(steer=0.5)}), "p1")
     assert Event("turbo", "p1", 2) in events and p1.car.boost == pytest.approx(0.40)
 
 
@@ -512,8 +514,10 @@ def test_a_bump_in_the_race_ends_a_drift_with_no_turbo():
         put(r, -100_000.0 - 1000 * race.racers.index(r), 2.1)
     for r in (p1, green):
         r.next_row, r.next_box = len(race.rows), len(race.box_lines)
-    put(p1, race.lap_length * 0.3, 0.0)
-    put(green, race.lap_length * 0.3 + 3000.0, 0.6)
+    segs = race.track.segments  # in the long sweeper, where a drift charges
+    start = next(s for s in segs if s.index > 1300 and s.curve > config.DRIFT_CHARGE_CURVE)
+    put(p1, start.z + 400.0, 0.3)
+    put(green, start.z + 30_000.0, -0.6)
     drift = Controls(steer=0.5, brake=1.0)
     for _ in range(round(1.0 / DT)):
         race.update(DT, {"p1": drift})
@@ -525,3 +529,25 @@ def test_a_bump_in_the_race_ends_a_drift_with_no_turbo():
     assert not p1.car.drifting
     events = race.update(DT, {"p1": Controls(steer=0.5)})
     assert not [e for e in events if e.kind == "turbo"] and p1.car.boost == 0.0
+
+
+def test_a_measure_waits_for_the_check_freeze_to_end():
+    """A player frozen on the CIRCUIT CHECK can't see or steer: a MEASURE that reaches them
+    then waits, and collapses them on the first frame after the freeze."""
+    race = Race(seed=3, players=1, finish_all=True)
+    p1, green = race.racer("p1"), race.racer("green")
+    to_the_check(race, p1, slots_right=16)
+    for r in race.racers[2:]:
+        put(r, race.lap_length / 2, 2.1)
+    green.next_row, green.next_box = len(race.rows), len(race.box_lines)
+    put(green, p1.car.z - 4000.0, 0.0)
+    race.update(DT, {})
+    assert p1.check_wait > 0
+    green.item = "MEASURE"
+    events = race.update(DT, {"green": Controls(item=True)})
+    while p1.check_wait > 0:
+        events += race.update(DT, {})
+        assert not p1.car.spinning
+    p1.hazards = []
+    events += race.update(DT, {})
+    assert Event("collapse", "p1", "green") in events and p1.car.spinning

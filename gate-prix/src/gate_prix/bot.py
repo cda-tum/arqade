@@ -15,7 +15,8 @@ race) and returns the same `Controls` a human does, so the race never knows who 
   when there is room. Lined up for an arch it stays inside the arch; with no room there
   it eases off behind the car in front instead of ramming it.
 - **Braking:** below BOT_BRAKE_SKILL it brakes into sharp curves; better bots never brake.
-  It never brakes with the stick steered past DRIFT_STEER, since that would be a drift.
+  It never brakes with the stick steered past DRIFT_STEER, since that would be a drift:
+  it steers instead, unless it has to ease off behind a car, when it steers less.
 - **Drifting:** through each curve sharper than BOT_DRIFT_CURVE it drifts with probability
   `skill` (decided once per curve and lap): stick back, steered into the curve at least
   DRIFT_STEER, and let go as the curve eases, for the mini-turbo. Not while it is steering
@@ -34,7 +35,9 @@ race) and returns the same `Controls` a human does, so the race never knows who 
 
 from __future__ import annotations
 
+import math
 import random
+import weakref
 
 from gate_prix import config
 from gate_prix.car import Controls, _wrapped, aim
@@ -196,7 +199,10 @@ class Bot:
         if side:  # stick back, steered into the curve
             steer, brake = side * max(config.DRIFT_STEER, side * steer), 1.0
         elif brake > 0 and abs(steer) >= config.DRIFT_STEER:
-            brake = 0.0  # that would be a drift: it steers instead
+            if queue > 0:  # it must ease off behind a car: a brake, so the steer stays under
+                steer = math.copysign(config.DRIFT_STEER - 0.01, steer)
+            else:
+                brake = 0.0  # that would be a drift: it steers instead
         return Controls(steer, brake, self._use(race, me, row), self.pace(race))
 
     def _sees(self, key: tuple) -> bool:
@@ -286,12 +292,13 @@ def dodge(race, me, goal: float, arch: Arch | None = None, sees=None) -> float:
     return min(free, key=lambda x: abs(x - car.x) + 0.25 * abs(x - goal)) if free else goal
 
 
-_CURVES: dict[int, dict[int, int]] = {}
+# per Track object, held weakly (an id could be reused by a later track)
+_CURVES: weakref.WeakKeyDictionary[Track, dict[int, int]] = weakref.WeakKeyDictionary()
 
 
 def _curves(course: Track) -> dict[int, int]:
     """Segment index -> which of the lap's curves sharper than BOT_DRIFT_CURVE it is in."""
-    key = id(course)
+    key = course
     if key not in _CURVES:
         out, n, inside = {}, -1, False
         for seg in course.segments:
