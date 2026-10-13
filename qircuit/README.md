@@ -24,8 +24,7 @@ put back in at the back of the pack, already moving.
 There is no logo or `batocera/gamelist.xml` entry yet. The PC launcher finds
 the game anyway, using the description in its `pyproject.toml`. On the
 cabinet it is an experimental game: deployed but hidden from the public game
-list (see "On the cabinet" below). It has not yet run there, and OpenGL there
-is unchecked.
+list (see "On the cabinet" below).
 
 ## How to play
 
@@ -413,18 +412,18 @@ with real OpenGL, and skips itself where no GL context can be made.
 
 ### On the cabinet
 
-Not tried yet. Things to check before the first deploy:
+First run on the cabinet 2026-10-13 (Batocera 39, Pi 4): pygame gets an
+OpenGL ES context under sway, and the title draws its 3D race at 1080p.
+`qircuit/__init__.py` makes SDL and PyOpenGL both use EGL, because on a
+Wayland desktop they otherwise pick different platforms and PyOpenGL finds no
+context; on the cabinet SDL's wayland driver uses EGL anyway.
 
-- **OpenGL ES under sway:** whether pygame there gets a GL ES 3.0 context
-  at all. On Linux, `qircuit/__init__.py` makes SDL and PyOpenGL both use
-  EGL, because they otherwise pick different platforms on a Wayland desktop
-  and PyOpenGL then finds no context. On the cabinet, SDL's wayland and
-  kmsdrm drivers use EGL anyway.
-- **The dependencies:** whether Batocera's Python has numpy and PyOpenGL.
-  PyOpenGL is pure Python and could ship with the game. numpy is compiled,
-  so it is either already there or the vertex arrays move to the standard
-  library's `array`.
-- **Frame time on the Pi 4.**
+- **Dependencies:** Batocera's Python has neither numpy nor PyOpenGL, nor
+  pip. `deploy_batocera.sh` downloads the cabinet's wheels (aarch64, CPython
+  3.11, the versions pinned in `pyproject.toml`) into `.vendor/` and unpacks
+  them into `/userdata/games/qircuit/vendor/` (~66 MB), which the loader puts
+  on `sys.path`. Nothing is installed into Batocera itself.
+- **Still to check:** the frame time on the Pi 4 in a full race.
 
 `./deploy_batocera.sh` parks the loader at
 `/userdata/games/qircuit/qircuit.pygame`, outside the ROMs folder, so the

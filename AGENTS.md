@@ -421,7 +421,10 @@ checked against batocera-emulationstation's source (`Scripting.cpp`,
 
 **The cabinet's Python has no numpy, no PyOpenGL and no pip** (checked
 2026-10-13). The other games need only pygame; a game that needs more has to
-bring it along in its deploy.
+bring it along in its deploy: Qircuit's `deploy_batocera.sh` unpacks the
+aarch64 / CPython 3.11 wheels of numpy and PyOpenGL into
+`/userdata/games/qircuit/vendor/` and its loader adds that to `sys.path`.
+With that it runs, on OpenGL ES under sway (2026-10-13).
 
 ## Local PC launcher (`launcher/`, `./arqade.sh`)
 
