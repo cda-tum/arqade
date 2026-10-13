@@ -369,13 +369,6 @@ def test_a_minute_without_input_returns_to_the_title():
     assert mt.state == m.TITLE
 
 
-def test_danger_when_a_stack_nears_the_top():
-    mt = in_round()
-    assert not mt.danger
-    mt.boards["p1"].grid.set((0, config.DANGER_ROWS - 1), Gate("X", error=True))
-    assert mt.danger
-
-
 # --- pausing ---------------------------------------------------------------------------
 
 

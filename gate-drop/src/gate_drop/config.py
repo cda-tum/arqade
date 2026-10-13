@@ -118,4 +118,3 @@ SCORE_FILE = Path.home() / ".gate_drop_scores.json"
 
 # --- Sound -------------------------------------------------------------------------
 MASTER_VOLUME = 0.8
-MUSIC_VOLUME = 0.35
