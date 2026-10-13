@@ -22,6 +22,16 @@ def surface():
     return pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT))
 
 
+def begin(s, r):
+    """Start a run from the title and get past the HOW TO PLAY card, drawing it."""
+    r.draw(s, s.update(DT, FrameInput(activity=True, confirms={"p1": True, "p2": False})), DT)
+    assert s.state == S.TUTORIAL
+    for _ in range(round(1.0 / DT)):
+        r.draw(s, s.update(DT, FrameInput(activity=True)), DT)
+    r.draw(s, s.update(DT, FrameInput(activity=True, presses={"p1": True, "p2": False})), DT)
+    assert s.state == S.INTRO
+
+
 def drive(s, r, seconds, play=lambda g: g.bot(), inp=None):
     seen = set()
     for _ in range(round(seconds / DT)):
@@ -40,7 +50,7 @@ def test_a_whole_run_renders(surface, mode):
     s.mode = mode
     r = Renderer(surface)
     r.draw(s, [], DT)
-    s.update(DT, FrameInput(activity=True, confirms={"p1": True, "p2": False}))
+    begin(s, r)
     seen = drive(s, r, 60, play=lambda g: g.bot())  # every microgame, well played
     assert {S.INTRO, S.PLAY, S.RESULT, S.SPEED_UP} <= seen
     seen = drive(s, r, 60, play=lambda g: PlayerInput())  # then run out of lives
@@ -53,7 +63,7 @@ def test_title_attract_name_entry_and_hiscores_render(surface):
     assert S.TITLE in drive(s, r, config.ATTRACT_DELAY + 6, inp=lambda: FrameInput(activity=False))
     assert s.attract
     s.mode = 1
-    s.update(DT, FrameInput(activity=True, confirms={"p1": True, "p2": False}))
+    begin(s, r)
     seen = drive(s, r, 50, play=lambda g: g.bot() if s.score == 0 else PlayerInput())  # 0 never qualifies
     assert S.NAME_ENTRY in seen
     for _ in range(3):
@@ -65,7 +75,8 @@ def test_pause_menu_renders(surface):
     s = Session(random.Random(0), Hiscores(None))
     s.mode = 2
     r = Renderer(surface)
-    s.update(DT, FrameInput(activity=True, confirms={"p1": True, "p2": False}))
+    begin(s, r)
+    drive(s, r, config.PAUSE_GRACE + 0.05)
     s.update(DT, FrameInput(activity=True, pauses={"p1": True, "p2": False}))
     assert s.paused
     r.draw(s, [], DT)
@@ -76,7 +87,7 @@ def test_the_boss_card_intro_and_fight_render(surface, mode):
     s = Session(random.Random(4), Hiscores(None))
     s.mode = mode
     r = Renderer(surface)
-    s.update(DT, FrameInput(activity=True, confirms={"p1": True, "p2": False}))
+    begin(s, r)
     s.toward_boss = config.BOSS_EVERY
     seen = set()
     for _ in range(round(40 / DT)):

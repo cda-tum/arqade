@@ -55,6 +55,9 @@ def test_the_session_counts_appearances():
 
     s = S.Session(random.Random(0), Hiscores(None), [Shorter])
     s.update(1 / 60, S.FrameInput(activity=True, confirms={"p1": True, "p2": False}))
+    for _ in range(30):  # the HOW TO PLAY card
+        s.update(1 / 60, S.FrameInput(activity=True))
+    s.update(1 / 60, S.FrameInput(activity=True, presses={"p1": True, "p2": False}))
     seen = [s.games["p1"].appearance]
     for _ in range(2):
         while s.state != S.PLAY:

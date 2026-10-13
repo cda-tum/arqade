@@ -77,8 +77,22 @@ WINNING_SCORE = 7
 # drops again later). X/Z bounce the ball as if off a vertical/horizontal
 # wall. SWAP teleports it to the mirrored spot across the field.
 GATE_RADIUS = 24  # sized to comfortably fit the 4-letter "SWAP" label
-GATE_SPAWN_INTERVAL = 2.5  # seconds between spawn attempts
-MAX_GATES_ON_SCREEN = 3
+# Spawning speeds up over a match, gently: the gap between spawn attempts
+# shrinks linearly from GATE_SPAWN_INTERVAL to GATE_SPAWN_INTERVAL_MIN over
+# GATE_SPAWN_RAMP_SECONDS of play (pauses don't count), and the on-screen cap
+# grows by one every GATE_CAP_STEP_SECONDS, from MAX_GATES_ON_SCREEN up to
+# MAX_GATES_ON_SCREEN_LATE. Gates never vanish on their own, so the cap is
+# what really sets how crowded the field gets.
+GATE_SPAWN_INTERVAL = 2.5  # seconds between spawn attempts, at kick-off
+GATE_SPAWN_INTERVAL_MIN = 1.25  # ... and once the ramp is over
+GATE_SPAWN_RAMP_SECONDS = 90.0
+MAX_GATES_ON_SCREEN = 3  # at kick-off
+MAX_GATES_ON_SCREEN_LATE = 5
+GATE_CAP_STEP_SECONDS = 45.0
+# A gate is announced this long before it appears: a dashed outline with its
+# letter, at exactly the spot it will land, so a ball is never hit by a gate
+# that pops in out of nowhere. An announced gate does nothing to balls yet.
+GATE_WARNING_SECONDS = 1.5
 MAX_BALLS_ON_SCREEN = 4
 # Keep spawns out of a margin near each paddle.
 GATE_SPAWN_MARGIN_X = 120
@@ -119,6 +133,11 @@ COLOR_FLASH = (255, 255, 255)
 IDLE_TIMEOUT_SECONDS = 60.0  # no input during a match -> back to the title screen
 WINNER_SCREEN_DURATION = 5.0  # auto-return to title after this long, sooner on input
 TITLE_BLINK_PERIOD = 1.0  # seconds per "PRESS START" blink cycle
+# HOW TO PLAY card before each match from the title: button presses in its
+# first TUTORIAL_IGNORE_SECONDS don't dismiss it (the A/Start that left the
+# title, or its bounce), and its demo shows each gate for this long.
+TUTORIAL_IGNORE_SECONDS = 0.3
+TUTORIAL_SCENE_SECONDS = 4.0
 
 # --- Debug ---
 SHOW_FPS_DEFAULT = False

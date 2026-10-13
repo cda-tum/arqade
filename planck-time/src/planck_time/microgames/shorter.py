@@ -109,6 +109,7 @@ def split(rng, total: int) -> list[int]:
 class Shorter(Microgame):
     VERB = "SHORTER!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "Compilers cancel gates to make circuits shorter"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

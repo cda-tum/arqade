@@ -49,6 +49,30 @@ def test_the_game_runs_headless_and_quits(monkeypatch) -> None:
     assert frames["n"] >= 30
 
 
+def test_quit_on_the_title_ends_the_game_loop(monkeypatch) -> None:
+    """Down, then A: the loop returns, the way Start + Select leaves it."""
+    import pygame
+
+    from brawl_ket import game
+
+    real_update = game.Input.update
+    frames = {"n": 0}
+
+    def update(self, dt):
+        real_update(self, dt)
+        frames["n"] += 1
+        if frames["n"] == 3:
+            self.frame.nav["p1"] = (0, 1)
+        elif frames["n"] == 5:
+            self.frame.confirms["p1"] = True
+        elif frames["n"] > 120:             # never got out: fail rather than hang
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+
+    monkeypatch.setattr(game.Input, "update", update)
+    game.run(fullscreen=False, window_size="640x360", show_fps=False)
+    assert frames["n"] < 30
+
+
 def test_the_default_window_is_a_whole_multiple_of_the_internal_size() -> None:
     w, h = (int(v) for v in parse_args([]).window_size.split("x"))
     assert w % config.INTERNAL_WIDTH == 0 and h % config.INTERNAL_HEIGHT == 0
@@ -62,13 +86,15 @@ def test_a_press_is_used_by_exactly_one_step() -> None:
 
     press = FrameInput(fighters={"p1": FighterInput(dx=1, a=True), "p2": FighterInput()},
                        confirms={"p1": True, "p2": False}, nav={"p1": (0, 1), "p2": (0, 0)},
-                       activity=True)
+                       activity=True, any_button=True)
     pending = merge_pending(FrameInput(), press)
     assert pending.fighters["p1"].a and pending.confirms["p1"] and pending.nav["p1"] == (0, 1)
+    assert pending.any_button
     spent = consume(pending)
     assert not spent.fighters["p1"].a and spent.fighters["p1"].dx == 1     # the stick is still held
-    assert not spent.confirm and spent.nav["p1"] == (0, 0)
+    assert not spent.confirm and spent.nav["p1"] == (0, 0) and not spent.any_button
     assert spent.activity                                                 # holding the stick counts
     # a frame with no step due: the next poll must not wipe the unspent presses
     again = merge_pending(pending, FrameInput(fighters={"p1": FighterInput(dx=1), "p2": FighterInput()}))
     assert again.fighters["p1"].a and again.confirms["p1"] and again.nav["p1"] == (0, 1)
+    assert again.any_button

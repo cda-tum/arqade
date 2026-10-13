@@ -231,6 +231,7 @@ def tiles(colors) -> pygame.Surface:
 class Drop(Microgame):
     VERB = "DROP!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "A gate next to its inverse vanishes"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

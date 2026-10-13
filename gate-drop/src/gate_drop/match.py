@@ -1,10 +1,15 @@
 """Match flow. Pure (no pygame): it takes one FrameInput per frame and
 returns events, so it is unit tested like board.py.
 
-  title -> setup -> countdown -> round (Start pauses: resume / quit to title) -> ...
-    versus:  round result -> countdown ... -> match result -> rematch or title
+  title -> setup -> how to play -> countdown -> round (Start pauses: resume / quit to title) -> ...
+    versus:  round result -> countdown ... -> match result -> rematch (no how to play) or title
     single:  level clear -> countdown (next level) ... game over
              -> initials (if it's a high score) -> high scores -> title
+
+The title is a short menu: 1 PLAYER, 2 PLAYERS and QUIT. Start always
+plays (with the mode last picked), A picks the row, and A on QUIT leaves
+the game (the loop sees quit_requested). Every match started from the setup
+screen first shows the HOW TO PLAY card, until any button is pressed.
 
 On the setup screen each player picks a level (2n + 2 errors) and a speed;
 with two players, each sets their own as a handicap. Players on the same
@@ -24,6 +29,7 @@ from gate_drop.hiscores import Hiscores
 PLAYERS = ("p1", "p2")
 TITLE = "title"
 SETUP = "setup"
+TUTORIAL = "tutorial"
 COUNTDOWN = "countdown"
 ROUND = "round"
 ROUND_RESULT = "round_result"
@@ -34,13 +40,15 @@ NAME_ENTRY = "name_entry"
 HISCORES = "hiscores"
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
+TITLE_ITEMS = ("1 PLAYER", "2 PLAYERS", "QUIT")  # the first two rows are the modes
+QUIT_ROW = TITLE_ITEMS.index("QUIT")
 
 
 @dataclass(frozen=True)
 class Cue:
     """A match-level event for the sound and the renderer."""
 
-    kind: str  # beep, go, blip, pause, round_won, draw, match_won, level_clear, game_over
+    kind: str  # beep, go, blip, confirm, back, pause, round_won, draw, match_won, level_clear, game_over
     player: str | None = None
 
 
@@ -61,6 +69,7 @@ class FrameInput:
     confirms: dict = field(default_factory=_per_player(bool))  # A or Start pressed this frame
     backs: dict = field(default_factory=_per_player(bool))  # B pressed this frame
     pauses: dict = field(default_factory=_per_player(bool))  # Start pressed this frame
+    any_button: bool = False  # any pad button (or, in dev, any key) newly pressed this frame
     activity: bool = False  # any input at all (for the idle timeout)
 
     @property
@@ -159,6 +168,8 @@ class Match:
         self.rng = rng or random.Random()
         self.hiscores = hiscores if hiscores is not None else Hiscores(None)
         self.mode = 2  # 1 or 2 players
+        self.title_index = self.mode - 1  # the title menu's selected row
+        self.quit_requested = False  # QUIT picked on the title: the game loop exits
         self.state = TITLE
         self.t = 0.0  # seconds in the current state
         self.idle = 0.0
@@ -243,24 +254,48 @@ class Match:
                 self._to_title()
 
     def _on_title(self, dt: float, inp: FrameInput, events: list) -> None:
-        if any(d != (0, 0) for d in inp.nav.values()):
-            self.mode = 3 - self.mode
+        """Up and down move through 1 PLAYER, 2 PLAYERS and QUIT; left and
+        right flip between the two modes. Start plays whatever row is lit,
+        A picks the row, and B does nothing here."""
+        dx = next((d[0] for d in inp.nav.values() if d[0]), 0)
+        dy = next((d[1] for d in inp.nav.values() if d[1]), 0)
+        if dy:
+            self.title_index = (self.title_index + dy) % len(TITLE_ITEMS)
             events.append(Cue("blip"))
-        if inp.confirm:
+        elif dx and self.title_index != QUIT_ROW:
+            self.title_index = 1 - self.title_index
+            events.append(Cue("blip"))
+        if self.title_index != QUIT_ROW:
+            self.mode = self.title_index + 1
+        if inp.pause or (inp.confirm and self.title_index != QUIT_ROW):
             for s in self.setups.values():
                 s.ready, s.row = False, 0
             self._set_state(SETUP)
-            events.append(Cue("blip"))
+            events.append(Cue("confirm"))
+        elif inp.confirm:  # A on QUIT: no confirm dialog
+            self.quit_requested = True
 
     def _on_setup(self, dt: float, inp: FrameInput, events: list) -> None:
         for p in self.players:
             result = self.setups[p].update(*self._menu(inp, p))
             if result == "back":
                 self._to_title()
+                events.append(Cue("back"))
                 return
             if result:
-                events.append(Cue("blip"))
+                events.append(Cue("confirm" if result == "ready" else "blip"))
         if all(self.setups[p].ready for p in self.players):
+            self._set_state(TUTORIAL)
+
+    def _on_tutorial(self, dt: float, inp: FrameInput, events: list) -> None:
+        """The HOW TO PLAY card: any button starts the match, once it has been
+        up for TUTORIAL_LOCK (so the A that readied up can't skip it unseen).
+        Input is edge-based, so the dismissing press is spent here and can't
+        rotate or pause anything in the round."""
+        if self.t < config.TUTORIAL_LOCK:
+            return
+        if inp.any_button or inp.confirm or inp.back or inp.pause:
+            events.append(Cue("confirm"))
             self._start_match(events)
 
     def _on_countdown(self, dt: float, inp: FrameInput, events: list) -> None:
@@ -382,6 +417,7 @@ class Match:
     def _to_title(self) -> None:
         self.boards = {}
         self.paused = False
+        self.title_index = self.mode - 1  # never back onto QUIT
         self._set_state(TITLE)
 
     def _save_name(self) -> None:

@@ -12,6 +12,10 @@ The lettering follows the in-game logo (scenes.draw_logo) rather than the
 kit's neon wordmark: Press Start 2P, cream with gold Qs, and a hard ink drop
 shadow, built at the font's native 8 px and integer-scaled, like ket.py
 builds its labels.
+
+The wide tile (wide(), for the cabinet's 2:1 game list) is the same kitchen
+seen from further back: the wall and its title across the full width, the
+chef centred on the floor below, floor and chef at half the square's scale.
 """
 
 from __future__ import annotations
@@ -31,6 +35,12 @@ ROM = "overquqed"
 FLOOR_SCALE = 8
 HERO_SCALE = 14
 WALL_H = 264  # px of dark wall behind the title
+# the wide tile at 1024x512 (wide() scales these with its height): floor
+# and chef at half the square's scale, the title only a little smaller
+WIDE_FLOOR_SCALE = 4
+WIDE_HERO_SCALE = 7
+WIDE_TITLE_K = 10
+WIDE_WALL_H = 160
 
 # two-band pixel fills, light top / deeper bottom (no smooth gradients)
 CREAM = ((255, 252, 240), (250, 224, 180))
@@ -64,19 +74,21 @@ def _title(k: int) -> pygame.Surface:
     return kit.trim(out)
 
 
-def _floor(size: int) -> pygame.Surface:
-    """The kitchen: wall band on top, the game's checkered floor below."""
-    n = -(-size // FLOOR_SCALE)
-    native = pygame.Surface((n, n))
-    for ty in range(n // TILE + 1):
-        for tx in range(n // TILE + 1):
-            render._floor(native, tx, ty, tx * TILE - 4, ty * TILE)
-    surf = pygame.Surface((size, size))
-    surf.blit(kit.nearest(native, FLOOR_SCALE), (0, 0))
+def _floor(width: int, height: int, scale: int = FLOOR_SCALE, wall_h: int = WALL_H,
+           shift: int = 4) -> pygame.Surface:
+    """The kitchen: wall band on top, the game's checkered floor below (at
+    x`scale`, the tiles moved `shift` native px to the left)."""
+    nw, nh = -(-width // scale), -(-height // scale)
+    native = pygame.Surface((nw, nh))
+    for ty in range(nh // TILE + 1):
+        for tx in range((nw + shift) // TILE + 1):
+            render._floor(native, tx, ty, tx * TILE - shift, ty * TILE)
+    surf = pygame.Surface((width, height))
+    surf.blit(kit.nearest(native, scale), (0, 0))
     # the wall: the game's dark cap colour, its lighter lip, an ink edge
-    surf.fill(P.WALL, (0, 0, size, WALL_H))
-    surf.fill(P.WALL_TOP, (0, WALL_H - 3 * FLOOR_SCALE, size, 2 * FLOOR_SCALE))
-    surf.fill(P.INK, (0, WALL_H - FLOOR_SCALE, size, FLOOR_SCALE))
+    surf.fill(P.WALL, (0, 0, width, wall_h))
+    surf.fill(P.WALL_TOP, (0, wall_h - 3 * scale, width, 2 * scale))
+    surf.fill(P.INK, (0, wall_h - scale, width, scale))
     return surf
 
 
@@ -100,11 +112,26 @@ def _hero() -> pygame.Surface:
 
 
 def art(size: int) -> pygame.Surface:
-    surf = _floor(size)
+    surf = _floor(size, size)
     title = _title(12)
     kit.blit_center(surf, title, (size / 2, WALL_H / 2 - 6))
     hero = kit.nearest(_hero(), HERO_SCALE)
     surf.blit(hero, hero.get_rect(midbottom=(size // 2, size - 66)))
+    return surf
+
+
+def wide(width: int, height: int) -> pygame.Surface:
+    """The same kitchen for a 2:1 tile, seen from further back: the wall
+    with the title runs the full width, the chef stands centred below."""
+    u = height / 512
+    scale = max(1, round(WIDE_FLOOR_SCALE * u))
+    wall_h = round(WIDE_WALL_H * u)
+    # the floor tiles lined up on the chef: a tile edge runs down the middle
+    shift = (TILE - (width // 2 // scale) % TILE) % TILE
+    surf = _floor(width, height, scale, wall_h, shift)
+    kit.blit_center(surf, _title(max(1, round(WIDE_TITLE_K * u))), (width / 2, wall_h / 2 - scale))
+    hero = kit.nearest(_hero(), max(1, round(WIDE_HERO_SCALE * u)))
+    surf.blit(hero, hero.get_rect(midbottom=(width // 2, height - round(height * 0.05))))
     return surf
 
 

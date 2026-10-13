@@ -17,7 +17,8 @@ import pygame
 from qurves import config, rules
 from qurves.fonts import load_font
 from qurves.fx import Fx
-from qurves.match import COUNTDOWN, MATCH_RESULT, PAUSE_ITEMS, ROUND, ROUND_RESULT, TITLE, Match
+from qurves.match import COUNTDOWN, MATCH_RESULT, PAUSE_ITEMS, ROUND, ROUND_RESULT, TITLE, TITLE_ITEMS, TUTORIAL, Match
+from qurves.tutorial import TutorialScreen
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 CELL, HUD = config.CELL, config.HUD_HEIGHT
@@ -116,9 +117,8 @@ def glow_text(font: pygame.font.Font, text: str, color) -> pygame.Surface:
     return surf
 
 
-def make_logo(font: pygame.font.Font) -> pygame.Surface:
-    """QURVES, shading letter by letter through the four player colours."""
-    word = "QURVES"
+def make_logo(font: pygame.font.Font, word: str = "QURVES") -> pygame.Surface:
+    """A word (QURVES) shading letter by letter through the four player colours."""
     stops = list(config.PLAYER_COLORS.values())
     pieces = []
     for i, ch in enumerate(word):
@@ -137,20 +137,27 @@ def make_logo(font: pygame.font.Font) -> pygame.Surface:
     return surf
 
 
-def make_background() -> pygame.Surface:
-    s = pygame.Surface((W, H))
-    s.fill(config.COLOR_HUD)
-    arena = pygame.Rect(0, HUD, W, config.GRID_H * CELL)
+def make_arena(width: int, height: int) -> pygame.Surface:
+    """An empty arena of width x height cells: the wall ring, the floor, the grid."""
+    s = pygame.Surface((width * CELL, height * CELL))
+    arena = s.get_rect()
     inner = arena.inflate(-2 * CELL, -2 * CELL)
     s.fill(config.COLOR_WALL_FILL, arena)
     s.fill(config.COLOR_BACKGROUND, inner)
-    for x in range(4, config.GRID_W - 1, 4):
+    for x in range(4, width - 1, 4):
         pygame.draw.line(s, config.COLOR_GRID, (x * CELL, inner.top), (x * CELL, inner.bottom - 1))
-    for y in range(4, config.GRID_H - 1, 4):
-        pygame.draw.line(s, config.COLOR_GRID, (inner.left, HUD + y * CELL), (inner.right - 1, HUD + y * CELL))
+    for y in range(4, height - 1, 4):
+        pygame.draw.line(s, config.COLOR_GRID, (inner.left, y * CELL), (inner.right - 1, y * CELL))
     if config.GLOW:
         pygame.draw.rect(s, scale(config.COLOR_WALL, 0.35), inner.inflate(4, 4), 3)
     pygame.draw.rect(s, config.COLOR_WALL, inner.inflate(2, 2), 1)
+    return s
+
+
+def make_background() -> pygame.Surface:
+    s = pygame.Surface((W, H))
+    s.fill(config.COLOR_HUD)
+    s.blit(make_arena(config.GRID_W, config.GRID_H), (0, HUD))
     # Vignette: a tiny brightness map, smoothly scaled up and multiplied in.
     vignette = pygame.Surface((32, 18))
     for vy in range(18):
@@ -251,6 +258,8 @@ class Renderer:
         self.round: rules.RoundState | None = None
         self.t = 0.0
         self._cache: dict = {}
+        self.tutorial = TutorialScreen(self)
+        self._state = None
 
     # --- per frame ------------------------------------------------------------------------
 
@@ -260,8 +269,13 @@ class Renderer:
             self._reset(match.round)
         self._apply(events)
         self.fx.update(dt)
+        if match.state == TUTORIAL and self._state != TUTORIAL:
+            self.tutorial.reset()
+        self._state = match.state
         if match.state == TITLE:
             self._draw_title(match, dt)
+        elif match.state == TUTORIAL:
+            self.tutorial.draw(self.surface, match.mode, match.t, dt)
         else:
             self._draw_arena(match)
             self._draw_hud(match)
@@ -464,14 +478,18 @@ class Renderer:
         for line in self.RULES:
             self._center(self._plain(line, self.font16, config.COLOR_TEXT), y, add=False)
             y += 26
-        self._center(self._glow(f"<  {match.mode} PLAYERS  >", self.font32, WHITE), 384)
+        players, quit_ = (TITLE_ITEMS[match.title_index] == item for item in TITLE_ITEMS)
+        mode_color = config.COLOR_FPS if players else config.COLOR_DIM
+        self._center(self._glow(f"<  {match.mode} PLAYERS  >", self.font32, mode_color), 380)
+        self._center(self._glow("> QUIT <" if quit_ else "QUIT", self.font16,
+                                config.COLOR_FPS if quit_ else config.COLOR_DIM), 422)
         if int(self.t * 2) % 2 == 0:
-            self._center(self._glow("PRESS A OR START", self.font32, config.COLOR_FPS), 444)
+            self._center(self._glow("PRESS START", self.font32, WHITE), 460)
         if match.mode == 4:
             self._center(self._plain("EACH PAD: THE STICK IS ONE PLAYER, THE X Y B A BUTTONS ANOTHER",
-                                     self.font8, config.COLOR_TEXT), 490, add=False)
-        self._center(self._plain("STEER: STICK OR X Y B A     MODE: STICK LEFT / RIGHT     QUIT: START + SELECT",
-                                 self.font8, config.COLOR_DIM), 510, add=False)
+                                     self.font8, config.COLOR_TEXT), 494, add=False)
+        self._center(self._plain("STICK: CHOOSE     A: PICK     START: PLAY     QUIT: START + SELECT",
+                                 self.font8, config.COLOR_DIM), 512, add=False)
 
     # --- text -------------------------------------------------------------------------------
 

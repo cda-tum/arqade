@@ -38,6 +38,7 @@ def edge(a, b) -> tuple:
 class Connect(Microgame):
     VERB = "CONNECT!"
     INPUT = "stick"
+    STEPS = True
     CAPTION = "Two-qubit gates need neighbours: compilers add SWAPs"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

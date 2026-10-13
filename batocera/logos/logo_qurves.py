@@ -165,31 +165,40 @@ def title(scale: int) -> pygame.Surface:
     return kit.trim(out)
 
 
-def art(size: int) -> pygame.Surface:
-    surf = pygame.Surface((size, size))
+def scene(w: int, h: int, hy: int, spread: tuple[float, float] = (18, 260), lines: int = 14,
+          haze: int = 220) -> pygame.Surface:
+    """The arena's background colour with the floor below the horizon at `hy`.
+
+    The arena's grid (render.make_background) as a synthwave floor: laid flat
+    and running off to a horizon behind the title, fading out upwards. Its
+    2 * `lines` + 1 lines fan out from `spread[0]` px apart at the horizon to
+    `spread[1]` at the bottom edge."""
+    surf = pygame.Surface((w, h))
     surf.fill(config.COLOR_BACKGROUND)
-    # The arena's grid (render.make_background) as a synthwave floor: laid
-    # flat and running off to a horizon behind the title, fading out upwards.
-    hy = round(size * 0.6)
-    floor = pygame.Surface((size, size - hy))
+    floor = pygame.Surface((w, h - hy))
     floor.fill((0, 0, 0))
     grid = kit.shade(config.COLOR_GRID, 3.6)
-    vx = size / 2
-    for i in range(-14, 15):
-        pygame.draw.aaline(floor, grid, (vx + i * 18, 0), (vx + i * 260, size - hy))
+    vx = w / 2
+    for i in range(-lines, lines + 1):
+        pygame.draw.aaline(floor, grid, (vx + i * spread[0], 0), (vx + i * spread[1], h - hy))
     z = 1.0
     while z < 40:
-        y = (size - hy) / z
-        pygame.draw.line(floor, grid, (0, round(y)), (size, round(y)))
+        y = (h - hy) / z
+        pygame.draw.line(floor, grid, (0, round(y)), (w, round(y)))
         z *= 1.35
     floor.blit(kit.gradient(floor.get_size(), [(0, 0, 0), (110, 110, 110), (255, 255, 255)]), (0, 0),
                special_flags=pygame.BLEND_MULT)
     surf.blit(floor, (0, hy), special_flags=pygame.BLEND_ADD)
     # the horizon: the arena wall's colour, as a thin line in a low haze
-    haze = pygame.transform.smoothscale(kit.radial((256, 256), (128, 128), 128, (60, 40, 140)), (size, 220))
-    surf.blit(haze, (0, hy - 110), special_flags=pygame.BLEND_ADD)
-    surf.blit(kit.gradient((size, 2), [(0, 0, 0), config.COLOR_WALL, (0, 0, 0)], vertical=False), (0, hy),
+    glow = pygame.transform.smoothscale(kit.radial((256, 256), (128, 128), 128, (60, 40, 140)), (w, haze))
+    surf.blit(glow, (0, hy - haze // 2), special_flags=pygame.BLEND_ADD)
+    surf.blit(kit.gradient((w, 2), [(0, 0, 0), config.COLOR_WALL, (0, 0, 0)], vertical=False), (0, hy),
               special_flags=pygame.BLEND_ADD)
+    return surf
+
+
+def art(size: int) -> pygame.Surface:
+    surf = scene(size, size, round(size * 0.6))
 
     h = kit.nearest(hero(), ZOOM)
     kit.blit_center(surf, kit.blur(kit.pad(h, 40), 12), (size / 2, size * 0.38))
@@ -198,6 +207,33 @@ def art(size: int) -> pygame.Surface:
     word = title(16)
     word = kit.fit(word, 880, 260) if word.get_width() > 880 else word
     kit.blit_center(surf, word, (size / 2, size * 0.79))
+    return surf
+
+
+# Where the stem's first cell sits, in game px below hero()'s top edge (its
+# highest cell, less the 20 px margin hero() leaves for the glows): the stem
+# rises off the horizon there.
+STEM_FOOT = (render.cell_px(STEM[0])[1]
+             - min(render.cell_px(c)[1] for c in STEM + RED_RUN + COPIES[0] + COPIES[1]) + 20)
+
+
+def wide(width: int, height: int) -> pygame.Surface:
+    """The same scene laid out wide: a lower horizon with a broader, shallower
+    floor running out to both sides, the fork above it at a smaller whole
+    zoom, and QURVES on the floor below."""
+    zoom = max(1, round(height * 3 / 512))
+    hy = round(height * 0.66)
+    surf = scene(width, height, hy, spread=(18 * height / 512, 260 * height / 512 * 1.4), lines=28,
+                 haze=round(height * 0.3))
+
+    h = kit.nearest(hero(), zoom)
+    top = hy - STEM_FOOT * zoom
+    centre = (width / 2, top + h.get_height() / 2)
+    kit.blit_center(surf, kit.blur(kit.pad(h, 8 * zoom), 8), centre)
+    kit.blit_center(surf, h, centre)
+
+    word = title(max(1, round(height * 11 / 512)))
+    kit.blit_center(surf, word, (width / 2, hy + (height - hy) * 0.5))
     return surf
 
 

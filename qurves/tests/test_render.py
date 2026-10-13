@@ -30,6 +30,10 @@ def play_through_every_screen(mode=2):
         frame(FrameInput(nav=(1, 0), activity=True))
     seen.add(mt.state)
     frame(FrameInput(confirm=True, activity=True))
+    for _ in range(330):  # how to play, its demo running through once
+        frame()
+        seen.add(mt.state)
+    frame(FrameInput(any_button=True, activity=True))
     for _ in range(200):  # the countdown, into the round
         frame()
         seen.add(mt.state)
@@ -51,12 +55,12 @@ def play_through_every_screen(mode=2):
 
 def test_every_screen_renders_without_errors():
     seen = play_through_every_screen()
-    assert seen >= {m.TITLE, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
+    assert seen >= {m.TITLE, m.TUTORIAL, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
 
 
 def test_four_player_screens_render_without_errors():
     seen = play_through_every_screen(mode=4)
-    assert seen >= {m.TITLE, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
+    assert seen >= {m.TITLE, m.TUTORIAL, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
 
 
 def test_it_still_renders_with_glow_and_scanlines_off(monkeypatch):
@@ -70,7 +74,8 @@ def test_the_pause_menu_renders():
     surface = pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT))
     mt = Match(random.Random(0))
     renderer = Renderer(surface)
-    for inp in [FrameInput(confirm=True, activity=True)] + [FrameInput()] * 200 + [FrameInput(pause=True)]:
+    script = [FrameInput(confirm=True, activity=True)] + [FrameInput()] * 30 + [FrameInput(any_button=True)]
+    for inp in script + [FrameInput()] * 200 + [FrameInput(pause=True)]:
         renderer.draw(mt, mt.update(1 / 60, inp), 1 / 60)
     assert mt.paused
     renderer.draw(mt, mt.update(1 / 60, FrameInput(nav=(0, 1))), 1 / 60)

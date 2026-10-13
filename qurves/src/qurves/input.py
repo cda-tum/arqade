@@ -3,7 +3,10 @@
 Per pad there are two steering inputs: the stick (with the hat as a
 fallback) and the four face buttons X Y B A laid out like W A S D. Which
 player each one steers is the match's business (config.CONTROLS). In menus,
-printed A (or Start) confirms and printed B goes back.
+printed A (or Start) confirms and printed B goes back. Any button at all
+(or, without --no-keyboard, any key) dismisses the HOW TO PLAY card, and
+the buttons still held then are consumed until let go (consume_held), so
+the press that dismissed it never steers.
 
 The pure helpers (stick_direction, hat_direction, latest_direction,
 should_quit) are unit tested; reading real pads is verified on the cabinet
@@ -91,12 +94,15 @@ class Input:
         self.pause_keys = _codes(config.KEYS_PAUSE)
         self._order = {pad: [] for pad in PADS}
         self._down: dict[int, set[int]] = {pad: set() for pad in PADS}
+        self._consumed: dict[int, set[int]] = {pad: set() for pad in PADS}
+        self._raw: dict[int, set[int]] = {pad: set() for pad in PADS}
+        self._key_pressed = False
         self._keys_down: set[str] = set()
         self._stick_prev: dict[int, Vec | None] = {pad: None for pad in PADS}
         self.stick: list[Vec | None] = [None, None]
         self.pad: list[Vec | None] = [None, None]
         self.nav: Vec | None = None
-        self.confirm = self.back = self.pause = self.pick = False
+        self.confirm = self.back = self.pause = self.pick = self.any_button = False
         self.start_select = {pad: (False, False) for pad in PADS}
         self.select_held_time = 0.0
         self.keyboard_quit = False
@@ -113,6 +119,13 @@ class Input:
     def handle(self, event: pygame.event.Event) -> None:
         if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
             self.rescan()
+        elif event.type == pygame.KEYDOWN and _keyboard_enabled:
+            self._key_pressed = True
+
+    def consume_held(self) -> None:
+        """Ignore every button held right now until it is let go."""
+        for pad in PADS:
+            self._consumed[pad] = set(self._raw[pad])
 
     def _read_pad(self, pad: int) -> tuple[set[int], Vec | None]:
         cfg = config.INPUT_CONFIG["pads"][pad]
@@ -137,16 +150,20 @@ class Input:
         self.keyboard_quit = keyboard_quit_held(keys)
         self.activity = self.keyboard_quit
         self.confirm = self.back = self.pause = self.pick = False
+        self.any_button, self._key_pressed = self._key_pressed, False
         self.nav = None
         for pad in PADS:
-            down, stick = self._read_pad(pad)
+            raw, stick = self._read_pad(pad)
+            self._raw[pad] = raw
+            self._consumed[pad] &= raw
+            down = raw - self._consumed[pad]
             if stick is None:
                 for name, vec in DIRECTIONS.items():
                     if any(keys[k] for k in self.keymap[("stick", pad)][name]):
                         stick = vec
                         break
             buttons = config.INPUT_CONFIG["pads"][pad]["buttons"]
-            held = {name for name, raw in buttons.items() if down & set(raw)}
+            held = {name for name, nums in buttons.items() if down & set(nums)}
             held |= {name for name, codes in self.keymap[("pad", pad)].items() if any(keys[k] for k in codes)}
             self._order[pad], self.pad[pad] = latest_direction(self._order[pad], held)
 
@@ -156,13 +173,15 @@ class Input:
             self.back |= bool(pressed & set(system["back_buttons"]))
             self.pause |= system["start_button"] in pressed
             self.pick |= bool(pressed & set(system["confirm_buttons"]))
-            self.start_select[pad] = (system["start_button"] in down, system["select_button"] in down)
+            self.any_button |= bool(pressed)
+            # Raw, not down: Start + Select quits even with a consumed button.
+            self.start_select[pad] = (system["start_button"] in raw, system["select_button"] in raw)
 
             if stick is not None and stick != self._stick_prev[pad] and self.nav is None:
                 self.nav = stick
             self._stick_prev[pad] = stick
             self.stick[pad] = stick
-            if down or stick is not None or held:
+            if raw or stick is not None or held:
                 self.activity = True
 
         keys_now = {"confirm"} if any(keys[k] for k in self.confirm_keys) else set()
@@ -184,7 +203,7 @@ class Input:
     def frame_input(self) -> FrameInput:
         return FrameInput(stick=tuple(self.stick), pad=tuple(self.pad), nav=self.nav,
                           confirm=self.confirm, back=self.back, pause=self.pause, pick=self.pick,
-                          activity=self.activity)
+                          any_button=self.any_button, activity=self.activity)
 
     def quit_combo(self) -> bool:
         (s0, sel0), (s1, sel1) = self.start_select[0], self.start_select[1]

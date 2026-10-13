@@ -17,7 +17,8 @@ tall. That style is the stone body with a darker drop shadow, the trim
 border and inner wall lines, a trim line between floors, and a recess in
 the window colour. Colours all come from `config`. The marquee puts the
 same carved letters along a horizontal stone parapet, with the gold ket
-block as its emblem.
+block as its emblem. The wide tile is too shallow for eight floors, so its
+letters go on that parapet, as a battlement in front of the tower's base.
 """
 
 from __future__ import annotations
@@ -92,32 +93,43 @@ def _tower(height: int) -> tuple[pygame.Surface, pygame.Rect]:
     visuals._draw_tower_body(surf, top, floor, floor + 1, TARGET, TARGET, [fonts.load_font(8)])
 
     # the climber, two and a half floors down the lettered wall (alongside
-    # L and I), still reaching up towards the gold band, with a 1 px dark
-    # outline so it holds its shape against the sky
-    feet_y = top.bottom + FLOOR_H * 5 // 2
-    fig = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
-    visuals.draw_climber(fig, top.right, feet_y, config.COLOR_PLAYER_1, 0.0, -1, climb_progress=0.5)
-    surf.blit(kit.dilate(fig, 1, config.COLOR_TEXT_SHADOW, square=True), (0, 0))
-    surf.blit(fig, (0, 0))
+    # L and I), still reaching up towards the gold band
+    _climber(surf, top.right, top.bottom + FLOOR_H * 5 // 2)
     return surf, top
 
 
-def _sky(size: int) -> pygame.Surface:
+def _climber(surf: pygame.Surface, wall_x: int, feet_y: int) -> None:
+    """P1 in its climbing pose on a right-hand wall, reaching up, with a
+    1 px dark outline so it holds its shape against the sky."""
+    fig = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+    visuals.draw_climber(fig, wall_x, feet_y, config.COLOR_PLAYER_1, 0.0, -1, climb_progress=0.5)
+    surf.blit(kit.dilate(fig, 1, config.COLOR_TEXT_SHADOW, square=True), (0, 0))
+    surf.blit(fig, (0, 0))
+
+
+def _title_row(surf: pygame.Surface, left: int, centery: int, cell: int) -> None:
+    """The carved letters in a row, one per `cell` px, from x=left."""
+    for i, ch in enumerate(TITLE):
+        letter = _carved(ch)
+        surf.blit(letter, letter.get_rect(center=(left + cell * i + cell // 2 + 1, centery + 1)))
+
+
+def _sky(width: int, height: int) -> pygame.Surface:
     """Dusk: the title screen's night navy overhead, warming towards the
     horizon behind the tower's base, with a sparse scatter of stars."""
-    sky = kit.gradient((size, size), [
+    sky = kit.gradient((width, height), [
         config.COLOR_BACKGROUND, (24, 22, 54), (62, 40, 88), (150, 74, 84), (214, 120, 70),
     ]).convert()
     rng = random.Random(3)
-    for _ in range(46):
-        x, y = rng.randrange(size), rng.randrange(round(size * 0.45))
-        b = round(rng.randint(120, 220) * (1 - y / (size * 0.5)))
+    for _ in range(round(46 * height / width)):
+        x, y = rng.randrange(width), rng.randrange(round(height * 0.45))
+        b = round(rng.randint(120, 220) * (1 - y / (height * 0.5)))
         pygame.draw.rect(sky, (b, b, min(255, b + 20)), (x // K * K, y // K * K, K, K))
     return sky
 
 
 def art(size: int) -> pygame.Surface:
-    canvas = _sky(size)
+    canvas = _sky(size, size)
     top_y = 66
     tower, gold = _tower((size - top_y) // K + 1)
     tower = kit.nearest(tower, K)
@@ -127,6 +139,46 @@ def art(size: int) -> pygame.Surface:
     canvas.blit(kit.radial((size, size), light, 300, (150, 96, 20), 0.9), (0, 0),
                 special_flags=pygame.BLEND_ADD)
     canvas.blit(tower, (x, top_y))
+    return canvas
+
+
+def wide(width: int, height: int) -> pygame.Surface:
+    """Eight lettered floors don't fit a 2:1 tile at a readable size, so the
+    title moves down onto a battlement in front of the tower's base (the
+    marquee's parapet), and the tower above it is the game's own: roof, gold
+    band and ket, a cleared floor with its window, and P1 reaching up the
+    right wall. At 512 px tall the pixels are the square icon's size."""
+    k = max(1, round(K * height / 512))
+    cw, ch = -(-width // k), -(-height // k)
+    canvas = _sky(width, height)
+    scene = pygame.Surface((cw, ch), pygame.SRCALPHA)
+
+    # player on floor 15, the camera placed so the roof sits on tower.top:
+    # the gold band, then cleared floors running off the bottom
+    band = config.TOWER_BAND_HEIGHT
+    floors = ch // band + 1
+    tower = pygame.Rect((cw - WIDTH) // 2, 17, WIDTH, band * floors)
+    visuals._draw_tower_body(scene, tower, config.TOWER_HEIGHT - 1, config.TOWER_HEIGHT + 1 - floors,
+                             TARGET, TARGET, [fonts.load_font(8)])
+    _climber(scene, tower.right, tower.top + band + 42)  # one floor below the band
+
+    # the battlement, built like the marquee's parapet, running off the bottom
+    cell = 28
+    wall = pygame.Rect(0, ch - 53, cell * len(TITLE) + 36, 53 + 10)
+    wall.centerx = cw // 2
+    pygame.draw.rect(scene, visuals._darken(config.COLOR_TOWER, 0.55), wall.move(3, 4))
+    pygame.draw.rect(scene, config.COLOR_TOWER, wall)
+    visuals._draw_crenellations(scene, wall, TRIM)
+    course = pygame.Rect(0, wall.top + 3, cell * len(TITLE), FLOOR_H)
+    course.centerx = cw // 2
+    _title_row(scene, course.left, course.centery, cell)
+    pygame.draw.line(scene, TRIM, (wall.left + 5, course.bottom + 2), (wall.right - 5, course.bottom + 2), 2)
+    pygame.draw.rect(scene, TRIM, wall, width=3)
+
+    light = (tower.centerx * k, (tower.top + band / 2) * k)
+    canvas.blit(kit.radial((width, height), light, 100 * k, (150, 96, 20), 0.9), (0, 0),
+                special_flags=pygame.BLEND_ADD)
+    canvas.blit(kit.nearest(scene, k), (0, 0))
     return canvas
 
 
@@ -145,8 +197,6 @@ def marquee() -> pygame.Surface:
     pygame.draw.rect(surf, config.COLOR_TARGET, gold, border_radius=3)
     ket = fonts.load_font(8).render("|+>", False, config.COLOR_TEXT_SHADOW)
     surf.blit(ket, ket.get_rect(center=gold.center))
-    for i, ch in enumerate(TITLE):
-        letter = _carved(ch)
-        surf.blit(letter, letter.get_rect(center=(body.left + ket_w + cell * i + cell // 2 + 1, body.centery + 1)))
+    _title_row(surf, body.left + ket_w, body.centery, cell)
     pygame.draw.rect(surf, TRIM, body, width=3)
     return kit.nearest(surf, 4)

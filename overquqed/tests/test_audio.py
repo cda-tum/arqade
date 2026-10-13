@@ -50,7 +50,7 @@ def test_all_sfx_the_game_asks_for_exist():
     names = set(build_sfx())
     wanted = {"blip", "confirm", "nope", "pick", "put", "fridge", "flip", "stir", "whirr", "blend_done",
               "cnot", "cnot_sparkle", "sink", "bin", "serve", "refuse", "leave", "order", "siren",
-              "cosmic", "swap", "timeup", "results"}
+              "cosmic", "swap", "timeup", "results", "back"}
     assert wanted <= names
 
 

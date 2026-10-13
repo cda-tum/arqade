@@ -1,9 +1,12 @@
-"""Match flow: title -> countdown -> round -> round result -> ... -> match
-result. Pure (no pygame): it takes one FrameInput per frame and returns
-events, so it is unit tested like rules.py.
+"""Match flow: title -> how to play -> countdown -> round -> round result ->
+... -> match result. Pure (no pygame): it takes one FrameInput per frame and
+returns events, so it is unit tested like rules.py.
 
-On the title, pushing the stick left or right picks 2 or 4 players. Which
-input steers which player is config.CONTROLS. The simulation ticks at the
+The title is a two-row menu: the player count (stick left or right picks 2
+or 4) and QUIT. Start always starts; A starts on the first row and quits on
+QUIT. Every match started from the title opens on the HOW TO PLAY card,
+which any button press dismisses after a short guard; a rematch from the
+result screen skips it. Which input steers which player is config.CONTROLS. The simulation ticks at the
 current speed; steering is kept between ticks, so the latest direction
 since the last tick wins and a quick tap between two ticks is not lost.
 """
@@ -17,17 +20,21 @@ from qurves import config, rules
 
 TITLE = "title"
 COUNTDOWN = "countdown"
+TUTORIAL = "tutorial"
 ROUND = "round"
 ROUND_RESULT = "round_result"
 MATCH_RESULT = "match_result"
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
+TITLE_ITEMS = ("PLAYERS", "QUIT")
 
 
 @dataclass(frozen=True)
 class Cue:
     """A match-level event for the sound and the renderer."""
 
-    kind: str  # "beep", "go", "blip", "pause", "round_won", "draw" or "match_won"
+    # "beep", "go", "blip", "start" (title -> how to play), "ready" (how to
+    # play dismissed), "pause", "round_won", "draw" or "match_won"
+    kind: str
     player: str | None = None
 
 
@@ -40,6 +47,7 @@ class FrameInput:
     back: bool = False  # B pressed this frame, either pad
     pause: bool = False  # Start pressed this frame, either pad
     pick: bool = False  # A pressed this frame, either pad (picks a pause-menu item)
+    any_button: bool = False  # any button newly pressed this frame, either pad (or a key, dev)
     activity: bool = False  # any input at all (for the idle timeout)
 
 
@@ -75,6 +83,8 @@ class Match:
         self._pending: dict = {}
         self.paused = False
         self.pause_index = 0
+        self.title_index = 0
+        self.quit_requested = False  # QUIT picked on the title: the game loop exits
 
     @property
     def players(self) -> tuple[str, ...]:
@@ -96,12 +106,10 @@ class Match:
             return events
         self.t += dt
         if self.state == TITLE:
-            if inp.nav in ((-1, 0), (1, 0)):
-                step = 1 if inp.nav == (1, 0) else -1
-                self.mode = config.MODES[(config.MODES.index(self.mode) + step) % len(config.MODES)]
-                self.scores = {p: 0 for p in self.players}
-                events.append(Cue("blip"))
-            if inp.confirm:
+            self._on_title(inp, events)
+        elif self.state == TUTORIAL:
+            if self.t >= config.TUTORIAL_GUARD and inp.any_button:
+                events.append(Cue("ready"))
                 self._start_match(events)
         elif self.state == COUNTDOWN:
             if self.t >= config.COUNTDOWN:
@@ -129,6 +137,7 @@ class Match:
                 if inp.confirm:
                     self._start_match(events)
                 elif inp.back:
+                    events.append(Cue("blip"))
                     self._to_title()
         return events
 
@@ -141,7 +150,27 @@ class Match:
     def _to_title(self) -> None:
         self.round = None
         self.paused = False
+        self.title_index = 0
         self._set_state(TITLE)
+
+    def _on_title(self, inp: FrameInput, events: list) -> None:
+        """Stick up/down picks a row, left/right the player count on its row.
+        Start always starts; A (confirm) starts, or quits on QUIT. B does
+        nothing here: there is no page to go back to."""
+        if inp.nav in ((0, -1), (0, 1)):
+            self.title_index = (self.title_index + inp.nav[1]) % len(TITLE_ITEMS)
+            events.append(Cue("blip"))
+        elif inp.nav in ((-1, 0), (1, 0)) and TITLE_ITEMS[self.title_index] == "PLAYERS":
+            step = 1 if inp.nav == (1, 0) else -1
+            self.mode = config.MODES[(config.MODES.index(self.mode) + step) % len(config.MODES)]
+            self.scores = {p: 0 for p in self.players}
+            events.append(Cue("blip"))
+        if inp.pause or (inp.confirm and TITLE_ITEMS[self.title_index] != "QUIT"):
+            self.scores = {p: 0 for p in self.players}
+            self._set_state(TUTORIAL)
+            events.append(Cue("start"))
+        elif inp.confirm:
+            self.quit_requested = True
 
     def _on_pause(self, inp: FrameInput, events: list) -> None:
         """Start pauses a round (either pad). In the menu the stick moves, A

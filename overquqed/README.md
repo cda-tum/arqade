@@ -107,9 +107,20 @@ with F1 on the title screen. Leave with Esc, or hold Select for 2 s.
   pauses it.
 - **Menus.** A or Start confirms, B goes back: the cabinet's shared button
   convention (see `../AGENTS.md`). Select also goes back.
-- **Quitting.** Start + Select on one pad quits from anywhere. Holding Select
-  for 2 s on the title screen also quits. Esc quits when the keyboard is
-  enabled.
+- **Title.** Two rows, PLAY and QUIT; the stick picks one and A takes it.
+  Start always plays, whichever row is selected. QUIT exits back to the
+  cabinet's game list (or the launcher's menu) at once, and B does nothing
+  there. When the attract demo starts, the selection goes back to PLAY.
+- **HOW TO PLAY.** Every kitchen picked from the level select (Training Day
+  too) opens with a card: the goal in three lines, a tiny kitchen where the
+  game's own bot cooks a |+> and a |1> on the real rules, with a caption for
+  P1's chef, and the pad's buttons. Any button on either pad starts the
+  round once the card has been up 0.3 s; the stick doesn't. A button held
+  through it counts as released until it really is, so it never works a
+  station or pauses. RESTART from the pause menu skips the card.
+- **Quitting.** QUIT on the title, or Start + Select on one pad from
+  anywhere. Holding Select for 2 s on the title screen also quits. Esc quits
+  from the title when the keyboard is enabled.
 - **Keyboard on the cabinet.** The cabinet loader passes `--no-keyboard`
   because Batocera's evmapy turns P1's pad into key presses (see
   `../AGENTS.md`). P1's dev keys are deliberately the keys evmapy sends for the
@@ -156,7 +167,7 @@ uv run pytest
 | Quantum core | gate identities, every recipe and wrong-order case, CNOT orientation, entanglement, global phase, permutation-maximised fidelity, trace/positivity of every noise channel, analytic T1/T2 decay curves |
 | Rules | chef movement and collision, every station, belts, the limited fridge and dirty bowls, the two-chef press (and its half-speed solo mode), cosmic rays, orders, scoring, hiscores |
 | Playthroughs (`test_bot.py`) | bots play whole rounds of every level on the real rules. They must make every dish, including all Bell states and GHZ, and reach 3 stars. The bot also completes the tutorial script. |
-| Smoke (`test_smoke.py`) | drives every scene headless with scripted input: menus, pause, results, quit combo, idle reset, attract mode |
+| Smoke (`test_smoke.py`) | drives every scene headless with scripted input: menus, the title's PLAY / QUIT, the HOW TO PLAY card (its 0.3 s guard, stick vs buttons, held buttons, RESTART skipping it, its demo kitchen), pause, results, quit combo, idle reset, attract mode |
 
 ## Dev tools
 
@@ -174,7 +185,7 @@ uv run pytest
 | `world.py`, `stations.py`, `guests.py`, `scoring.py`, `levels.py` | game rules (no pygame) |
 | `bot.py` | planner used by attract mode and tests |
 | `render.py`, `hud.py`, `dining.py`, `sprites.py`, `ket.py`, `circuit.py` | drawing |
-| `game.py`, `scenes.py`, `round_scene.py`, `tutorial.py`, `attract.py` | flow |
+| `game.py`, `scenes.py`, `round_scene.py`, `howto.py`, `tutorial.py`, `attract.py` | flow |
 | `input.py`, `display.py`, `audio.py`, `hiscores.py` | platform |
 
 ## Fonts

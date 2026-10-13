@@ -14,7 +14,8 @@ too hard to read).
 - **The game:** three fighters (ROBERT, BOHR and PHOEBE), versus only, best of 3
   rounds of 60 s.
 - **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat) at 640x360 (x3 on the cabinet), the
-  title with a bot demo, character select, stage select, round calls and pause.
+  title (PLAY / QUIT) with a bot demo, character select, stage select, a HOW TO PLAY card,
+  round calls and pause.
 - **Stages:** five backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
   for each match; the title demo always rolls), kept for all its rounds. Visual only:
   - SERVER RACK: the lab with its qubit racks;
@@ -62,6 +63,28 @@ bar has a basis badge (`0/1` green, `+/-` purple) and A / B chips in the colours
 that player's buttons hit right now; an attack's whole arm or leg is drawn in its
 colour from the wind-up on, so you see before contact whether it will match. A wrong-colour hit pings, a switch flashes white with an `H`.
 
+## The flow
+
+Title (PLAY / QUIT) -> character select -> CHOOSE YOUR STAGE -> **HOW TO PLAY** ->
+ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
+
+- **The title** is a menu: the stick picks PLAY or QUIT, A takes it. QUIT ends
+  the game at once, back to EmulationStation (or the launcher), the same way out
+  as Start + Select. **Start always plays**, whichever row is picked, and B does
+  nothing. Left alone, the title runs a bot demo and a COLOUR MUST MATCH card;
+  the demo puts the cursor back on PLAY, so whoever stops it with A never quits.
+- **HOW TO PLAY** shows before every match started from CHOOSE YOUR STAGE, in the
+  room that match is fought in (RANDOM is rolled as the stage is picked). A rematch
+  goes straight to ROUND 1 as before, with no stage screen and no card. The card
+  shows the goal in two lines, the controls (the stick and the 2x3 buttons as
+  printed on the cabinet, `L X R` over `Y B A`, with A, B, X and Y lit) and a
+  looping 4.7 s scene, a real fight played from a script (`tutorial.py`): a green
+  jab from ROBERT hurts green BOHR, BOHR switches (Y) to purple, the same jab
+  bounces, B hurts. Any button on either pad (L, R and Select too, but not the
+  stick) goes on, once the card has been up 0.3 s. It plays the confirm sound,
+  and because presses are edges it does nothing in the round. Start + Select still
+  quits, and the 60 s idle timeout still returns to the title.
+
 ## The fighters
 
 | | ROBERT | BOHR | PHOEBE |
@@ -89,7 +112,7 @@ the rival is a throw. A chains A, A, B.
 | Special | X | T | / |
 | Switch basis (H) | Y | G | ; |
 | Start / pause (resume or quit to the title) | Start | 1 | 2 |
-| Quit | Start + Select, or hold Select 2 s on the title | Esc | Esc |
+| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Esc | Esc |
 
 P1's dev keys avoid the pad's own letters (l, x, r, b, y, a; see
 `../AGENTS.md`). The keyboard is a dev fallback only: on the cabinet the
@@ -116,9 +139,10 @@ uv run python tools/benchmark.py                    # frame cost (on the cabinet
 | `basis.py` | The two bases, which errors change which, H, and each attack's error from its colour rule. Pure, exact, tested against 2x2 matrices. |
 | `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR and PHOEBE. |
 | `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). Pure. |
-| `match.py` | Title, select, rounds, the result, pause, idle and the attract demo. Pure. |
+| `match.py` | Title (PLAY / QUIT), select, stage select, HOW TO PLAY, rounds, the result, pause, idle and the attract demo. Pure. |
+| `tutorial.py` | The HOW TO PLAY card's scene: a real Fight played from a script, looping. Pure. |
 | `stages.py` | The backdrops, each drawn once (with its blinking lights); no green or purple in a large area, so the fighters stay readable. |
-| `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens. |
+| `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens (HOW TO PLAY draws its scene with a second, off-screen renderer). |
 | `bot.py` | The CPU for the attract demo and the tests. |
 | `audio.py` | Chiptune effects and music, adapted from Planck Time's. |
 | `input.py`, `config.py` | Pads and the dev keyboard; every tuning number and button. |

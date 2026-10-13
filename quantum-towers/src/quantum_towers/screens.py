@@ -88,7 +88,9 @@ def draw_title_screen(
         )
 
 
-PLAYER_CHOICES = (("1p", "1 PLAYER"), ("2p", "2 PLAYERS"))
+# The title's rows, top to bottom. QUIT is last: A on it leaves the game
+# (back to the cabinet's game list); Start never does.
+PLAYER_CHOICES = (("1p", "1 PLAYER"), ("2p", "2 PLAYERS"), ("quit", "QUIT"))
 
 
 def _draw_player_choice(
@@ -97,9 +99,10 @@ def _draw_player_choice(
     centerx = config.INTERNAL_WIDTH // 2
     widest = max(font.size(label)[0] for _key, label in PLAYER_CHOICES)
     left = centerx - widest // 2
-    line = font.get_height() + 8
+    line = font.get_height() + 6
+    top = centery - (len(PLAYER_CHOICES) * line - 6) // 2
     for i, (key, label) in enumerate(PLAYER_CHOICES):
-        y = centery - line + i * line
+        y = top + i * line
         active = key == selected
         color = config.COLOR_HINT if active else config.COLOR_TOWER
         visuals.blit_outlined_text(surface, font, label, color, (left, y))

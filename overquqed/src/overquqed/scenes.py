@@ -50,6 +50,9 @@ def _title_backdrop() -> pygame.Surface:
     return _BACKDROP[0]
 
 
+TITLE_ITEMS = ("PLAY", "QUIT")
+
+
 class TitleScene(Scene):
     idle_resets = False
 
@@ -57,9 +60,12 @@ class TitleScene(Scene):
         super().__init__(app)
         self.t = 0.0
         self.idle = 0.0
+        self.index = 0  # into TITLE_ITEMS
         self.demo = None  # attract-mode demo round (a bot kitchen)
         self.guest_keys = list(GUESTS)
         self.backdrop = _title_backdrop()
+        self.menu_band = pygame.Surface((INTERNAL_WIDTH, 74), pygame.SRCALPHA)
+        self.menu_band.fill((18, 14, 28, 200))
         app.music("title")
 
     def update(self, dt: float, inp: Input) -> None:
@@ -68,15 +74,28 @@ class TitleScene(Scene):
         if inp.select_held_time >= config.BACK_HOLD_TO_QUIT:
             self.app.running = False
             return
+        # Start always plays, whatever is selected; A picks the selected row,
+        # and QUIT leaves for the cabinet's menu the way Start + Select does.
         for i, p in enumerate(PLAYERS):
-            if inp.was_pressed(p, "start") or inp.was_pressed(p, "pick"):
-                self.app.sfx("confirm")
-                self.app.switch(JoinScene(self.app, first=i))
+            start = inp.was_pressed(p, "start")
+            if not (start or inp.was_pressed(p, "pick")):
+                continue
+            if not start and TITLE_ITEMS[self.index] == "QUIT":
+                self.app.running = False
                 return
+            self.app.sfx("confirm")
+            self.app.switch(JoinScene(self.app, first=i))
+            return
+        if self.demo is None:
+            for d, step in (("up", -1), ("down", 1)):
+                if inp.any_nav(d):
+                    self.index = (self.index + step) % len(TITLE_ITEMS)
+                    self.app.sfx("blip")
         if self.demo is None and self.idle > config.ATTRACT_DELAY:
             from overquqed.attract import Demo
 
             self.demo = Demo()
+            self.index = 0  # whoever walks up and presses A gets PLAY
         elif self.demo is not None and inp.activity:
             self.demo = None
         if self.demo is not None:
@@ -121,9 +140,18 @@ class TitleScene(Scene):
             surf.blit(frames[("right", f)], (round(x), 222))
             k = ket_surface(("+",) if idx else ("0",))
             surf.blit(k, (round(x) + 2, 208))
-        if int(self.t * 2) % 2 == 0:
-            center(surf, text("PRESS START", 16, P.WHITE, shadow=P.INK), 268)
-        center(surf, text("A or START: JOIN      HOLD SELECT: QUIT", 8, P.TEXT, shadow=P.INK), 300)
+        surf.blit(self.menu_band, (0, 248))
+        for i, item in enumerate(TITLE_ITEMS):
+            sel = i == self.index
+            label = text(item, 16, P.GOLD if sel else P.TEXT, shadow=P.INK)
+            x = (INTERNAL_WIDTH - label.get_width()) // 2
+            y = 254 + i * 22
+            surf.blit(label, (x, y))
+            if sel:
+                bob = int(self.t * 4) % 2
+                surf.blit(text(">", 16, P.GOLD, shadow=P.INK), (x - 22 - bob, y))
+                surf.blit(text("<", 16, P.GOLD, shadow=P.INK), (x + label.get_width() + 6 + bob, y))
+        center(surf, text("STICK: CHOOSE   A: OK   START: PLAY", 8, P.TEXT_DIM, shadow=P.INK), 304)
         center(surf, text("original game for the MQSF gaming corner", 8, (150, 140, 170)), 346)
 
 
@@ -138,6 +166,7 @@ class JoinScene(Scene):
     def update(self, dt: float, inp: Input) -> None:
         self.t += dt
         if inp.back():
+            self.app.sfx("back")
             self.app.to_title()
             return
         for i, p in enumerate(PLAYERS):
@@ -203,6 +232,7 @@ class LevelSelectScene(Scene):
     def update(self, dt: float, inp: Input) -> None:
         self.t += dt
         if inp.back():
+            self.app.sfx("back")
             self.app.to_title()
             return
         if inp.any_nav("up"):
@@ -216,9 +246,9 @@ class LevelSelectScene(Scene):
             self.app.sfx("confirm")
             if level.tutorial:
                 self.app.session["played_tutorial"] = True
-            from overquqed.round_scene import RoundScene
+            from overquqed.howto import HowToPlayScene
 
-            self.app.switch(RoundScene(self.app, level, self.players))
+            self.app.switch(HowToPlayScene(self.app, level, self.players))
 
     def _thumb(self, level) -> pygame.Surface:
         thumb = self._thumbs.get(level.key)

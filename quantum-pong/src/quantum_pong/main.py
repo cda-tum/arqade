@@ -1,9 +1,11 @@
 """Entry point: CLI args, window setup, screen flow, game loop.
 
 This module wires pygame I/O to the pure logic in pong.py/gates.py/screens.py/
-sound.py/input.py/display.py/pause.py. It is not unit tested (no headless
-assertions on rendered output make sense); verify by running it and by the
---input-test smoke path.
+sound.py/input.py/display.py/pause.py/title.py/tutorial.py. Rendering is not
+unit tested (no headless assertions on rendered output make sense); verify by
+running it and by the --input-test smoke path. The screen flow in `main()`
+(title -> HOW TO PLAY -> match -> winner -> title) is tested with the
+screens stubbed out (tests/test_flow.py).
 """
 
 from __future__ import annotations
@@ -14,11 +16,14 @@ import sys
 
 import pygame
 
-from quantum_pong import config, fonts, gates as gates_mod, screens, sound
+from quantum_pong import config, fonts, screens, sound, sprites, title
+from quantum_pong import gates as gates_mod
+from quantum_pong import tutorial as tutorial_mod
 from quantum_pong.display import make_display, present
-from quantum_pong.gates import Gate
+from quantum_pong.gates import Gate, is_live
 from quantum_pong.input import (
     keyboard_confirm_held,
+    keyboard_enabled,
     keyboard_pause_held,
     keyboard_quit_held,
     pressed_edge,
@@ -70,45 +75,6 @@ def _new_paddles() -> tuple[Paddle, Paddle]:
     return Paddle(y=y, height=config.PADDLE_HEIGHT), Paddle(y=y, height=config.PADDLE_HEIGHT)
 
 
-def _draw_ball(surface: pygame.Surface, ball: Ball) -> None:
-    pos = (round(ball.x), round(ball.y))
-    pygame.draw.circle(surface, config.COLOR_BALL, pos, config.BALL_RADIUS)
-    pygame.draw.circle(surface, config.COLOR_BACKGROUND, pos, config.BALL_RADIUS, 1)
-
-
-def _make_gate_label_surfaces(font: pygame.font.Font) -> dict[str, pygame.Surface]:
-    """Pre-render each gate letter once -- there are only 4 possible labels,
-    no need to re-rasterize text every frame for every gate on screen."""
-    return {kind: font.render(kind, False, config.COLOR_BACKGROUND) for kind in config.GATE_COLORS}
-
-
-def _draw_gate(
-    surface: pygame.Surface,
-    label_surfaces: dict[str, pygame.Surface],
-    gate: Gate,
-) -> None:
-    color = config.GATE_COLORS[gate.kind]
-    size = config.GATE_RADIUS * 2
-    rect = pygame.Rect(0, 0, size, size)
-    rect.center = (round(gate.x), round(gate.y))
-
-    pygame.draw.rect(surface, color, rect, border_radius=6)
-    pygame.draw.rect(surface, config.COLOR_TEXT, rect, width=2, border_radius=6)
-
-    label = label_surfaces[gate.kind]
-    surface.blit(label, label.get_rect(center=rect.center))
-
-
-def _draw_flash(surface: pygame.Surface, flash: tuple[float, float, float], game_time: float) -> None:
-    """Draw a brief expanding ring at a paddle catch/score point. Caller is
-    responsible for dropping flashes older than FLASH_DURATION."""
-    x, y, started_at = flash
-    age = game_time - started_at
-    t = min(1.0, age / config.FLASH_DURATION)
-    radius = config.BALL_RADIUS + round(t * config.FLASH_MAX_GROWTH)
-    pygame.draw.circle(surface, config.COLOR_FLASH, (round(x), round(y)), radius, 2)
-
-
 def _poll_players(keys: pygame.key.ScancodeWrapper) -> tuple:
     return read_player_raw_input("p1", keys), read_player_raw_input("p2", keys)
 
@@ -134,6 +100,28 @@ def _wants_start(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> bool:
     )
 
 
+def _directions(p1_raw, p2_raw) -> tuple[int, int]:
+    """Each player's stick (or dev keys) as -1 up / 0 / 1 down."""
+    deadzone = config.INPUT_CONFIG["axis_deadzone"]
+    return tuple(
+        resolve_paddle_direction(
+            up_held=raw.up_held, down_held=raw.down_held,
+            axis_value=raw.axis_value, deadzone=deadzone,
+        )
+        for raw in (p1_raw, p2_raw)
+    )
+
+
+def _title_buttons_held(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> dict[str, tuple]:
+    """Like _pause_buttons_held, for the title menu: Start (Space or P on the
+    dev keyboard) starts, A (Enter) picks the selected item."""
+    return {
+        "start": (p1_raw.start_held, p2_raw.start_held, keys[pygame.K_SPACE], keyboard_pause_held(keys)),
+        "back": (p1_raw.back_held, p2_raw.back_held),
+        "confirm": (p1_raw.confirm_held, p2_raw.confirm_held, keyboard_confirm_held(keys)),
+    }
+
+
 def _pause_buttons_held(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> dict[str, tuple]:
     """Held state of each pause-menu button, per source (P1 pad, P2 pad,
     keyboard), so each source's presses are edge-detected on their own."""
@@ -148,18 +136,27 @@ def _pressed(previous: dict[str, tuple], held: dict[str, tuple], name: str) -> b
     return any(pressed_edge(p, c) for p, c in zip(previous[name], held[name]))
 
 
-def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> str:
-    """Attract/title screen. Returns 'start' or 'quit'."""
+def run_title_screen(
+    surface: pygame.Surface, window: pygame.Surface | None, sounds: sound.Sounds
+) -> str:
+    """Attract/title screen with its PLAY / QUIT menu. Returns 'start' or
+    'quit'. Start always starts; A picks the selected row (see title.py)."""
     internal = surface
     clock = pygame.time.Clock()
     title_font = fonts.load_font(26)
     legend_font = fonts.load_font(9)
-    prompt_font = fonts.load_font(12)
+    item_font = fonts.load_font(10)
+    prompt_font = fonts.load_font(8)
+    menu = title.TitleMenu()
     t = 0.0
-    # Only start once every start button has been let go: the A that picked
+    # Seed the edge detection with what's held right now: the A that picked
     # QUIT TO TITLE (or the Start that left the winner screen) is usually
-    # still held on the first frame here, and would start a new match at once.
-    armed = False
+    # still held on the first frame here, and must not start a match (or, on
+    # QUIT, leave the game) by itself.
+    keys = read_keys()
+    p1_raw, p2_raw = _poll_players(keys)
+    prev_held = _title_buttons_held(p1_raw, p2_raw, keys)
+    prev_dirs = _directions(p1_raw, p2_raw)
 
     while True:
         dt = clock.tick(config.FPS) / 1000.0
@@ -174,15 +171,74 @@ def run_title_screen(surface: pygame.Surface, window: pygame.Surface | None) -> 
 
         if _wants_quit(p1_raw, p2_raw, keys):
             return "quit"
-        wants_start = _wants_start(p1_raw, p2_raw, keys)
-        if armed and wants_start:
+
+        held = _title_buttons_held(p1_raw, p2_raw, keys)
+        dirs = _directions(p1_raw, p2_raw)
+        title_input = title.TitleInput(
+            start=_pressed(prev_held, held, "start"),
+            confirm=_pressed(prev_held, held, "confirm"),
+            back=_pressed(prev_held, held, "back"),
+            nav=nav_edge(prev_dirs[0], dirs[0]) or nav_edge(prev_dirs[1], dirs[1]),
+        )
+        prev_held, prev_dirs = held, dirs
+
+        index_before = menu.index
+        step = menu.update(title_input)
+        if step == title.QUIT:
+            return "quit"
+        if step == title.START:
+            sounds.confirm.play()
             return "start"
-        armed = armed or not wants_start
+        if menu.index != index_before:
+            sounds.move.play()
 
         screens.draw_title_screen(
-            internal, title_font, legend_font, prompt_font,
+            internal, title_font, legend_font, item_font, prompt_font, menu.index,
             screens.blink_visible(t, config.TITLE_BLINK_PERIOD),
         )
+        present(internal, window)
+        pygame.display.flip()
+
+
+def run_tutorial_screen(
+    surface: pygame.Surface, window: pygame.Surface | None, sounds: sound.Sounds
+) -> str:
+    """The HOW TO PLAY card (tutorial.py). Returns 'play' once any button is
+    pressed (after a short grace period), 'quit' on Start + Select, or 'idle'
+    after IDLE_TIMEOUT_SECONDS with nobody pressing anything."""
+    internal = surface
+    clock = pygame.time.Clock()
+    card = tutorial_mod.TutorialCard()
+    demo = tutorial_mod.DemoScene()
+    tutorial = tutorial_mod.DismissGate()  # attract bots look for this name
+    # Presses still queued from the title must not count.
+    pygame.event.clear((pygame.JOYBUTTONDOWN, pygame.KEYDOWN))
+
+    while True:
+        dt = clock.tick(config.FPS) / 1000.0
+
+        pressed = False
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            # Any button on either pad; any key only for dev runs.
+            if event.type == pygame.JOYBUTTONDOWN or (
+                event.type == pygame.KEYDOWN and keyboard_enabled()
+            ):
+                pressed = True
+
+        keys = read_keys()
+        p1_raw, p2_raw = _poll_players(keys)
+        if _wants_quit(p1_raw, p2_raw, keys):
+            return "quit"
+        if tutorial.update(dt, pressed):
+            sounds.confirm.play()
+            return "play"
+        if tutorial.age >= config.IDLE_TIMEOUT_SECONDS:
+            return "idle"
+
+        demo.step(dt)
+        card.draw(internal, demo, tutorial.age, screens.blink_visible(tutorial.age, config.TITLE_BLINK_PERIOD))
         present(internal, window)
         pygame.display.flip()
 
@@ -231,7 +287,8 @@ def run_game(
     font = fonts.load_font(10)
     score_font = fonts.load_font(16)
     gate_font = fonts.load_font(10)
-    gate_label_surfaces = _make_gate_label_surfaces(gate_font)
+    gate_label_surfaces = sprites.make_gate_label_surfaces(gate_font)
+    gate_warning_labels = sprites.make_gate_warning_labels(gate_font)
     pause_hint_font = fonts.load_font(8)
     rng = random.Random()
 
@@ -293,9 +350,15 @@ def run_game(
         )
         prev_held, prev_dirs = held, (p1_dir, p2_dir)
 
+        was_paused, index_before = pause_menu.paused, pause_menu.index
         step = pause_menu.update(pause_input)
         if step == QUIT_TO_TITLE:
+            sounds.confirm.play()
             return "title", score
+        if pause_menu.paused != was_paused:
+            sounds.confirm.play()
+        elif pause_menu.index != index_before:
+            sounds.move.play()
 
         # The idle timeout keeps counting while paused, so a match left paused
         # still drops back to the title; using the menu counts as input.
@@ -314,12 +377,15 @@ def run_game(
 
             balls = [step_ball(b, dt, config.INTERNAL_HEIGHT, config.BALL_RADIUS) for b in balls]
 
+            gate_count_before = len(active_gates)
             active_gates, last_gate_spawn_at = gates_mod.maybe_spawn_gate(
                 active_gates, game_time, last_gate_spawn_at, rng
             )
+            if len(active_gates) > gate_count_before:
+                sounds.announce.play()  # a dashed gate shows where one will appear
             gate_count_before = len(active_gates)
             balls, active_gates = gates_mod.check_gate_collisions(
-                balls, active_gates, config.BALL_RADIUS
+                balls, active_gates, config.BALL_RADIUS, game_time
             )
             if len(active_gates) < gate_count_before:
                 sounds.gate.play()
@@ -367,25 +433,20 @@ def run_game(
             internal, config.COLOR_MIDLINE,
             (config.INTERNAL_WIDTH // 2, 0), (config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT), 1,
         )
-        pygame.draw.rect(
-            internal, config.COLOR_PADDLE,
-            (p1_x, p1_paddle.y, config.PADDLE_WIDTH, p1_paddle.height),
-            border_radius=2,
-        )
-        pygame.draw.rect(
-            internal, config.COLOR_PADDLE,
-            (p2_x, p2_paddle.y, config.PADDLE_WIDTH, p2_paddle.height),
-            border_radius=2,
-        )
+        sprites.draw_paddle(internal, p1_x, p1_paddle)
+        sprites.draw_paddle(internal, p2_x, p2_paddle)
 
         for gate in active_gates:
-            _draw_gate(internal, gate_label_surfaces, gate)
+            if is_live(gate, game_time):
+                sprites.draw_gate(internal, gate_label_surfaces, gate)
+            else:
+                sprites.draw_gate_warning(internal, gate_warning_labels, gate, game_time)
 
         for ball in balls:
-            _draw_ball(internal, ball)
+            sprites.draw_ball(internal, ball)
 
         for flash in flashes:
-            _draw_flash(internal, flash, game_time)
+            sprites.draw_flash(internal, flash, game_time)
 
         if score != cached_score:
             cached_score = dict(score)
@@ -431,9 +492,16 @@ def main(argv: list[str] | None = None) -> None:
         show_fps = args.fps or config.SHOW_FPS_DEFAULT
 
         while True:
-            action = run_title_screen(surface, window)
+            action = run_title_screen(surface, window, sounds)
             if action == "quit":
                 break
+            # HOW TO PLAY before every match from the title (there's no
+            # rematch that skips the title, so that's every match).
+            action = run_tutorial_screen(surface, window, sounds)
+            if action == "quit":
+                break
+            if action == "idle":
+                continue
 
             result, final_score = run_game(surface, window, sounds, show_fps)
             if result == "quit":

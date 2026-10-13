@@ -105,6 +105,7 @@ def qubit_x(i: float) -> int:
 class Syndrome(Boss):
     VERB = "SYNDROME!"
     INPUT = "stick+a"
+    STEPS = True
     CAPTION = "Parity checks find errors without measuring the qubits"
     BOSS_NAME = "DECOHERENCE"
     BOSS_TITLE = "THE NOISE"

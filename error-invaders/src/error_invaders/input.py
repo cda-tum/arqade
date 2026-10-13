@@ -86,9 +86,12 @@ class Input:
         self.held = {p: set() for p in PLAYERS}
         self.prev = {p: set() for p in PLAYERS}
         self.pressed = {p: set() for p in PLAYERS}
+        self.raw = {p: set() for p in PLAYERS}
+        self.blocked = {p: set() for p in PLAYERS}  # see swallow()
         self.ev_keys = set()
         self.last_keys = []
         self.confirm = self.back = self.pause = False
+        self.any_button = False  # any new button press this frame, any pad
         self.back_held = 0.0
         self.quit_combo = False
         self.refresh_joys()
@@ -110,6 +113,7 @@ class Input:
             if not _keyboard_enabled:
                 return
             self.ev_keys.add(e.key)
+            self.any_button = True
             if e.key in CONFIRM_KEYS:
                 self.confirm = True
             if e.key in BACK_KEYS:
@@ -117,6 +121,7 @@ class Input:
             if e.key in PAUSE_KEYS:
                 self.pause = True
         elif e.type == pygame.JOYBUTTONDOWN:
+            self.any_button = True
             if e.button == system["start_button"]:
                 self.confirm = self.pause = True
             if e.button == system["select_button"]:
@@ -170,9 +175,12 @@ class Input:
                 h |= self._joy_held(j, cfg)
                 start_select[p] = (self._button(j, system["start_button"]),
                                    self._button(j, system["select_button"]))
+            self.raw[p] = h
+            self.blocked[p] &= h  # let go: counts again on the next press
+            h = h - self.blocked[p]
             self.pressed[p] = h - self.prev[p]
             for act in ACTIONS:
-                if any(k in self.ev_keys for k in KEYS[p][act]):
+                if act not in self.blocked[p] and any(k in self.ev_keys for k in KEYS[p][act]):
                     self.pressed[p].add(act)
             self.held[p] = h
             self.prev[p] = h
@@ -185,9 +193,18 @@ class Input:
             self._button(j, system["select_button"]) for j in self.joys.values())
         self.back_held = self.back_held + dt if back_down else 0.0
 
+    def swallow(self):
+        """Treat the fire/swap buttons held right now as already used: they
+        do nothing until they are let go. For the press that leaves the
+        HOW TO PLAY card, so it doesn't fire or switch color as well."""
+        for p in PLAYERS:
+            self.blocked[p] = self.raw[p] & {"fire", "swap"}
+            self.held[p] -= self.blocked[p]
+            self.pressed[p] -= self.blocked[p]
+
     def end_frame(self):
         self.ev_keys.clear()
-        self.confirm = self.back = self.pause = False
+        self.confirm = self.back = self.pause = self.any_button = False
 
     def down(self, p, a): return a in self.held[p]
     def hit(self, p, a): return a in self.pressed[p]

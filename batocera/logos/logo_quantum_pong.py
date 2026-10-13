@@ -7,7 +7,8 @@ the game. Below it, a ball off P1's paddle on the left runs into an H gate
 on the midline, and two balls leave the gate: one carries on towards P2's
 paddle on the right, one turns back towards P1. Motion is shown with faded
 copies of the ball. The marquee is the same white lettering between two
-paddles.
+paddles, and the wide tile opens the scene out to the game's own wide
+field, the paddles at its two ends.
 
 Only colours the game itself uses: COLOR_BACKGROUND, COLOR_MIDLINE,
 COLOR_PADDLE/BALL/TEXT and the H gate's GATE_COLORS entry. The gate and the
@@ -40,6 +41,8 @@ WHITE = config.COLOR_PADDLE
 # One pixel scale for every game sprite, so gate, ball and paddles keep
 # their in-game proportions (gate 48 px, ball 8 px, paddle 8x40).
 K = 5
+# The wide tile's scale: its field is half as tall, so the sprites are smaller.
+KW = 4
 
 
 # --- game sprites, drawn the way the game draws them ---------------------------
@@ -93,33 +96,20 @@ def title(k: int) -> pygame.Surface:
     return kit.trim(out)
 
 
-def art(size: int) -> pygame.Surface:
-    s = size / 1024
-    k = max(1, round(K * s))
-    surf = pygame.Surface((size, size))
-    surf.fill(BG)
+def midline(surf: pygame.Surface, left: int, top: int, bottom: int, width: int, dash: int, step: int) -> None:
+    """The dashed midline in COLOR_MIDLINE: `width`-wide dashes from x=left."""
+    for y in range(top, bottom, step):
+        pygame.draw.rect(surf, config.COLOR_MIDLINE, (left, y, width, dash))
 
-    # the score area: the title
-    kit.blit_center(surf, title(max(1, round(11 * s))), (size / 2, 230 * s))
 
-    # dashed midline below it, in COLOR_MIDLINE
-    dash, step = round(32 * s), round(56 * s)
-    for y in range(round(430 * s), round(960 * s), step):
-        pygame.draw.rect(surf, config.COLOR_MIDLINE, (size // 2 - round(5 * s), y, round(10 * s), dash))
-
-    # paddles framing the field: P1 left, P2 right
-    p1 = (130 * s, 590 * s)
-    p2 = (size - 130 * s, 790 * s)
-    kit.blit_center(surf, paddle_sprite(k), p1)
-    kit.blit_center(surf, paddle_sprite(k), p2)
-
-    # one ball, off P1's paddle, into the H gate on the midline
-    split = (size / 2, 680 * s)
-    start = (p1[0] + (config.PADDLE_WIDTH / 2 + config.BALL_RADIUS) * k, 560 * s)
+def split_ball(surf: pygame.Surface, k: int, start: tuple[float, float], split: tuple[float, float],
+               far: float, spacing: float) -> None:
+    """One ball from `start` into the H gate at `split`, and the two balls
+    apply_h makes of it, `far` px out of the gate. Faded copies `spacing`
+    apart show the motion."""
     vx, vy = split[0] - start[0], split[1] - start[1]
     norm = math.hypot(vx, vy)
     incoming = Ball(x=split[0], y=split[1], vx=vx / norm, vy=vy / norm)
-    spacing = 56 * s
     # its faded copies, brightest where it touched the gate's edge
     edge = (config.GATE_RADIUS + config.BALL_RADIUS) * k
     n_in = int((norm - edge) // spacing) + 1
@@ -131,13 +121,60 @@ def art(size: int) -> pygame.Surface:
     kit.blit_center(surf, gate_sprite("H", k), split)
 
     # apply_h: one half carries on towards P2, one turns back towards P1
-    far = 330 * s
     for out in apply_h(incoming):
         for i in range(3, 0, -1):
             d = far - i * spacing
             kit.blit_center(surf, ghost(k, round(200 * (1 - i / 4))),
                             (split[0] + out.vx * d, split[1] + out.vy * d))
         kit.blit_center(surf, ball_sprite(k), (split[0] + out.vx * far, split[1] + out.vy * far))
+
+
+def art(size: int) -> pygame.Surface:
+    s = size / 1024
+    k = max(1, round(K * s))
+    surf = pygame.Surface((size, size))
+    surf.fill(BG)
+
+    # the score area: the title
+    kit.blit_center(surf, title(max(1, round(11 * s))), (size / 2, 230 * s))
+
+    # dashed midline below it
+    midline(surf, size // 2 - round(5 * s), round(430 * s), round(960 * s),
+            round(10 * s), round(32 * s), round(56 * s))
+
+    # paddles framing the field: P1 left, P2 right
+    p1 = (130 * s, 590 * s)
+    p2 = (size - 130 * s, 790 * s)
+    kit.blit_center(surf, paddle_sprite(k), p1)
+    kit.blit_center(surf, paddle_sprite(k), p2)
+
+    # one ball, off P1's paddle, into the H gate on the midline
+    start = (p1[0] + (config.PADDLE_WIDTH / 2 + config.BALL_RADIUS) * k, 560 * s)
+    split_ball(surf, k, start, (size / 2, 680 * s), 330 * s, 56 * s)
+    return surf
+
+
+def wide(width: int, height: int) -> pygame.Surface:
+    """The game's own field is wide (480x270), so the wide tile is the square
+    scene opened out to it: the title at the top where the score sits, the
+    paddles out at the two ends, and the split on the midline below the
+    title, its paths flatter for the longer field."""
+    s = height / 512
+    k = max(1, round(KW * s))
+    surf = pygame.Surface((width, height))
+    surf.fill(BG)
+
+    kit.blit_center(surf, title(max(1, round(5 * s))), (width / 2, 94 * s))
+    midline(surf, width // 2 - k, round(184 * s), height, 2 * k, round(6.4 * k), round(11.2 * k))
+
+    # the paddles, each 10 % of the width in from its edge
+    p1 = (width * 0.1, 300 * s)
+    p2 = (width * 0.9, 400 * s)
+    kit.blit_center(surf, paddle_sprite(k), p1)
+    kit.blit_center(surf, paddle_sprite(k), p2)
+
+    start = (p1[0] + (config.PADDLE_WIDTH / 2 + config.BALL_RADIUS) * k, 290 * s)
+    split_ball(surf, k, start, (width / 2, 350 * s), 330 * s, 56 * s)
     return surf
 
 

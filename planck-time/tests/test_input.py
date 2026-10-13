@@ -49,3 +49,20 @@ def test_with_no_pads_and_no_keys_the_frame_is_idle():
     assert all(p.stick == (0.0, 0.0) and p.step == (0, 0) and not p.a for p in fi.players.values())
     assert all(d == (0, 0) for d in fi.nav.values())
     assert not fi.confirm and not fi.back and not fi.pause and not fi.activity
+
+
+def test_any_key_counts_as_a_press_unless_the_keyboard_is_off():
+    pygame.init()
+    inp = Input()
+    inp.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_z))
+    inp.update(1 / 60)
+    assert inp.frame_input().any_press
+    inp.update(1 / 60)
+    assert not inp.frame_input().any_press  # a press, not a hold
+    pinput.set_keyboard_enabled(False)
+    try:
+        inp.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_z))
+        inp.update(1 / 60)
+        assert not inp.frame_input().any_press
+    finally:
+        pinput.set_keyboard_enabled(True)

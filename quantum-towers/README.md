@@ -9,8 +9,9 @@ pure/tested), and the full two-player game: side-by-side towers, each player's o
 qubit/target chain, charges, and the automatic knockback attack, with smooth
 procedurally-drawn visuals (anti-aliased climber figure + shaded tower blocks showing
 the target state directly on them, not just text readouts). Title/winner screens, idle
-timeout, `--input-test`, and simple procedurally-generated sound effects (climb, perfect,
-shot — same approach as Quantum Pong's `sound.py`) are wired in. Batocera packaging isn't
+timeout, `--input-test`, and simple procedurally-generated sound effects (gate presses,
+climb, perfect, stun, shot, menu move and pick, the time trial's countdown and the win
+fanfare — same approach as Quantum Pong's `sound.py`) are wired in. Batocera packaging isn't
 built yet.
 
 ## The core loop
@@ -73,10 +74,36 @@ like the cabinet's 2x3 grid, with no printed button names: the layout alone maps
 hands, and letters like X and Y would read as gates. RESET doesn't fit a square, so it is drawn as a
 circular reset arrow.
 
+## Title, HOW TO PLAY
+
+The title's rows are **1 PLAYER**, **2 PLAYERS** and **QUIT**. The stick moves between them
+and A picks one; A on QUIT leaves the game at once, back to the cabinet's game list (the same
+clean exit as Start+Select). Start never quits: it always starts a match, with the player count
+highlighted last if QUIT is highlighted. B does nothing on the title.
+
+Every match picked on the title opens with a **HOW TO PLAY** card (`tutorial.py`): the goal in
+three lines, a looping demo climb, and the controls. The demo replays a short script of presses
+through the real rules (`player.py`) and draws it with the match's own tower, climber, legend and
+PERFECT!/WRONG! flashes: X and Z make the gold floor, a push up climbs, a push up on the wrong
+state stuns, H and up climb again. The controls panel shows the pad as printed, `L X R` over
+`Y B A`, each button with the gate it fires (the button printed X fires the Y gate; see
+`GATE_AT_POSITION` in `config.py`), and the button the demo presses lights up there too.
+
+- Any button on either pad starts the match, but only 0.3 s after the card opened, so the A or
+  Start that picked the mode doesn't skip it. The stick doesn't. Without `--no-keyboard` any key
+  does too.
+- The button that closed it doesn't act in the match: every button counts as held until it has
+  been let go once.
+- Start+Select quits from the card, and the 60 s idle timeout takes it back to the title.
+- There is no rematch: the winner screen goes back to the title, and every match from there
+  gets the card again.
+
+`main.run_flow` is the screen flow, and `tests/test_tutorial.py` drives it, the card and the
+title's QUIT headlessly.
+
 ## Single player: time trial
 
-On the title, the stick picks **1 PLAYER** or **2 PLAYERS** and A or Start begins. Two
-players play the race above, unchanged. One player gets a time trial:
+Two players play the race above, unchanged. One player gets a time trial (3, 2, 1, GO beep):
 
 - **One tower, centred.** It uses the same gates, legend and push-up-to-confirm, and either
   pad can play.
@@ -191,7 +218,8 @@ logic and knockback), `notation.py` (ket rendering, including the general fallba
 `sound.py` (tone-sample generation), `solo.py` and `times.py` (the time trial's tower,
 timer and table), and `pause.py` (the pause menu; `tests/test_pause.py` also
 drives the real `run_game` loop headlessly with scripted input, to check that a pause really
-freezes play) — this is most of the game's actual complexity, and none of
+freezes play), and `tutorial.py` (HOW TO PLAY's dismissal rules and demo climb;
+`tests/test_tutorial.py` also drives the card, the title's QUIT and the screen flow) — this is most of the game's actual complexity, and none of
 it depends on pygame. The pygame game
 loop and screen/visuals rendering (`main.py`, `visuals.py`) are integration glue — verified by
 running it, and by a large (20k-step) scripted simulation exercising real attack/knockback

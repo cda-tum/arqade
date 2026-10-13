@@ -11,7 +11,16 @@ check.
 
 ## How to play
 
-For 2 or 4 players: push the stick left or right on the title screen to pick.
+The title is a short menu: the player count (push the stick left or right
+to pick 2 or 4) and QUIT, which goes straight back to the cabinet's game list.
+Start always starts a match, whichever row is picked.
+
+Every match started from the title opens on a HOW TO PLAY card: the goal in
+three lines, a looping demo (the real rules on a small arena: P1 takes an H,
+splits, loses one copy to P2's trail and still wins) and the two pads as
+drawn, with who steers with what in the chosen player count. Any button
+dismisses it after a 0.3 s guard (the stick doesn't), and the press that
+dismissed it doesn't steer. A rematch from the result screen skips it.
 
 - **Steer** with the stick, or with the face buttons X, Y, B and A, which sit
   like W, A, S and D. You can't reverse into yourself.
@@ -37,11 +46,13 @@ For 2 or 4 players: push the stick left or right on the title screen to pick.
 |---|---|---|
 | Steer, 2 players | either pad's stick, or its X Y B A buttons | P1 W A S D or T F G H, P2 I J K L or arrows |
 | Steer, 4 players | left stick: P1, left buttons: P3, right stick: P2, right buttons: P4 | the same keys, one set per player |
-| Confirm (menus) | A or Start | Enter, 1, 2 |
+| Title menu | stick up or down picks a row, A picks it, Start always starts | W S, Enter, P |
+| Pick 2 or 4 players | stick left or right on the PLAYERS row | A or D, J or L |
+| Dismiss HOW TO PLAY | any button | any key |
 | Back (result screen) | B | Backspace |
+| Rematch (result screen) | A or Start | Enter |
 | Pause (resume or quit to the title) | Start | P |
-| Pick 2 or 4 players | stick left or right on the title | A or D, J or L |
-| Quit | Start + Select, or hold Select 2 s on the title | Esc |
+| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Esc |
 
 The keyboard is a dev fallback only. On the cabinet the loader passes
 `--no-keyboard`.
@@ -64,7 +75,8 @@ uv run python tools/snapshot.py /tmp/qurves-snaps   # render a scripted match to
 | Module | Role |
 |---|---|
 | `rules.py` | The simulation: grid, bikes, splits, collisions, collapse. Pure, fully tested. |
-| `match.py` | Title, countdown, rounds, results. Pure, tested. |
+| `match.py` | Title menu, HOW TO PLAY, countdown, rounds, results. Pure, tested. |
+| `tutorial.py` | The HOW TO PLAY card: its scripted demo (pure, tested) and drawing. |
 | `render.py`, `fx.py` | The neon look: a persistent trail board, ghost layers, glow sprites, particles. |
 | `input.py`, `sound.py` | Pads and dev keyboard; procedural sound effects. |
 | `config.py` | Every tuning number, colour and button mapping. |

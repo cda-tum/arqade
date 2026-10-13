@@ -1,9 +1,10 @@
 # ARQADE launcher
 
 Every game in this repo behind one menu, on an ordinary PC: a fullscreen
-carousel of the games, a loading card that shows the controls, and a settings
-menu where you set which keyboard keys act as the cabinet's two pads. It plays
-the role EmulationStation plays on the Batocera cabinet, without Batocera.
+carousel of the games, a loading card with the spinning ARQADE logo and the
+controls, an attract reel when nobody is playing, and a settings menu where
+you set which keyboard keys act as the cabinet's two pads. It plays the role
+EmulationStation plays on the Batocera cabinet, without Batocera.
 
 ```bash
 ./arqade.sh              # from the repo root (Windows: arqade.cmd)
@@ -12,7 +13,8 @@ the role EmulationStation plays on the Batocera cabinet, without Batocera.
 ./arqade.sh --list       # just list the games it found
 ```
 
-The first run creates `launcher/.venv` (Python 3.11, pygame 2.5.2, numpy) with
+The first run creates `launcher/.venv` (Python 3.11, pygame 2.5.2, numpy,
+imageio-ffmpeg) with
 [uv](https://docs.astral.sh/uv/). Without the script: `uv run --project launcher arqade`.
 
 ## In the menu
@@ -26,6 +28,11 @@ The first run creates `launcher/.venv` (Python 3.11, pygame 2.5.2, numpy) with
 | F11 | fullscreen / window |
 | Ctrl+Q | quit straight away (also in kiosk mode) |
 | mouse | wheel scrolls, click picks, click the centre game to play |
+
+**After 15 s without input the menu plays the attract reels**, the same ones
+the cabinet shows as its screensaver (`batocera/attract/reels/`), one at
+random after another. Any key or click brings the menu back and does nothing
+else. **Settings → Attract mode** turns it off.
 
 **In a game, Esc always goes back to the menu**, whatever the game's own
 controls. If a game crashes, the menu says so with the last error line; the
@@ -77,6 +84,11 @@ Windows). Hand-editing is fine; anything unreadable falls back to the defaults.
   JOYBUTTON and JOYAXIS events, using the cabinet's raw button numbers. Polling
   `get_button()` and `get_axis()` sees the same state. Real joysticks are hidden
   while this is on. Esc ends the game from inside that same wrapper.
+- **Video** (`video.py`): pygame cannot decode video, so the reels and the
+  spinning logo (`logos/animation/arqade_loading_v3_1080p.webm`) are decoded
+  by imageio-ffmpeg's bundled ffmpeg in a background thread. Without it, or
+  without the files, the menu has no attract mode and the loading card shows
+  the game's logo instead.
 - **One environment for all games.** Every game runs in the launcher's Python,
   so `pyproject.toml` here lists every game's dependencies. A test fails when a
   game adds one the launcher doesn't have.
@@ -91,5 +103,6 @@ cd launcher && uv run pytest
 ```
 
 The tests run headless. They cover discovery, settings, the virtual pads, the
-menu flow with a stand-in for the game process, and one real subprocess launch
-of a stand-in game.
+menu flow with a stand-in for the game process, the attract mode with a
+stand-in for the video player, and one real subprocess launch of a stand-in
+game. No test starts ffmpeg.

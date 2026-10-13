@@ -89,6 +89,7 @@ def bfs(start, goal, ok) -> list | None:
 class Route(Microgame):
     VERB = "ROUTE!"
     INPUT = "stick"
+    STEPS = True
     CAPTION = "Two-qubit gates need a free route"
 
     def __init__(self, seed: int, level: int, duration: float) -> None:

@@ -3,7 +3,8 @@
 Per player, in a microgame: the analog stick (deadzoned, -1..1), stick
 steps (a push past half way, auto-repeated, for cursors and grids), and A
 pressed and held. In menus the same steps navigate, A (or Start) confirms
-and B goes back. Start pauses. The pure helpers are unit tested; reading
+and B goes back. Start pauses. Any button at all (or, for dev, any key)
+counts as a press, for the HOW TO PLAY card. The pure helpers are unit tested; reading
 real pads is verified on the cabinet with --input-test.
 """
 
@@ -101,6 +102,7 @@ class Input:
         self.start_select = {p: (False, False) for p in PLAYERS}
         self.select_held_time = 0.0
         self.keyboard_quit = False
+        self._key_pressed = False  # any key went down since the last update (dev only)
         self.rescan()
 
     def rescan(self) -> None:
@@ -113,6 +115,8 @@ class Input:
     def handle(self, event: pygame.event.Event) -> None:
         if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
             self.rescan()
+        elif event.type == pygame.KEYDOWN and _keyboard_enabled:
+            self._key_pressed = True
 
     def _read_pad(self, player: str) -> tuple[set[int], float, float]:
         """(buttons down, stick x, stick y), deadzoned, with y positive = down."""
@@ -157,9 +161,13 @@ class Input:
             frame.confirms[p] = a or start in pressed or "start" in new_keys
             frame.backs[p] = system["back_button"] in pressed or "back" in new_keys
             frame.pauses[p] = start in pressed or "start" in new_keys
+            frame.presses[p] = bool(pressed or new_keys)
             self.start_select[p] = (start in down, system["select_button"] in down)
             if down or x or y or held_keys:
                 frame.activity = True
+        if self._key_pressed:  # any key at all, not just the mapped ones (the HOW TO PLAY card)
+            frame.presses["p1"] = frame.activity = True
+            self._key_pressed = False
         self.frame = frame
         if any(select for _start, select in self.start_select.values()):
             self.select_held_time += dt

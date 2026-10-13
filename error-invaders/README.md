@@ -24,6 +24,10 @@ transversal gate (spread shot), magic state (bomb), noise bias (errors correlate
 chains you can pop in one hit) and, in 2-player mode, lattice surgery (both players
 merge into one ship: P1 steers, P2 aims).
 
+The two players share their lives. A ship lost with none left is out, and the other
+plays on alone until the next wave (or boss), which brings the lost ship back, still
+with no lives to spare. The game is over only when both are out at once.
+
 ### Bosses
 
 Every third wave is a boss fight instead of a formation. **BOSS RUSH** (the third mode
@@ -86,12 +90,22 @@ axis mappings live there.
 | Fire / confirm | A / Y (or Z) | A / `,` |
 | Switch color / back | B / X | B / `.` |
 
-- **Start** (or Enter) confirms in menus. **Select** (or Esc) goes back a menu page.
+- **Title menu:** page one is 1 PLAYER / 2 PLAYERS / QUIT, page two the mode (EASY,
+  HARD, BOSS RUSH). The stick moves, A picks, B (or Select, Esc) goes back a page, and
+  **Start** (or Enter) always goes on towards a match, whatever row is selected. A on
+  **QUIT** leaves the game at once, back to the cabinet's game list (or the launcher).
+- **HOW TO PLAY:** every match started from the title opens with a card: the goal, a
+  looping demo (red corrects red, red turns purple blue, blue corrects blue) and the
+  controls, drawn as the pad's `L X R / Y B A` cluster with A and B lit. Any button
+  starts play (presses in its first 0.3 s are ignored, the stick doesn't count), and
+  whatever is held then is swallowed, so that press doesn't also fire or switch color.
+  The code is `src/error_invaders/tutorial.py`.
 - **Pause:** press **Start** (or P / Esc) during play, on either controller. Everything
   freezes. In the pause menu the stick picks RESUME or QUIT TO TITLE, A (fire) chooses,
   and Start or B resumes. Quitting to the title doesn't record a score.
-- **Quit:** hold Start and Select together on either controller. You can also hold Select
-  (or press Esc) for 2 s on the first menu page.
+- **Quit:** QUIT on the title, or hold Start and Select together on either controller
+  (anywhere, the HOW TO PLAY card included). You can also hold Select (or press Esc) for
+  2 s on the first menu page.
 - The keyboard keys are a dev fallback only. On the cabinet the loader passes
   `--no-keyboard`, because Batocera turns P1's pad into keystrokes as well (see
   `../AGENTS.md`), which made P1 move P2 and one button fire two actions.
@@ -121,7 +135,9 @@ the game doesn't show up twice.
 uv run pytest
 ```
 
-The tests cover the pure input-decision functions, the config (every key name exists
+The tests cover the title menu's flow (title, mode, HOW TO PLAY, play; QUIT; what
+dismisses the card and that the dismissing press is swallowed), the card's demo script,
+the pause menu, the pure input-decision functions, the config (every key name exists
 and fire/swap/start/select don't collide), the Pauli table used in HARD mode,
 `display.py`'s scaling math, and the bosses' pure logic: which wave gets which boss,
 the shared color rules, that every Syndrome error is uniquely decodable, and that

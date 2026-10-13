@@ -72,19 +72,21 @@ class Settings:
     # the keyboard its own way, and real joysticks pass straight through.
     pads: bool = True
     show_fps: bool = False
+    # The gameplay reel after a while without input on the game menu.
+    attract: bool = True
     # player -> action -> pygame key name, or None when unbound.
     keys: dict[str, dict[str, str | None]] = field(default_factory=default_keys)
 
     def to_json(self) -> dict:
         return {"fullscreen": self.fullscreen, "pads": self.pads,
-                "show_fps": self.show_fps, "keys": self.keys}
+                "show_fps": self.show_fps, "attract": self.attract, "keys": self.keys}
 
     @classmethod
     def from_json(cls, raw: object) -> Settings:
         settings = cls()
         if not isinstance(raw, dict):
             return settings
-        for name in ("fullscreen", "pads", "show_fps"):
+        for name in ("fullscreen", "pads", "show_fps", "attract"):
             if isinstance(raw.get(name), bool):
                 setattr(settings, name, raw[name])
         keys = raw.get("keys")
