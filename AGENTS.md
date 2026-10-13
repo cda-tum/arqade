@@ -412,9 +412,16 @@ loader at `/userdata/games/<rom>/<rom>.pygame` instead of in
 - `python3 /userdata/experimental.py --status` says what is parked, listed
   and hooked; `--on`/`--off` do it over SSH.
 
-Not yet run on the cabinet (2026-10-12): the API calls and the two event hooks were
-checked against batocera-emulationstation's source (`HttpServerThread.cpp`,
-`Scripting.cpp`, `SystemScreenSaver.cpp`, `main.cpp`), not on hardware.
+Checked on the cabinet (Batocera 39, 2026-10-13): `--on` and `--off` over SSH
+add Qircuit to the running list and take it out again (`GET
+/systems/pygame/games` shows it), and the parked loader stays. Not yet seen
+there: the pad combo, the screensaver hook and a reboot. The event hooks were
+checked against batocera-emulationstation's source (`Scripting.cpp`,
+`SystemScreenSaver.cpp`, `main.cpp`).
+
+**The cabinet's Python has no numpy, no PyOpenGL and no pip** (checked
+2026-10-13). The other games need only pygame; a game that needs more has to
+bring it along in its deploy.
 
 ## Local PC launcher (`launcher/`, `./arqade.sh`)
 
