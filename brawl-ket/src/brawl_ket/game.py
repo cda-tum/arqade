@@ -7,7 +7,7 @@ from dataclasses import replace
 import pygame
 
 from . import config
-from .audio import make_audio, music_for
+from .audio import make_audio
 from .display import make_display, present
 from .fonts import load_font
 from .input import PLAYERS, Input
@@ -90,8 +90,6 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
         if match.quit:          # QUIT on the title: the same way out as Start + Select
             break
 
-        audio.music(music_for(match))
-        audio.update()
         audio.play_events(events)
         renderer.draw(match, events)
         if show_fps:

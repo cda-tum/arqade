@@ -11,8 +11,9 @@ config.MAX_RACERS racers, each on a racer of its own. Behind the menu,
 four bots race the chosen track as a demo.
 
 The racer select works like Mario Kart's: every person moves their own
-cursor over the roster with their own stick or buttons. With one or two
-people, each locks in with A on their pad (B unlocks), and the race starts
+cursor over the roster with their own stick, or their buttons if that is
+all they have (cursor_sources). With one or two people, each locks in with
+A on their pad (B unlocks), and the race starts
 once everyone has; with three or four (whose button players have no A to
 spare: it steers them), Start starts with whatever everyone is on. Start
 always starts at once. B, with nobody locked in, goes back to the title.
@@ -53,7 +54,7 @@ MENU_ROWS = ("PLAYERS", "BOTS", "LEVEL", "TRACK", "LEAD", "QUIT")
 SETTINGS_ROWS = MENU_ROWS[:-1]
 DEMO_LEVELS = {"cpu1": "BRUTAL", "cpu2": "TOUGH", "cpu3": "TOUGH", "cpu4": "EASY"}
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
-SELECT_COLS = 3  # the roster as a 3 x 3 grid
+SELECT_COLS = 5  # the roster as a 5 x 2 grid
 SELECT_GO = 0.6  # seconds after the last person locks in
 STEPS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 
@@ -77,7 +78,8 @@ class FrameInput:
 
 def controls_for(humans: int, player: str, inp: FrameInput) -> Controls:
     """A person's controls, from whichever of their inputs they use. Up is
-    gas, down brake, left/right a wire change, all relative to the racer."""
+    faster, down slower (the cruise control, race.py), left/right a wire
+    change, all relative to the racer."""
     c = Controls()
     for source in config.CONTROLS[humans][player]:
         held = inp.held.get(source, ())
@@ -97,6 +99,17 @@ def pads_of(humans: int, player: str) -> set[int]:
     if humans == 2:
         return {0} if player == "p1" else {1}
     return set()
+
+
+def cursor_sources(humans: int, player: str) -> tuple:
+    """The inputs that move a person's cursor in the racer select: their
+    sources from config.CONTROLS, but not the face buttons of a pad whose A
+    and B lock them in and out (pads_of). Those buttons steer like W A S D
+    in a race, A being "right", so an A meant to lock in moved the cursor
+    one racer to the right first. With three or four people the button
+    players have no A to lock with, and their buttons do move them."""
+    lockers = pads_of(humans, player)
+    return tuple(src for src in config.CONTROLS[humans][player] if not (src[0] == "pad" and src[1] in lockers))
 
 
 class Pack:
@@ -348,7 +361,7 @@ class Match:
         for p in self.people:
             if p in self.locked:
                 continue
-            for source in config.CONTROLS[self.humans][p]:
+            for source in cursor_sources(self.humans, p):
                 for name in inp.pressed.get(source, ()):
                     dx, dy = STEPS[name]
                     col, row = self.picks[p] % SELECT_COLS, self.picks[p] // SELECT_COLS

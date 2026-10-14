@@ -126,3 +126,24 @@ def test_it_never_changes_wires_mid_change():
     me = race.bodies[0]
     me.lane, me.u = 2, 1.4
     assert Driver("cpu1", "BRUTAL", random.Random(0)).choose_wire(race, me) == 0
+
+
+def test_it_drives_through_the_same_cruise_control_and_holds_its_pace_on_a_straight():
+    """A bot's speed comes only from up and down on the cruise setting, as a
+    person's does: EASY brings the start's flat-out setting down to its pace
+    and then mostly lets the cruise control hold it."""
+    race = Race(straight_oval(), ("cpu1",), random.Random(0))
+    me = race.bodies[0]
+    me.p = me.reach = -300.0
+    me.lane, me.u = 1, 1.0
+    driver = Driver("cpu1", "EASY", random.Random(0))
+    driver.wait = 99.0  # no wire changes
+    pressed = 0
+    for i in range(round(3.5 / DT)):
+        c = driver.controls(race, DT)
+        pressed += i > 3 / DT and (c.throttle or c.brake)
+        race.update(DT, {"cpu1": c})
+    pace = SKILLS["EASY"].pace * config.CAR.max_speed
+    assert me.p < 400 and me.v == pytest.approx(pace, abs=4)
+    assert race.cruise_speed(me, config.CAR) == pytest.approx(pace, abs=4)
+    assert pressed <= 3  # hands off, once it is there

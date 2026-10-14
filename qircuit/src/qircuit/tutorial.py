@@ -44,6 +44,11 @@ CAPTIONS = {
     "lead": "LEAD: YOUR SECONDS COUNT",
 }
 
+# The controls, next to a drawing of the stick and of the buttons. Speed is
+# a cruise control (race.py): up and down set it, and it holds.
+STICK_LINES = ("UP: FASTER", "DOWN: SLOWER", "LET GO: KEEPS ITS SPEED", "LEFT/RIGHT: CHANGE WIRE")
+BUTTON_LINES = ("X: FASTER   B: SLOWER", "Y / A: WIRE LEFT / RIGHT")
+
 _starts: dict[str, tuple[float, int, int]] = {}
 
 

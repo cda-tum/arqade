@@ -67,6 +67,42 @@ cooling, passive cooling on/off and the ANHARMONIC warning coming on. Holding a 
 is silent on purpose: it would drone through the whole match. Without a working mixer
 every effect is a silent no-op.
 
+**Landing on the wave** is as loud as the landing is hard. `integrate()` passes the
+ion's speed into the curve (the normal component of its velocity relative to the
+surface, so a curve shoved up under it counts too) to `Sounds.impact()`, and
+`impact_gain()` maps it to a volume: silent below 200 px/s (rolling), a faint 6 % of
+full just above, rising as strength^1.5 to full at 1100 px/s, and capped there. A
+15 px drop lands at about 200 px/s, a 60 px drop at 400, a throw from the top of the
+screen at over 1000. Harder landings also pick a brighter, higher sound
+(`bounce_soft` / `bounce` / `bounce_hard`). The volume is set on the Sound itself, so
+the attract capture logs it. Two landing sounds are at least 150 ms apart, unless the
+second is 1.6 times louder: a ball rattling along a bumpy curve doesn't machine-gun,
+and a real crash right after a bump still sounds.
+
+**Ambience.** In a running arcade match (not the sandbox, menus or the pause screen)
+the laser beams hum and stray ions ping, quietly, from where they are. A beam pushing
+up shimmers high (two sines beating at 2 Hz), one pushing down a fifth lower; a stray
+gives a soft sonar ping every 1.3 s, every 0.55 s right next to an ion. Each is panned
+to its screen x (equal-power, the screen edges at 80 % pan), fades over 80 px as it
+scrolls on or off, and is 30 % as loud far from the nearest ion as right beside it.
+The hums are 2 s seamless loops, swell in over 0.8 s and out over 0.5 s, breathe once
+per loop, and only play while audible. They run on three reserved mixer channels (12
+in all, so effects never land on a panned channel and still have 9); their peaks stay
+under every effect's. The attract capture leaves them out of its WAV, like music: it
+only logs `Sound.play()`, and they play through `Channel.play()`.
+
+Measured from the rendered sounds (peak, loudest 50 ms RMS, dBFS):
+
+| Sound | Peak | RMS |
+|---|---|---|
+| old landing, any strength | -11.1 | -18.9 |
+| landing at 250 / 450 px/s | -32.7 / -23.9 | -39.1 / -30.4 |
+| landing at 600 / 800 px/s | -18.8 / -14.3 | -26.6 / -21.5 |
+| landing at 1100+ px/s (cap) | -9.5 | -16.7 |
+| other effects | -7.5 to -21.2 | -13.5 to -27.4 |
+| beam hum, far / beside an ion, centre | -39.5 / -29.0 | -43.2 / -32.7 |
+| stray ping, far / beside an ion, centre | -38.5 / -28.0 | -47.3 / -36.9 |
+
 ## Sandbox
 
 The sandbox is the **SANDBOX** entry in the game's own main menu, alongside the three
@@ -219,7 +255,10 @@ config (every key name exists, and start/select aren't action buttons),
 the HOW TO PLAY card (`tests/test_tutorial.py`: menu -> card -> play for every mode,
 the 0.3 s guard, stick vs buttons, the used-up dismissing press, the quit combo, which
 starts skip the card, the demo looping and leaving the global random state alone),
-the sound builders and their silent fallback (`tests/test_sound.py`), and the sandbox
+the sound builders and their silent fallback, the landing volume curve (silent, then
+faint, monotonic, capped) and its rate limit, panning, and the ambience swelling, pinging
+and surviving the attract capture's sound log (`tests/test_sound.py`; the landing speed
+and the ambient sources from a real match are in `tests/test_game.py`), and the sandbox
 physics:
 - `quantum.py`: norm conservation, a stationary ground state, coherent-state
   oscillation, squeezed-state breathing with even-only Fock populations, kicks and

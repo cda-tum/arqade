@@ -326,6 +326,81 @@ def photon() -> Model:
     return vox
 
 
+def _capsule(vox: Model, a: tuple, b: tuple, r: float, color: Color) -> None:
+    """A thick limb from joint a to joint b, as Brawl-Ket draws its puppets'
+    capsules. A voxel (x, y, z) has its centre at (x, y, z + 0.5)."""
+    lo = [math.floor(min(p, q) - r) for p, q in zip(a, b)]
+    hi = [math.ceil(max(p, q) + r) for p, q in zip(a, b)]
+    d = [q - p for p, q in zip(a, b)]
+    dd = sum(v * v for v in d) or 1.0
+    for x in range(lo[0], hi[0] + 1):
+        for y in range(lo[1], hi[1] + 1):
+            for z in range(max(0, lo[2] - 1), hi[2] + 1):
+                p = (x - a[0], y - a[1], z + 0.5 - a[2])
+                t = max(0.0, min(1.0, sum(u * v for u, v in zip(p, d)) / dd))
+                if sum((u - t * v) ** 2 for u, v in zip(p, d)) <= r * r:
+                    vox[(x, y, z)] = color
+
+
+# Brawl-Ket's ROBERT: a lean puppet in the colour of its basis (green, the Z
+# basis it starts a round in), its accent cream (render.py's GREEN and ACCENT).
+ROBERT_BODY, ROBERT_ACCENT = (72, 200, 96), (248, 232, 192)
+SPARK = (248, 200, 48)  # Brawl-Ket's GOLD
+
+
+def robert() -> Model:
+    """Brawl-Ket: ROBERT, the lean green puppet, grinding the wire like
+    Sonic on a rail. He stands side on, facing his right, feet apart along
+    the wire (front foot ahead, back foot behind), knees bent, leaning into
+    the run with his arms out for balance. Back limbs a darker green, a pale
+    stripe down the torso, a shine on the round head, and his cream visor
+    and fists, looking ahead."""
+    body = ROBERT_BODY
+    dark, pale = shade(body, 0.65), mix(body, WHITE, 0.4)
+    cream, cream_d = ROBERT_ACCENT, shade(ROBERT_ACCENT, 0.8)
+    vox: Model = {}
+    hip, chest = (0.0, 0.4, 4.4), (1.4, 0.6, 7.8)
+    knee_f, knee_b = (3.4, 1.8, 3.9), (-2.8, 1.8, 3.7)
+    foot_f, foot_b = (5.6, 0.0, 0.6), (-5.6, 0.0, 0.6)
+    # the back leg, then the back arm: the darker shade, as Brawl-Ket's far limbs
+    _capsule(vox, hip, knee_b, 1.1, dark)
+    _capsule(vox, knee_b, foot_b, 1.05, dark)
+    _capsule(vox, foot_b, (foot_b[0] - 1.6, 0.0, 0.6), 0.8, dark)
+    _capsule(vox, chest, (-2.4, 0.2, 8.4), 1.0, dark)
+    _capsule(vox, (-2.4, 0.2, 8.4), (-5.6, 0.0, 9.4), 1.0, dark)
+    _sphere(vox, -6.6, 0.0, 9.4, 2.6, cream_d, cream_d)
+    # the front leg: thigh forward, the knee bent over the front foot
+    _capsule(vox, hip, knee_f, 1.1, body)
+    _capsule(vox, knee_f, foot_f, 1.05, body)
+    _capsule(vox, foot_f, (foot_f[0] + 1.6, 0.0, 0.6), 0.8, body)
+    # the torso, leaning into the run, with its pale stripe down the front
+    _capsule(vox, hip, chest, 1.55, body)
+    _capsule(vox, (0.3, 1.9, 5.0), (1.5, 2.1, 7.6), 0.5, pale)
+    # the front arm reaching ahead, a little low
+    _capsule(vox, chest, (5.0, 0.8, 8.6), 1.0, body)
+    _capsule(vox, (5.0, 0.8, 8.6), (8.2, 0.8, 8.0), 1.0, body)
+    _sphere(vox, 9.2, 0.8, 8.0, 2.6, cream, cream)
+    # the round head, ahead of the chest on a short neck: a shine at the
+    # back, and the visor across the face, looking ahead past the front
+    # shoulder
+    hx, hy, hz, r2 = 3.4, 0.6, 11.0, 6.3
+    _capsule(vox, chest, (hx, hy, hz - 1.0), 0.8, body)
+    _sphere(vox, hx, hy, hz, r2, body, body)
+    r = math.sqrt(r2)
+    for (x, y, z) in [k for k in vox if k[2] == 11]:
+        if (x - hx) * 0.55 + (y - hy) * 0.84 > r - 1.2 and (x - hx) ** 2 + (y - hy) ** 2 + (z - hz) ** 2 <= r2:
+            vox[(x, y, z)] = cream
+    vox[(2, -1, 13)] = vox[(2, 0, 13)] = pale
+    # grind sparks off the back foot, where he scrapes along the wire
+    for x, y, z, c in ((-8, 0, 0, SPARK), (-9, -1, 1, WHITE), (-10, 1, 0, SPARK), (-11, 0, 2, SPARK)):
+        vox[(x, y, z)] = c
+    return vox
+
+
+# Racers with no car under them, standing on the wire: the renderer leans
+# them into corners and lets them sway (config.RIDER_*).
+RIDERS = frozenset({"robert"})
+
 RACERS = {
     "chandelier": chandelier,
     "ion": ion,
@@ -336,6 +411,7 @@ RACERS = {
     "chef": chef,
     "rook": rook,
     "photon": photon,
+    "robert": robert,
 }
 
 

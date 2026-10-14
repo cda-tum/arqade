@@ -336,9 +336,10 @@ list to trim if one of them should be public too.
 
 **Unlocking at the cabinet, with no laptop:** `batocera/unlock_daemon.py`
 watches the pads underneath ES and runs `kiosk.py --toggle` when it sees
-**L R L R X** (either pad, within 6 seconds). `unlock_daemon.py --install`
-writes `/userdata/system/custom.sh`, which `S99userservices` runs on every
-boot. It **toggles** -- an unlock-only code leaves no way back into kiosk
+**L R L R X** (either pad, within 6 seconds). `deploy_ui.sh` installs it as
+`/userdata/unlock_daemon.py` and restarts it; its `--install` writes
+`/userdata/system/custom.sh`, which `S99userservices` runs on every boot.
+It **toggles** -- an unlock-only code leaves no way back into kiosk
 mode from the cabinet, which is the whole point of not needing a laptop. That sequence cannot fire by accident: the lockdown unmaps x, y,
 pageup and pagedown from `es_input.cfg`, and L/R *were* pageup/pagedown, so
 all three buttons are inert in ES — and inside a game they are live, which is
@@ -370,6 +371,60 @@ desk: it creates a uinput joystick with the cabinet encoders' exact
 bus/vendor/product/version, so SDL derives the same GUID and ES applies the
 same `es_input.cfg` entry to it. Real button presses, no cabinet required —
 that is how the lockdown above was verified rather than assumed.
+
+### Experimental games: a hidden dev mode (`batocera/experimental.py`)
+
+A game that isn't ready for visitors (Qircuit, 2026-10-12) can still be
+deployed and tried on the cabinet itself. Its deploy script **parks** the
+loader at `/userdata/games/<rom>/<rom>.pygame` instead of in
+`/userdata/roms/pygame/`, so ES never lists it. Then:
+
+- **Holding Start + Select on both pads at once**, in the menu, toggles
+  experimental mode: every parked game joins the game list, or leaves it.
+  The unlock daemon watches for it (only outside a game, and once per hold),
+  and runs `experimental.py --toggle`. Nothing on screen names the mode, the
+  games just appear. On an unlocked cabinet Start and Select still open ES's
+  menus as well; locked, they are inert.
+- **It always falls back to the public list.**
+  - Idle: a `screensaver-start` ES event hook (written by
+    `experimental.py --install` under
+    `/userdata/system/configs/emulationstation/scripts/<event>/`) turns it
+    off when the cabinet idles into the attract reels.
+  - Restarts: `kiosk.py` drops the links before it starts ES again, and the
+    unlock daemon runs `experimental.py --reset` whenever it starts (every
+    boot): it waits until ES answers, then takes the parked games out of the
+    list. A `start` event hook also drops the links as ES starts, but **ES
+    doesn't wait for event scripts on Linux** (only for `quit`), so that hook
+    races the ROM scan, and it can't be relied on alone.
+- **How:** turning it on symlinks each parked loader into the ROMs folder and
+  calls ES's local HTTP API (`127.0.0.1:1234`, always on): `POST
+  /addgames/pygame` with a partial gamelist adds the games to the running
+  list in place, named after the ROM (`qircuit` → `Qircuit`), with no reload
+  splash. `POST /removegames/pygame` takes them out again and unlinks their
+  files, which are only the links. **Don't point `removegames` at a real
+  ROM: it deletes the file.**
+- A dangling symlink is no way to hide a game: ES lists it anyway (its
+  directory scan never checks the target), and launching it then fails.
+- **To make a game public:** have its deploy script write the loader to the
+  ROMs folder like the others, and give it a `batocera/gamelist.xml` entry
+  and a logo. Not before: the gamelist entry would also put it in the
+  attract reels, and the reels are public.
+- `python3 /userdata/experimental.py --status` says what is parked, listed
+  and hooked; `--on`/`--off` do it over SSH.
+
+Checked on the cabinet (Batocera 39, 2026-10-13): `--on` and `--off` over SSH
+add Qircuit to the running list and take it out again (`GET
+/systems/pygame/games` shows it), and the parked loader stays. Not yet seen
+there: the pad combo, the screensaver hook and a reboot. The event hooks were
+checked against batocera-emulationstation's source (`Scripting.cpp`,
+`SystemScreenSaver.cpp`, `main.cpp`).
+
+**The cabinet's Python has no numpy, no PyOpenGL and no pip** (checked
+2026-10-13). The other games need only pygame; a game that needs more has to
+bring it along in its deploy: Qircuit's `deploy_batocera.sh` unpacks the
+aarch64 / CPython 3.11 wheels of numpy and PyOpenGL into
+`/userdata/games/qircuit/vendor/` and its loader adds that to `sys.path`.
+With that it runs, on OpenGL ES under sway (2026-10-13).
 
 ## Local PC launcher (`launcher/`, `./arqade.sh`)
 
@@ -542,8 +597,8 @@ for any game that gets them later.
   gates). One driver class runs all three.
 - **One AI per game, in the game's package (`<package>/ai.py`).** It is pure:
   it reads the game's own state and returns the same controls a person's
-  input becomes (Qircuit: gas, brake, a wire change), never more. So it plays
-  by the same rules and is unit tested like the rules.
+  input becomes (Qircuit: up or down on its cruise speed, a wire change),
+  never more. So it plays by the same rules and is unit tested like the rules.
 - **Everything that plays the game without a person uses that one AI:**
   - the in-game opponents;
   - any demo racing behind the title (Qircuit's title shows four bots);

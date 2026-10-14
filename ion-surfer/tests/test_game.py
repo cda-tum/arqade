@@ -166,3 +166,74 @@ def test_keyboard_fallback_pauses_with_start_key_and_esc(make_game):
         frame(g, pygame.event.Event(pygame.KEYDOWN, key=key, unicode=""))
         frame(g, pygame.event.Event(pygame.KEYUP, key=key, unicode=""))
         assert g.state == "play"
+
+
+class RecordingSounds:
+    def __init__(self):
+        self.impacts, self.ambient_calls = [], []
+
+    def play(self, name):
+        pass
+
+    def impact(self, speed):
+        self.impacts.append(speed)
+
+    def ambient(self, sources, dt):
+        self.ambient_calls.append(list(sources))
+
+
+def test_a_landing_reports_how_hard_it_hit(make_game):
+    """The sound is told the ion's speed into the wave: a higher drop, a
+    harder landing."""
+    def drop(height):
+        g = make_game()
+        g.sounds = RecordingSounds()
+        g.next_spawn = float("inf")
+        g.ents = []
+        ion = g.ions[0]
+        ion.y = g.surf([ion.curve], ion.x) + game_mod.R + height
+        ion.vx = ion.vy = 0.0
+        for _ in range(int(2 / game_mod.STEP)):
+            g.ion_physics(ion, game_mod.STEP)
+            if g.sounds.impacts:
+                break
+        return max(g.sounds.impacts)
+
+    low, high = drop(20), drop(300)
+    assert low < high
+    # free fall at G from that height, give or take the slope and damping
+    assert 0.8 * (2 * game_mod.G * 300) ** 0.5 < high < 1.1 * (2 * game_mod.G * 300) ** 0.5
+
+
+def test_beams_and_strays_are_ambient_sources_only_in_a_running_match(make_game):
+    g = make_game()
+    g.next_spawn = float("inf")
+    ion = g.ions[0]
+    g.ents = [
+        game_mod.Ent(type="laser", x=g.cam_x + 200, dir=1),
+        game_mod.Ent(type="laser", x=g.cam_x + 1100, dir=-1),
+        game_mod.Ent(type="stray", x=ion.x + 30, y=ion.y, vx=0.0, vy=0.0, active=True, color=game_mod.STRAY_C),
+        game_mod.Ent(type="stray", x=g.cam_x + 2000, y=0.0, vx=0.0, vy=0.0, active=False,
+                     color=game_mod.STRAY_C),
+        game_mod.Ent(type="photon", x=ion.x, y=ion.y, ph=0.0),
+    ]
+    src = g.ambient_sources()
+    kinds = [k for k, *_ in src]
+    assert kinds == ["beam_up", "beam_down", "stray"]       # the inactive stray is still off screen
+    (_, _, x_up, _), (_, _, x_down, _), (_, _, _, near_stray) = src
+    assert x_up == 200 and x_down == 1100                    # screen x, for the pan
+    assert near_stray > 0.8                                  # right next to the ion
+
+    g.sounds = RecordingSounds()
+    frame(g)
+    assert g.sounds.ambient_calls[-1]                        # a running match hums
+    g.state = "pause"
+    assert g.ambient_sources() == []
+    g.state = "menu"
+    assert g.ambient_sources() == []
+
+
+def test_the_sandbox_has_no_ambience(make_game):
+    g = make_game(mode=game_mod.SANDBOX)
+    g.ents = [game_mod.Ent(type="laser", x=300, dir=1)]
+    assert g.ambient_sources() == []

@@ -57,6 +57,42 @@ dismissed it doesn't steer. A rematch from the result screen skips it.
 The keyboard is a dev fallback only. On the cabinet the loader passes
 `--no-keyboard`.
 
+## Sound
+
+Light-cycle synth effects, built at start-up in `sound.py` with no asset
+files and no numpy. It's a small subtractive synth in pure Python:
+band-limited sawtooth or raw pulse oscillators in detuned unison, a square
+sub, noise, a resonant low-pass filter whose cutoff sweeps, a bit crusher,
+and tanh saturation on the output. Everything is synthesized at 22050 Hz and
+resampled to the mixer's rate. That takes about 0.1 s on a desktop.
+
+| Sound | Plays on | Design |
+|---|---|---|
+| `beep` | countdown 3-2-1, pause | plucked E stab, 3-saw unison plus a sub, the resonant filter chirping shut |
+| `go` | GO | B power-chord stab whose filter blooms open, over a resonant bass hum |
+| `blip` | menu moves | tiny 25 % pulse tick |
+| `confirm` | start, HOW TO PLAY dismissed | two-note octave stab |
+| `pickup` | any gate | bright four-note arpeggio zap up to E7 |
+| `split` | H | forking arpeggios: one climbs while its mirror falls |
+| `teleport` | X | pulse laser rising through a resonant filter, with one echo |
+| `shield` | Z | A power chord charging up through a high-resonance sweep |
+| `collapse` | measurement, decoherence | wide, beating unison sliding down, lightly crushed |
+| `measure` | measuring a rival | glitchy, sample-held pulse zap downwards |
+| `crash` | a copy crashes (derez) | noise-and-thump impact, then a saw diving to 30 Hz while the crusher eats it (8 to 4 bits, 1/8 rate), plus scattering pulse shards |
+| `round`, `match` | round won or draw, match won | climbing E-minor arpeggios over a resonant hum (the match one is longer) |
+
+Each effect's level in `EFFECTS` is calibrated so that its A-weighted loudness
+(RMS of the loudest 50 ms) matches the sine beep it replaced, so the balance
+between sounds didn't change. Nothing peaks above `PEAK` (55 % of full scale).
+
+There is deliberately no engine hum. A loop under every round would drone
+on a public cabinet. pygame can't bend a playing sound's pitch either, so a
+hum that follows the bike would mean several pre-rendered loops cross-faded
+per bike. The resonant hum lives in the GO, round and match stabs instead.
+
+Without a mixer, every sound is a silent no-op. The attract capture
+(`batocera/attract/capture.py`) logs these effects like any others.
+
 ## Setup (dev machine)
 
 Requires [uv](https://docs.astral.sh/uv/).
@@ -78,7 +114,7 @@ uv run python tools/snapshot.py /tmp/qurves-snaps   # render a scripted match to
 | `match.py` | Title menu, HOW TO PLAY, countdown, rounds, results. Pure, tested. |
 | `tutorial.py` | The HOW TO PLAY card: its scripted demo (pure, tested) and drawing. |
 | `render.py`, `fx.py` | The neon look: a persistent trail board, ghost layers, glow sprites, particles. |
-| `input.py`, `sound.py` | Pads and dev keyboard; procedural sound effects. |
+| `input.py`, `sound.py` | Pads and dev keyboard; the synthesized sound effects (see Sound). |
 | `config.py` | Every tuning number, colour and button mapping. |
 
 If the cabinet drops frames, set `GLOW` and/or `SHOW_SCANLINES` to `False` in `config.py`.

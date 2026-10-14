@@ -234,7 +234,17 @@ def start_es() -> None:
     alone (killing it takes the whole UI down), the matching start is the
     wrapper itself. It is a loop that keeps ES alive, so it must be detached
     or this script never returns.
+
+    Experimental mode's links into the ROMs folder go first, while ES is
+    down, so the ES that comes up shows the public list (experimental.py).
     """
+    try:
+        import experimental  # installed beside this file
+    except ImportError:
+        pass
+    else:
+        for link in experimental.drop_links():
+            print(f"experimental mode off: removed {link}")
     subprocess.Popen(
         ["/usr/bin/emulationstation-standalone"],
         start_new_session=True,

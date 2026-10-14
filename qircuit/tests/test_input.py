@@ -7,7 +7,7 @@ from qircuit.input import Input, hat_held, menu_direction, should_quit, stick_he
 def test_the_stick_reads_every_axis_past_the_deadzone():
     assert stick_held(0.1, -0.2, 0.5) == set()
     assert stick_held(0.0, -0.9, 0.5) == {"up"}  # SDL: negative y is up
-    assert stick_held(0.9, -0.9, 0.5) == {"up", "right"}  # gas and a wire change at once
+    assert stick_held(0.9, -0.9, 0.5) == {"up", "right"}  # faster and a wire change at once
     assert stick_held(-0.8, 0.7, 0.5) == {"down", "left"}
 
 

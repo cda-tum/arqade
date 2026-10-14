@@ -34,6 +34,12 @@ CAM_DISTANCE = 340.0  # where its eye sits for the fog (orthographic: no effect 
 CAM_AHEAD = 30.0  # it centres this far ahead of the leader
 CAM_FOLLOW = 0.25  # seconds: how closely it follows (smaller is tighter)
 VOXEL_SIZE = 1.35  # world units per voxel of a racer's model
+# A racer that stands on the wire itself (voxels.RIDERS: ROBERT, grinding it)
+# leans into corners, more the harder it corners, and sways a little all the time.
+RIDER_LEAN = 0.32  # radians of lean per unit of corner load (render.py)
+RIDER_LEAN_MAX = 0.42  # radians
+RIDER_SWAY = 0.06  # radians: the sway's size
+RIDER_SWAY_RATE = 2.4  # radians per second: its pace
 HUD_BAND = 46  # the strip along the top of the 960x540 frame for the HUD
 
 # --- Track -----------------------------------------------------------------------
@@ -60,8 +66,8 @@ DEFAULT_LEVEL = "EASY"
 # "pad" is the four face buttons laid out like WASD (as in Qurves). Alone,
 # either pad drives; with 2, each pad is a player; with 3 or 4, the left
 # pad's buttons are P3 and the right pad's P4. Every control is relative to
-# the car: up is gas, down is brake, left and right change to the wire on
-# the car's own left or right.
+# the car: up and down raise and lower the speed it cruises at (CRUISE_*),
+# left and right change to the wire on the car's own left or right.
 CONTROLS = {
     1: {"p1": (("stick", 0), ("pad", 0), ("stick", 1), ("pad", 1))},
     2: {"p1": (("stick", 0), ("pad", 0)), "p2": (("stick", 1), ("pad", 1))},
@@ -89,13 +95,21 @@ class CarStats:
     max_speed: float
     accel: float  # at full gas
     brake: float
-    coast: float  # slowing down with neither gas nor brake
+    coast: float  # easing down to its cruise speed from over it (off a boost pad)
     grip: float  # lateral acceleration a corner can take before the car drifts
     mass: float = 1.0  # in bumps and pushes, the heavier car gives less
     switch_rate: float = 6.0  # wires per second while changing
 
 
 CAR = CarStats(max_speed=220.0, accel=110.0, brake=320.0, coast=45.0, grip=240.0)
+
+# Cruise control: a racer holds the speed it is set to, so the stick is
+# free for changing wires. The setting is a share of its top speed (the
+# slipstream raises it); up raises it, down lowers it and brakes (race.py
+# _cruise).
+CRUISE_START = 1.0  # at the start it sets off flat out
+CRUISE_RISE = 1.0  # up raises the setting by this share of top speed a second ...
+CRUISE_MIN = 0.25  # ... and down lowers it no further than this: a crawl, below every corner's limit
 
 # What each step of a racer's 1-5 ratings is worth, around CAR at 3.
 STAT_SPEED = 3.0  # top speed per step

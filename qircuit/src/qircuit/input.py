@@ -49,7 +49,7 @@ def _codes(names: list[str]) -> list[int]:
 
 def stick_held(ax: float, ay: float, deadzone: float) -> set[str]:
     """Every direction the stick is pushed past the deadzone: up-right is
-    gas and a wire change at once."""
+    faster and a wire change at once."""
     held = set()
     if ay < -deadzone:
         held.add("up")
