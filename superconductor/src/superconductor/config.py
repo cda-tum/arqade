@@ -26,7 +26,7 @@ HURT_SECONDS = 1.4           # how long the red "life lost" flash lasts
 QUBIT_SPEED = 0.8            # edges per second a travelling qubit covers
 MAX_ACTIVE_PAIRS = 6         # pairs on the chip at once (waiting + travelling)
 MIN_PAIR_DISTANCE = 2        # spawned endpoints are at least this many hops apart
-INITIAL_PAIRS = 2            # pairs already waiting when the game starts
+INITIAL_PAIRS = 3            # pairs already waiting when the game starts
 # Spawn interval and coherence time both shrink linearly from START to MIN
 # over RAMP_SECONDS of (board) play time.
 SPAWN_INTERVAL_START = 5.0

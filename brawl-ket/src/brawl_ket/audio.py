@@ -1,11 +1,10 @@
-"""Synthesised chiptune: a title loop, a 150 bpm fight loop and the effects for
-every hit, bounce, basis switch and round call. No audio files, no numpy.
+"""Synthesised chiptune effects for every hit, bounce, basis switch and round
+call. No audio files, no numpy, and no music (the cabinet's owners want music
+only in Overquqed).
 
-Adapted from Planck Time's audio.py (from Gate Drop's, from Overquqed's). Music
-is built by tiling one waveform period per note (array repetition runs in C),
-so even the Pi renders a loop quickly, and the tracks are rendered in a
-background thread at start-up. If the mixer can't start (no sound card),
-everything becomes a silent no-op, so the cabinet never crashes over audio.
+Adapted from Planck Time's audio.py (from Gate Drop's, from Overquqed's). If
+the mixer can't start (no sound card), everything becomes a silent no-op, so
+the cabinet never crashes over audio.
 """
 
 from __future__ import annotations
@@ -13,13 +12,10 @@ from __future__ import annotations
 import array
 import math
 import random
-import threading
-from dataclasses import dataclass
 
 import pygame
 
 from . import config
-from . import match as M
 from .match import Cue
 
 SAMPLE_RATE = 22050
@@ -89,117 +85,13 @@ def concat(*parts: list[int]) -> list[int]:
     return out
 
 
-def mix(*tracks: list[int]) -> list[int]:
-    n = max(len(t) for t in tracks)
+def mix(*parts: list[int]) -> list[int]:
+    n = max(len(t) for t in parts)
     out = [0] * n
-    for t in tracks:
+    for t in parts:
         for i, v in enumerate(t):
             out[i] += v
     return [max(-AMP, min(AMP, v)) for v in out]
-
-
-def _period(kind: str, freq: float, vol: float, sr: int) -> array.array:
-    length = max(2, round(sr / freq))
-    return array.array("h", (int(AMP * vol * _wave(kind, i / length)) for i in range(length)))
-
-
-def voice(notes: list, bpm: float, kind: str, vol: float, staccato: float = 0.85,
-          sr: int = SAMPLE_RATE) -> array.array:
-    """A melodic line from (note, beats) pairs, built by tiling single periods."""
-    out = array.array("h")
-    beat = 60.0 / bpm
-    for name, beats in notes:
-        n = int(sr * beats * beat)
-        f = note_freq(name)
-        if f <= 0:
-            out.extend(array.array("h", [0]) * n)
-            continue
-        on = int(n * staccato)
-        loud, soft = _period(kind, f, vol, sr), _period(kind, f, vol * 0.7, sr)
-        attack = min(on, int(sr * 0.04))
-        seg = (loud * (attack // len(loud) + 1))[:attack]
-        seg.extend((soft * ((on - attack) // len(soft) + 1))[: on - attack])
-        out.extend(seg)
-        out.extend(array.array("h", [0]) * (n - on))
-    return out
-
-
-def drums(pattern: str, bpm: float, bars: int, vol: float, sr: int = SAMPLE_RATE) -> array.array:
-    """8th-note pattern per bar: k = kick, s = snare, h = hat, . = rest."""
-    step = int(sr * 60.0 / bpm / 2)
-    hits = {
-        "k": array.array("h", tone(90, 0.09, vol, "sine", decay=30, slide=0.4)),
-        "s": array.array("h", noise_wave(0.08, vol * 0.8, decay=35, hold=2, seed=3)),
-        "h": array.array("h", noise_wave(0.025, vol * 0.4, decay=120, hold=1, seed=5)),
-    }
-    out = array.array("h")
-    for _ in range(bars):
-        for ch in pattern:
-            cell = array.array("h", [0]) * step
-            hit = hits.get(ch)
-            if hit is not None:
-                m = min(step, len(hit))
-                cell[:m] = hit[:m]
-            out.extend(cell)
-    return out
-
-
-# --- the music ------------------------------------------------------------------------
-# Both original. The title: G major, G - Em - C - D twice, an easy triangle lead.
-# The fight: E minor, i - VI - VII - i, then i - VI - VII - V (a B major, for the
-# pull back round), a pulse lead over a pumping eighth-note bass and double kicks.
-
-TITLE_MELODY = [
-    "G4 B4 D5 G5 D5 B4 D5 G5", "E5 D5 B4 G4 E4 G4 B4 E5",
-    "C5 E5 G5 E5 C5 E5 G5 C6", "D5 F#5 A5 F#5 D5 A4 F#5 A5",
-    "B5 A5 G5 D5 B4 D5 G5 B5", "E5 G5 B5 G5 E5 B4 G4 B4",
-    "C5 E5 A5 G5 E5 C5 D5 E5", "D5 F#5 A5 C6 B5 A5 F#5 D5",
-]
-TITLE_BASS = ["G2 D3 G2 D3", "E2 B2 E2 B2", "C3 G3 C3 G3", "D3 A3 D3 A3"] * 2
-
-FIGHT_MELODY = [
-    "E5 E5 B4 E5 G5 F#5 E5 B4", "C5 E5 G5 E5 C6 B5 G5 E5",
-    "D5 F#5 A5 F#5 D6 C6 A5 F#5", "E5 G5 B5 G5 E6 D6 B5 G5",
-    "B5 B5 G5 E5 B5 A5 G5 F#5", "G5 G5 E5 C5 G5 F#5 E5 D5",
-    "F#5 A5 D6 A5 F#5 D5 E5 F#5", "D#5 F#5 B5 A5 F#5 D#5 B4 -",
-]
-FIGHT_BASS = [f"{r}2 {r}2 {r}3 {r}2 {r}2 {r}2 {r}3 {r}2" for r in ("E", "C", "D", "E", "E", "C", "D", "B")]
-
-
-@dataclass(frozen=True)
-class Tune:
-    melody: list
-    bass: list
-    bass_beats: float  # each bass note's length
-    bass_wave: str
-    bass_vol: float
-    drums: str
-    drum_vol: float
-
-
-TUNES = {
-    "title": Tune(TITLE_MELODY, TITLE_BASS, 1.0, "triangle", 0.30, "k.hsk.hs", 0.22),
-    "fight": Tune(FIGHT_MELODY, FIGHT_BASS, 0.5, "square", 0.15, "kkshkhsh", 0.30),
-}
-TRACKS = {  # name: (bpm, lead wave, tune)
-    "title": (116, "triangle", "title"),
-    "fight": (150, "pulse", "fight"),
-}
-
-
-def render_track(bpm: float, lead: str, tune: Tune) -> array.array:
-    mel = [(n, 0.5) for bar in tune.melody for n in bar.split()]
-    bass = [(n, tune.bass_beats) for bar in tune.bass for n in bar.split()]
-    a = voice(mel, bpm, lead, 0.18 if lead == "saw" else 0.2)
-    b = voice(bass, bpm, tune.bass_wave, tune.bass_vol, staccato=0.95 if tune.bass_beats >= 1 else 0.7)
-    d = drums(tune.drums, bpm, len(tune.melody), tune.drum_vol)
-    n = min(len(a), len(b), len(d))
-    return array.array("h", (max(-AMP, min(AMP, a[i] + b[i] + d[i])) for i in range(n)))
-
-
-def music_for(m: M.Match) -> str:
-    """The title loop on the title, select and result screens; the fight loop in a round."""
-    return "fight" if m.state in (M.ROUND_INTRO, M.FIGHT, M.ROUND_END) else "title"
 
 
 # --- sound effects ------------------------------------------------------------------------
@@ -279,12 +171,6 @@ class NullAudio:
     def play_events(self, events: list) -> None:
         pass
 
-    def music(self, name: str) -> None:
-        pass
-
-    def update(self) -> None:
-        pass
-
 
 class Audio:
     def __init__(self) -> None:
@@ -295,16 +181,9 @@ class Audio:
             raise pygame.error("mixer did not initialise")
         self.freq, _fmt, self.channels = info
         pygame.mixer.set_num_channels(16)
-        pygame.mixer.set_reserved(1)
-        self.music_channel = pygame.mixer.Channel(0)
         self.sounds = {k: self._sound(v) for k, v in build_sfx().items()}
         for s in self.sounds.values():
             s.set_volume(config.MASTER_VOLUME)
-        self.tracks: dict[str, pygame.mixer.Sound] = {}
-        self.want: str | None = None
-        self.playing: str | None = None
-        self._lock = threading.Lock()
-        threading.Thread(target=self._render_all, daemon=True).start()
 
     def _sound(self, samples) -> pygame.mixer.Sound:
         buf = samples if isinstance(samples, array.array) else array.array("h", samples)
@@ -318,37 +197,11 @@ class Audio:
             buf = stereo
         return pygame.mixer.Sound(buffer=buf.tobytes())
 
-    def _render_all(self) -> None:
-        for name, (bpm, lead, tune) in TRACKS.items():
-            snd = self._sound(render_track(bpm, lead, TUNES[tune]))
-            snd.set_volume(config.MUSIC_VOLUME)
-            with self._lock:
-                self.tracks[name] = snd
-
     def play_events(self, events: list) -> None:
         for name in sounds_for(events):
             s = self.sounds.get(name)
             if s is not None:
                 s.play()
-
-    def music(self, name: str) -> None:
-        if name != self.want:
-            self.want = name
-            self.update()
-
-    def update(self) -> None:
-        """Start (or switch to) the wanted track once it has been rendered."""
-        if self.want is None:
-            return
-        key = self.want
-        if key == self.playing:
-            return
-        with self._lock:
-            snd = self.tracks.get(key)
-        if snd is None:
-            return
-        self.music_channel.play(snd, loops=-1, fade_ms=150)
-        self.playing = key
 
 
 def make_audio():

@@ -38,7 +38,7 @@ arrival.
 - **Losing a life** flashes the whole chip red, the lost life icon swells and blinks, and
   "LIFE LOST" appears above the chip.
 - **Coherence timer.** The ring around a waiting pair is its coherence. At zero the pair
-  decoheres and costs one of 3 lives. The game starts with two pairs waiting. Over the
+  decoheres and costs one of 3 lives. The game starts with three pairs waiting. Over the
   first 2.5 minutes, pairs arrive faster and decohere sooner. A quick player gets there
   sooner: every second the chip sits with nothing to route speeds the schedule up a
   little more (`PACE_GAIN`, up to 1.4×), and it never slows down again.

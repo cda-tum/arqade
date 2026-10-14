@@ -273,7 +273,12 @@ class Renderer:
         elif b.load > config.WARN_LOAD or b.slip > 0.05:
             tint = (1.0, 0.1, 0.1, 0.25 + 0.35 * (int(self.time * 12) % 2))
         self.lit.vec("u_tint", *tint)
-        self.lit.mat4("u_model", camera.model_matrix(x, y, b.z, h, config.VOXEL_SIZE))
+        roll = 0.0
+        if key in voxels.RIDERS:  # on the wire itself: it leans into the corner, and sways
+            lean = min(config.RIDER_LEAN_MAX, config.RIDER_LEAN * b.load)
+            roll = math.copysign(lean, b.curve) + config.RIDER_SWAY * math.sin(
+                self.time * config.RIDER_SWAY_RATE + b.id * 1.7)
+        self.lit.mat4("u_model", camera.model_matrix(x, y, b.z, h, config.VOXEL_SIZE, roll))
         self.racer(key).draw()
         if b.boost > 0 and self.rng.random() < 0.8:
             self.smoke.append([x - math.cos(h) * 14, y - math.sin(h) * 14, b.z + 4, 0.25, SMOKE, 1.0])

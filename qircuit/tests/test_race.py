@@ -23,11 +23,23 @@ def race_on(track: Track, players=("p1", "p2"), seed=1, **kw) -> Race:
 
 
 def place(race: Race, player: str, p: float, lane: int, v: float = 0.0):
+    """A racer here, cruising at v (or crawling, from a standstill)."""
     b = race.bodies_of(player)[0]
     b.p = b.reach = p
     b.lane, b.u, b.v = lane, float(lane), v
+    b.cruise = max(config.CRUISE_MIN, v / race.racers[player].stats.max_speed)
     b.z = race.track.height(race.s_of(p))
     return b
+
+
+def until(race: Race, kind: str, seconds: float = 1.0, **controls) -> list:
+    """Run until a cue of this kind (and stop on that frame)."""
+    events = []
+    for _ in range(round(seconds / DT)):
+        events += race.update(DT, controls)
+        if kind in kinds(events):
+            break
+    return events
 
 
 def run(race: Race, seconds: float, **controls) -> list:
@@ -43,7 +55,7 @@ def kinds(events) -> list[str]:
 
 # --- driving --------------------------------------------------------------------------
 
-def test_gas_accelerates_to_top_speed_and_no_further():
+def test_up_from_a_standstill_accelerates_to_top_speed_and_no_further():
     race = race_on(oval())
     b = place(race, "p1", 0, 1)
     run(race, 1.0, p1=Controls(throttle=True))
@@ -52,13 +64,70 @@ def test_gas_accelerates_to_top_speed_and_no_further():
     assert b.p < CORNER and b.v == pytest.approx(config.CAR.max_speed)
 
 
-def test_coasting_slows_gently_and_braking_hard():
+def test_it_sets_off_flat_out_and_cruises_at_its_speed_with_no_input():
+    race = race_on(oval())
+    b = race.bodies_of("p1")[0]
+    assert b.v == 0 and b.cruise == config.CRUISE_START == 1.0
+    run(race, 2.2)
+    assert b.v == pytest.approx(config.CAR.max_speed)
+    race = race_on(oval())
+    b = place(race, "p1", 0, 1, v=150)
+    run(race, 1.0)
+    assert b.v == pytest.approx(150)
+
+
+def test_down_brakes_hard_and_it_holds_the_speed_it_is_let_go_at():
     race = race_on(oval())
     b = place(race, "p1", 0, 1, v=200)
-    run(race, 0.5)
-    assert b.v == pytest.approx(200 - 0.5 * config.CAR.coast, abs=1)
     run(race, 0.25, p1=Controls(brake=True))
-    assert b.v == pytest.approx(200 - 0.5 * config.CAR.coast - 0.25 * config.CAR.brake, abs=1)
+    assert b.v == pytest.approx(200 - 0.25 * config.CAR.brake, abs=1)
+    held = b.v
+    run(race, 0.5)
+    assert b.v == pytest.approx(held, abs=0.5)
+    run(race, 1.0, p1=Controls(brake=True))  # a crawl, never a stop
+    assert b.v == pytest.approx(config.CRUISE_MIN * config.CAR.max_speed)
+
+
+def test_a_short_push_up_raises_the_speed_it_cruises_at_and_it_gets_there_by_itself():
+    race = race_on(oval())
+    b = place(race, "p1", 0, 1, v=110)
+    run(race, 0.25, p1=Controls(throttle=True))
+    assert b.cruise == pytest.approx(0.5 + 0.25 * config.CRUISE_RISE, abs=0.02)
+    assert b.v < race.cruise_speed(b, config.CAR)  # it set its sights faster than it can go
+    run(race, 1.0)
+    assert b.v == pytest.approx(race.cruise_speed(b, config.CAR))
+    run(race, 1.0, p1=Controls(throttle=True))
+    assert b.cruise == 1.0  # up to its top speed, no further
+
+
+def test_down_brakes_at_once_even_while_it_is_still_speeding_up():
+    race = race_on(oval())
+    b = place(race, "p1", 0, 1, v=100)
+    b.cruise = 1.0
+    run(race, 0.1)
+    v = b.v
+    run(race, 0.05, p1=Controls(brake=True))
+    assert b.v < v and b.cruise * config.CAR.max_speed == pytest.approx(b.v, abs=1)
+
+
+def test_over_its_setting_it_eases_down_by_its_coast():
+    race = race_on(oval())
+    b = place(race, "p1", 0, 1, v=150)
+    b.v = 250  # off a boost pad, say
+    run(race, 0.5)
+    assert b.v == pytest.approx(250 - 0.5 * config.CAR.coast, abs=1)
+    run(race, 0.4, p1=Controls(throttle=True))  # up from over it starts from its speed, capped at the top
+    assert b.cruise == 1.0
+
+
+def test_after_a_spin_out_it_gets_going_no_faster_than_the_corner_allows():
+    race = race_on(oval())
+    b = place(race, "p1", CORNER - 60, 1, v=config.CAR.max_speed)
+    events = until(race, "spin", 3.0)
+    assert "spin" in kinds(events)
+    hold = race.safe_speed(b.lane, b.p, config.CAR, brake=0.0)
+    assert race.cruise_speed(b, config.CAR) <= hold + 1e-6
+    assert "spin" not in kinds(run(race, 2.0))
 
 
 def test_right_changes_to_the_wire_on_the_racers_right():
@@ -206,7 +275,7 @@ def test_a_hovering_bug_follows_its_racer_onto_another_wire_to_aim_it():
     race.update(DT, {"p1": Controls(right=True)})
     run(race, config.ERR_HOLD)
     assert car.lane == 3 and race.bugs[0].lane == 3
-    events = run(race, 1.5)
+    events = run(race, 3.0)  # p2 crawls on, out of the way
     assert {"bitflip", "phaseflip"} & set(kinds(events)) and race.bugs == []
 
 
@@ -220,7 +289,7 @@ def test_an_x_error_knocks_a_racer_onto_another_wire_and_a_z_takes_its_speed():
     b = place(race, "p1", 100, 1, v=200)
     place(race, "p2", 300, 3)
     race.bugs.append(Bug(race._id(), "Z", 1, 106, None, 5.0))
-    assert "phaseflip" in kinds(run(race, 0.05)) and b.v < 200 * config.BUG_HIT_KEEP["Z"] + 1
+    assert "phaseflip" in kinds(until(race, "phaseflip", 0.05)) and b.v < 200 * config.BUG_HIT_KEEP["Z"] + 3
 
 
 def test_a_bug_never_hits_the_racer_that_launched_it():
@@ -241,10 +310,10 @@ def test_a_zeno_trap_rides_behind_its_racer_then_drops_and_slows_whoever_hits_it
     run(race, config.ZENO_ARM, p1=Controls(throttle=True))
     assert trap.arm <= 0 and trap.body_id is None
     victim.p = victim.reach = trap.p - 30
-    victim.v = 150
-    events = run(race, 0.5)
+    victim.v, victim.cruise = 150, 150 / config.CAR.max_speed
+    events = until(race, "zeno", 0.5)
     assert "zeno" in kinds(events) and victim.measured > 0
-    assert 50 < victim.v <= 150 * config.ZENO_KEEP  # slowed, not stopped
+    assert 50 < victim.v <= 150 * config.ZENO_KEEP + 3  # slowed, not stopped
     assert owner.v > 100
 
 

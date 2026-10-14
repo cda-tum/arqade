@@ -193,11 +193,6 @@ class Match:
     def players(self) -> tuple[str, ...]:
         return ("p1",) if self.mode == 1 else PLAYERS
 
-    @property
-    def danger(self) -> bool:
-        """A stack is close to the top (the music speeds up, the frame blinks)."""
-        return self.state == ROUND and any(b.stack_top() < config.DANGER_ROWS for b in self.boards.values())
-
     # --- input helpers --------------------------------------------------------------------
 
     def _menu(self, inp: FrameInput, player: str) -> tuple[int, int, bool, bool]:

@@ -1,7 +1,7 @@
 [project]
 name = "qircuit"
 version = "0.1.0"
-description = "Slot-car racing on the wires of a quantum circuit: gas, brake, change wires, and every power-up is a gate"
+description = "Slot-car racing on the wires of a quantum circuit: set your speed, change wires, and every power-up is a gate"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [

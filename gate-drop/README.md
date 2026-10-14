@@ -8,8 +8,8 @@ Design: `../docs/superpowers/specs/2026-10-01-gate-drop-design.md`.
 
 **Status:** full game, with versus (first to 2 rounds) and Dr. Mario-style
 single player (levels, score, top-10 initials). Each player sets their own
-level and speed. Chiptune sound and music, `--input-test`, and a Batocera
-deploy script. Button numbers follow the ones confirmed on the cabinet.
+level and speed. Chiptune sound effects (no music: on the cabinet only
+Overquqed has music), `--input-test`, and a Batocera deploy script. Button numbers follow the ones confirmed on the cabinet.
 
 ## How to play
 
@@ -94,7 +94,7 @@ uv run python tools/snapshot.py /tmp/gate-drop-snaps   # render a scripted match
 | `match.py` | Title, setup, how to play, countdown, rounds, levels, results, initials, the attack exchange. Pure, tested. |
 | `tutorial.py` | The HOW TO PLAY card's words and its scripted demo round. Pure, tested. |
 | `sprites.py`, `render.py` | Procedural SNES-style pixel art at 480x270 (x4 on the cabinet). |
-| `audio.py` | Chiptune effects (menu move, confirm and back too) and music, adapted from Overquqed's `audio.py`. |
+| `audio.py` | Chiptune effects (menu move, confirm and back too), adapted from Overquqed's `audio.py`. No music. |
 | `input.py`, `config.py` | Pads and dev keyboard; every tuning number, colour and button. |
 
 ## Deploying to the cabinet

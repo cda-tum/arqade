@@ -64,7 +64,7 @@ def test_bots_race_behind_the_title():
     assert m.demo is not None and max(b.v for b in m.demo.race.bodies) > 50
 
 
-def test_controls_are_up_gas_down_brake_left_and_right_a_wire():
+def test_controls_are_up_faster_down_slower_left_and_right_a_wire():
     inp = FrameInput(held={("stick", 0): frozenset({"up", "right"})}, pressed={("stick", 0): frozenset({"right"})})
     c = controls_for(2, "p1", inp)
     assert c.throttle and not c.brake and c.right and not c.left
@@ -191,14 +191,14 @@ def test_the_last_seconds_tick_and_first_to_the_target_wins_and_a_rematches_with
     keys = dict(m.racer_of)
     for _ in range(120):
         step(m)
-    holder = m.pack.holder
-    m.pack.lead_time[holder] = m.target - 2.5
+    for p in m.players:  # whoever leads from here wins (P1 cruises along too, untouched)
+        m.pack.lead_time[p] = m.target - 2.5
     events = []
-    for _ in range(round(4 / DT)):
+    for _ in range(round(12 / DT)):  # the lead may change hands a few times on the way
         if m.state != RACE:
             break
         events += step(m)
-    assert m.state == MATCH_END and m.winner == holder
+    assert m.state == MATCH_END and m.winner == m.pack.holder and m.lead_time[m.winner] >= m.target
     assert [e.kind for e in events].count("tick") >= 2 and "match_won" in [e.kind for e in events]
     for _ in range(round(config.RESULT_LOCK / DT) + 1):
         step(m)
@@ -344,3 +344,83 @@ def test_the_demo_passes_and_takes_the_lead_on_every_track_and_loops(track_index
     for _ in range(round(0.2 / DT)):
         step(m)
     assert demo.phase == "draft" and demo.t < 0.2  # and over again
+
+
+# --- the racer select through the real input path (a cabinet regression) ---------------------------
+
+class FakePad:
+    """A cabinet pad: raw buttons held, the stick centred."""
+
+    def __init__(self) -> None:
+        self.down: set[int] = set()
+
+    def get_numbuttons(self) -> int:
+        return 12
+
+    def get_button(self, b: int) -> bool:
+        return b in self.down
+
+    def get_numaxes(self) -> int:
+        return 2
+
+    def get_axis(self, i: int) -> float:
+        return 0.0
+
+    def get_numhats(self) -> int:
+        return 0
+
+
+def press_raw(m: Match, inp, pads: list, pad: int, raw: int) -> None:
+    """Press a raw button on one pad for a frame, then let go, through Input
+    and FrameInput into the match, as on the cabinet."""
+    for down in (True, False):
+        if down:
+            pads[pad].down.add(raw)
+        else:
+            pads[pad].down.discard(raw)
+        inp.update(DT)
+        m.update(DT, inp.frame_input())
+
+
+@pytest.mark.parametrize("humans,pad", [(1, 0), (1, 1), (2, 0), (2, 1)])
+def test_a_locks_in_the_racer_under_the_cursor_and_does_not_move_it(humans, pad):
+    """On the cabinet, A (raw 1) is also "right" on the face buttons, which
+    steer like W A S D in a race: in the select it moved the cursor one racer
+    to the right before locking in, so you got the racer next to yours."""
+    import pygame
+
+    from qircuit.input import Input
+
+    pygame.init()
+    inp = Input()
+    pads = [FakePad(), FakePad()]
+    inp.joysticks = pads
+    m = to_select(humans)
+    player = "p1" if humans == 1 or pad == 0 else "p2"
+    before = dict(m.picks)
+    press_raw(m, inp, pads, pad, config.INPUT_CONFIG["system"]["confirm_buttons"][0])
+    assert player in m.locked and m.picks == before
+    press_raw(m, inp, pads, pad, config.INPUT_CONFIG["system"]["back_buttons"][0])  # B unlocks, nothing moves
+    assert player not in m.locked and m.picks == before and m.state == SELECT
+    for raw in config.INPUT_CONFIG["pads"][pad]["buttons"]["up"] + config.INPUT_CONFIG["pads"][pad]["buttons"]["left"]:
+        press_raw(m, inp, pads, pad, raw)  # X and Y don't steer the cursor either: the stick does
+    assert m.picks == before
+
+
+def test_with_three_people_the_button_player_still_steers_with_the_buttons():
+    import pygame
+
+    from qircuit.input import Input
+
+    pygame.init()
+    inp = Input()
+    pads = [FakePad(), FakePad()]
+    inp.joysticks = pads
+    m = to_select(3)
+    p3 = m.picks["p3"]
+    press_raw(m, inp, pads, 0, config.INPUT_CONFIG["pads"][0]["buttons"]["right"][0])  # A: P3's "right"
+    from qircuit.match import SELECT_COLS
+
+    n = len(racers.ROSTER)
+    col = (p3 % SELECT_COLS + 1) % SELECT_COLS
+    assert m.picks["p3"] == min(n - 1, (p3 // SELECT_COLS) * SELECT_COLS + col) and not m.locked

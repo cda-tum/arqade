@@ -37,6 +37,3 @@ def test_chains_raise_the_pitch_and_each_sound_plays_once_per_frame():
 def test_audio_never_raises_without_a_sound_card():
     a = audio.make_audio()
     a.play_events([Cue("beep")])
-    a.music("title")
-    a.tempo(True)
-    a.update()

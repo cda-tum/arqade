@@ -3,8 +3,10 @@ item gates, error bugs and Zeno traps. Pure (no pygame), so it is unit
 tested; match.py drives it one frame at a time, decides who has fallen off
 the screen (camera.py) and puts them back in with reset().
 
-A racer drives like a slot car: gas, brake, or neither (it coasts down),
-and left/right change to the neighbouring wire on its own left or right.
+A racer drives on cruise control: it holds the speed it is set to, and
+up/down only raise or lower that setting (Body.cruise, a share of its top
+speed), so the stick is free for left/right, which change to the
+neighbouring wire on its own left or right. See _cruise().
 Corners have a speed limit per wire (inner wires are shorter but tighter):
 over it the racer drifts and scrubs speed, further over it flashes red
 while its spin meter fills, and a full meter spins it out: it stalls,
@@ -44,8 +46,8 @@ from qircuit.track import Track
 
 @dataclass
 class Controls:
-    throttle: bool = False
-    brake: bool = False
+    throttle: bool = False  # up held: raise the cruise speed
+    brake: bool = False  # down held: lower it, braking at once
     left: bool = False  # pressed this frame: change to the wire on the racer's left
     right: bool = False
 
@@ -69,6 +71,7 @@ class Body:
     lane: int  # the wire it is on, or changing to
     u: float  # where it is across the wires
     v: float = 0.0
+    cruise: float = config.CRUISE_START  # the speed it holds, as a share of its top speed (_cruise)
     reach: float = 0.0  # furthest progress so far: things fire only on new ground
     load: float = 0.0  # lateral acceleration over grip
     curve: float = 0.0  # signed curvature under it (for drawing the drift)
@@ -214,8 +217,9 @@ class Race:
         self._ids += 1
         return self._ids
 
-    def _body(self, player: str, p: float, lane: int, v: float = 0.0, u: float | None = None) -> Body:
-        b = Body(self._id(), player, p, lane, float(lane) if u is None else u, v=v, reach=p)
+    def _body(self, player: str, p: float, lane: int, v: float = 0.0, u: float | None = None,
+              cruise: float = config.CRUISE_START) -> Body:
+        b = Body(self._id(), player, p, lane, float(lane) if u is None else u, v=v, reach=p, cruise=cruise)
         b.z = self.track.height(self.s_of(p))
         return b
 
@@ -277,10 +281,13 @@ class Race:
         """The furthest body of anyone."""
         return max(self.bodies, key=lambda b: b.p)
 
-    def safe_speed(self, lane: int, p: float, stats: config.CarStats, look: float = 200.0) -> float:
+    def safe_speed(self, lane: int, p: float, stats: config.CarStats, look: float = 200.0,
+                   brake: float | None = None) -> float:
         """The fastest a racer at p on this wire can go and still brake down to
-        the drift limit of every corner within look."""
-        s0, brake = self.s_of(p), 0.8 * stats.brake
+        the drift limit of every corner within look (at brake, by default
+        most of its braking; 0: the speed it can simply hold through them)."""
+        s0 = self.s_of(p)
+        brake = 0.8 * stats.brake if brake is None else brake
         best, d = math.inf, 0.0
         while d <= look:
             k = abs(self.track.curvature(lane, s0 + d))
@@ -293,7 +300,9 @@ class Race:
     def reset(self, player: str, p: float, v: float, events: list) -> Body:
         """Off the screen: back in at progress p (its copies gone), on the
         emptiest wire there, already doing v (or less, if a corner is coming),
-        and passing through everything for RESET_GHOST."""
+        and passing through everything for RESET_GHOST. It cruises on at the
+        speed it comes back with, which the corners within reach allow with
+        no braking: a racer put back in is not sent straight into a spin."""
         b = self.front(player)
         for other in self.bodies_of(player):
             if other is not b:
@@ -308,7 +317,8 @@ class Race:
         stats = self.racers[player].stats
         b.p, b.reach = p, max(b.reach, p)
         b.lane, b.u = lane, float(lane)
-        b.v = min(v, self.safe_speed(lane, p, stats))
+        b.v = min(v, self.safe_speed(lane, p, stats, brake=0.0))
+        b.cruise = max(config.CRUISE_MIN, min(1.0, b.v / stats.max_speed))
         b.z, b.vz, b.air = self.track.height(self.s_of(p)), 0.0, False
         b.load = b.slip = b.spin = b.measured = b.wiggle = b.boost = b.draft = b.drs = 0.0
         b.ghost = config.RESET_GHOST
@@ -446,25 +456,13 @@ class Race:
 
     def _drive(self, b: Body, c: Controls, dt: float, events: list) -> None:
         stats = self.racers[b.player].stats
-        gas, brake = c.throttle, c.brake
         b.measured = max(0.0, b.measured - dt)
         b.ghost = max(0.0, b.ghost - dt)
         if b.spin > 0:  # spun out: nothing works for a moment
             b.spin = max(0.0, b.spin - dt)
-            gas = brake = False
             b.v = max(0.0, b.v - 2 * stats.brake * dt)
-        if b.air:  # wheels off the ground: nothing to push or brake against
-            gas = brake = False
-        top = stats.max_speed * (1 + config.DRAFT_TOP * b.draft)
-        if gas and not brake:
-            if b.v < top:
-                b.v = min(top, b.v + stats.accel * (1 + config.DRAFT_ACCEL * b.draft) * dt)
-            else:
-                b.v = max(top, b.v - stats.coast * dt)
-        elif brake:
-            b.v = max(0.0, b.v - stats.brake * dt)
-        elif not b.air:
-            b.v = max(0.0, b.v - stats.coast * dt)
+        else:
+            self._cruise(b, stats, c, dt)
 
         b.u = approach(b.u, float(b.lane), stats.switch_rate * dt)
         p_was = b.p
@@ -486,6 +484,38 @@ class Race:
             self._cross(b, b.reach, b.p, events)
             b.reach = b.p
 
+    @staticmethod
+    def cruise_speed(b: Body, stats: config.CarStats) -> float:
+        """The speed b's cruise control holds: its share of top speed, which
+        the slipstream raises."""
+        return b.cruise * stats.max_speed * (1 + config.DRAFT_TOP * b.draft)
+
+    def _cruise(self, b: Body, stats: config.CarStats, c: Controls, dt: float) -> None:
+        """Cruise control. Up raises the speed it holds by CRUISE_RISE of top
+        speed a second, so a short push is enough; it gets there at its own
+        acceleration. Down lowers it at the racer's full braking, and brakes
+        with it, down to CRUISE_MIN: a crawl, never a stop. Either one starts
+        from the speed it really has if that is nearer (a push up off a
+        boost pad keeps the boost's speed as the setting, a push down
+        brakes at once even while it is still speeding up). With neither,
+        it holds the setting: after a bump or a bug it gets back up to it,
+        and over it (off a boost pad, out of a slipstream) it eases down by
+        its coast. In the air the setting still changes, but nothing pushes
+        or brakes."""
+        top = stats.max_speed * (1 + config.DRAFT_TOP * b.draft)
+        up, down = c.throttle and not c.brake, c.brake
+        if up:
+            b.cruise = min(1.0, max(b.cruise, b.v / top) + config.CRUISE_RISE * stats.max_speed / top * dt)
+        elif down:
+            b.cruise = max(config.CRUISE_MIN, min(b.cruise, b.v / top) - stats.brake / top * dt)
+        if b.air:  # wheels off the ground: nothing to push or brake against
+            return
+        goal = b.cruise * top
+        if b.v < goal:
+            b.v = min(goal, b.v + stats.accel * (1 + config.DRAFT_ACCEL * b.draft) * dt)
+        elif b.v > goal:
+            b.v = max(goal, b.v - (stats.brake if down else stats.coast) * dt)
+
     def _corner(self, b: Body, stats: config.CarStats, dt: float, events: list) -> None:
         was = b.load
         b.load = b.v * b.v * abs(b.curve) / stats.grip
@@ -502,6 +532,10 @@ class Race:
             b.slip = max(0.0, b.slip - config.SLIP_RECOVER * dt)
         if b.slip >= 1.0:  # spun out: nearly stopped, for a moment
             b.slip = b.load = 0.0
+            # it gets going again at no more than this corner allows, not
+            # straight back to the speed that spun it
+            hold = self.safe_speed(b.lane, b.p, stats, brake=0.0)
+            b.cruise = max(config.CRUISE_MIN, min(b.cruise, hold / stats.max_speed))
             b.v *= config.SPIN_KEEP
             b.spin = config.SPIN_TIME
             b.wiggle = config.WIGGLE_TIME
@@ -577,7 +611,7 @@ class Race:
             return
         if any(o.lane == target and abs(self.gap(o.p, b.p)) < config.CAR_LEN for o in mine):
             return
-        self._new_bodies.append(self._body(b.player, b.p, target, v=b.v, u=b.u))
+        self._new_bodies.append(self._body(b.player, b.p, target, v=b.v, u=b.u, cruise=b.cruise))
         self.racers[b.player].copy_time = config.COPY_TIME
         events.append(self._cue("copy", b))
 

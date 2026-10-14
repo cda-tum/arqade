@@ -25,8 +25,9 @@ too hard to read).
   - QUANTUM SPACE: the open-plan TUM Quantum Space office, with the MQT logo on its glass wall;
   - QUANTUM WEEK: Toronto at dusk, with the CN Tower and the Metro Toronto Convention Centre,
     home of IEEE Quantum Week 2026.
-- **Extras:** chiptune (a title and a fight loop), `--input-test`, a
-  snapshot tool and a Batocera deploy script.
+- **Extras:** chiptune sound effects (no music: on the cabinet only
+  Overquqed has music), `--input-test`, a snapshot tool and a Batocera
+  deploy script.
 
 ## The rules: colour must match
 
@@ -144,7 +145,7 @@ uv run python tools/benchmark.py                    # frame cost (on the cabinet
 | `stages.py` | The backdrops, each drawn once (with its blinking lights); no green or purple in a large area, so the fighters stay readable. |
 | `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens (HOW TO PLAY draws its scene with a second, off-screen renderer). |
 | `bot.py` | The CPU for the attract demo and the tests. |
-| `audio.py` | Chiptune effects and music, adapted from Planck Time's. |
+| `audio.py` | Chiptune effects, adapted from Planck Time's. No music. |
 | `input.py`, `config.py` | Pads and the dev keyboard; every tuning number and button. |
 
 ## Deploying to the cabinet

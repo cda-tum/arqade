@@ -20,8 +20,8 @@ explains its concept in a one-line caption *afterwards*.
   same microgame, side by side).
 - **Screens:** GBA-style pixel art at 640x360 (x3 on the cabinet), the title
   with an attract demo, and pause.
-- **Extras:** chiptune whose tempo follows the level, `--input-test`, and a
-  Batocera deploy script.
+- **Extras:** chiptune sound effects (no music: on the cabinet only
+  Overquqed has music), `--input-test`, and a Batocera deploy script.
 
 ## How to play
 
@@ -151,7 +151,7 @@ uv run python tools/snapshot.py /tmp/planck-snaps   # every screen and microgame
 | `tutorial.py` | The HOW TO PLAY card's words and its demo (real microgames, played by their bots). |
 | `render.py` | The 640x360 frame: handheld bezels, HUD, fuse, cards, and every screen. |
 | `decoherence.py` | DECOHERENCE, SYNDROME!'s monster: its pre-rendered static body, face, moods, bolt and dissolve. |
-| `audio.py` | Chiptune effects and music, adapted from Gate Drop's. |
+| `audio.py` | Chiptune effects, adapted from Gate Drop's. No music. |
 | `input.py`, `config.py`, `hiscores.py` | Pads and the dev keyboard; every tuning number and button; the top-10 table. |
 
 ### Adding a microgame
