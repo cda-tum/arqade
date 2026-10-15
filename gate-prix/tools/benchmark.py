@@ -35,7 +35,7 @@ from gate_prix.road import RoadView
 from gate_prix.sprites import SpriteCache, tilt_kind
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
-CPU = ("green", "white", "lime", "steel")
+CPU = tuple(config.CPU_COLORS)[:4]
 
 
 def objects_for(fridge, statics, cams, frame: int):
@@ -97,8 +97,9 @@ def run(views, frames: int, fridge, statics, cache, renderer=None) -> list[float
                 screen.blit(strip, (view.rect.x + x, view.rect.y + y))
         if renderer:
             Minimap.for_track(fridge, MAP).draw(screen, (10, H - MAP[1] - 10),
-                                                [(f"{c}", cams[0][0] + 900 * i) for i, c in
-                                                 enumerate(config.CAR_COLORS)], ("p1", "p2"))
+                                                [(car_id, c, cams[0][0] + 900 * i) for i, (car_id, c) in
+                                                 enumerate(zip(("p1", "p2", *config.CPU_IDS), config.CAR_COLORS))],
+                                                ("p1", "p2"))
         times.append((time.perf_counter() - start) * 1000)
     return times
 

@@ -51,10 +51,59 @@ def test_the_minimap_is_the_lap_from_above_fitted_in_its_box():
     assert mm.point(2 * lap + 500) == pytest.approx(mm.point(500.0))
     surface = pygame.Surface((300, 200))
     surface.fill((0, 0, 0))
-    mm.draw(surface, (10, 10), [("p1", 1000.0), ("green", 80000.0)], players=("p1",))
+    mm.draw(surface, (10, 10), [("p1", "p1", 1000.0), ("cpu1", "white", 80000.0)],
+            players=("p1",))
     x, y = mm.point(1000.0)
     got = surface.get_at((10 + round(x), 10 + round(y)))[:3]
     assert all(abs(a - b) <= 4 for a, b in zip(got, config.PLAYER_COLORS["p1"]))
+
+
+def test_every_dot_on_the_minimap_carries_its_cars_name():
+    pygame.font.init()
+    mm = Minimap.for_track(track.fridge(), (170, 118))
+    assert set(mm._labels) == {"p1", "p2", *config.CPU_IDS}
+    plain = pygame.Surface((300, 200))
+    mm.draw(plain, (10, 10), [])
+    for car_id, colour in (("cpu3", "silver"), ("p2", "p2")):
+        surface = pygame.Surface((300, 200))
+        mm.draw(surface, (10, 10), [(car_id, colour, 30000.0)], players=("p2",))
+        x, y = mm.point(30000.0)
+        right = pygame.Rect(10 + round(x) + 6, 10 + round(y) - 5, 20, 10)  # beside the dot
+        changed = sum(surface.get_at(p) != plain.get_at(p)
+                      for p in ((i, j) for i in range(right.left, right.right)
+                                for j in range(right.top, right.bottom)))
+        assert changed > 15, car_id
+
+
+def test_in_a_bunch_the_names_never_overlap_and_the_peoples_always_show():
+    pygame.font.init()
+    mm = Minimap.for_track(track.fridge(), (170, 118))
+    cars = [(c, c if c[0] == "p" else "white", 1000.0 + 10 * i)
+            for i, c in enumerate(("p1", "p2", *config.CPU_IDS))]
+    _, names = mm.layout((0, 0), cars, players=("p1", "p2"))
+    ids = [car_id for car_id, _ in names]
+    assert ids[:2] == ["p1", "p2"] and len(ids) < len(cars)
+    rects = [r for _, r in names]
+    assert all(a.collidelist([b for b in rects if b is not a]) < 0 for a in rects)
+    lap = track.fridge().lap_length()
+    spread = [(c, col, lap * i / 7) for i, (c, col, _) in enumerate(cars)]
+    assert len(mm.layout((0, 0), spread, ("p1",))[1]) == len(cars)  # apart: every name
+
+
+def test_the_peoples_cars_have_a_white_outline_the_bots_none(monkeypatch):
+    pygame.font.init()
+
+    def solid(img):
+        return sum(img.get_at((i, j))[3] > 200 for i in range(img.get_width())
+                   for j in range(img.get_height()))
+    for kind in sprites.OUTLINED:
+        with_line = sprites.render_sprite(kind, 300.0)[0]
+        monkeypatch.setattr(sprites, "OUTLINED", ())
+        without = sprites.render_sprite(kind, 300.0)[0]
+        monkeypatch.undo()
+        assert solid(with_line) > solid(without) * 1.05, kind
+    assert sprites.OUTLINED == ("car:p1", "car:p2")
+    assert not any(f"car:{c}" in sprites.OUTLINED for c in config.CPU_COLORS)
 
 
 # --- The renderer ------------------------------------------------------------------------------
@@ -79,7 +128,7 @@ def started(mode):
     m = Match(random.Random(2))
     m.update(DT, FrameInput())
     if mode == 2:
-        m.update(DT, frame(p1={"nav": (0, 1)}))
+        m.update(DT, frame(p1={"nav": (1, 0)}))
     m.update(DT, frame(p1={"start": True, "held": True}))
     assert m.state == HOWTO
     for _ in range(30):
@@ -99,10 +148,10 @@ def busy(m):
     p1.car.drifting, p1.car.drift_dir, p1.car.drift_time, p1.car.drift_angle = True, 1, 1.6, 0.3
     p1.car.turbo_level, p1.car.turbo_flash = 2, 0.2
     p1.item = "MEASURE"
-    green = race.racer("green")
+    green = race.racer("cpu1")
     green.car.tunnel_time = 2.0
-    race.shots.append(Shot("p1", "green", 0.2))
-    race.clouds.append(Cloud(0, p1.car.z + 3000, 0.0, "white", 5.0))
+    race.shots.append(Shot("p1", "cpu1", 0.2))
+    race.clouds.append(Cloud(0, p1.car.z + 3000, 0.0, "cpu2", 5.0))
     p1.blind_time = 1.0
     m.banners["p1"] += [Banner("tip", "TUNNEL", 1.0), Banner("final", 3, 2.0)]
     m.banners["p1"].append(Banner("reveal", "DECOHERENCE", 0.5))
@@ -147,11 +196,22 @@ def test_the_start_lights_go_with_the_gantry_too_near_to_draw(renderer):
 
 
 def test_the_title_the_card_and_quit_draw(renderer):
+    from gate_prix.render import field_line, title_rows
+
     m = Match(random.Random(3))
     m.update(DT, FrameInput())
-    for _ in range(2):
+    assert [label for label, *_ in title_rows(m)] == list(config.TITLE_ITEMS)
+    assert title_rows(m)[:3] == [("PLAYERS", "1", True, False), ("BOTS", "5", False, True),
+                                 ("LEVEL", "TOUGH", False, False)]
+    renderer.draw(m)
+    m.bot_count = 0
+    assert field_line(m) == "A TIME TRIAL: JUST YOU"
+    m.mode = 2
+    assert field_line(m) == "A DUEL: JUST THE TWO OF YOU"
+    m.mode, m.bot_count = 1, 5
+    for _ in range(3):
         m.update(DT, frame(p1={"nav": (0, 1)}))
-    assert m.title_index == 2
+    assert m.title_index == 3
     renderer.draw(m)
     m.update(DT, frame(p1={"start": True, "held": True}))
     assert m.state == HOWTO

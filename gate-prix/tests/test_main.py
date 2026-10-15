@@ -48,14 +48,14 @@ def test_every_cue_has_a_sound_and_the_effects_build():
               Cue("result"), Event("right", "p1", 1), Event("right", "p1", 30),
               Event("wrong", "p1", 0), Event("miss", "p1", 0), Event("check", "p1", 0),
               Event("check", "p1", 4), Event("warp", "p1", (1.0, 6.0)), Event("lap", "p1", 2), Event("finish", "p1", 1),
-              Event("bump", "p1", "green"), Event("box", "p1", "QEC"), Event("box", "p1", None),
+              Event("bump", "p1", "cpu1"), Event("box", "p1", "QEC"), Event("box", "p1", None),
               Event("box_full", "p1", "SPLIT"), Event("item", "p1", "SPLIT"),
               Event("item", "p1", "QEC"), Event("split_end", "p1"),
               Event("item", "p1", "MEASURE"), Event("item", "p1", "TUNNEL"),
               Event("item", "p1", "DECOHERENCE"), Event("turbo", "p1", 1),
               Event("turbo", "p1", 2), Event("drift", "p1", 1), Event("hazard", "p1", "cloud"),
-              Event("hazard", "p1", "mine"), Event("collapse", "p1", "green"),
-              Event("decohered", "p1", "green"), Event("fizzle", "p1"),
+              Event("hazard", "p1", "mine"), Event("collapse", "p1", "cpu1"),
+              Event("decohered", "p1", "cpu1"), Event("fizzle", "p1"),
               Event("immune", "p1", "shot"), Event("tunnel_end", "p1")]:
         name = audio.sound_for(e)
         assert name in sfx, e
@@ -66,11 +66,11 @@ def test_every_cue_has_a_sound_and_the_effects_build():
 
 
 def test_the_shooter_and_the_victim_of_a_hit_hear_different_sounds():
-    hit = Event("collapse", "green", "p1")  # P1's MEASURE collapsed a CPU
+    hit = Event("collapse", "cpu1", "p1")  # P1's MEASURE collapsed a CPU
     assert audio.sound_for(hit, ("p1",)) == "scored"
-    assert audio.sound_for(Event("collapse", "p1", "green"), ("p1",)) == "collapsed"
-    assert audio.sound_for(Event("decohered", "white", "p2"), ("p1", "p2")) == "deco_scored"
-    assert audio.sound_for(Event("decohered", "p2", "white"), ("p1", "p2")) == "static"
+    assert audio.sound_for(Event("collapse", "p1", "cpu1"), ("p1",)) == "collapsed"
+    assert audio.sound_for(Event("decohered", "cpu2", "p2"), ("p1", "p2")) == "deco_scored"
+    assert audio.sound_for(Event("decohered", "p2", "cpu2"), ("p1", "p2")) == "static"
     # P1 measures P2: both sounds, once each
     both = audio.sounds_for([Event("collapse", "p2", "p1")], ("p1", "p2"))
     assert set(both) == {"collapsed", "scored"}

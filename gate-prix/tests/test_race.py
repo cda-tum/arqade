@@ -91,11 +91,59 @@ def cross(race, racer, x, dt=DT):
 def test_a_race_has_six_cars_players_first():
     race = Race(seed=1, players=2)
     ids = [r.car.id for r in race.racers]
-    assert ids == ["p1", "p2", "green", "white", "lime", "steel"]
+    assert ids == ["p1", "p2", "cpu1", "cpu2", "cpu3", "cpu4"]
     assert [r.player for r in race.racers] == [True, True, False, False, False, False]
     race = Race(seed=1, players=1)
-    assert [r.car.id for r in race.racers] == ["p1", "green", "white", "lime", "steel", "black"]
+    assert [r.car.id for r in race.racers] == ["p1", "cpu1", "cpu2", "cpu3", "cpu4", "cpu5"]
     assert len(race.racers) == config.CARS
+
+
+def test_by_default_the_bots_fill_the_field_in_their_neutral_colours_cpu1_first():
+    race = Race(seed=1, players=1)
+    bots = [r for r in race.racers if not r.player]
+    assert [r.car.colour for r in bots] == list(config.CPU_COLORS)
+    assert [r.label for r in race.racers] == ["P1", "CPU1", "CPU2", "CPU3", "CPU4", "CPU5"]
+    assert race.bots == 5 and Race(seed=1, players=2).bots == 4
+
+
+@pytest.mark.parametrize("players", [1, 2])
+@pytest.mark.parametrize("bots", range(0, 6))
+def test_any_number_of_bots_up_to_six_cars_on_a_grid_with_the_players_at_the_back(players, bots):
+    if players + bots > config.CARS:
+        with pytest.raises(ValueError):
+            Race(seed=1, players=players, bots=bots)
+        return
+    race = Race(seed=1, players=players, bots=bots)
+    assert [r.car.id for r in race.racers] == (["p1", "p2"][:players]
+                                               + list(config.CPU_IDS[:bots]))
+    cars = {r.car.id: r.car for r in race.racers}
+    assert all(c.z < 0 for c in cars.values())
+    people = [cars[p] for p in ("p1", "p2")[:players]]
+    assert len({c.z for c in people}) == 1  # side by side: neither starts ahead
+    bots_z = [c.z for k, c in cars.items() if k.startswith("cpu")]
+    behind = sum(z < people[0].z for z in bots_z)
+    assert behind == 0 if players == 2 else behind <= 1  # alone: one beside it, half a row back
+    if players == 2:
+        assert cars["p1"].x < 0 < cars["p2"].x
+    cs = list(cars.values())
+    for i, a in enumerate(cs):  # no two cars overlap on the grid
+        for b in cs[i + 1:]:
+            assert abs(a.x - b.x) >= config.CAR_WIDTH or abs(a.z - b.z) >= config.CAR_LENGTH
+
+
+def test_alone_a_player_starts_at_the_front_of_a_short_grid():
+    assert Race(seed=1, players=1, bots=0).racer("p1").car.z == -config.GRID_FIRST
+    duel = Race(seed=1, players=2, bots=0)
+    assert [r.car.z for r in duel.racers] == [-config.GRID_FIRST] * 2
+
+
+def test_a_race_of_bots_alone_is_for_the_tests_and_runs_until_they_finish():
+    race = Race(seed=1, players=0, bots=1)
+    assert [r.car.id for r in race.racers] == ["cpu1"] and not race.over
+    with pytest.raises(ValueError):
+        Race(seed=1, players=0, bots=0)
+    with pytest.raises(ValueError):
+        Race(seed=1, players=3)
 
 
 def test_the_target_rows_and_circuits():
@@ -272,28 +320,28 @@ def test_the_check_boost_starts_after_the_freeze_and_the_car_keeps_moving():
 
 def test_the_cpus_get_the_check_by_their_own_circuits():
     race = Race(seed=3, players=1)
-    green = race.racer("green")
+    green = race.racer("cpu1")
     to_the_check(race, green, slots_right=11)
-    events = of(race.update(DT, {}), "green")
-    assert Event("check", "green", 5) in events
+    events = of(race.update(DT, {}), "cpu1")
+    assert Event("check", "cpu1", 5) in events
     events = []
     for _ in range(round(config.CHECK_FREEZE / DT)):
-        events += of(race.update(DT, {}), "green", "warp")
-    assert events == [Event("warp", "green", config.check_boost(5))]
+        events += of(race.update(DT, {}), "cpu1", "warp")
+    assert events == [Event("warp", "cpu1", config.check_boost(5))]
 
 
 def test_a_better_circuits_warp_passes_a_cpu_that_crossed_earlier():
     """The warp is strong and long enough to pass cars: a perfect circuit catches and
     passes a CPU with a typical 13/16 that crossed into the final lap 1.5 s earlier."""
     race = Race(seed=3, players=1)
-    p1, green = race.racer("p1"), race.racer("green")
+    p1, green = race.racer("p1"), race.racer("cpu1")
     to_the_check(race, p1, slots_right=16)
     to_the_check(race, green, slots_right=13)
     green.car.z += 1.5 * TOP
     p1.car.x, green.car.x = -0.3, 0.3
     for r in race.racers[2:]:
         put(r, race.lap_length / 2, 2.1)
-    lanes = {"p1": -0.3, "green": 0.3}
+    lanes = {"p1": -0.3, "cpu1": 0.3}
     passed = None
     while race.time < 9.0 and passed is None:
         race.update(DT, {r.car.id: (hold(race, r, lanes[r.car.id]) if r.car.id in lanes
@@ -383,13 +431,13 @@ def test_the_race_is_not_over_until_every_player_finishes():
     green = race.racers[2]
     put(green, end - 10.0, 1.9)
     events = race.update(DT, {})
-    assert Event("finish", "green", 2) in events and not race.over
+    assert Event("finish", "cpu1", 2) in events and not race.over
     put(p2, end - 10.0, -1.9)
     events = race.update(DT, {})
     assert Event("finish", "p2", 3) in events
     assert race.over
-    assert race.finish_order == ["p1", "green", "p2"]
-    assert race.results()[:3] == ["p1", "green", "p2"]
+    assert race.finish_order == ["p1", "cpu1", "p2"]
+    assert race.results()[:3] == ["p1", "cpu1", "p2"]
 
 
 def test_a_finished_race_stops_changing():
@@ -423,15 +471,15 @@ def test_the_check_fires_once_even_if_a_car_is_bumped_back_over_the_line():
 def test_places_are_ordered_by_laps_then_distance():
     race = Race(seed=4, players=2)
     lap = race.track.lap_length()
-    spots = {"p1": 1.5 * lap, "p2": 0.2 * lap, "green": 1.1 * lap, "white": 0.9 * lap,
-             "lime": 5000.0, "steel": 2.2 * lap}
+    spots = {"p1": 1.5 * lap, "p2": 0.2 * lap, "cpu1": 1.1 * lap, "cpu2": 0.9 * lap,
+             "cpu3": 5000.0, "cpu4": 2.2 * lap}
     for r in race.racers:
         r.car.z = spots[r.car.id]
         r.car.x = -1.9 + 0.75 * race.racers.index(r)  # nobody bumps
     race.update(1e-6, {})
-    assert race.places() == ["steel", "p1", "green", "white", "p2", "lime"]
+    assert race.places() == ["cpu4", "p1", "cpu1", "cpu2", "p2", "cpu3"]
     assert {r.car.id: r.place for r in race.racers} == {
-        "steel": 1, "p1": 2, "green": 3, "white": 4, "p2": 5, "lime": 6}
+        "cpu4": 1, "p1": 2, "cpu1": 3, "cpu2": 4, "p2": 5, "cpu3": 6}
 
 
 def test_a_finished_car_keeps_its_place_whoever_passes_it():
@@ -444,7 +492,7 @@ def test_a_finished_car_keeps_its_place_whoever_passes_it():
     put(green, 3 * lap + 5000.0, 1.9)  # further along now, but it crossed the line later
     race.update(DT, {})
     assert green.finished
-    assert race.places()[:2] == ["p1", "green"]
+    assert race.places()[:2] == ["p1", "cpu1"]
 
 
 # --- Bumps and determinism ----------------------------------------------------------------
@@ -509,7 +557,7 @@ def test_drifting_comes_from_the_stick_and_cues_its_charge_and_turbo():
 
 def test_a_bump_in_the_race_ends_a_drift_with_no_turbo():
     race = Race(seed=1, players=1, finish_all=True)
-    p1, green = race.racer("p1"), race.racer("green")
+    p1, green = race.racer("p1"), race.racer("cpu1")
     for r in race.racers[2:]:
         put(r, -100_000.0 - 1000 * race.racers.index(r), 2.1)
     for r in (p1, green):
@@ -535,7 +583,7 @@ def test_a_measure_waits_for_the_check_freeze_to_end():
     """A player frozen on the CIRCUIT CHECK can't see or steer: a MEASURE that reaches them
     then waits, and collapses them on the first frame after the freeze."""
     race = Race(seed=3, players=1, finish_all=True)
-    p1, green = race.racer("p1"), race.racer("green")
+    p1, green = race.racer("p1"), race.racer("cpu1")
     to_the_check(race, p1, slots_right=16)
     for r in race.racers[2:]:
         put(r, race.lap_length / 2, 2.1)
@@ -544,10 +592,10 @@ def test_a_measure_waits_for_the_check_freeze_to_end():
     race.update(DT, {})
     assert p1.check_wait > 0
     green.item = "MEASURE"
-    events = race.update(DT, {"green": Controls(item=True)})
+    events = race.update(DT, {"cpu1": Controls(item=True)})
     while p1.check_wait > 0:
         events += race.update(DT, {})
         assert not p1.car.spinning
     p1.hazards = []
     events += race.update(DT, {})
-    assert Event("collapse", "p1", "green") in events and p1.car.spinning
+    assert Event("collapse", "p1", "cpu1") in events and p1.car.spinning

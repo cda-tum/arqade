@@ -29,9 +29,9 @@ def at_speed(x=0.0, speed=TOP) -> Car:
 
 
 def test_a_new_car_stands_in_its_lane():
-    car = Car("green", "green", -0.4)
-    assert (car.id, car.colour, car.x, car.z, car.speed) == ("green", "green", -0.4, 0.0, 0.0)
-    assert car.kind == "car:green"
+    car = Car("cpu1", "white", -0.4)
+    assert (car.id, car.colour, car.x, car.z, car.speed) == ("cpu1", "white", -0.4, 0.0, 0.0)
+    assert car.kind == "car:white"
     assert (car.boost, car.boost_time) == (0.0, 0.0)
 
 

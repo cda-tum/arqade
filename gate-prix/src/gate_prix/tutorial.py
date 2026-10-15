@@ -5,7 +5,7 @@ as the cabinet's pad (the stick, the L X R / Y B A cluster with A lit, and START
 blinking PRESS ANY BUTTON TO START. The match decides when it goes; this module only draws.
 
 The demo is no animation of its own: `Demo` runs a real `Race` on THE FRIDGE with the
-game's own CPU driver at full skill on P1's car. It starts a little before the race's first
+game's own AI at BRUTAL (every right arch) on P1's car, alone. It starts a little before the race's first
 gate row, off to the left of the glowing arch, steers into it, gets its RIGHT GATE boost,
 drives on with its flames lit, then starts over. `Demo` is pure and unit tested;
 `TutorialCard` draws it with the game's own road renderer, sprites and HUD pieces.
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pygame
 
-from gate_prix import bot, config, track
+from gate_prix import ai, config, track
 from gate_prix.race import Race
 
 DEMO_SEED = 24  # its first row: three arches, the right one (Z) far over on the right
@@ -33,22 +33,20 @@ CLUSTER = (("L", "X", "R"), ("Y", "B", "A"))  # the cabinet's buttons as printed
 
 
 class Demo:
-    """The scripted scene: P1's car, a CPU driver, the race's first gate row."""
+    """The scripted scene: P1's car, the AI driving it, the race's first gate row."""
 
     def __init__(self) -> None:
         self.restart()
 
     def restart(self) -> None:
-        race = Race(DEMO_SEED, 1)
+        race = Race(DEMO_SEED, 1, bots=0)  # P1's car alone
         self.race = race
         self.row = race.rows[0]
         car = race.racer("p1").car
         car.z = car.prev_z = self.row.z - DEMO_LEAD * config.TOP_SPEED
         car.x = car.prev_x = DEMO_X
         car.speed = config.TOP_SPEED
-        for r in race.racers[1:]:  # the CPU cars wait far behind, out of the picture
-            r.car.z = r.car.prev_z = -100 * config.TOP_SPEED
-        self.driver = bot.Bot("p1", 1.0, DEMO_SEED, offset=0.0)
+        self.driver = ai.Driver("p1", "BRUTAL", DEMO_SEED, offset=0.0)
         self.outcome: str | None = None  # "right", "wrong" or "miss", once it crossed the row
         self.after = 0.0  # seconds since
 

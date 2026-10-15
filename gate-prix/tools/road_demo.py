@@ -22,7 +22,7 @@ from gate_prix.road import RoadView
 from gate_prix.sprites import SpriteCache, font
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
-CPU = (("green", 2500, 0.93), ("white", 6000, 0.95), ("lime", 9000, 0.9), ("steel", 14000, 0.97))
+CPU = (("white", 2500, 0.93), ("tan", 6000, 0.95), ("silver", 9000, 0.9), ("cream", 14000, 0.97))
 
 
 def scene(seed: int):

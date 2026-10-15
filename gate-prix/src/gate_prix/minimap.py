@@ -4,7 +4,8 @@
 x/y and scaled to fit the box): the road as a light line on a dark edge, a small tick
 across it at every gate row and item box, and the chequered finish line. Per frame only
 the dots are blitted (`draw`): a small one per car in its colour, a bigger ringed one for
-each player's own car. A car's place on it is its race distance along the plan.
+each player's own car, each with its name beside it (P1, P2, CPU1 ...; drawn once, at
+start-up, like the dots). A car's place on it is its race distance along the plan.
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ import math
 import pygame
 
 from gate_prix import config
+from gate_prix.race import label
+from gate_prix.sprites import font
 
 SS = 3
 EDGE = (10, 12, 26)
@@ -39,9 +42,11 @@ class Minimap:
         self.points = [(ox + k * x, oy - k * y) for x, y in plan]
         self.surface = self._outline(track)
         self._dots: dict[tuple[str, bool], tuple[pygame.Surface, int]] = {}
-        for car, col in config.CAR_COLORS.items():
+        for colour, col in config.CAR_COLORS.items():
             for big in (False, True):
-                self._dots[(car, big)] = self._dot(col, big)
+                self._dots[(colour, big)] = self._dot(col, big)
+        self._labels = {car_id: self._label(car_id) for car_id in
+                        ("p1", "p2", *config.CPU_IDS)}
 
     @classmethod
     def for_track(cls, track, size: tuple[int, int]) -> Minimap:
@@ -102,15 +107,53 @@ class Minimap:
         img = pygame.transform.smoothscale(s, (n // SS, n // SS))
         return img, n // SS // 2
 
-    def draw(self, surface: pygame.Surface, topleft: tuple[int, int], cars, players=()) -> None:
-        """The outline at topleft, then a dot per car: `cars` is (id, race distance), drawn
-        in order with the `players`' own (bigger, ringed) on top."""
+    @staticmethod
+    def _label(car_id: str) -> pygame.Surface:
+        """A car's name, small, with a dark edge so it reads over the road."""
+        col = config.PLAYER_COLORS.get(car_id, (225, 228, 238))
+        face = font(9)
+        fg = face.render(label(car_id), True, col)
+        edge = face.render(label(car_id), True, EDGE)
+        img = pygame.Surface((fg.get_width() + 2, fg.get_height() + 2), pygame.SRCALPHA)
+        for dx, dy in ((0, 1), (2, 1), (1, 0), (1, 2)):
+            img.blit(edge, (dx, dy))
+        img.blit(fg, (1, 1))
+        img.set_alpha(255, pygame.RLEACCEL)
+        return img
+
+    def layout(self, topleft: tuple[int, int], cars, players=()):
+        """Where each dot and name goes: ({id: (x, y, colour, mine)}, [(id, name's rect)]).
+        A name goes right of its dot, else left of it, else (in a bunch) is left out; the
+        people's are placed first, so theirs always show."""
         x0, y0 = topleft
+        spots = {}
+        for mine in (True, False):
+            for car_id, colour, z in cars:
+                if (car_id in players) == mine:
+                    x, y = self.point(z)
+                    spots[car_id] = (x0 + round(x), y0 + round(y), colour, mine)
+        taken: list[pygame.Rect] = []
+        names = []
+        for car_id, (px, py, colour, mine) in spots.items():  # people first
+            half = self._dots[(colour, mine)][1]
+            w, h = self._labels[car_id].get_size()
+            for x in (px + half - 1, px - half + 1 - w):
+                rect = pygame.Rect(x, py - h // 2, w, h)
+                if rect.collidelist(taken) < 0:
+                    taken.append(rect)
+                    names.append((car_id, rect))
+                    break
+        return spots, names
+
+    def draw(self, surface: pygame.Surface, topleft: tuple[int, int], cars, players=()) -> None:
+        """The outline at topleft, then a dot per car with its name (`layout`): `cars` is
+        (id, colour, race distance), the `players`' own dots (bigger, ringed) on top."""
         surface.blit(self.surface, topleft)
+        spots, names = self.layout(topleft, cars, players)
         for mine in (False, True):
-            for car_id, z in cars:
-                if (car_id in players) != mine:
-                    continue
-                img, half = self._dots[(car_id, mine)]
-                x, y = self.point(z)
-                surface.blit(img, (x0 + round(x) - half, y0 + round(y) - half))
+            for px, py, colour, own in spots.values():
+                if own == mine:
+                    img, half = self._dots[(colour, own)]
+                    surface.blit(img, (px - half, py - half))
+        for car_id, rect in names:
+            surface.blit(self._labels[car_id], rect)

@@ -1,18 +1,21 @@
 """`--selftest SECONDS`: a scripted session through the real loop, renderer and match.
 
 It plays, as a visitor would, and checks the match at every turn:
-1. the title, untouched until the attract race starts, then a while of it; the menu moved
-   down onto QUIT (a held stick stays there) and back up;
-2. Start on QUIT: a 1 PLAYER match (Start never quits), its HOW TO PLAY card (a press in
-   its first 0.3 s ignored, then X goes on), the countdown, a race steered by a bot with the stick mashed on top (A
+1. the title, untouched until the attract race starts, then a while of it; the menu: BOTS
+   stepped down and back up with left and right (clamped at 5), a held stick down onto
+   QUIT (it stays there), a held diagonal up a row (and no value changed), back on QUIT;
+2. Start on QUIT: a 1 player, 5 TOUGH bots match (Start never quits), its HOW TO PLAY card
+   (a press in its first 0.3 s ignored, then X goes on), the countdown, a race steered by
+   the AI with the stick mashed on top (A
    pressed at random, Select tapped, Start to pause, the pause menu moved and B to
    resume), through the CIRCUIT CHECK (all 16 gates before it, a freeze of about a
    second while the car drives on, no gate after it), to the finish and the result; a
    mashed A in the result's lock is ignored, then A rematches; in the rematch, pause and
    QUIT TO TITLE with A held on: the title must wait for it to be let go;
-3. 2 PLAYERS (picked with the stick): the card, then a race with both pads driven the same
-   way, to the result, B to the title;
-4. a race left untouched: 60 s later it is back on the title, at 1 PLAYER;
+3. PLAYERS 2, BOTS 2, LEVEL BRUTAL (picked with the stick): the card, then a race of four
+   with both pads driven the same way, to the result, B to the title;
+4. a race left untouched: 60 s later it is back on the title, its rows reset (1 player,
+   5 bots, TOUGH);
 5. QUIT, with A: the game exits (the script fails if it is still running a frame later).
 
 It stops after SECONDS of game time (exit 0 if every check held until then) or at the
@@ -28,7 +31,7 @@ import time
 
 import pygame
 
-from gate_prix import bot, config
+from gate_prix import ai, config
 from gate_prix.match import (COUNTDOWN, HOWTO, PAUSED, RACE, RESULT, TITLE, FrameInput,
                              PlayerInput)
 
@@ -54,7 +57,7 @@ class Script:
         self.error: str | None = None
         self.pending: str | None = None
         self.taken: list[str] = []
-        self._drivers: dict[str, bot.Bot] = {}
+        self._drivers: dict[str, ai.Driver] = {}
         self._race_id = None
         self._gen = self._script()
         self._wall = time.perf_counter()
@@ -110,7 +113,7 @@ class Script:
             return FrameInput()
         if id(race) != self._race_id:
             self._race_id = id(race)
-            self._drivers = {p: bot.Bot(p, 0.8, self.rng.randrange(1000)) for p in m.players}
+            self._drivers = {p: ai.Driver(p, "TOUGH", self.rng.randrange(1000)) for p in m.players}
         players = {}
         for p in ("p1", "p2"):
             if p not in self._drivers or m.state != RACE:
@@ -156,7 +159,8 @@ class Script:
     def _script(self):
         m = self.match
         yield from self.idle(0.5)
-        check(m.state == TITLE and m.mode == 1 and not m.attract, "the title at 1 PLAYER")
+        check(m.state == TITLE and (m.mode, m.bot_count, m.level) == (1, 5, "TOUGH")
+              and not m.attract, "the title at 1 player, 5 bots, TOUGH")
         yield from self.snap("title")
         yield from self.idle(config.ATTRACT_DELAY)
         check(m.attract and m.race is not None and m.race.players == 2, "the attract race")
@@ -165,32 +169,47 @@ class Script:
         yield from self.idle(DT)
         check(m.race.time > 7.0, "the attract race drives")
 
-        # the menu: down onto QUIT and back up, then Start on QUIT
+        # the menu: BOTS down and up, down onto QUIT and back up, then Start on QUIT
         yield from self.tap(nav=(0, 1))
         check(m.title_index == 0 and not m.attract, "the stick stops the demo, and only that")
         yield from self.tap(nav=(0, 1))
-        check(m.mode == 2 and m.title_index == 1, "down: 2 PLAYERS")
+        check(m.title_index == 1, "down: BOTS")
+        yield from self.tap(nav=(-1, 0), stick=(-1, 0))
+        check(m.bot_count == 4 and m.title_index == 1, "left: one bot fewer")
+        for _ in range(2):
+            yield from self.tap(nav=(1, 0), stick=(1, 0))
+        check(m.bot_count == 5, "right: back to 5, and no further")
+        yield from self.snap("title-bots")
         for k in range(40):  # the stick held down, auto-repeating: QUIT, and it stays there
             yield self._press(nav=(0, 1) if k == 0 or self.rng.random() < 0.2 else (0, 0),
                               stick=(0, 1))
-            check(m.title_index == 2, "a held stick stops on QUIT, the last row")
+            check(m.title_index == 2, "a held stick steps once per push: LEVEL")
+        yield from self.idle(DT)  # let go
+        yield from self.tap(nav=(0, 1))
+        check(m.title_index == 3, "QUIT, the last row")
+        for _ in range(3):
+            yield from self.tap(nav=(0, 1), stick=(0, 1))
+        check(m.title_index == 3, "the stick stops on QUIT")
         yield from self.snap("title-quit")
         for k in range(60):  # held up-right, the y axis two frames late: one step up
             yield self._press(nav=(1 if k % 9 == 0 else 0, -1 if k == 2 else 0),
                               stick=(1, -1 if k >= 2 else 0))
-            check(m.title_index == (2 if k < 2 else 1), "a held diagonal steps once")
+            check(m.title_index == (3 if k < 2 else 2), "a held diagonal steps once")
+        check(m.level == "TOUGH", "a diagonal never changes a value")
         yield from self.tap(nav=(0, 1))
-        check(m.title_index == 2, "back on QUIT")
+        check(m.title_index == 3, "back on QUIT")
         yield from self.tap("p2", start=True)
-        check(m.state == HOWTO and m.mode == 1 and not m.quit_requested,
-              "Start on QUIT begins 1 PLAYER, with the HOW TO PLAY card")
+        check(m.state == HOWTO and (m.mode, m.bot_count, m.level) == (1, 5, "TOUGH")
+              and not m.quit_requested, "Start on QUIT begins the race, with the card")
         yield from self.idle(0.1)
         yield from self.tap(a=True)
         check(m.state == HOWTO, "the card ignores a press in its first 0.3 s")
         yield from self.idle(0.6)
         yield from self.snap("howto-1p")
         yield from self.tap("p2", button=True)  # X: any button goes on
-        check(m.state == COUNTDOWN and m.race.players == 1, "any button: the 1P countdown")
+        check(m.state == COUNTDOWN and m.race.players == 1 and len(m.race.racers) == 6
+              and {d.level for d in m.drivers.values()} == {"TOUGH"},
+              "any button: the 1P countdown, 5 TOUGH bots")
         yield from self.idle(1.4)
         yield from self.snap("countdown")
         yield from self.idle(config.COUNTDOWN - 1.4 + 0.1)
@@ -241,15 +260,26 @@ class Script:
         check(m.state == TITLE, "the title waits for the buttons to be let go")
         yield from self.idle(0.2)
 
-        # 2 PLAYERS
-        yield from self.tap("p2", nav=(0, 1))
-        check(m.mode == 2, "2 PLAYERS")
+        # PLAYERS 2, BOTS 2, LEVEL BRUTAL
+        check(m.title_index == 0, "back on PLAYERS")
+        yield from self.tap("p2", nav=(1, 0), stick=(1, 0))
+        check(m.mode == 2 and m.bot_count == 4, "PLAYERS 2: the field stays full, 4 bots")
+        yield from self.tap(nav=(0, 1))
+        for _ in range(2):
+            yield from self.tap(nav=(-1, 0), stick=(-1, 0))
+        yield from self.tap(nav=(0, 1))
+        for _ in range(2):
+            yield from self.tap(nav=(1, 0), stick=(1, 0))
+        check((m.mode, m.bot_count, m.level) == (2, 2, "BRUTAL"), "2 players, 2 bots, BRUTAL")
+        yield from self.snap("title-2p")
         yield from self.tap(a=True)
         check(m.state == HOWTO, "A: the HOW TO PLAY card")
         yield from self.idle(0.5)
         yield from self.snap("howto-2p")
         yield from self.tap("p2", b=True)
-        check(m.state == COUNTDOWN and m.race.players == 2, "B on the card: a 2P countdown")
+        check(m.state == COUNTDOWN and m.race.players == 2 and len(m.race.racers) == 4
+              and {d.level for d in m.drivers.values()} == {"BRUTAL"},
+              "B on the card: a 2P countdown, 2 BRUTAL bots")
         yield from self.idle(0.5)
         yield from self.snap("countdown-2p")
         yield from self.idle(config.COUNTDOWN - 0.4)
@@ -267,19 +297,20 @@ class Script:
         check(m.state == TITLE and m.mode == 2, "B goes to the title")
         yield from self.idle(0.2)
 
-        # a race left alone: back to the title at 1 PLAYER
+        # a race left alone: back to the title, its rows reset
         yield from self.tap(start=True)
         yield from self.idle(0.4)
         yield from self.tap(start=True)
         check(m.state == COUNTDOWN, "Start on the card goes on, never pauses it")
         yield from self.idle(config.IDLE_TIMEOUT + 0.5)
-        check(m.state == TITLE and m.mode == 1, "60 s untouched: the title, 1 PLAYER")
+        check(m.state == TITLE and (m.mode, m.bot_count, m.level) == (1, 5, "TOUGH"),
+              "60 s untouched: the title, its rows reset")
         yield from self.snap("idle-title")
         yield from self.idle(0.5)
 
-        # QUIT: down twice, then A
-        yield from self.tap(nav=(0, 1))
-        yield from self.tap(nav=(0, 1))
-        check(m.title_index == 2, "QUIT")
+        # QUIT: down three times, then A
+        for _ in range(3):
+            yield from self.tap(nav=(0, 1))
+        check(m.title_index == 3, "QUIT")
         yield self._press(a=True)
         check(False, "A on QUIT quits the game")

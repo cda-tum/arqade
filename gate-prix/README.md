@@ -9,7 +9,8 @@ Design: `../docs/superpowers/specs/2026-10-12-gate-prix-design.md`; the approved
 
 **Status:** playable, with the first playtest's changes (fewer gates and a gate-free final
 lap, a simpler HUD, items that explain themselves, the CIRCUIT CHECK as an event, and more
-sense of speed). The race, items, CPU racers, title with an attract race, pause, results,
+sense of speed). The race, items, the AI's bots at three levels, the title (PLAYERS, BOTS,
+LEVEL) with an attract race, pause, results,
 sound, `--input-test` and the Batocera deploy script are in; the screens get the look
 file's polish next (Task 6 of the plan). Button numbers follow the ones confirmed on the
 cabinet. The second playtest's changes are in: drifting, the noise storm, MEASURE, TUNNEL
@@ -19,9 +20,31 @@ PLAY card.
 
 ## The race
 
-- **6 cars, 3 laps** of about 40 s. 2 PLAYERS race in a vertical split screen (P1 on the
-  left, blue; P2 on the right, red) against 4 CPU racers; 1 PLAYER gets the full screen
-  against 5.
+- **Up to 6 cars, 3 laps** of about 40 s. 2 players race in a vertical split screen (P1
+  on the left, blue; P2 on the right, red); 1 player gets the full screen. The **bots**
+  fill the rest of the field by default (5 against one player, 4 against two), or as many
+  as the title's BOTS row says: none at all is a time trial alone, or a duel for two.
+- **The bots** are one AI (`ai.py`) at the title's **LEVEL**, the same for all of them:
+  - **EASY**, for a first-time visitor: it goes for the right arch only about 45% of the
+    time, drives at 94% of the top speed, brakes into the sharp curves instead of drifting,
+    misses half the hazards, fumbles half its items (using them at once, wherever it is),
+    reacts late (it looks at the traffic every fifth of a second) and wanders off its line;
+  - **TOUGH** (the default) makes a decent player work: about 4 rows in 5 right, drifts
+    most sharp curves, sees nearly every hazard, plays every item at its moment, and is
+    rubber-banded a little (3% slower in front, 3% quicker at the back);
+  - **BRUTAL** is as near perfect as the game allows: every right arch, every curve
+    drifted, every hazard seen, every item played at its moment, and it knows the rivals'
+    items too (it never MEASUREs a car that holds a TUNNEL). It never eases off in front.
+
+  Inside a level each bot differs a little (its aim and pace, and its own line), so a field
+  never moves in lockstep. The bots are labelled CPU1 to CPU5 and wear neutral colours
+  (white, tan, silver, cream, graphite), never a player's; your own car has a white
+  outline. Alone on the track over 20 seeds a race takes BRUTAL about 87 s, TOUGH 107 s and
+  EASY 127 s (`tools/race_stats.py --ladder`). Scripted players in a 5-bot race: one with
+  60% right gates, no drifting and no items beats EASY 20 races out of 20 (at 50% 19, at
+  40% 13), and loses to TOUGH every time; a perfect-gate player (no drifting, no items)
+  beats TOUGH 19 times in 20 by about 8 s, and loses to BRUTAL every time by about a
+  second.
 - **The start and finish line** is a chequered band across the road under a gantry with
   a "GATE PRIX" banner and five start lights: red one by one in the 3-2-1 countdown, all
   green at GO. Crossing it shows LAP 2/3, and FINAL LAP with STORM AHEAD.
@@ -42,11 +65,11 @@ PLAY card.
   GATES CORRECT", the wrong ones marked) while your car drives on (the race keeps going for
   everyone else), then comes the **LIGHT SPEED!** warp: (right / 16)² x 100% extra speed
   for 2 s + 0.25 s per right gate. A perfect circuit is +100% for 6 s, 14/16 is +77% for
-  5.5 s, 12/16 is +56% for 5 s. The CPU racers get the same check by their own circuits,
+  5.5 s, 12/16 is +56% for 5 s. The bots get the same check by their own circuits,
   so a better circuit's warp passes them.
   A check under +5% (3/16 or fewer) is **NO BOOST**: no warp at all.
 - **The final lap** has no gates, but a **noise storm**: your own decoherence hazards, that
-  only you see (drawn in your view only) and hit (the CPUs get theirs). There are 4 + 2 per wrong gate of the check
+  only you see (drawn in your view only) and hit (the bots get theirs). There are 4 + 2 per wrong gate of the check
   (a perfect circuit 4, 8/16 20, at most 24), spread over the lap, never within 1 s of the
   finish, and they always leave a clear line more than a car wide:
   - a **static cloud** (wide, crackling grey-violet) takes your boosts and caps you at 70%
@@ -86,16 +109,20 @@ PLAY card.
   green, ✗ red; in 2P two rows of 8, a lap each); past the last row "TO THE LINE", and on
   the final lap "FINAL LAP: NO GATES". Top right the place and the lap, and the held item
   under them (beside them in 1P).
-- **The minimap:** the lap from above with a dot per car (yours bigger, ringed), small
+- **The minimap:** the lap from above with a dot per car (yours bigger, ringed), each
+  named beside it (P1, P2, CPU1 ...; in a bunch the people's names come first), small
   ticks for the gate rows (gold) and boxes (blue) and the finish line. 1P: bottom left;
   2P: one map for both, straddling the divider at the bottom.
 - **Speed you can feel:** the top speed is 12% up from the first build, the roadside
   stands close to the road, speed lines show at top speed, the camera shakes a little,
   and a boost widens the field of view, lights the exhaust and whooshes.
-- **The result:** places and times, and each player's circuit under the target with its
+- **The result:** places (the bots as CPU1 ...) and times, and each player's circuit under the target with its
   accuracy ("14/16 GATES") and its check ("CHECK 12/16"). A rematches, B goes to the title.
-- **2 PLAYERS:** the race ends when both have finished, or 40 s after the first one did
-  (the other is placed where they are). A finished car is driven on by the computer.
+- **2 players:** the race ends when both have finished, or 40 s after the first one did
+  (the other is placed where they are). A finished car is driven on by the AI.
+- **Sounds:** what a bot does to you (a bump, a MEASURE that hits you, its cloud you
+  drive through) sounds as it does from a person; a bot's own drifts, boosts, streaks,
+  boxes and items stay silent, so a full field never turns into noise.
 
 ## Controls
 
@@ -105,24 +132,31 @@ PLAY card.
 | Brake | stick pulled straight back | D | Down |
 | Drift (let go for the mini-turbo) | stick pulled back and steered | D + S / F | Down + Left / Right |
 | Use the item; confirm in menus | A | Q | . |
+| Title: choose a row / change its value | stick up, down / left, right | E, D / S, F | arrows |
 | Back (pause menu, result) | B | W | , |
 | Start the race; pause (RESUME / QUIT TO TITLE) | Start | 1 | 2 |
 | Select (only for the quit) | Select | 3 | 4 |
 | Quit | Start + Select on one pad | 1 + 3, or Esc | 2 + 4, or Esc |
 
-- **Title:** 1 PLAYER / 2 PLAYERS / QUIT. The stick moves up and down one row at a time,
-  stopping at the ends (no wrap). A begins the highlighted mode, and on **QUIT** quits the
-  game at once. Start always begins (1 PLAYER when QUIT is highlighted) and never quits;
-  B does nothing. A button already held when the game starts must be let go first.
-  Untouched for 3 s, an attract race of 6 CPU-driven cars plays behind it.
+- **Title:** four rows, **PLAYERS** (1 or 2), **BOTS** (0 up to 6 minus the players; 5 by
+  default), **LEVEL** (EASY, TOUGH or BRUTAL; TOUGH by default) and **QUIT**. The stick
+  moves up and down one row per push, and left and right change the highlighted row's
+  value one step per push, both stopping at the ends (no wrap); a diagonal moves the row
+  and never a value. Going to 2 players keeps a full field full (4 bots), and back to 1
+  fills it again. A line under the rows says what you picked ("A TIME TRIAL: JUST YOU").
+  A or Start begins the race as set; A on **QUIT** quits the game at once, and Start never
+  quits. B does nothing. A button already held when the game starts must be let go first.
+  Untouched for 3 s, an attract race of 6 cars driven by the AI at TOUGH plays behind it;
+  whoever stops it finds PLAYERS highlighted, never QUIT.
 - **HOW TO PLAY:** every match begun from the title (not a rematch) opens on a card: the
   goal, a demo of a car steering through the glowing arch and boosting (the real race and
-  CPU driver), and the controls (the stick: steer, brake, STICK BACK + STEER: DRIFT; the
+  the AI at BRUTAL), and the controls (the stick: steer, brake, STICK BACK + STEER: DRIFT; the
   L X R / Y B A buttons with A lit; START). Any button on either pad goes on, after its
   first 0.3 s; the stick doesn't. Start + Select still quits and the idle timeout runs.
 - **Pause:** Start, on either pad. The stick moves, A picks, B or Start resumes.
-- **Idle:** 60 s untouched anywhere (paused too) returns to the title, at 1 PLAYER.
-- With 1 PLAYER either pad drives. The accelerator is automatic.
+- **Idle:** 60 s untouched anywhere (paused too) returns to the title, its rows reset (1
+  player, 5 bots, TOUGH).
+- With 1 player either pad drives. The accelerator is automatic.
 - The keyboard is a dev fallback only: P1's keys avoid `l x r b y a`, which the cabinet's
   P1 encoder also types, and the cabinet's loader passes `--no-keyboard`. The stick is read
   as an analog axis (axis 0 steers, axis 1 brakes), never a hat.
@@ -145,11 +179,12 @@ uv run python -m gate_prix --selftest 600 --shots /tmp/gate-prix-shots
 From the repo root, `./arqade.sh` runs it from the ARQADE launcher's menu too.
 
 `--selftest SECONDS` plays a scripted session through the real loop and renderer, as fast
-as the machine draws: the title and the attract race, the menu held down onto QUIT and
-back, Start on QUIT (a 1P match) and its HOW TO PLAY card (a press in its first 0.3 s
-ignored), a 1P race steered by a bot with the stick mashed on top (pause and resume, the
-result, a rematch, QUIT TO TITLE with A held), the 2P card and a 2P race to the result, a
-race left alone until the idle timeout, and finally A on QUIT, which must quit the game. On the way it checks
+as the machine draws: the title and the attract race, BOTS stepped down and up, the menu
+held down onto QUIT and back, Start on QUIT (1 player, 5 TOUGH bots) and its HOW TO PLAY
+card (a press in its first 0.3 s ignored), a 1P race steered by the AI with the stick
+mashed on top (pause and resume, the result, a rematch, QUIT TO TITLE with A held), 2
+players with 2 BRUTAL bots: the card and the race to the result, a race left alone until
+the idle timeout (the rows reset), and finally A on QUIT, which must quit the game. On the way it checks
 that all 16 gates come before the final lap and none on it, and that the CIRCUIT CHECK's
 freeze lasts about a second while the car drives on. It checks the
 match at every step and exits 0 if all held (it stops early, still 0, after SECONDS of game
@@ -159,12 +194,13 @@ races.
 ## Tests
 
 ```bash
-uv run pytest -q                                            # about 40 s
+uv run pytest -q                                            # about 50 s
 uvx --from 'ruff==0.15.22' ruff check src tests tools
 ```
 
 The tests cover the circuit, the track and its gate rows, the car's handling, the race
-rules, items, the CPU racers (over many seeds), the road projection and sprite cache, the
+rules, items, the AI (its levels and the ladder alone on the track, and who beats which
+level over many seeds), the road projection and sprite cache, the
 match flow (title, attract, countdown, pause, idle, finish, result), the input (axes,
 presses, the armed Start + Select quit, keyboard fallbacks, `--no-keyboard`), the QUIT row
 and the HOW TO PLAY card, the demo, the minimap, the renderer drawing every effect from its
@@ -178,7 +214,7 @@ caches only, the sound table, and a short scripted session of the real loop.
 | `tools/drive_demo.py` | A real race with debug text; `--auto` drives P1 perfectly. |
 | `tools/benchmark.py` | Times the road renderer (2 views of 480x540, then 1; plain, then with the warp's and the drift, storm, gantry and minimap effects); runs headless, also on the cabinet. |
 | `tools/handling.py` | How the track drives, piece by piece, for tuning the handling. |
-| `tools/race_stats.py` | Races the CPUs over many seeds: gate rates, finish gaps and P1's margin, bumps, items, turbos and hits. |
+| `tools/race_stats.py` | Races the bots (`--level`, `--bots`) against a scripted P1 (`--player perfect`, `mediocre` with `--right`, `ai`, `park`) over many seeds: gate rates, finish gaps and P1's margin, bumps, items, turbos and hits. `--ladder` times each level alone on the track. |
 
 ## Layout (`src/gate_prix/`)
 
@@ -189,13 +225,13 @@ caches only, the sound table, and a short scripted session of the real loop.
 | `car.py` | Car physics: auto-acceleration, steering, drifting, curves, off-road, boosts, spin-outs, bumps. Pure. |
 | `race.py` | The race: cars, arches, items (shots, clouds), laps, the CIRCUIT CHECK, the storm, places, the finish. Pure. |
 | `storm.py` | The final lap's noise storm: one racer's hazards, laid out from its check. Pure. |
-| `bot.py` | The CPU racers (and the attract race's drivers, and a finished player's autopilot). Pure. |
+| `ai.py` | The one AI: `Skill`, `SKILLS` (EASY / TOUGH / BRUTAL) and the `Driver` for the bots, the attract race, a finished player's autopilot and the HOW TO PLAY demo. Pure. |
 | `match.py` | Title (and QUIT), the HOW TO PLAY card, attract, countdown, race, pause, result, idle. Pure. |
 | `road.py` | The pseudo-3D projection and road drawing (and the chequered lap line) for one view. |
 | `sprites.py` | Every sprite pre-rendered at 24 sizes at start-up (cars tilted and see-through too, the gantry, sparks, the storm, shots); the backgrounds per view size. |
 | `icons.py` | The five item icons, drawn once per size. |
-| `minimap.py` | The lap from above, drawn once; a dot per car per frame. |
-| `tutorial.py` | The HOW TO PLAY card and its demo (a real race, the CPU driver on P1's car). |
+| `minimap.py` | The lap from above, drawn once; a dot and a name per car per frame. |
+| `tutorial.py` | The HOW TO PLAY card and its demo (a real race, the AI on P1's car). |
 | `render.py` | The views, the HUD, the banners and the screens. |
 | `audio.py` | Synthesised effects and the engine hum (pitch follows speed); silent without a mixer. |
 | `input.py`, `display.py` | Pads and dev keys; the 960x540 surface scaled onto the screen. |

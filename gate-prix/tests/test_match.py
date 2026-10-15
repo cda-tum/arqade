@@ -6,7 +6,8 @@ import random
 import pytest
 
 from gate_prix import config
-from gate_prix.match import (COUNTDOWN, HOWTO, PAUSED, RACE, RESULT, TITLE, Cue, FrameInput,
+from gate_prix.match import (AIMED, COUNTDOWN, HOWTO, PAUSED, RACE, RESULT, TITLE, Cue,
+                             FrameInput,
                              Match, PlayerInput)
 
 DT = 1 / 60
@@ -26,6 +27,8 @@ DOWN = frame(p1={"nav": (0, 1)})
 HELD = frame(p1={"held": True})
 X = frame(p2={"button": True})  # a button that is none of A, B, Start, Select
 UP = frame(p1={"nav": (0, -1)})
+RIGHT = frame(p1={"nav": (1, 0), "stick": (1, 0)})
+LEFT = frame(p1={"nav": (-1, 0), "stick": (-1, 0)})
 
 
 def run(m: Match, seconds: float, inp: FrameInput = IDLE) -> list:
@@ -55,11 +58,18 @@ def through_card(m: Match, inp: FrameInput = X) -> list:
     return events
 
 
+def tap(m: Match, inp: FrameInput) -> list:
+    """One push of the stick (or a press), then let go."""
+    events = m.update(DT, inp)
+    m.update(DT, IDLE)
+    return events
+
+
 def begun(mode=1, seed=1) -> Match:
     """A match whose countdown has just begun (past the title and the card)."""
     m = fresh(seed)
     if mode == 2:
-        m.update(DT, DOWN)
+        tap(m, RIGHT)  # PLAYERS 2
     m.update(DT, START)
     through_card(m)
     return m
@@ -87,28 +97,77 @@ def finish(m: Match, car_id: str) -> None:
 # --- The title -------------------------------------------------------------------------------
 
 
-def test_the_title_starts_at_one_player_and_the_stick_steps_through_three_rows():
+def settings(m: Match) -> tuple:
+    return m.mode, m.bot_count, m.level
+
+
+def test_the_title_starts_at_one_player_five_bots_tough_and_steps_through_four_rows():
     m = fresh(1)
-    assert m.state == TITLE and m.mode == 1 and m.title_index == 0
-    assert config.TITLE_ITEMS == ("1 PLAYER", "2 PLAYERS", "QUIT")
+    assert m.state == TITLE and settings(m) == (1, 5, "TOUGH") and m.title_index == 0
+    assert config.TITLE_ITEMS == ("PLAYERS", "BOTS", "LEVEL", "QUIT")
     events = m.update(DT, DOWN)
-    assert m.mode == 2 and m.title_index == 1 and cues(events, "blip")
-    events = m.update(DT, frame(p2={"nav": (0, 1), "stick": (0, 1)}))  # down again: QUIT
-    assert m.title_index == 2 and m.mode == 2 and cues(events, "blip")
-    events = m.update(DT, DOWN)  # clamped: no wrap round to the top
-    assert m.title_index == 2 and not cues(events, "blip")
-    events = m.update(DT, frame(p2={"nav": (0, -1)}))  # up, on either pad
     assert m.title_index == 1 and cues(events, "blip")
-    m.update(DT, UP)
-    m.update(DT, UP)  # clamped at the top too
-    assert m.title_index == 0 and m.mode == 1
-    m.update(DT, frame(p1={"nav": (1, 0), "stick": (1, 0)}))  # sideways: nothing
+    events = tap(m, frame(p2={"nav": (0, 1), "stick": (0, 1)}))  # down again: LEVEL
+    assert m.title_index == 2 and cues(events, "blip")
+    tap(m, DOWN)
+    assert m.title_index == 3  # QUIT, the last row
+    events = m.update(DT, DOWN)  # clamped: no wrap round to the top
+    assert m.title_index == 3 and not cues(events, "blip")
+    events = m.update(DT, frame(p2={"nav": (0, -1)}))  # up, on either pad
+    assert m.title_index == 2 and cues(events, "blip")
+    for _ in range(3):
+        m.update(DT, UP)  # clamped at the top too
     assert m.title_index == 0
+    assert settings(m) == (1, 5, "TOUGH")  # moving between the rows changes no value
 
 
-def held_diagonal(dx: int, dy: int, lag: int, seconds: float = 2.0):
-    """Frames of a stick held on a diagonal through the real auto-repeat, the y axis
-    crossing its threshold `lag` frames after x (as a real stick's two axes do)."""
+def test_left_and_right_change_the_highlighted_rows_value_clamped():
+    m = fresh(1)
+    # PLAYERS: 1 or 2, and a full field stays full (5 bots alone, 4 with two)
+    events = tap(m, RIGHT)
+    assert settings(m) == (2, 4, "TOUGH") and cues(events, "blip")
+    events = tap(m, RIGHT)
+    assert settings(m) == (2, 4, "TOUGH") and not cues(events, "blip")  # clamped, silent
+    tap(m, LEFT)
+    assert settings(m) == (1, 5, "TOUGH")
+    # BOTS: 0 up to 6 - players
+    tap(m, DOWN)
+    for _ in range(7):
+        tap(m, LEFT)
+    assert m.bot_count == 0  # 1 player alone: a time trial
+    tap(m, RIGHT)
+    tap(m, RIGHT)
+    assert m.bot_count == 2
+    tap(m, UP)
+    tap(m, RIGHT)
+    assert settings(m) == (2, 2, "TOUGH")  # not a full field: kept as it was
+    tap(m, DOWN)
+    for _ in range(5):
+        tap(m, RIGHT)
+    assert m.bot_count == 4  # 2 players: at most 4 bots
+    tap(m, UP)
+    tap(m, LEFT)
+    assert settings(m) == (1, 5, "TOUGH")  # full again: 5 with one player
+    # LEVEL: EASY, TOUGH, BRUTAL
+    tap(m, DOWN)
+    tap(m, DOWN)
+    tap(m, LEFT)
+    assert m.level == "EASY"
+    tap(m, LEFT)
+    assert m.level == "EASY"
+    tap(m, RIGHT)
+    tap(m, RIGHT)
+    tap(m, RIGHT)
+    assert m.level == "BRUTAL"
+    # QUIT has no value
+    tap(m, DOWN)
+    events = tap(m, RIGHT)
+    assert m.title_index == 3 and settings(m) == (1, 5, "BRUTAL") and not cues(events)
+
+
+def held(dx: int, dy: int, lag: int = 0, seconds: float = 2.0):
+    """Frames of a stick held (on a diagonal, with dx and dy) through the real auto-repeat,
+    the y axis crossing its threshold `lag` frames after x (as a real stick's two axes do)."""
     from gate_prix.input import AutoRepeat
 
     rx, ry = AutoRepeat(), AutoRepeat()
@@ -119,19 +178,22 @@ def held_diagonal(dx: int, dy: int, lag: int, seconds: float = 2.0):
 
 
 @pytest.mark.parametrize("dx, dy, start, want", [(1, -1, 1, 0), (-1, 1, 1, 2), (1, 1, 0, 1),
-                                                  (-1, -1, 2, 1)])
+                                                  (-1, -1, 2, 1), (1, 1, 2, 3)])
 @pytest.mark.parametrize("lag", [0, 2, 5])
-def test_a_held_diagonal_moves_one_row_up_or_down(dx, dy, start, want, lag):
-    """The sideways repeats never move the menu, and a held push moves it one row."""
+def test_a_held_diagonal_moves_one_row_up_or_down_and_never_a_value(dx, dy, start, want, lag):
+    """The sideways repeats never move the menu, and a held push moves it one row. Only a
+    push straight sideways changes a value: a diagonal's x is the stick's slop."""
     m = fresh(1)
     for _ in range(start):
-        m.update(DT, DOWN)
+        tap(m, DOWN)
     rows = []
-    for inp in held_diagonal(dx, dy, lag):
+    for inp in held(dx, dy, lag):
         m.update(DT, inp)
         rows.append(m.title_index)
     steps = [b - a for a, b in zip(rows, rows[1:]) if a != b]
     assert rows[-1] == want and all(d == (1 if dy > 0 else -1) for d in steps), rows[:20]
+    if lag == 0:
+        assert settings(m) == (1, 5, "TOUGH")
 
 
 def test_two_pads_held_opposite_ways_follow_p1():
@@ -145,59 +207,91 @@ def test_two_pads_held_opposite_ways_follow_p1():
     assert set(rows) == {2}
 
 
-def held_down(m: Match, seconds: float) -> int:
-    """Hold P1's stick down through the real auto-repeat; returns the blips."""
-    from gate_prix.input import AutoRepeat
-
-    rep, blips = AutoRepeat(), 0
-    for _ in range(round(seconds / DT)):
-        blips += len(cues(m.update(DT, frame(p1={"nav": (0, rep.update(DT, 1)),
-                                                 "stick": (0, 1)})), "blip"))
+def held_down(m: Match, seconds: float, dx: int = 0, dy: int = 1) -> int:
+    """Hold P1's stick (down) through the real auto-repeat; returns the blips."""
+    blips = sum(len(cues(m.update(DT, inp), "blip")) for inp in held(dx, dy, 0, seconds))
     m.update(DT, IDLE)  # let go
     return blips
 
 
 def test_a_held_stick_moves_one_row_per_push():
-    """A push held for 2 s from 1 PLAYER lands on 2 PLAYERS, never runs on to QUIT; a
-    second push reaches QUIT, and a third stays there (no wrap)."""
+    """A push held for 2 s from PLAYERS lands on BOTS, never runs on; each further push one
+    row more, and on QUIT it stays (no wrap)."""
     m = fresh(1)
-    assert held_down(m, 2.0) == 1 and m.title_index == 1 and m.mode == 2
-    assert held_down(m, 2.0) == 1 and m.title_index == 2
-    assert held_down(m, 2.0) == 0 and m.title_index == 2
+    for want in (1, 2, 3):
+        assert held_down(m, 2.0) == 1 and m.title_index == want
+    assert held_down(m, 2.0) == 0 and m.title_index == 3
+
+
+def test_a_held_sideways_push_changes_a_value_one_step():
+    m = fresh(1)
+    tap(m, DOWN)
+    assert held_down(m, 2.0, dx=-1, dy=0) == 1 and m.bot_count == 4
+    assert held_down(m, 2.0, dx=-1, dy=0) == 1 and m.bot_count == 3
+    assert held_down(m, 2.0, dx=1, dy=0) == 1 and m.bot_count == 4
 
 
 @pytest.mark.parametrize("button", [A, START])
-def test_a_title_left_on_quit_offers_a_mode_once_the_attract_race_runs(button):
+def test_a_title_left_on_quit_offers_players_once_the_attract_race_runs(button):
     """The next visitor's first press (A, most likely) starts a match, never quits."""
     m = fresh(1)
-    m.update(DT, DOWN)
-    m.update(DT, DOWN)
-    assert m.title_index == 2 and m.mode == 2
+    tap(m, RIGHT)  # 2 players
+    for _ in range(3):
+        tap(m, DOWN)
+    assert m.title_index == 3
     run(m, config.ATTRACT_DELAY + 1.0)
-    assert m.attract and m.title_index == 1  # back on the mode: 2 PLAYERS
+    assert m.attract and m.title_index == 0  # back on PLAYERS
     events = m.update(DT, button)
     assert not m.quit_requested and not cues(events, "quit")
-    assert m.state == HOWTO and m.mode == 2
+    assert m.state == HOWTO and settings(m) == (2, 4, "TOUGH")
 
 
 def test_a_on_quit_quits_at_once():
     m = fresh(1)
-    m.update(DT, DOWN)
-    m.update(DT, DOWN)
+    for _ in range(3):
+        tap(m, DOWN)
     assert not m.quit_requested
     events = m.update(DT, A)
     assert m.quit_requested and cues(events, "quit") and m.state == TITLE
 
 
-def test_start_never_quits_it_begins_one_player_from_quit():
+def test_start_never_quits_it_begins_the_race_as_set_from_quit():
     m = fresh(1)
-    m.update(DT, DOWN)  # 2 PLAYERS
-    m.update(DT, DOWN)  # QUIT
+    tap(m, RIGHT)  # 2 players
+    tap(m, DOWN)
+    tap(m, LEFT)  # 3 bots
+    tap(m, DOWN)
+    tap(m, LEFT)  # EASY
+    tap(m, DOWN)  # QUIT
     events = m.update(DT, START)
     assert not m.quit_requested and not cues(events, "quit")
-    assert m.state == HOWTO and m.mode == 1 and m.title_index == 0
+    assert m.state == HOWTO and m.title_index == 0 and settings(m) == (2, 3, "EASY")
     through_card(m)
-    assert m.race.players == 1
+    assert m.race.players == 2 and len(m.race.racers) == 5
+    assert {d.level for d in m.drivers.values()} == {"EASY"} and len(m.drivers) == 3
+
+
+@pytest.mark.parametrize("row", [0, 1, 2])
+def test_a_on_any_row_but_quit_begins_the_race(row):
+    m = fresh(1)
+    for _ in range(row):
+        tap(m, DOWN)
+    m.update(DT, A)
+    assert m.state == HOWTO and not m.quit_requested
+
+
+@pytest.mark.parametrize("mode, players", [(1, 1), (2, 2)])
+def test_no_bots_is_a_time_trial_alone_or_a_duel(mode, players):
+    m = fresh(1)
+    if mode == 2:
+        tap(m, RIGHT)
+    tap(m, DOWN)
+    for _ in range(5):
+        tap(m, LEFT)
+    m.update(DT, START)
+    through_card(m)
+    assert [r.car.id for r in m.race.racers] == ["p1", "p2"][:players]
+    assert m.drivers == {}
 
 
 def test_b_on_the_title_does_nothing():
@@ -213,26 +307,31 @@ def test_the_attract_race_never_picks_quit():
     assert m.attract and m.title_index == 0 and not m.quit_requested
 
 
-def test_the_input_that_stops_the_attract_race_does_not_change_the_mode():
+@pytest.mark.parametrize("inp", [DOWN, RIGHT])
+def test_the_input_that_stops_the_attract_race_changes_nothing(inp):
     m = fresh(1)
     run(m, config.ATTRACT_DELAY + 0.5)
     assert m.attract
-    events = m.update(DT, DOWN)
-    assert not m.attract and m.mode == 1 and not cues(events, "blip")
-    m.update(DT, DOWN)
+    events = m.update(DT, inp)
+    assert not m.attract and m.title_index == 0 and settings(m) == (1, 5, "TOUGH")
+    assert not cues(events, "blip")
+    m.update(DT, IDLE)
+    tap(m, RIGHT)
     assert m.mode == 2
 
 
 @pytest.mark.parametrize("button", ["a", "start"])
-def test_a_or_start_shows_the_card_then_the_countdown_with_the_chosen_players(button):
+def test_a_or_start_shows_the_card_then_the_countdown_with_the_chosen_field(button):
     for mode in (1, 2):
         m = fresh(1)
         if mode == 2:
-            m.update(DT, DOWN)
+            tap(m, RIGHT)
         events = m.update(DT, frame(p2={button: True, "held": True}))
         assert m.state == HOWTO and m.race is None and cues(events, "select")
         through_card(m)
         assert m.race.players == mode and not m.attract
+        assert len(m.race.racers) == config.CARS  # the bots fill the field
+        assert {d.level for d in m.drivers.values()} == {"TOUGH"}
 
 
 # --- The HOW TO PLAY card --------------------------------------------------------------------
@@ -287,8 +386,8 @@ def test_the_attract_race_runs_after_3_s_untouched_and_any_input_stops_it():
     assert m.state == TITLE and m.attract and m.race is not None
     race = m.race
     assert race.players == 2 and race.finish_all
-    assert set(m.bots) == {r.car.id for r in race.racers}  # bots drive P1 and P2 too
-    assert all(m.bots[p].skill == config.ATTRACT_SKILL for p in ("p1", "p2"))
+    assert set(m.drivers) == {r.car.id for r in race.racers}  # the AI drives P1 and P2 too
+    assert {d.level for d in m.drivers.values()} == {config.ATTRACT_LEVEL} == {"TOUGH"}
     events = run(m, 2.0)
     assert race.time > 1.5 and not events  # the attract race is silent
     m.update(DT, frame(p2={"steer": 0.5}))
@@ -384,6 +483,25 @@ def test_race_events_of_the_players_reach_the_sound_and_the_hud():
     assert [e for e in events if getattr(e, "kind", None) == "right" and e.car == "p1"]
 
 
+def test_a_bots_own_cues_stay_silent_what_it_does_to_a_person_sounds():
+    """The sound policy: a bot's drifts, turbos, streaks, boxes and items never reach the
+    sound or the HUD; a bump or a hit it gives a person does, through the person's car."""
+    m = started()
+    events = run(m, 25.0, frame(p1={"steer": 0.0}))
+    race_events = [e for e in events if not isinstance(e, Cue)]
+    bots = {r.car.id for r in m.race.racers if not r.player}
+    assert all(e.car == "p1" or (e.kind in AIMED and e.value == "p1") for e in race_events)
+    assert not any(e.car in bots for e in race_events if e.kind not in AIMED)
+    p1, c1, c2 = m.race.racer("p1").car, m.race.racer("cpu1").car, m.race.racer("cpu2").car
+    c1.z, c1.x, c1.speed = p1.z + 100.0, p1.x + 0.1, p1.speed  # a bot bumps P1
+    c2.z, c2.x = c1.z + 50_000.0, 0.0
+    m.race.racer("cpu3").car.z, m.race.racer("cpu3").car.x = c2.z + 100.0, 0.1  # and a bot
+    events = m.update(DT, frame(p1={"steer": 0.0}))
+    bumps = [(e.car, e.value) for e in events if getattr(e, "kind", None) == "bump"]
+    # both sides of P1's bump (one sound: a frame's sounds play once); the bots' own is silent
+    assert sorted(bumps) == [("cpu1", "p1"), ("p1", "cpu1")]
+
+
 # --- Pause -----------------------------------------------------------------------------------
 
 
@@ -465,8 +583,9 @@ def test_a_minute_untouched_goes_back_to_the_title_at_one_player(paused):
     m.update(DT, START if paused else frame(p1={"steer": 0.1}))
     run(m, config.IDLE_TIMEOUT - 1.0)
     assert m.state != TITLE
+    m.level = "BRUTAL"
     run(m, 1.1)
-    assert m.state == TITLE and m.mode == 1 and m.race is None
+    assert m.state == TITLE and settings(m) == (1, 5, "TOUGH") and m.race is None
 
 
 def test_touching_anything_keeps_the_race_going():
@@ -490,13 +609,16 @@ def test_one_player_finishing_shows_the_result_after_a_moment():
     rows = m.results
     assert [r.car for r in rows][0] == "p1" and rows[0].place == 1 and rows[0].player
     assert len(rows) == config.CARS
+    assert (rows[0].label, rows[0].colour) == ("P1", "p1")
+    bots = {(r.label, r.colour) for r in rows[1:]}  # the bots by their names and colours
+    assert bots == {(f"CPU{i + 1}", c) for i, c in enumerate(config.CPU_COLORS)}
 
 
-def test_a_finished_player_is_driven_on_by_a_bot():
+def test_a_finished_player_is_driven_on_by_the_ai():
     m = started()
     finish(m, "p1")
     run(m, 0.1)
-    assert "p1" in m.bots
+    assert m.drivers["p1"].level == config.AUTOPILOT_LEVEL
     p1 = m.race.racer("p1")
     x = p1.car.x
     run(m, 1.0, frame(p1={"steer": 1.0}))  # ignored

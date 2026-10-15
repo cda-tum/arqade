@@ -5,22 +5,27 @@ and the countdown, plus the race's own `race.Event`s for the players' cars (the 
 the HUD use both).
 
     TITLE --A/Start--> HOWTO --any button--> COUNTDOWN (3-2-1-GO) --> RACE --> RESULT
-      ^  \\_ 3 s untouched: an attract race of 6 bots plays behind the title      |
+      ^  \\_ 3 s untouched: an attract race of 6 AI cars plays behind the title   |
       |                                     A/Start rematches (no HOWTO card) |
       +----------------- B, QUIT TO TITLE, or 60 s untouched ------------------+
 
-- **The title:** three rows, 1 PLAYER / 2 PLAYERS / QUIT (`title_index`), moved one row per
-  push of the stick up or down (a held stick's auto-repeats don't count, so a push for
-  2 PLAYERS never runs on to QUIT) and clamped at both ends (no wrap). Only the first pad
-  whose stick is up or down counts: sideways does nothing, and when the pads disagree P1's
-  wins. Whenever the attract race starts or is stopped the row goes back to the mode, so
-  the visitor who stops it finds a mode under A, never QUIT. A begins the
-  highlighted mode, or on QUIT quits at once (`quit_requested`, the main loop's clean exit).
-  Start begins, never quits: the highlighted mode, or 1 PLAYER on QUIT. B does nothing.
+- **The title:** four rows (config.TITLE_ITEMS, `title_index`): PLAYERS (`mode`: 1 or 2
+  people), BOTS (`bot_count`: 0 up to CARS - people; a lone person gets the full field of 5
+  by default, and 1 person with none is a time trial, 2 with none a duel), LEVEL (`level`,
+  EASY / TOUGH / BRUTAL, one for every bot) and QUIT. Up and down move between the rows one
+  row per push (a held stick's auto-repeats don't count, so a push for LEVEL never runs on
+  to QUIT), clamped at both ends (no wrap); left and right change the highlighted row's
+  value, one step per push, clamped too, and only on a push straight sideways (a diagonal
+  moves the row, never a value). Only the first pad whose stick is pushed counts, so when
+  the pads disagree P1's wins. Changing PLAYERS keeps a full field full (5 bots alone, 4
+  with two) and otherwise clamps BOTS. Whenever the attract race starts or is stopped the
+  row goes back to PLAYERS, so the visitor who stops it never finds QUIT under A. A begins
+  the race with the rows' settings, or on QUIT quits at once (`quit_requested`, the main
+  loop's clean exit). Start always begins, never quits. B does nothing.
   After ATTRACT_DELAY seconds untouched an attract race plays behind it:
-  `Race(seed, 2, finish_all=True)`, all six cars driven by bots, silently (the bots drive,
-  they never touch the menu). Any input stops it (and that frame's stick changes nothing);
-  A or Start still begins at once.
+  `Race(seed, 2, finish_all=True)`, all six cars driven by the AI at ATTRACT_LEVEL,
+  silently (the AI drives, it never touches the menu). Any input stops it (and that
+  frame's stick changes nothing); A or Start still begins at once.
 - **The HOW TO PLAY card** (HOWTO) comes before every match begun from the title, never
   before a rematch. Its first HOWTO_GUARD seconds ignore the buttons; after that any button
   of either pad (the stick doesn't count) goes on to the countdown, and that press does
@@ -30,14 +35,18 @@ the HUD use both).
   start the next one.
 - **Driving:** each player's stick steers and pulled back brakes; A *pressed* uses the held
   item (never A held, or a held button would fire the next item the moment a box gives it).
-  With 1 PLAYER either pad drives P1. A player past the line is driven on by a bot and the
-  pad no longer counts.
+  With 1 player either pad drives P1. The bots are `ai.field` drivers at the title's LEVEL.
+  A player past the line is driven on by the AI (AUTOPILOT_LEVEL) and the pad no longer
+  counts.
 - **The CIRCUIT CHECK freeze:** for CHECK_FREEZE seconds after a player crosses into the
   final lap (`frozen(p)`, the race's `check_wait`) their view shows the comparison and their
   pad does nothing: the car drives straight on (the line is on the start straight) and loses
   no distance. The race, and any other player, runs on.
 - **Events:** a player gets the race's events of its own car, and those aimed at another car
-  from its own (`AIMED`: its bumps, its MEASURE hitting, its cloud driven through).
+  from its own (`AIMED`: its bumps, its MEASURE hitting, its cloud driven through). So the
+  bots' own personal cues (their drifts and turbos, streaks, boxes, items, laps) never reach
+  the sound or the HUD; what a bot does *to* a person (a bump, a MEASURE hit, a cloud) does,
+  through the person's own car.
 - **Banners**, per player, for the HUD: "gate" flashes each row's outcome for FLASH_TIME
   (value ("right", streak), ("wrong", slot) or ("miss", slot); one at a time), "tip" says how
   to use an item on its first pickup (value the item; once per item and player each
@@ -51,8 +60,9 @@ the HUD use both).
   after the first one did) the race is frozen into `results`; FINISH_DELAY later the result
   screen shows it. A or Start rematches (after RESULT_LOCK), B goes to the title.
 - **Idle:** IDLE_TIMEOUT seconds untouched anywhere but the title (paused too) returns to
-  the title and resets it to 1 PLAYER. Start + Select quitting is the main loop's.
-- All the races are `finish_all=True`, so the CPU cars drive on behind the finish banner;
+  the title and resets its rows: 1 player, 5 bots, TOUGH. Start + Select quitting is the
+  main loop's.
+- All the races are `finish_all=True`, so the bots drive on behind the finish banner;
   the match decides when the race is over, and freezes the places at that moment.
 """
 
@@ -61,7 +71,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field, replace
 
-from gate_prix import bot, config
+from gate_prix import ai, config
 from gate_prix.car import Controls
 from gate_prix.race import Event, Race
 
@@ -143,6 +153,8 @@ class ResultRow:
     car: str
     place: int
     player: bool
+    label: str  # P1, CPU1 ...
+    colour: str  # its key of config.CAR_COLORS
     time: float | None  # its finishing time, None when it was still racing
     right: int  # right slots of its circuit
     check: int | None  # its CIRCUIT CHECK distance
@@ -155,14 +167,17 @@ class Match:
     def __init__(self, rng: random.Random | None = None) -> None:
         self.rng = rng or random.Random()
         self.state = TITLE
-        self.mode = 1  # 1 or 2 PLAYERS
+        self.mode = 1  # PLAYERS: 1 or 2 people
+        self.bot_count = config.CARS - 1  # BOTS
+        self.level = config.DEFAULT_LEVEL  # LEVEL
         self.title_index = 0  # the title's highlighted row (config.TITLE_ITEMS)
         self._title_push = 0  # the up/down direction the title's stick is held in now
+        self._title_push_x = 0  # and the left/right one
         self.quit_requested = False  # QUIT picked on the title: the main loop exits
         self.t = 0.0  # seconds in the current state
         self.idle = 0.0
         self.race: Race | None = None
-        self.bots: dict[str, bot.Bot] = {}
+        self.drivers: dict[str, ai.Driver] = {}  # the AI's cars: the bots, and players past the line
         self.seed = 0
         self.attract = False
         self.title_wait = True  # the title waits for every button to be let go (at launch too)
@@ -205,7 +220,7 @@ class Match:
         self.idle = 0.0 if inp.activity else self.idle + dt
         if self.state != TITLE and self.idle >= config.IDLE_TIMEOUT:
             self._to_title(wait=False)
-            self.mode, self.title_index = 1, 0
+            self._title_defaults()
             self.tips_seen = {p: set() for p in PLAYERS}  # someone new: tips again
             return [Cue("title")]
         events: list = []
@@ -223,10 +238,14 @@ class Match:
         self.state = state
         self.t = 0.0
 
+    def _title_defaults(self) -> None:
+        self.mode, self.bot_count, self.level = 1, config.CARS - 1, config.DEFAULT_LEVEL
+        self.title_index = 0
+
     def _to_title(self, wait: bool) -> None:
         self._set(TITLE)
         self.race = None
-        self.bots = {}
+        self.drivers = {}
         self.attract = False
         self.results = None
         self.title_wait = wait
@@ -241,48 +260,70 @@ class Match:
             self.title_wait = False
         stopped = inp.activity and self.attract
         if stopped:
-            self.race, self.bots, self.attract = None, {}, False
-            self.title_index = self.mode - 1  # never QUIT under the A that stopped it
-        step = self._title_step(inp)
+            self.race, self.drivers, self.attract = None, {}, False
+            self.title_index = 0  # never QUIT under the A that stopped it
+        step, change = self._title_steps(inp)
         index = max(0, min(len(config.TITLE_ITEMS) - 1, self.title_index + step))
+        row = config.TITLE_ITEMS[index]
         if not stopped and index != self.title_index:
             self.title_index = index
-            if index < 2:
-                self.mode = index + 1
             events.append(Cue("blip"))
-        quitting = self.title_index == len(config.TITLE_ITEMS) - 1
+        elif not stopped and change and self._change(row, change):
+            events.append(Cue("blip"))
+        quitting = row == "QUIT"
         if inp.any("a") and quitting:
             self.quit_requested = True
             events.append(Cue("quit"))
             return
         if inp.any("a") or inp.any("start"):
-            if quitting:  # Start never quits: it races, 1 PLAYER
-                self.mode, self.title_index = 1, 0
+            if quitting:  # Start never quits: it races, with the rows as they are
+                self.title_index = 0
             events.append(Cue("select"))
             self._set(HOWTO)
-            self.race, self.bots, self.attract = None, {}, False
+            self.race, self.drivers, self.attract = None, {}, False
             return
         if self.attract:
             if self.race.over:
                 self._attract()
             else:
-                self.race.update(dt, bot.drive(self.race, self.bots))  # silent
+                self.race.update(dt, ai.drive(self.race, self.drivers))  # silent
         elif self.idle >= config.ATTRACT_DELAY:
             self._attract()
 
-    def _title_step(self, inp: FrameInput) -> int:
-        """The title's up/down step (-1, 0 or 1): one per push of the first pad (P1 first)
-        whose stick is up or down, on the frame the push begins (or a tap's one step), never
-        its auto-repeats, nor the sideways axis. Another pad held the other way is ignored."""
+    def max_bots(self) -> int:
+        """The most bots beside the people: the field is CARS cars at most."""
+        return config.CARS - self.mode
+
+    def _change(self, row: str, step: int) -> bool:
+        """Step a row's value (clamped); whether it changed."""
+        before = (self.mode, self.bot_count, self.level)
+        if row == "PLAYERS":
+            full = self.bot_count == self.max_bots()
+            self.mode = max(1, min(config.MAX_PLAYERS, self.mode + step))
+            self.bot_count = self.max_bots() if full else min(self.bot_count, self.max_bots())
+        elif row == "BOTS":
+            self.bot_count = max(0, min(self.max_bots(), self.bot_count + step))
+        elif row == "LEVEL":
+            i = config.LEVELS.index(self.level) + step
+            self.level = config.LEVELS[max(0, min(len(config.LEVELS) - 1, i))]
+        return (self.mode, self.bot_count, self.level) != before
+
+    def _title_steps(self, inp: FrameInput) -> tuple[int, int]:
+        """The title's (up/down, left/right) steps, each -1, 0 or 1: one per push of the
+        first pad (P1 first) whose stick is pushed, on the frame the push begins (or a
+        tap's one step), never its auto-repeats. Left/right counts only on a push straight
+        sideways: a diagonal moves the row, never a value. Another pad is ignored."""
         for p in PLAYERS:
             i = inp.players[p]
-            if i.stick[1] or i.nav[1]:
-                d = i.stick[1] or i.nav[1]
-                step = d if d != self._title_push else 0
-                self._title_push = i.stick[1]  # a tap holds nothing: the next tap counts
-                return step
-        self._title_push = 0
-        return 0
+            dx, dy = i.stick[0] or i.nav[0], i.stick[1] or i.nav[1]
+            if dx or dy:
+                step = dy if dy and dy != self._title_push else 0
+                change = dx if dx and not dy and dx != self._title_push_x else 0
+                # a tap holds nothing: the next tap counts
+                self._title_push, self._title_push_x = i.stick[1], i.stick[0]
+                return step, change
+        self._title_push = self._title_push_x = 0
+        return 0, 0
 
     # --- The HOW TO PLAY card ----------------------------------------------------------------
 
@@ -291,16 +332,17 @@ class Match:
             self._new_race(events)
 
     def _attract(self) -> None:
-        self.title_index = self.mode - 1  # whoever stops the demo finds a mode under A
+        self.title_index = 0  # whoever stops the demo finds PLAYERS under A, never QUIT
         self.seed = self.rng.randrange(1 << 30)
         self.race = Race(self.seed, 2, finish_all=True)
-        self.bots = bot.field(self.race, self.seed, players=config.ATTRACT_SKILL)
+        level = config.ATTRACT_LEVEL
+        self.drivers = ai.field(self.race, self.seed, level, players=level)
         self.attract = True
 
     def _new_race(self, events: list) -> None:
         self.seed = self.rng.randrange(1 << 30)
-        self.race = Race(self.seed, self.mode, finish_all=True)
-        self.bots = bot.cpu_bots(self.race, self.seed)
+        self.race = Race(self.seed, self.mode, finish_all=True, bots=self.bot_count)
+        self.drivers = ai.field(self.race, self.seed, self.level)
         self.attract = False
         self.banners = {p: [] for p in PLAYERS}
         self.results = None
@@ -324,10 +366,10 @@ class Match:
 
     def _controls(self, inp: FrameInput) -> dict[str, Controls]:
         race = self.race
-        controls = bot.drive(race, self.bots)
+        controls = ai.drive(race, self.drivers)
         pads = inp.players
         for p in self.players:
-            if p in self.bots:  # past the line: the autopilot drives
+            if p in self.drivers:  # past the line: the autopilot drives
                 continue
             if race.players == 1:  # either pad drives P1
                 a, b = pads["p1"], pads["p2"]
@@ -385,7 +427,7 @@ class Match:
             banners.append(Banner("final", e.value, config.CHECK_FREEZE + config.FINAL_BANNER))
         elif e.kind == "finish":
             banners[:] = [Banner("finish", e.value, None)]
-            self.bots[e.car] = bot.Bot(e.car, config.AUTOPILOT_SKILL, self.seed)
+            self.drivers[e.car] = ai.Driver(e.car, config.AUTOPILOT_LEVEL, self.seed)
 
     def _tick_banners(self, dt: float) -> None:
         for p, banners in self.banners.items():
@@ -400,7 +442,7 @@ class Match:
         for place, car_id in enumerate(race.places(), 1):
             r = race.racer(car_id)
             c = r.circuit
-            rows.append(ResultRow(car_id, place, r.player, r.finish_time,
+            rows.append(ResultRow(car_id, place, r.player, r.label, r.car.colour, r.finish_time,
                                   sum(1 for ok in c.results if ok), r.check,
                                   tuple(c.slots), tuple(c.results), r.check_right))
         self.results = rows

@@ -5,7 +5,7 @@
 
 P1 (top view) steers with S/F, brakes with D and uses its item with Q, or pad 0's stick
 (pulled back brakes) and A; P2 (bottom) uses the arrows, Down and ".", or pad 1. The CPU cars
-are the real bots (bot.py). Every cue is printed (each bump once). --auto drives P1 through
+are the real AI (ai.py, at TOUGH). Every cue is printed (each bump once). --auto drives P1 through
 every right arch. --screenshot runs --seconds of the race headless with
 P1 on --auto, saves the last frame and exits. Esc quits.
 """
@@ -18,7 +18,7 @@ import sys
 
 import pygame
 
-from gate_prix import bot, config, track
+from gate_prix import ai, config, track
 from gate_prix.car import Controls, aim
 from gate_prix.race import Race
 from gate_prix.road import RoadView
@@ -90,7 +90,7 @@ def main(argv=None) -> None:
         pygame.display.set_caption("GATE PRIX drive demo")
     race = Race(args.seed, args.views)
     statics = track.arch_objects(race.rows)
-    bots = bot.cpu_bots(race, args.seed)
+    bots = ai.field(race, args.seed)
     views = ([RoadView((0, 0, W, 270)), RoadView((0, 270, W, 270))] if args.views == 2
              else [RoadView((0, 0, W, H))])
     cache = SpriteCache.shared()
@@ -109,7 +109,7 @@ def main(argv=None) -> None:
                     pygame.quit()
                     return
             keys = pygame.key.get_pressed()
-        controls = bot.drive(race, bots)
+        controls = ai.drive(race, bots)
         for p, racer in enumerate(race.racers):
             if not racer.player:
                 continue

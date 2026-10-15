@@ -38,7 +38,7 @@ class Controls(NamedTuple):
     """One car's input for a frame: steer -1 (left) to 1 (right), brake 0 to 1, and whether
     to use the held item (true on the frame of a press: a held button would use the next
     item the moment a box gives it). `pace` multiplies the top speed (within config.PACE_LIMITS): a
-    human always drives at 1.0, and the CPU racers use it for their skill and rubber-banding,
+    human always drives at 1.0, and the bots (ai.py) use it for their level and rubber-banding,
     so the race never needs to know who drives."""
 
     steer: float = 0.0
@@ -264,7 +264,7 @@ def aim(car: Car, goal_x: float, segment, gain: float = 4.0, brake_at: float = 0
     the gap at `gain` per second. When the push alone (not drifting) needs more than
     `brake_at` of full stick, it brakes too, which takes some of the push away; with the
     stick steered past DRIFT_STEER that brake is a drift, and the car's own drift push is
-    what it cancels. For scripted drivers and the CPU racers."""
+    what it cancels. For scripted drivers and the AI."""
     rate = car.steer_rate()
     if rate <= 0:
         return 0.0, 0.0

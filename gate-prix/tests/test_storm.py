@@ -67,8 +67,8 @@ def test_each_racer_gets_its_hazards_as_it_starts_the_final_lap_from_its_own_che
 
 
 def test_the_cpus_get_their_storms_too():
-    race, green = into_the_storm(car_id="green", slots_right=10)
-    assert len(race.hazards_for("green")) == 16
+    race, green = into_the_storm(car_id="cpu1", slots_right=10)
+    assert len(race.hazards_for("cpu1")) == 16
 
 
 def test_hazards_are_the_renderers_z_x_kind_alive():

@@ -127,13 +127,13 @@ def test_draw_reports_sprites_far_to_near_with_roadside_and_objects():
     surface = pygame.Surface((960, 540))
     view = RoadView((0, 270, 960, 270))
     out = [("stale", 0, 0, 0, 0)]
-    objects = [(5000.0, 0.3, "arch:H:lit"), (9000.0, -0.5, "box"), (2000.0, 0.0, "car:green"),
-               (-500.0, 0.0, "car:lime")]  # behind the camera: not drawn
+    objects = [(5000.0, 0.3, "arch:H:lit"), (9000.0, -0.5, "box"), (2000.0, 0.0, "car:white"),
+               (-500.0, 0.0, "car:tan")]  # behind the camera: not drawn
     view.draw(surface, fridge, 0.0, 0.0, out, objects)
     kinds = [s[0] for s in out]
     assert "stale" not in kinds
-    assert {"arch:H:lit", "box", "car:green", "coax"} <= set(kinds)
-    assert "car:lime" not in kinds
+    assert {"arch:H:lit", "box", "car:white", "coax"} <= set(kinds)
+    assert "car:tan" not in kinds
     scales = [s[3] for s in out]
     assert scales == sorted(scales)  # far (small) to near (big)
     view.draw_sprites(surface, out)

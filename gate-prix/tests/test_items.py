@@ -123,7 +123,7 @@ def test_a_box_reaches_box_reach_either_side():
 
 def test_a_taken_box_is_gone_until_it_respawns_after_3_s():
     race = Race(seed=1, players=1)
-    p1, green = race.racer("p1"), race.racer("green")
+    p1, green = race.racer("p1"), race.racer("cpu1")
     through_box(race, p1)
     assert not race.box_present(0, 0)
     assert len([o for o in race.box_objects() if o[2] == "box"]) == (
@@ -205,11 +205,11 @@ def test_a_box_rolls_with_the_drivers_place(monkeypatch):
     race = Race(seed=2, players=1)
     seen = []
     monkeypatch.setattr(race, "roll_item", lambda place, **kw: seen.append(place) or "QEC")
-    green, p1 = race.racer("green"), race.racer("p1")
+    green, p1 = race.racer("cpu1"), race.racer("p1")
     through_box(race, green, lap=1)  # far ahead of everyone
     p1.car.z = green.car.z - 30_000  # still behind the others
-    through_box(race, race.racer("black"), k=1, j=2)
-    assert seen[0] == 1 and seen[1] == race.racer("black").place
+    through_box(race, race.racer("cpu5"), k=1, j=2)
+    assert seen[0] == 1 and seen[1] == race.racer("cpu5").place
 
 
 # --- Using items ---------------------------------------------------------------------------
@@ -449,8 +449,8 @@ def test_the_item_constants():
 
 def test_measure_flies_to_the_nearest_car_ahead_and_collapses_it():
     race = Race(seed=1, players=1, finish_all=True)
-    p1 = lineup(race, {"green": 20_000.0, "white": 8_000.0, "lime": -3_000.0}, x=-0.5)
-    white = race.racer("white")
+    p1 = lineup(race, {"cpu1": 20_000.0, "cpu2": 8_000.0, "cpu3": -3_000.0}, x=-0.5)
+    white = race.racer("cpu2")
     white.car.x = 0.5
     white.circuit.streak = 4
     white.car.give_boost(0.5, 3.0)
@@ -459,7 +459,7 @@ def test_measure_flies_to_the_nearest_car_ahead_and_collapses_it():
     assert Event("item", "p1", "MEASURE") in events
     assert len(race.shots) == 1
     shot = race.shots[0]
-    assert (shot.owner, shot.target) == ("p1", "white")
+    assert (shot.owner, shot.target) == ("p1", "cpu2")
     # in flight it is between the two cars, seen by the renderer
     fly(race, config.MEASURE_FLIGHT / 2)
     (z, x, kind), = race.shot_objects()
@@ -467,34 +467,34 @@ def test_measure_flies_to_the_nearest_car_ahead_and_collapses_it():
     assert 0.3 < shot.progress < 0.7
     assert not white.car.spinning
     events = fly(race, config.MEASURE_FLIGHT / 2 + DT)
-    assert Event("collapse", "white", "p1") in events
+    assert Event("collapse", "cpu2", "p1") in events
     assert race.shots == [] and race.shot_objects() == []
     assert white.car.spinning and white.circuit.streak == 0 and white.car.boost == 0.0
     assert white.car.speed < 0.5 * TOP
-    assert not race.racer("green").car.spinning
+    assert not race.racer("cpu1").car.spinning
 
 
 def test_measure_with_no_car_ahead_in_range_fizzles():
     race = Race(seed=1, players=1, finish_all=True)
-    p1 = lineup(race, {"green": config.MEASURE_RANGE + 2_000.0, "white": -2_000.0})
+    p1 = lineup(race, {"cpu1": config.MEASURE_RANGE + 2_000.0, "cpu2": -2_000.0})
     p1.item = "MEASURE"
     events = race.update(DT, {"p1": USE})
     assert Event("item", "p1", "MEASURE") in events and Event("fizzle", "p1") in events
     assert race.shots == [] and p1.item is None
     assert race.measure_target("p1") is None
-    race.racer("green").car.z -= 4_000.0
-    assert race.measure_target("p1").car.id == "green"
+    race.racer("cpu1").car.z -= 4_000.0
+    assert race.measure_target("p1").car.id == "cpu1"
 
 
 def test_a_tunnelling_car_is_immune_to_measure():
     race = Race(seed=1, players=1, finish_all=True)
-    p1 = lineup(race, {"green": 5_000.0})
-    green = race.racer("green")
+    p1 = lineup(race, {"cpu1": 5_000.0})
+    green = race.racer("cpu1")
     p1.item = "MEASURE"
     race.update(DT, {"p1": USE})
     green.car.tunnel(config.TUNNEL_TIME)
     events = fly(race, config.MEASURE_FLIGHT + 2 * DT)
-    assert Event("immune", "green", "shot") in events
+    assert Event("immune", "cpu1", "shot") in events
     assert not green.car.spinning and race.shots == []
 
 
@@ -503,8 +503,8 @@ def test_a_tunnelling_car_is_immune_to_measure():
 
 def test_tunnel_passes_through_cars_for_3_s():
     race = Race(seed=1, players=1, finish_all=True)
-    p1 = lineup(race, {"green": 100.0})
-    green = race.racer("green")
+    p1 = lineup(race, {"cpu1": 100.0})
+    green = race.racer("cpu1")
     green.car.x = 0.05
     p1.item = "TUNNEL"
     events = race.update(DT, {"p1": USE})
@@ -538,15 +538,15 @@ def drop_cloud(race, p1):
 
 def test_decoherence_drops_a_cloud_just_behind_that_any_car_can_hit():
     race = Race(seed=1, players=1, finish_all=True)
-    p1 = lineup(race, {"green": -3_000.0}, x=0.2)
-    green = race.racer("green")
+    p1 = lineup(race, {"cpu1": -3_000.0}, x=0.2)
+    green = race.racer("cpu1")
     cloud = drop_cloud(race, p1)
     assert cloud.owner == "p1" and cloud.x == pytest.approx(0.2)
     assert p1.car.z - 1000.0 < cloud.z < p1.car.z - config.CAR_LENGTH
     assert (cloud.z, cloud.x, "deco") in race.deco_objects()
     green.car.give_boost(0.6, 4.0)
     events = fly(race, 0.5)
-    assert Event("decohered", "green", "p1") in events
+    assert Event("decohered", "cpu1", "p1") in events
     assert green.car.boost == 0.0
     assert green.blind and green.effects["blind"] <= config.BLIND_TIME
     assert race.clouds == []  # used up
@@ -556,28 +556,28 @@ def test_decoherence_drops_a_cloud_just_behind_that_any_car_can_hit():
 
 def test_a_cloud_on_the_final_lap_slows_instead_of_blinding():
     race = Race(seed=1, players=1, finish_all=True)
-    p1 = lineup(race, {"green": -3_000.0})
-    green = race.racer("green")
+    p1 = lineup(race, {"cpu1": -3_000.0})
+    green = race.racer("cpu1")
     for r in (p1, green):
         r.laps = config.LAPS - 1
         r.car.z += (config.LAPS - 1) * race.lap_length
     drop_cloud(race, p1)
     events = fly(race, 0.5)
-    assert Event("decohered", "green", "p1") in events
+    assert Event("decohered", "cpu1", "p1") in events
     assert not green.blind
     assert green.car.slow_time > 0 and green.car.speed <= config.CLOUD_CAP * TOP + 1e-6
 
 
 def test_a_cloud_lasts_10_s_and_a_car_beside_it_or_tunnelling_is_untouched():
     race = Race(seed=1, players=1, finish_all=True)
-    p1 = lineup(race, {"green": -3_000.0, "white": -3_000.0})
-    green, white = race.racer("green"), race.racer("white")
+    p1 = lineup(race, {"cpu1": -3_000.0, "cpu2": -3_000.0})
+    green, white = race.racer("cpu1"), race.racer("cpu2")
     green.car.x, white.car.x = -0.9, 0.0
     white.car.tunnel(config.TUNNEL_TIME)
     drop_cloud(race, p1)
-    events = fly(race, 1.0, {"green": Controls(steer=-0.0)})
+    events = fly(race, 1.0, {"cpu1": Controls(steer=-0.0)})
     assert not [e for e in events if e.kind == "decohered"]
-    assert Event("immune", "white", "deco") in events
+    assert Event("immune", "cpu2", "deco") in events
     assert len(race.clouds) == 1
     fly(race, config.DECO_TIME - 1.0 + 2 * DT)
     assert race.clouds == [] and race.deco_objects() == []

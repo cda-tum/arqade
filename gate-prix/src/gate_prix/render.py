@@ -4,12 +4,13 @@
 - 2 players: two 480x540 views side by side, P1 on the left, P2 on the right, a thin
   divider between (each projects the road VIEW_2P_SPREAD wide, so nothing is squeezed).
   1 player: one 960x540 view. The attract race behind the title is drawn as a 2-player
-  race (bots driving both players' cars).
+  race (the AI driving both players' cars).
 - Each view is a `RoadView` of the track from behind its own car, with the arches, the
   item boxes, the start and finish gantry over the chequered lap line (its five start
   lights red one by one in the countdown, all green from GO), every car, their exhaust
   flames while they boost and the SPLIT clones (translucent) as sprites, and a bouncing
-  marker over every right arch. A drifting car is tilted, with sparks at its rear wheels
+  marker over every right arch. The people's cars (P1 blue, P2 red) have a white outline, so
+  you find your own among the bots' neutral ones (sprites.py). A drifting car is tilted, with sparks at its rear wheels
   (white, blue at charge 1, gold at 2) and the mini-turbo's flash as it lets go; a
   tunnelling car is a see-through shimmer. MEASURE shots fly as gold orbs on a beam from
   their shooter, DECOHERENCE clouds sit on the road, and each racer's own noise storm (its
@@ -28,7 +29,7 @@
   - PRESS A TO USE SPLIT on the first pickup of each item (in its own place, never over a
     flash), LAP 2/3, FINAL LAP with STORM AHEAD (after the check's freeze), FINISH;
   - the minimap: bottom left in 1P, and one map for both, straddling the divider at the
-    bottom, in 2P.
+    bottom, in 2P; every car's dot is labelled (P1, P2, CPU1 ...).
 - The HOW TO PLAY card (`tutorial.TutorialCard`) before every match begun from the title.
 - **The CIRCUIT CHECK**: for CHECK_FREEZE seconds after a player crosses into the final
   lap, their view is a still of the moment they crossed, under the comparison panel
@@ -39,7 +40,8 @@
   boosting), a slight camera shake at speed, and the field of view widening with speed
   above the top (a projection constant and the camera pulled in: `RoadView.draw`'s depth
   and ahead), plus the exhaust flames.
-- The 3-2-1-GO countdown; the title (1 PLAYER / 2 PLAYERS / QUIT), pause and result screens.
+- The 3-2-1-GO countdown; the title (PLAYERS / BOTS / LEVEL / QUIT, each value between
+  arrows, dimmed at its end), pause and result screens (the bots named CPU1, CPU2 ...).
 
 Nothing is scaled per frame and no text is rendered twice: text goes through a cache, and
 the gate badges, dots, panels, speed lines, tunnel, tint, markers, start lights, item icons,
@@ -111,6 +113,33 @@ SHOT = (255, 200, 90)
 LIGHT_RADII = tuple(range(2, 42, 2))  # the start lights, px
 ORDINALS = ("1st", "2nd", "3rd", "4th", "5th", "6th")
 NAMES = {"p1": "P1", "p2": "P2"}
+
+
+LEVEL_LINES = {
+    "EASY": "EASY BOTS: FOR YOUR FIRST RACE",
+    "TOUGH": "TOUGH BOTS: YOU WILL HAVE TO WORK FOR IT",
+    "BRUTAL": "BRUTAL BOTS: NEAR PERFECT",
+}
+
+
+def title_rows(match: Match) -> list[tuple[str, str | None, bool, bool]]:
+    """The title's rows as (label, value, at its low end, at its high end); QUIT's value
+    is None."""
+    levels = config.LEVELS
+    return [
+        ("PLAYERS", str(match.mode), match.mode == 1, match.mode == config.MAX_PLAYERS),
+        ("BOTS", str(match.bot_count), match.bot_count == 0,
+         match.bot_count == match.max_bots()),
+        ("LEVEL", match.level, match.level == levels[0], match.level == levels[-1]),
+        ("QUIT", None, True, True),
+    ]
+
+
+def field_line(match: Match) -> str:
+    """What the rows add up to, under them."""
+    if match.bot_count == 0:
+        return "A DUEL: JUST THE TWO OF YOU" if match.mode == 2 else "A TIME TRIAL: JUST YOU"
+    return LEVEL_LINES[match.level]
 
 
 def ordinal(n: int) -> str:
@@ -670,7 +699,8 @@ class Renderer:
         else:
             x, y = 10, H - MAP[1] - 10
         self.surface.blit(self.panel(MAP[0], MAP[1], (110, 116, 150), 170), (x, y))
-        mm.draw(self.surface, (x, y), [(r.car.id, r.car.z) for r in race.racers], match.players)
+        mm.draw(self.surface, (x, y), [(r.car.id, r.car.colour, r.car.z) for r in race.racers],
+                match.players)
 
     # --- The HUD -----------------------------------------------------------------------------
 
@@ -844,22 +874,34 @@ class Renderer:
 
     def _title(self, match: Match) -> None:
         cx = W // 2
-        self.put("GATE PRIX", 78, WHITE, center=(cx, 118))
+        self.put("GATE PRIX", 78, WHITE, center=(cx, 112))
         self.put("STEER THROUGH THE GLOWING GATE TO BUILD THE TARGET CIRCUIT", 14, SOFT,
-                 center=(cx, 176))
-        rows = (config.PLAYER_COLORS["p1"], config.PLAYER_COLORS["p2"], (200, 205, 225))
-        for i, (label, col) in enumerate(zip(config.TITLE_ITEMS, rows)):
-            y = 240 + 46 * i
+                 center=(cx, 168))
+        rows = title_rows(match)
+        self.surface.blit(self.panel(400, 40 * len(rows) + 8, None, 150), (cx - 200, 196))
+        for i, (label, value, lo, hi) in enumerate(rows):
+            y = 220 + 40 * i
             chosen = match.title_index == i
+            col = WHITE if chosen else (150, 156, 180)
             if chosen:
-                self.surface.blit(self.panel(300, 40, col, 220), (cx - 150, y - 20))
-                self.put("▶", 18, col, center=(cx - 120, y))
-            px = 26 if i < 2 else 22
-            self.put(label, px, WHITE if chosen else (150, 156, 180), center=(cx, y))
+                self.surface.blit(self.panel(380, 36, (200, 205, 225), 220), (cx - 190, y - 18))
+                self.put("▶", 16, GOLD, center=(cx - 168, y))
+            if value is None:  # QUIT
+                self.put(label, 20, col, center=(cx, y))
+                continue
+            self.put(label, 20, col, midleft=(cx - 146, y))
+            vx = cx + 92
+            self.put(value, 20, GOLD if chosen else col, center=(vx, y))
+            if chosen:
+                arrow = (255, 230, 120)
+                self.put("◀", 14, arrow if not lo else EMPTY, center=(vx - 70, y))
+                self.put("▶", 14, arrow if not hi else EMPTY, center=(vx + 70, y))
+        self.put(field_line(match), 13, LABEL, center=(cx, 382))
         if (self.frame // 30) % 2 == 0:
-            self.put("PRESS START", 24, (255, 230, 120), center=(cx, 400))
+            self.put("PRESS START", 22, (255, 230, 120), center=(cx, 414))
         self.surface.blit(self.panel(720, 58, None, 190), (cx - 360, 443))  # over the car
-        self.put("STICK UP / DOWN: CHOOSE   A: PICK   START: RACE", 14, SOFT, center=(cx, 458))
+        self.put("STICK UP / DOWN: CHOOSE   LEFT / RIGHT: CHANGE   A OR START: RACE", 14, SOFT,
+                 center=(cx, 458))
         self.put("IN THE RACE   STICK: STEER   BACK: BRAKE   BACK + STEER: DRIFT   A: ITEM   "
                  "START: PAUSE", 12, LABEL, center=(cx, 486))
         if match.attract:
@@ -887,13 +929,12 @@ class Renderer:
         rows = match.results or []
         for i, row in enumerate(rows):
             y = 76 + 27 * i
-            col = config.CAR_COLORS[row.car]
+            col = config.CAR_COLORS[row.colour]
             bright = row.player
             self.put(ordinal(row.place), 18, WHITE if bright else SOFT, midright=(250, y))
             pygame.draw.rect(surf, col, (268, y - 9, 30, 18), border_radius=4)
             pygame.draw.rect(surf, (150, 156, 180), (268, y - 9, 30, 18), 1, border_radius=4)
-            name = NAMES[row.car] if row.player else "CPU " + row.car.upper()
-            self.put(name, 18, col if bright else SOFT, midleft=(312, y))
+            self.put(row.label, 18, col if bright else SOFT, midleft=(312, y))
             self.put(race_time(row.time), 16, WHITE if bright else SOFT, midleft=(470, y))
             gates = f"{row.right}/{config.SLOTS} GATES"
             self.put(gates, 16, (255, 230, 120) if bright else (150, 156, 180), midleft=(590, y))

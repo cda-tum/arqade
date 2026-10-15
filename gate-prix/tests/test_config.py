@@ -11,7 +11,8 @@ def test_race_shape():
     assert config.SLOTS == 16
     assert config.CHECK_SLOTS == config.SLOTS  # the check covers the whole target
     assert (config.ARCHES_MIN, config.ARCHES_MAX) == (1, 3)
-    assert config.CPU_CARS_2P == 4 and config.CPU_CARS_1P == 5
+    assert config.MAX_PLAYERS == 2  # people; bots fill the rest of the CARS
+    assert config.CPU_IDS == ("cpu1", "cpu2", "cpu3", "cpu4", "cpu5")
     assert config.ITEM_BOXES_PER_LAP == 2
 
 
@@ -125,13 +126,19 @@ def test_the_cars_take_their_colours_from_one_place():
     for p in ("p1", "p2"):
         assert config.CAR_COLORS[p] == config.PLAYER_COLORS[p]
     assert set(config.CAR_COLORS) == {"p1", "p2", *config.CPU_COLORS}
-    assert len(config.CPU_COLORS) == config.CARS - 1  # the 1P field; 2P races use the first 4
+    assert len(config.CPU_COLORS) == config.CARS - 1  # a lone player's full field
 
 
 # Hue bands that belong to the players (AGENTS.md): P1 is blue or blue-leaning (cyan,
-# teal), P2 red or red-leaning (orange, pink). A CPU racer's colour stays out of both.
+# teal), P2 red or red-leaning (orange, pink), P3 green and P4 purple. A bot's colour is
+# none of them: neutral (a grey) or a pale warm tone (tan, cream) between orange and green.
 P1_BAND = (165, 265)
-P2_BAND = (315, 40)  # wraps round 0
+P2_BAND = (315, 35)  # wraps round 0
+P3_BAND = (65, 165)  # lime to emerald
+P4_BAND = (265, 315)
+WARM = (35, 65)  # tan, sand, cream: allowed, but only pale
+NEUTRAL_SAT = 0.15  # below this a colour is a grey, whatever its hue
+PALE_SAT = 0.45  # a warm tone stays below this
 
 
 def _in_band(h, band):
@@ -139,39 +146,47 @@ def _in_band(h, band):
     return lo <= h <= hi if lo < hi else h >= lo or h <= hi
 
 
+def _neutral(rgb):
+    h, s, _ = _hue(rgb)
+    return s < NEUTRAL_SAT or (_in_band(h, WARM) and s < PALE_SAT)
+
+
 @pytest.mark.parametrize("rgb, ok", [
     ((30, 196, 178), False),  # teal
     ((40, 220, 240), False),  # cyan
     ((255, 112, 24), False),  # orange
     ((255, 110, 200), False),  # pink
-    ((30, 180, 90), True),  # emerald
-    ((150, 220, 40), True),  # lime
+    ((30, 180, 90), False),  # emerald (P3's green)
+    ((150, 220, 40), False),  # lime
+    ((168, 80, 216), False),  # purple (P4)
+    ((248, 192, 40), False),  # the H gate's gold: too strong
+    ((236, 238, 246), True),  # white
+    ((150, 154, 166), True),  # grey
+    ((176, 148, 106), True),  # tan
+    ((238, 228, 150), True),  # cream
 ])
-def test_the_player_bands_catch_cyan_teal_orange_and_pink(rgb, ok):
-    h = _hue(rgb)[0]
-    assert (not _in_band(h, P1_BAND) and not _in_band(h, P2_BAND)) == ok
+def test_neutral_means_a_grey_or_a_pale_warm_tone(rgb, ok):
+    assert _neutral(rgb) == ok
 
 
-def test_cpu_colours_are_clear_of_the_players_the_gates_and_each_other():
+def test_bot_colours_are_neutral_and_clear_of_the_players_the_gates_and_each_other():
     def dist(a, b):
-        return min(abs(a - b), 360 - abs(a - b))
+        return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
 
-    hues, greys = [], []
+    bots = list(config.CPU_COLORS.values())
     for name, rgb in config.CPU_COLORS.items():
         h, s, v = _hue(rgb)
-        if s < 0.3:
-            greys.append((name, v))  # white, steel, black: not hues at all
-            continue
-        hues.append((name, h))
-        assert not _in_band(h, P1_BAND) and not _in_band(h, P2_BAND), name
+        assert _neutral(rgb), name
+        if s >= NEUTRAL_SAT:  # a hue at all: none of the players' bands
+            for band in (P1_BAND, P2_BAND, P3_BAND, P4_BAND):
+                assert not _in_band(h, band), name
         for other in (*config.PLAYER_COLORS.values(), *config.GATE_COLORS.values()):
-            assert dist(h, _hue(other)[0]) >= 20, name
-    for i, (a, ha) in enumerate(hues):
-        for b, hb in hues[i + 1:]:
-            assert dist(ha, hb) >= 40, (a, b)
-    for i, (a, va) in enumerate(greys):
-        for b, vb in greys[i + 1:]:
-            assert abs(va - vb) >= 0.25, (a, b)  # greys apart by brightness
+            assert dist(rgb, other) >= 80, name
+        # the H gate's gold is the nearest hue: the cream is far paler
+        assert s < _hue(config.GATE_COLORS["H"])[1] - 0.35, name
+    for i, a in enumerate(bots):
+        for b in bots[i + 1:]:
+            assert dist(a, b) >= 60, (a, b)  # every two apart on the road
 
 
 def test_idle_timeout_is_a_minute():
@@ -183,6 +198,6 @@ def test_circuit_check_boost_clamps_the_distance(distance, clamped):
     assert config.check_boost(distance) == config.check_boost(clamped)
 
 
-def test_the_black_cpu_stands_out_from_the_road():
-    r, g, b = config.CPU_COLORS["black"]
+def test_the_graphite_bot_stands_out_from_the_road():
+    r, g, b = config.CPU_COLORS["graphite"]
     assert min(r, g, b) >= 55  # the road is (40, 42, 62) and (34, 36, 54)

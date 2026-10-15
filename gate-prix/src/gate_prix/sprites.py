@@ -8,6 +8,9 @@ sideways for parallax) and the gold plate overhead, pre-rendered once per view s
 Sizes are "scales": pixels per road half-width at the sprite's distance, which is what the
 road renderer reports for every sprite it projects.
 
+The people's cars (`OUTLINED`: P1's and P2's) are drawn with a white outline round their
+body, at every size, so a player finds their own car among the bots' at a glance.
+
 Only plain surfaces are used (no display needed), so the benchmark runs on the cabinet.
 """
 
@@ -573,6 +576,8 @@ def render_sprite(kind: str, scale: float) -> tuple[pygame.Surface, int, int]:
     cy = math.ceil(-top * u) + pad
     canvas = pygame.Surface((cw, ch), pygame.SRCALPHA)
     draw(canvas, cx, cy, u)
+    if kind in OUTLINED:
+        canvas = outlined(canvas, max(1.0, min(OUTLINE_MAX, scale * OUTLINE)) * SS)
     if kind == "clone":
         canvas.fill((255, 255, 255, 140), special_flags=pygame.BLEND_RGBA_MULT)
     box = canvas.get_bounding_rect()
@@ -586,6 +591,27 @@ def render_sprite(kind: str, scale: float) -> tuple[pygame.Surface, int, int]:
     img = pygame.transform.smoothscale(cropped, size)
     _rle(img)
     return img, (cx - x0) // SS, (cy - y0) // SS
+
+
+# The people's cars get a white outline, OUTLINE of a road half-width thick (at least a
+# pixel, at most OUTLINE_MAX), round what is solid of the car (not its shadow or glows).
+OUTLINED = ("car:p1", "car:p2")
+OUTLINE = 0.003
+OUTLINE_MAX = 3.0
+OUTLINE_SOLID = 200  # the alpha that counts as the car's body
+
+
+def outlined(canvas: pygame.Surface, width: float) -> pygame.Surface:
+    """The canvas with a white outline `width` pixels thick round its solid pixels."""
+    mask = pygame.mask.from_surface(canvas, OUTLINE_SOLID)
+    shape = mask.to_surface(setcolor=(*WHITE, 255), unsetcolor=(0, 0, 0, 0))
+    out = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
+    r = max(1, round(width))
+    for k in range(16):
+        a = 2 * math.pi * k / 16
+        out.blit(shape, (round(r * math.cos(a)), round(r * math.sin(a))))
+    out.blit(canvas, (0, 0))
+    return out
 
 
 def _rle(img: pygame.Surface) -> None:
