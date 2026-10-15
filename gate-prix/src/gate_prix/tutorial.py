@@ -137,6 +137,7 @@ class TutorialCard:
         car = demo.car
         view.draw(surface, demo.race.track, car.z - config.CAR_AHEAD, car.x, self.sprites,
                   demo.objects())
+        r.gantry.lights = ("green", config.GANTRY_LIGHTS)
         view.draw_sprites(surface, self.sprites, r.cache)
         if demo.outcome is None:
             r._markers_over_right_arches(view, self.sprites)

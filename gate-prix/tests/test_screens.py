@@ -177,22 +177,95 @@ def test_a_race_with_every_new_effect_draws_from_caches_only(renderer, monkeypat
         renderer.draw(m)
 
 
-def test_the_start_lights_go_with_the_gantry_too_near_to_draw(renderer):
-    """Between the gantry's last cached size and the cut-off of the nearest-size pick
-    there is no gantry: no lights either."""
+def _close(got, want, tol=40):
+    return sum(abs(a - b) for a, b in zip(got[:3], want)) <= tol
+
+
+@pytest.mark.parametrize("size,spread", [((960, 540), None), ((480, 540), config.VIEW_2P_SPREAD)])
+def test_the_gantry_is_drawn_at_its_exact_size_as_the_cars_pull_away(size, spread):
+    """The start's flicker: the gantry used to be a sprite of the nearest cached size, 18%
+    apart, so as the grid pulled away under it its posts and banner jumped every few frames
+    and its lights (placed exactly) slid out of their sockets. Every frame from the back
+    row of the grid to the line, its posts, its banner's gold edge and its lit lights must
+    be where the road's projection puts them, and its width must only grow."""
+    from gate_prix import gantry
     from gate_prix.road import RoadView
 
-    view = RoadView((0, 0, 960, 540))
-    cache = renderer.cache
-    surface = pygame.Surface((960, 540), pygame.SRCALPHA)
-    for scale in [s for s in cache.scales if s > sprites.GANTRY_MAX_SCALE][:2] + [600.0]:
-        surface.fill((0, 0, 0, 0))
-        renderer._gantry_lights(surface, view, [("gantry", 480, 530, scale, 540)], ("red", 5))
-        drawn = cache.images["gantry"][cache.index(scale)] is not None
-        assert (surface.get_bounding_rect().w > 0) == drawn, scale
-    surface.fill((0, 0, 0, 0))
-    renderer._gantry_lights(surface, view, [("gantry", 480, 530, 200.0, 540)], ("red", 5))
-    assert surface.get_bounding_rect().w > 0
+    pygame.font.init()
+    sprites._FONTS.clear()
+    view = RoadView((0, 0, *size), spread=spread)
+    fridge = track.fridge()
+    surface = pygame.Surface(size)
+    found: list = []
+    gantry.Gantry.shared().lights = ("green", 5)
+    z, speed, widths = -2300.0, 0.0, []
+    while z < -300:
+        cam = z - config.CAR_AHEAD
+        view.draw(surface, fridge, cam, -0.4, found, [(0.0, 0.0, "gantry")])
+        view.draw_sprites(surface, found)
+        x, y, u, _ = view.place(-cam, 0.0)
+        row = round(y - 0.5 * u)
+        steel = [i for i in range(size[0]) if _close(surface.get_at((i, row)), gantry.STEEL, 12)
+                 or _close(surface.get_at((i, row)), gantry.SHINE, 12)]
+        posts = [x + side * gantry.POST * u for side in (-1, 1)]
+        seen = [p for p in posts if 0 <= p - gantry.POST_W * u / 2 and p + gantry.POST_W * u / 2 < size[0]]
+        for p in seen:  # each post in sight is a post's width of steel, where it should be
+            near = [i for i in steel if abs(i - p) <= gantry.POST_W * u / 2 + 2]
+            assert near and abs(min(near) - (p - gantry.POST_W * u / 2)) <= 1.5, (z, p, near[:3])
+        if len(seen) == 2:
+            widths.append(max(steel) - min(steel))
+        edge_y = round(y - (gantry.BANNER + gantry.EDGE / 2) * u)
+        for ex in (x - 0.9 * u, x + 0.9 * u):
+            if 0 <= round(ex) < size[0] and 0 <= edge_y and gantry.EDGE * u >= 3:
+                assert _close(surface.get_at((round(ex), edge_y)), gantry.GOLD), (z, ex)
+        r = gantry.LIGHT_R * u
+        ly = y - gantry.LIGHT_Y * u
+        for lx in gantry.LIGHT_X:
+            px, py = round(x + lx * u + 0.45 * r), round(ly + 0.45 * r)
+            if r >= 3 and 0 <= px < size[0] and 0 <= py:
+                assert _close(surface.get_at((px, py)), gantry.LIGHT_COLOURS["green"], 60), (z, lx)
+        speed += config.ACCEL / 60
+        z += speed / 60
+    assert len(widths) > 10 and all(b >= a for a, b in zip(widths, widths[1:]))
+
+
+@pytest.mark.parametrize("mode", [1, 2])
+def test_the_gantry_holds_still_in_the_countdown_and_only_grows_as_the_race_starts(renderer, mode):
+    """Through the real match and renderer: in the countdown every view's gantry is the same
+    rectangle each frame; from GO to 3 s in, it only grows, at the road's exact scale, and
+    once it has passed overhead it never comes back."""
+    m = Match(random.Random(2))
+    m.update(DT, FrameInput())
+    if mode == 2:
+        m.update(DT, frame(p1={"nav": (1, 0)}))
+    m.update(DT, frame(p1={"start": True, "held": True}))
+    for _ in range(30):
+        m.update(DT, FrameInput())
+    m.update(DT, frame(p2={"button": True}))
+    assert m.state == "countdown"
+    views = renderer.views[mode]
+    still, grown = None, [[] for _ in views]
+    while m.state == "countdown" or m.race.time < 3.0:
+        renderer.draw(m)
+        drawn = list(renderer.gantry.drawn)
+        if m.state == "countdown":
+            assert len(drawn) == mode
+            assert still is None or drawn == still
+            still = drawn
+        else:
+            assert len(drawn) <= mode
+            for i, (view, car_id) in enumerate(zip(views, m.viewed)):
+                cam = m.race.racer(car_id).car.z - config.CAR_AHEAD
+                placed = view.place(-cam, 0.0)
+                rect = next((rc for rc, u in drawn if placed and u == pytest.approx(placed[2])), None)
+                grown[i].append(rect.width if rect else None)
+        m.update(DT, FrameInput())
+    for widths in grown:
+        assert widths[0] is not None
+        shown = [w for w in widths if w is not None]
+        gone = widths.index(None) if None in widths else len(widths)
+        assert all(w is None for w in widths[gone:])  # passed overhead: never back
+        assert all(b >= a for a, b in zip(shown, shown[1:]))
 
 
 def test_the_title_the_card_and_quit_draw(renderer):

@@ -308,48 +308,8 @@ def draw_car(surf, x, y, u, col, ghost=False):
 GHOST = (170, 230, 255)
 
 
-# --- The second playtest's sprites: the gantry, drifting, the storm, the items --------------
-
-GANTRY_POST = 1.3  # the gantry's posts stand this far out (road half-widths), past the rumble
-GANTRY_TOP = 1.62  # its banner's top, above the road
-GANTRY_BANNER = 1.18  # and its bottom
-LIGHT_Y = 1.07  # the start lights' centres, above the road
-LIGHT_X = (-0.3, -0.15, 0.0, 0.15, 0.3)
-LIGHT_R = 0.055
-GANTRY_MAX_SCALE = 560.0  # nearer than this its banner is above the view: not drawn
-
-
-def draw_gantry(surf, x, y, u):
-    """The start and finish gantry over the lap line: two posts, a "GATE PRIX" banner and
-    a dark housing hanging under it with five unlit start lights (lit by the renderer)."""
-    post = 0.07 * u
-    for side in (-1, 1):
-        px = x + side * GANTRY_POST * u
-        _ellipse(surf, (0, 0, 0, 100), px - post * 1.6, y - post * 0.3, post * 3.2, post * 0.6)
-        _rect(surf, (90, 96, 116), px - post / 2, y - GANTRY_TOP * u, post, GANTRY_TOP * u)
-        _rect(surf, (200, 206, 224), px - post / 2, y - GANTRY_TOP * u, post * 0.3, GANTRY_TOP * u)
-        _rect(surf, (220, 170, 60), px - post * 0.8, y - 0.06 * u, post * 1.6, 0.06 * u)
-    left, right = x - (GANTRY_POST + 0.08) * u, x + (GANTRY_POST + 0.08) * u
-    top, bottom = y - GANTRY_TOP * u, y - GANTRY_BANNER * u
-    _rect(surf, (18, 22, 44), left, top, right - left, bottom - top, rad=0.03 * u)
-    _rect(surf, (220, 170, 60), left, top, right - left, 0.03 * u)
-    _rect(surf, (220, 170, 60), left, bottom - 0.03 * u, right - left, 0.03 * u)
-    for k in range(14):  # chequer strips at both ends of the banner
-        cx0 = left + 0.05 * u
-        cy0 = top + 0.05 * u + (k % 2) * 0.17 * u
-        for end in (0, 1):
-            ox = cx0 + end * (right - left - 0.44 * u) + (k // 2) * 0.05 * u
-            if ox < cx0 + end * (right - left - 0.44 * u) + 0.34 * u:
-                _rect(surf, (240, 240, 246) if (k // 2) % 2 == 0 else (30, 30, 40),
-                      ox, cy0, 0.05 * u, 0.17 * u)
-    _text(surf, "GATE PRIX", max(5, round(0.3 * u)), (255, 230, 120), x, (top + bottom) / 2)
-    # the start lights' housing, under the middle of the banner
-    hx0, hx1 = x + (LIGHT_X[0] - 0.09) * u, x + (LIGHT_X[-1] + 0.09) * u
-    _rect(surf, (12, 12, 20), hx0, bottom, hx1 - hx0, (GANTRY_BANNER - LIGHT_Y + 0.08) * u, rad=0.03 * u)
-    for lx in LIGHT_X:
-        _circle(surf, (50, 30, 34), x + lx * u, y - LIGHT_Y * u, LIGHT_R * u)
-        _circle(surf, (90, 70, 74), x + lx * u, y - LIGHT_Y * u, LIGHT_R * u, max(1, 0.012 * u))
-
+# --- The second playtest's sprites: drifting, the storm, the items (the start and finish
+# gantry is drawn at its exact size every frame instead: gantry.py) -------------------------
 
 SPARK_COLOURS = ((255, 250, 225), (90, 170, 255), (255, 200, 60))  # drift charge 0, 1, 2
 SPARK_FRAMES = 3
@@ -457,7 +417,6 @@ def draw_shot(surf, x, y, u):
 
 
 def _kinds_v2(kinds):
-    kinds["gantry"] = (draw_gantry, (-(GANTRY_POST + 0.1), -GANTRY_TOP - 0.02, GANTRY_POST + 0.1, 0.03))
     for level in range(3):
         for f in range(SPARK_FRAMES):
             kinds[f"spark:{level}:{f}"] = (lambda s, x, y, u, lv=level, f=f: draw_sparks(s, x, y, u, lv, f),
@@ -505,7 +464,6 @@ def _kinds():
 
 _KIND_TABLE = _kinds()
 KINDS = tuple(_KIND_TABLE)
-MAX_SCALE = {"gantry": GANTRY_MAX_SCALE}  # kinds never drawn nearer than this
 
 # Every car also comes tilted (a drift: TILT_STEP degrees a step, TILTS steps either way) and
 # as a tunnelling ghost (translucent, with GHOST_FRAMES of a shimmer). These are made from the
@@ -629,9 +587,8 @@ class SpriteCache:
         self.scales = sprite_scales()
         self._log_lo = math.log(self.scales[0])
         self._log_step = math.log(self.scales[1] / self.scales[0])
-        self.images: dict[str, list[tuple[pygame.Surface, int, int] | None]] = {
-            kind: [render_sprite(kind, s) if s <= MAX_SCALE.get(kind, s) else None
-                   for s in self.scales] for kind in KINDS
+        self.images: dict[str, list[tuple[pygame.Surface, int, int]]] = {
+            kind: [render_sprite(kind, s) for s in self.scales] for kind in KINDS
         }
         for kind in CAR_KINDS:
             base = self.images[kind]
@@ -663,10 +620,7 @@ class SpriteCache:
         i = self.index(scale)
         if i is None:
             return False
-        entry = self.images[kind][i]
-        if entry is None:
-            return False
-        img, ax, ay = entry
+        img, ax, ay = self.images[kind][i]
         left, top = round(x) - ax, round(y) - ay
         if clip_y is not None:
             visible = round(clip_y) - top

@@ -6,15 +6,17 @@
   1 player: one 960x540 view. The attract race behind the title (bots only) is drawn in
   two views as well, following two of its bots (`match.viewed`).
 - Each view is a `RoadView` of the track from behind its own car, with the arches, the
-  item boxes, the start and finish gantry over the chequered lap line (its five start
-  lights red one by one in the countdown, all green from GO), every car, their exhaust
-  flames while they boost and the SPLIT clones (translucent) as sprites, and a bouncing
-  marker over every right arch. The people's cars (P1 blue, P2 red) have a white outline, so
-  you find your own among the bots' neutral ones (sprites.py). A drifting car is tilted, with sparks at its rear wheels
-  (white, blue at charge 1, gold at 2) and the mini-turbo's flash as it lets go; a
-  tunnelling car is a see-through shimmer. MEASURE shots fly as gold orbs on a beam from
-  their shooter, DECOHERENCE clouds sit on the road, and each racer's own noise storm (its
-  static clouds and bit-flip mines) shows in its own view only.
+  item boxes, the start and finish gantry over the chequered lap line (drawn at its exact
+  size, gantry.py; its five start lights red one by one in the countdown, all green from
+  GO), every car, their exhaust flames while they boost and the SPLIT clones
+  (translucent) as sprites, and a bouncing marker over every right arch. The people's cars
+  (P1 blue, P2 red) have a white outline, so you find your own among the bots' neutral ones
+  (sprites.py; the attract race has no people, so nobody is outlined). A drifting car is
+  tilted, with sparks at its rear wheels (white, blue at charge 1, gold at 2) and the
+  mini-turbo's flash as it lets go; a tunnelling car is a see-through shimmer. MEASURE
+  shots fly as gold orbs on a beam from their shooter, DECOHERENCE clouds sit on the road,
+  and each racer's own noise storm (its static clouds and bit-flip mines) shows in its own
+  view only.
 - **The HUD**, per view:
   - top left, one big NEXT GATE badge and under it a dot per slot, 16 in all (in a narrow
     2P view two rows of 8, a lap each): ✓ green, ✗ red, the next one ringed. Past the last
@@ -60,6 +62,7 @@ import pygame
 
 from gate_prix import config, icons, sprites, track
 from gate_prix.circuit import GATES
+from gate_prix.gantry import Gantry
 from gate_prix.match import COUNTDOWN, HOWTO, PAUSED, RACE, RESULT, TITLE, Match
 from gate_prix.minimap import Minimap
 from gate_prix.race import Race
@@ -110,7 +113,6 @@ MAP = (170, 118)  # the minimap's box
 TILT = 0.45  # a drifting car's tilt, as a share of its slide's angle (20 degrees: 9)
 STORM = (200, 170, 255)  # STORM AHEAD's violet
 SHOT = (255, 200, 90)
-LIGHT_RADII = tuple(range(2, 42, 2))  # the start lights, px
 ORDINALS = ("1st", "2nd", "3rd", "4th", "5th", "6th")
 NAMES = {"p1": "P1", "p2": "P2"}
 
@@ -199,7 +201,7 @@ class Renderer:
             Background.for_size(size)
         self._text: dict[tuple, pygame.Surface] = {}
         self._sprites: list = []
-        self._arches: tuple[int, list] = (0, [])
+        self._arches: tuple[Race | None, list] = (None, [])
         self._small = self._gate_boxes(SMALL)
         self._badges = self._next_badges()
         self._dots = self._slot_dots()
@@ -212,9 +214,9 @@ class Renderer:
         self._panels: dict[tuple, pygame.Surface] = {}
         self._buttons = [self._a_button(k / (PULSE - 1)) for k in range(PULSE)]
         self._markers = sprites.markers()
-        self._frozen: dict[str, tuple[int, pygame.Surface]] = {}  # player: (race, still)
+        self._frozen: dict[str, tuple[Race, pygame.Surface]] = {}  # player: (race, still)
         self._blind = self._blind_badge()
-        self._lights = self._light_discs()
+        self.gantry = Gantry.shared()  # drawn at its exact size: gantry.py
         icons.build((ICON, TIP_ICON, *REVEAL_ICONS))
         self._gantries = [(n * track.fridge().lap_length(), 0.0, "gantry")
                           for n in range(config.LAPS + 1)]
@@ -449,24 +451,6 @@ class Renderer:
                          2 * ss, border_radius=10 * ss)
         return pygame.transform.smoothscale(s, (BADGE + 16, BADGE + 16))
 
-    @staticmethod
-    def _light_discs() -> dict[str, list[pygame.Surface]]:
-        """The start lights, lit: red and green, a glowing disc at each of LIGHT_RADII."""
-        out = {}
-        for name, col in (("red", (255, 40, 50)), ("green", (60, 255, 120))):
-            discs = []
-            for r in LIGHT_RADII:
-                n = r * 6
-                s = pygame.Surface((n, n), pygame.SRCALPHA)
-                c = n // 2
-                for k in range(3 * r, r, -1):
-                    pygame.draw.circle(s, (*col, round(110 * (1 - (k - r) / (2 * r)) ** 2)), (c, c), k)
-                pygame.draw.circle(s, col, (c, c), r)
-                pygame.draw.circle(s, mix(col, WHITE, 0.6), (c - r // 3, c - r // 3), max(1, r // 2))
-                discs.append(s)
-            out[name] = discs
-        return out
-
     def _title_backdrop(self) -> pygame.Surface:
         """The title's picture when no attract race runs: the grid of a race, under the
         gantry, a gate row ahead."""
@@ -478,19 +462,21 @@ class Renderer:
         objects.append((cam_z + config.CAR_AHEAD, 0.0, "car:p1"))
         objects.append((cam_z + config.CAR_AHEAD + 2600, 0.5, "car:p2"))
         view.draw(surf, race.track, cam_z, 0.0, self._sprites, objects)
+        self.gantry.lights = ("green", config.GANTRY_LIGHTS)
         view.draw_sprites(surf, self._sprites, self.cache)
-        self._gantry_lights(surf, view, self._sprites, ("green", config.GANTRY_LIGHTS))
         return surf
 
     def _arch_objects(self, race: Race) -> list:
-        if self._arches[0] != id(race):
-            self._arches = (id(race), track.arch_objects(race.rows) + self._gantries)
+        # keyed by the race itself, not its id(): a new race can reuse a freed one's id
+        if self._arches[0] is not race:
+            self._arches = (race, track.arch_objects(race.rows) + self._gantries)
         return self._arches[1]
 
     # --- The frame ---------------------------------------------------------------------------
 
     def draw(self, match: Match) -> None:
         self.frame += 1
+        self.gantry.drawn.clear()
         state = match.state
         if state == HOWTO:
             if not self._in_howto:
@@ -605,8 +591,8 @@ class Renderer:
         view.draw(self.surface, race.track, car.z - ahead, car.x, self._sprites, objects,
                   depth=config.CAMERA_DEPTH / widen, ahead=ahead,
                   lift=shake(car.speed, self.frame, i))
+        self.gantry.lights = self._lights_state(match)
         view.draw_sprites(self.surface, self._sprites, self.cache)
-        self._gantry_lights(self.surface, view, self._sprites, self._lights_state(match))
         self._beams(view, race, car.z - ahead)
         if not (hud and racer.blind):  # decohered: the marker goes blank
             self._markers_over_right_arches(view)
@@ -641,27 +627,6 @@ class Renderer:
                 continue  # behind a crest, or above the view
             self.surface.blit(img, (ox + round(x - w / 2), oy + round(bottom - w)))
 
-    def _gantry_lights(self, surface, view: RoadView, found, state: tuple[str, int]) -> None:
-        """The gantry's start lights, lit, over each gantry in sight."""
-        colour, n = state
-        discs = self._lights[colour]
-        ox, oy = view.rect.topleft
-        for kind, x, y, scale, clip_y in found:
-            if kind != "gantry":
-                continue
-            size = self.cache.index(scale)
-            if size is None or self.cache.images["gantry"][size] is None:
-                continue  # too near for the gantry to be drawn: no lights without it
-            ly = y - sprites.LIGHT_Y * scale
-            if ly > clip_y:
-                continue
-            want = sprites.LIGHT_R * scale
-            i = max(0, min(len(LIGHT_RADII) - 1, round(want / 2) - 1))
-            img = discs[i]
-            half = img.get_width() // 2
-            for lx in sprites.LIGHT_X[:n]:
-                surface.blit(img, (ox + round(x + lx * scale) - half, oy + round(ly) - half))
-
     def _beams(self, view: RoadView, race: Race, cam_z: float) -> None:
         """Each MEASURE shot's beam, from its shooter's car to the orb, in this view."""
         ox, oy = view.rect.topleft
@@ -684,9 +649,9 @@ class Renderer:
         race = match.race
         p = racer.car.id
         still = self._frozen.get(p)
-        if still is None or still[0] != id(race):
+        if still is None or still[0] is not race:
             self._view(match, view, racer, objects, i, hud=True)
-            still = (id(race), self.surface.subsurface(view.rect).copy())
+            still = (race, self.surface.subsurface(view.rect).copy())
             self._frozen[p] = still
         self.surface.blit(still[1], view.rect.topleft)
         self.surface.blit(self._shade[150], view.rect.topleft, ((0, 0), view.rect.size))

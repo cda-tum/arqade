@@ -47,7 +47,10 @@ PLAY card.
   second.
 - **The start and finish line** is a chequered band across the road under a gantry with
   a "GATE PRIX" banner and five start lights: red one by one in the 3-2-1 countdown, all
-  green at GO. Crossing it shows LAP 2/3, and FINAL LAP with STORM AHEAD.
+  green at GO. Crossing it shows LAP 2/3, and FINAL LAP with STORM AHEAD. The gantry is
+  the one thing on the road drawn at its exact size every frame (`gantry.py`): as a
+  nearest-size sprite it jumped between sizes 18% apart as the grid pulled away under it,
+  and flickered.
 - **The target circuit** is 16 random gates from H, X, Y and Z (never the same gate twice
   in a row), one per **gate row**: 8 rows a lap, on **laps 1 and 2 only**. A row has 1 to
   3 arches spread across the road. The right one, the slot's gate, glows brightly under a
@@ -232,7 +235,8 @@ caches only, the sound table, and a short scripted session of the real loop.
 | `ai.py` | The one AI: `Skill`, `SKILLS` (EASY / TOUGH / BRUTAL) and the `Driver` for the bots, the attract race, a finished player's autopilot and the HOW TO PLAY demo. Pure. |
 | `match.py` | Title (and QUIT), the HOW TO PLAY card, attract, countdown, race, pause, result, idle. Pure. |
 | `road.py` | The pseudo-3D projection and road drawing (and the chequered lap line) for one view. |
-| `sprites.py` | Every sprite pre-rendered at 24 sizes at start-up (cars tilted and see-through too, the gantry, sparks, the storm, shots); the backgrounds per view size. |
+| `sprites.py` | Every sprite pre-rendered at 24 sizes at start-up (cars tilted and see-through too, sparks, the storm, shots); the backgrounds per view size. |
+| `gantry.py` | The start and finish gantry, drawn from its parts at its exact size (its lettering, shadows and lights pre-rendered). |
 | `icons.py` | The five item icons, drawn once per size. |
 | `minimap.py` | The lap from above, drawn once; a dot and a name per car per frame. |
 | `tutorial.py` | The HOW TO PLAY card and its demo (a real race, the AI on P1's car). |

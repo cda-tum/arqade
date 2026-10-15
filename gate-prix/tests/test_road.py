@@ -182,7 +182,7 @@ def test_the_sprite_cache_holds_every_kind_at_every_size(cache):
     expected |= {f"flame:{i}" for i in range(sprites.FLAME_FRAMES)}
     expected |= {f"arch:{g}" for g in circuit.GATES} | {f"arch:{g}:lit" for g in circuit.GATES}
     expected |= {f"car:{name}" for name in config.CAR_COLORS}
-    expected |= {"gantry", "shot", "turbo:1", "turbo:2"}
+    expected |= {"shot", "turbo:1", "turbo:2"}  # (the gantry is drawn exactly: gantry.py)
     expected |= {f"spark:{lv}:{f}" for lv in range(3) for f in range(sprites.SPARK_FRAMES)}
     expected |= {f"{k}:{f}" for k in ("static", "deco") for f in range(sprites.STATIC_FRAMES)}
     expected |= {f"mine:{f}" for f in range(sprites.MINE_FRAMES)}
@@ -195,10 +195,6 @@ def test_the_sprite_cache_holds_every_kind_at_every_size(cache):
         assert len(images) == config.SPRITE_SIZES
         if kind in derived:
             continue
-        cap = sprites.MAX_SCALE.get(kind)
-        if cap is not None:  # never drawn nearer than its cap: no image for those sizes
-            assert all((e is None) == (s > cap) for e, s in zip(images, cache.scales)), kind
-            images = [e for e in images if e is not None]
         heights = [img.get_height() for img, _, _ in images]
         # within a pixel: far away an arch's badge keeps a minimum size, so it barely grows
         assert all(b >= a - 1 for a, b in zip(heights, heights[1:])), kind
@@ -227,8 +223,7 @@ def test_the_sprite_cache_builds_once(cache, monkeypatch):
     surface = pygame.Surface((960, 270))
     for kind in cache.images:
         for scale in (18, 25, 77, 300, 999, 1080):
-            cap = sprites.MAX_SCALE.get(kind)
-            assert cache.blit(surface, kind, 480, 200, scale) == (cap is None or scale < cap), kind
+            assert cache.blit(surface, kind, 480, 200, scale), kind
 
 
 def test_blit_picks_the_nearest_size_and_skips_what_is_too_near(cache):

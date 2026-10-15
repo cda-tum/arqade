@@ -86,11 +86,11 @@ def run(views, frames: int, fridge, statics, cache, renderer=None) -> list[float
             view.draw(screen, fridge, cam_z + config.CAR_AHEAD - ahead, cam_x, sprites,
                       objects, depth=config.CAMERA_DEPTH / widen, ahead=ahead,
                       lift=shake(speed, frame, i))
+            renderer.gantry.lights = ("red", 5)
             view.draw_sprites(screen, sprites, cache)
             renderer._sprites = sprites
             renderer.frame = frame
             renderer._markers_over_right_arches(view)
-            renderer._gantry_lights(screen, view, sprites, ("red", 5))
             k = (frame // 2) % len(renderer._tunnel[view.rect.size])
             screen.blit(renderer._tunnel[view.rect.size][k], view.rect.topleft)
             for strip, (x, y) in renderer._tint[view.rect.size][-1]:
