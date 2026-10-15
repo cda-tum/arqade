@@ -47,6 +47,7 @@ ROMS = [
     "gate_drop",
     "planck_time",
     "brawl_ket",
+    "gate_prix",
 ]
 SIZE = 1024
 WIDE = (1024, 512)
