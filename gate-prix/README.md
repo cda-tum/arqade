@@ -11,12 +11,12 @@ Design: `../docs/superpowers/specs/2026-10-12-gate-prix-design.md`; the approved
 lap, a simpler HUD, items that explain themselves, the CIRCUIT CHECK as an event, and more
 sense of speed). The race, items, the AI's bots at three levels, the title (PLAYERS, BOTS,
 LEVEL) with an attract race, pause, results,
-sound, `--input-test` and the Batocera deploy script are in; the screens get the look
-file's polish next (Task 6 of the plan). Button numbers follow the ones confirmed on the
-cabinet. The second playtest's changes are in: drifting, the noise storm, MEASURE, TUNNEL
-and DECOHERENCE (the rules), and the screens: the vertical split, the finish line and its
-gantry, the minimap, item icons, the drift and item effects, the QUIT row and the HOW TO
-PLAY card.
+sound, `--input-test` and the Batocera deploy script are in. Button numbers follow the
+ones confirmed on the cabinet. The second playtest's changes are in: drifting, the noise
+storm, MEASURE, TUNNEL and DECOHERENCE (the rules), and the screens: the vertical split,
+the finish line and its gantry, the minimap, item icons, the drift and item effects, the
+QUIT row and the HOW TO PLAY card. So is the look file's polish: every car's Bloch orb,
+the results' circuits and Bloch spheres, the title's wordmark and ITEM FULL.
 
 ## The race
 
@@ -56,6 +56,11 @@ PLAY card.
   3 arches spread across the road. The right one, the slot's gate, glows brightly under a
   bouncing ▼; the decoys are dimmer and smaller (and only what is drawn counts: a car
   goes through a decoy within 80% of the right arch's width).
+- **The car's qubit:** your circuit so far is simulated exactly on |0>, and the orb on
+  your engine cover shows the state: its arrow points along the Bloch vector and its colour
+  names the state (|0⟩ ice white, pointing up; |1⟩ gold, down; |+⟩ green, towards you;
+  |−⟩ pink, away). H, X, Y and Z from |0> only ever reach these four. Every car carries
+  one. It is decoration and teaching only: scoring is gate by gate.
 - **Driving through an arch** adds its gate to your circuit, and a flash by your car says
   how it went:
   - **RIGHT GATE +BOOST:** your streak grows and you get a **light-speed boost**, +30% for
@@ -90,7 +95,9 @@ PLAY card.
   gets more MEASURE, TUNNEL and SPLIT, the front more DECOHERENCE and QEC, and on the final
   lap there is no SPLIT or QEC. A box's item pops up over your car as you take it. You hold
   one; its slot pulses with its icon, its name and A (in 1P also what it does), and the
-  first time you get each one a banner says "PRESS A TO USE ...". The icons:
+  first time you get each one a banner says "PRESS A TO USE ...". A box driven through
+  with an item already held breaks and gives nothing: the slot's edge flashes red and says
+  ITEM FULL for a second. The icons:
   - **SPLIT** (two overlapping cars, "a clone takes a second gate"): for the next 2 gate rows a translucent
     clone drives mirrored across the centre line; if either of you takes the right arch,
     the slot is right. It is over with the last gate row: one still held is dropped;
@@ -119,8 +126,11 @@ PLAY card.
 - **Speed you can feel:** the top speed is 12% up from the first build, the roadside
   stands close to the road, speed lines show at top speed, the camera shakes a little,
   and a boost widens the field of view, lights the exhaust and whooshes.
-- **The result:** places (the bots as CPU1 ...) and times, and each player's circuit under the target with its
-  accuracy ("14/16 GATES") and its check ("CHECK 12/16"). A rematches, B goes to the title.
+- **The result:** places (the bots as CPU1 ...) and times, and a panel per player: the
+  accuracy ("14/16 GATES") and the check ("CHECK 12/16"); the whole circuit under the
+  target's, the wrong slots outlined in red and a ✓ or ✗ under each slot in a row of its
+  own; and the final state on a small Bloch sphere beside the target's, with = or ≠
+  between them. A rematches, B goes to the title.
 - **2 players:** the race ends when both have finished, or 40 s after the first one did
   (the other is placed where they are). A finished car is driven on by the AI.
 - **Sounds:** what happens to a bot sounds as it does for a person: a bump or a MEASURE
@@ -152,9 +162,11 @@ PLAY card.
   fills it again. A line under the rows says what you picked ("A TIME TRIAL: JUST YOU").
   A or Start begins the race as set; A on **QUIT** quits the game at once, and Start never
   quits. B does nothing. A button already held when the game starts must be let go first.
-  Untouched for 3 s, an attract race of 5 bots at TOUGH plays behind it, its two split
-  views following two of them; it resets the rows for the next visitor (1 player, 5 bots,
-  EASY), and whoever stops it finds PLAYERS highlighted, never QUIT.
+  The title is the GATE PRIX wordmark of the logo (italic race lettering over the
+  chequer). Untouched for 3 s, an attract race of 5 bots at TOUGH plays behind it, its two
+  split views following two of them, and whoever stops it never finds QUIT highlighted
+  (PLAYERS is). The rows stay as set while a visitor reads; only after 30 s untouched do
+  they go back to 1 player, 5 bots, EASY for the next one.
 - **HOW TO PLAY:** every match begun from the title (not a rematch) opens on a card: the
   goal, a demo of a car steering through the glowing arch and boosting (the real race and
   the AI at BRUTAL), and the controls (the stick: steer, brake, STICK BACK + STEER: DRIFT; the
@@ -208,7 +220,8 @@ uvx --from 'ruff==0.15.22' ruff check src tests tools
 The tests cover the circuit, the track and its gate rows, the car's handling, the race
 rules, items, the AI (its levels and the ladder alone on the track, and who beats which
 level over many seeds), the road projection and sprite cache, the
-match flow (title, attract, countdown, pause, idle, finish, result), the input (axes,
+match flow (title, attract, countdown, pause, idle, finish, result), the qubit's states
+and pictures, the gantry drawn at its exact size through the start, the input (axes,
 presses, the armed Start + Select quit, keyboard fallbacks, `--no-keyboard`), the QUIT row
 and the HOW TO PLAY card, the demo, the minimap, the renderer drawing every effect from its
 caches only, the sound table, and a short scripted session of the real loop.
@@ -217,9 +230,10 @@ caches only, the sound table, and a short scripted session of the real loop.
 
 | Tool | Does |
 |---|---|
+| `tools/snapshot.py OUT` | Every screen to PNGs, through the real match and renderer: the title (and over the attract race), HOW TO PLAY, the countdown's lights, GO, the 1P race, a drift, each item held and used, ITEM FULL, pause, the CHECK and the warp, the storm, the results, and a 2P race, check and results. |
 | `tools/road_demo.py` | Drive the camera round the track (`--screenshot` for one frame). |
 | `tools/drive_demo.py` | A real race with debug text; `--auto` drives P1 perfectly. |
-| `tools/benchmark.py` | Times the road renderer (2 views of 480x540, then 1; plain, then with the warp's and the drift, storm, gantry and minimap effects); runs headless, also on the cabinet. |
+| `tools/benchmark.py` | Times the road renderer (2 views of 480x540, then 1, 6 cars in each; plain, then with the warp's and the drift, orb, storm, gantry and minimap effects; every run made twice, the first discarded); runs headless, also on the cabinet. |
 | `tools/handling.py` | How the track drives, piece by piece, for tuning the handling. |
 | `tools/race_stats.py` | Races the bots (`--level`, `--bots`) against a scripted P1 (`--player perfect`, `mediocre` with `--right`, `ai`, `park`) over many seeds: gate rates, finish gaps and P1's margin, bumps, items, turbos and hits. `--ladder` times each level alone on the track. |
 
@@ -238,6 +252,8 @@ caches only, the sound table, and a short scripted session of the real loop.
 | `sprites.py` | Every sprite pre-rendered at 24 sizes at start-up (cars tilted and see-through too, sparks, the storm, shots); the backgrounds per view size. |
 | `gantry.py` | The start and finish gantry, drawn from its parts at its exact size (its lettering, shadows and lights pre-rendered). |
 | `icons.py` | The five item icons, drawn once per size. |
+| `bloch.py` | The four states the gates reach from \|0⟩: their colours, the cars' orbs' arrows, the results' Bloch spheres. |
+| `wordmark.py` | The title's GATE PRIX lettering, drawn once at start-up. |
 | `minimap.py` | The lap from above, drawn once; a dot and a name per car per frame. |
 | `tutorial.py` | The HOW TO PLAY card and its demo (a real race, the AI on P1's car). |
 | `render.py` | The views, the HUD, the banners and the screens. |

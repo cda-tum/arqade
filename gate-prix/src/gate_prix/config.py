@@ -210,10 +210,6 @@ BOT_TUNNEL_LOOK = 0.5  # a hazard or cloud still in its path this close: TUNNEL
 BOT_TRAFFIC = 2 * 400.0  # TUNNEL in traffic: a car this close ahead or alongside (CAR_LENGTH)
 BOT_DECO_BEHIND = 8000.0  # DECOHERENCE when a car is this close behind it, in line
 BOT_DECO_LINE = 0.6  # in line: within this sideways
-# A bump or a MEASURE hit between two bots sounds for a person who can see it: the bot is
-# within the person's draw distance ahead, or a few car lengths behind.
-HEAR_AHEAD = 120 * 200.0  # DRAW_SEGMENTS * SEG
-HEAR_BEHIND = 3 * 400.0  # 3 * CAR_LENGTH
 BOT_BLIND_SKILL = 0.5  # a bot picking its arch while blind does it at this times its aim
 BOT_FUMBLE = 0.8  # seconds after the pickup a bot that fumbles an item uses it, wherever
 
@@ -229,6 +225,10 @@ CAR_AHEAD = 760.0  # camera to its own car: the car's wheels then sit 10 px abov
 DRAW_SEGMENTS = 120  # how far ahead the road is projected (2.4 s at top speed)
 HORIZON = 112 / 270  # the horizon's height, as a fraction of a view's height
 PARALLAX_TILES = 3  # how many background widths scroll past in one full turn (a lap)
+# A bump or a MEASURE hit between two bots sounds for a person who can see it: the bot is
+# within the person's draw distance ahead, or a few car lengths behind (match.Match._seen).
+HEAR_AHEAD = DRAW_SEGMENTS * SEG
+HEAR_BEHIND = 3 * CAR_LENGTH
 
 # --- Gate rows -----------------------------------------------------------------------------
 ARCH_HALF_WIDTH = 0.22  # an arch's outer radius: a car within it of the offset goes through
@@ -250,6 +250,9 @@ CAR_WIDTH = 0.32  # in road half-widths, as the look's own car beside its road
 
 # --- Flow ------------------------------------------------------------------------------
 ATTRACT_DELAY = 3.0  # untouched seconds on the title before the attract race plays
+# untouched seconds on the title before its rows go back to the defaults: long enough to read
+# the title (the attract race starting does not touch them), short of a new visitor arriving
+ATTRACT_RESET = 30.0
 ATTRACT_LEVEL = "TOUGH"  # the attract race behind the title: bots only
 ATTRACT_BOTS = 5  # its cars (the bots' five colours); the two split views follow two of them
 IDLE_TIMEOUT = 60.0  # untouched seconds anywhere but the title: back to the title, its rows reset
@@ -278,6 +281,7 @@ PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 TITLE_ITEMS = ("PLAYERS", "BOTS", "LEVEL", "QUIT")  # the title's rows; QUIT exits the game
 HOWTO_GUARD = 0.3  # the HOW TO PLAY card ignores the buttons this long (the A that chose)
 REVEAL_TIME = 0.9  # a box's item pops up over the car this long
+FULL_TIME = 1.0  # ITEM FULL flashes in the slot this long, on a box hit with an item held
 FINAL_BANNER = 2.4  # FINAL LAP / STORM AHEAD stays up this long after the check's freeze
 GANTRY_LIGHTS = 5  # the start lights: red one by one in the countdown, all green at GO
 

@@ -4,7 +4,8 @@
                                       [--player perfect|mediocre|ai|park] [--naive]
     uv run python tools/race_stats.py --ladder [--seeds N]
 
-For each seed it runs a whole 1P race to the end (every car finishes), the bots at --level.
+For each seed it runs a whole 1P race to the end (every car finishes), the bots at --level
+(TOUGH unless named: the level the AI was tuned at, not the title's EASY default).
 P1 is the scripted perfect driver (every right arch, every hazard seen, no drifting, no
 items), the scripted mediocre one (a first-time visitor: the right arch on 60% of the rows,
 60% of the hazards seen, no drifting, no items; --right sets the 60%), the AI at --level, or parked off the road.
@@ -125,7 +126,7 @@ def main(argv=None) -> None:
     parser.add_argument("--seeds", type=int, default=20)
     parser.add_argument("--player", choices=("perfect", "mediocre", "ai", "park"),
                         default="perfect")
-    parser.add_argument("--level", choices=config.LEVELS, default=config.DEFAULT_LEVEL)
+    parser.add_argument("--level", choices=config.LEVELS, default="TOUGH")
     parser.add_argument("--bots", type=int, default=None)
     parser.add_argument("--right", type=float, default=0.6,
                         help="the mediocre player's share of right arches and hazards seen")

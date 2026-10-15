@@ -231,16 +231,45 @@ def test_a_held_sideways_push_changes_a_value_one_step():
     assert held_down(m, 2.0, dx=1, dy=0) == 1 and m.bot_count == 4
 
 
-def test_an_attract_race_resets_the_rows_for_the_next_visitor():
-    m = fresh(1)
+def set_rows(m: Match) -> None:
     tap(m, RIGHT)  # 2 players
     tap(m, DOWN)
     tap(m, LEFT)  # 3 bots
     tap(m, DOWN)
     tap(m, RIGHT)  # TOUGH
     assert settings(m) == (2, 3, "TOUGH") and m.title_index == 2
+
+
+def test_a_visitor_reading_the_title_keeps_the_rows_they_set():
+    """The attract race starts after ATTRACT_DELAY untouched, but the rows (and the row
+    under A) stay as the visitor left them: they may only be reading."""
+    m = fresh(1)
+    set_rows(m)
     run(m, config.ATTRACT_DELAY + 0.5)
+    assert m.attract and settings(m) == (2, 3, "TOUGH") and m.title_index == 2
+    run(m, config.ATTRACT_RESET - config.ATTRACT_DELAY - 1.5)
+    assert m.attract and settings(m) == (2, 3, "TOUGH") and m.title_index == 2
+    m.update(DT, DOWN)  # the push that stops the attract race changes nothing
+    assert not m.attract and settings(m) == (2, 3, "TOUGH") and m.title_index == 2
+
+
+def test_a_long_idle_resets_the_rows_for_the_next_visitor():
+    assert config.ATTRACT_DELAY < 10 <= config.ATTRACT_RESET <= 45  # before someone new comes
+    m = fresh(1)
+    set_rows(m)
+    run(m, config.ATTRACT_RESET + 0.1)
     assert m.attract and settings(m) == (1, 5, "EASY") and m.title_index == 0
+    m.update(DT, START)
+    assert m.state == HOWTO and settings(m) == (1, 5, "EASY")
+
+
+def test_the_long_idle_counts_from_the_last_touch():
+    m = fresh(1)
+    set_rows(m)
+    run(m, config.ATTRACT_RESET - 5.0)
+    tap(m, RIGHT)  # stops the attract race (and changes nothing)
+    run(m, 6.0)
+    assert m.attract and settings(m) == (2, 3, "TOUGH")
 
 
 @pytest.mark.parametrize("button", [A, START])
@@ -255,7 +284,7 @@ def test_a_title_left_on_quit_offers_players_once_the_attract_race_runs(button):
     assert m.attract and m.title_index == 0  # back on PLAYERS
     events = m.update(DT, button)
     assert not m.quit_requested and not cues(events, "quit")
-    assert m.state == HOWTO and settings(m) == (1, 5, "EASY")  # the attract race reset them
+    assert m.state == HOWTO and settings(m) == (2, 4, "EASY")  # the rows as they were set
 
 
 def test_a_on_quit_quits_at_once():
@@ -937,6 +966,20 @@ def test_every_box_pops_its_item_up_over_the_car():
     m.race.racer("p1").item = None
     through_box(m)  # seen before: no tip, but the item still pops up
     assert m.banner("p1", "reveal").value == "MEASURE" and m.banner("p1", "tip") is None
+
+
+def test_a_box_hit_with_an_item_held_flashes_item_full():
+    m = started()
+    m.race.racer("p1").item = "QEC"
+    through_box(m)
+    full = m.banner("p1", "full")
+    assert full is not None and full.value == "QEC" and m.banner("p1", "reveal") is None
+    assert m.race.racer("p1").item == "QEC"
+    run(m, config.FULL_TIME)
+    assert m.banner("p1", "full") is None
+    m.race.racer("p1").item = None
+    through_box(m)  # with the slot free: the item, no flash
+    assert m.banner("p1", "full") is None and m.banner("p1", "reveal") is not None
 
 
 def test_lap_2_and_the_final_lap_get_their_banners():

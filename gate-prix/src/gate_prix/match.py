@@ -19,9 +19,10 @@ bumps and hits a player can see (the sound and the HUD use them).
   moves the row, never a value). Only the first pad whose stick is pushed counts, so when
   the pads disagree P1's wins. Changing PLAYERS keeps a full field full (5 bots alone, 4
   with two) and otherwise clamps BOTS. The rows start at 1 player, 5 bots, EASY (a level
-  a first-time visitor can beat), and go back to that whenever an attract race starts (a
-  new visitor is coming); when it is stopped too the highlight is on PLAYERS, so the
-  visitor who stops it never finds QUIT under A. A begins
+  a first-time visitor can beat), and go back to that, PLAYERS highlighted, after
+  ATTRACT_RESET seconds untouched (a new visitor is coming; a visitor only reading the
+  title keeps what they set). Whenever the attract race starts or is stopped, a highlight
+  on QUIT moves to PLAYERS, so the visitor who stops it never finds QUIT under A. A begins
   the race with the rows' settings, or on QUIT quits at once (`quit_requested`, the main
   loop's clean exit). Start always begins, never quits. B does nothing.
   After ATTRACT_DELAY seconds untouched an attract race plays behind it:
@@ -57,15 +58,16 @@ bumps and hits a player can see (the sound and the HUD use them).
   to use an item on its first pickup (value the item; once per item and player each
   session, a session ending when the idle timeout sends the cabinet back to the title),
   "lap" (LAP 2/3), "final" (FINAL LAP and STORM AHEAD, shown once the check's freeze is
-  over), "reveal" (the item a box just gave, popping up over the car) and "finish" (the
-  place, until the result).
+  over), "reveal" (the item a box just gave, popping up over the car), "full" (ITEM FULL in
+  the slot, FULL_TIME: a box driven through with an item held gives nothing) and "finish"
+  (the place, until the result).
 - **Pause:** Start (either pad) pauses the countdown or the race: RESUME / QUIT TO TITLE.
   The stick moves, A picks, B or Start resumes. Nothing moves meanwhile.
 - **The end:** once every player has finished (or, with 2 players, FINISH_GRACE seconds
   after the first one did) the race is frozen into `results`; FINISH_DELAY later the result
   screen shows it. A or Start rematches (after RESULT_LOCK), B goes to the title.
 - **Idle:** IDLE_TIMEOUT seconds untouched anywhere but the title (paused too) returns to
-  the title and resets its rows: 1 player, 5 bots, TOUGH. Start + Select quitting is the
+  the title and resets its rows: 1 player, 5 bots, EASY. Start + Select quitting is the
   main loop's.
 - All the races are `finish_all=True`, so the bots drive on behind the finish banner;
   the match decides when the race is over, and freezes the places at that moment.
@@ -276,7 +278,7 @@ class Match:
         stopped = inp.activity and self.attract
         if stopped:
             self.race, self.drivers, self.attract = None, {}, False
-            self.title_index = 0  # never QUIT under the A that stopped it
+            self._off_quit()  # never QUIT under the A that stopped it
         step, change = self._title_steps(inp)
         index = max(0, min(len(config.TITLE_ITEMS) - 1, self.title_index + step))
         row = config.TITLE_ITEMS[index]
@@ -298,6 +300,8 @@ class Match:
             self.race, self.drivers, self.attract = None, {}, False
             return
         if self.attract:
+            if self.idle >= config.ATTRACT_RESET:
+                self._title_defaults()  # nobody has touched it for long: someone new next
             if self.race.over:
                 self._attract()
             else:
@@ -346,8 +350,13 @@ class Match:
         if self.t - dt >= config.HOWTO_GUARD and inp.pressed():
             self._new_race(events)
 
+    def _off_quit(self) -> None:
+        """Off QUIT, onto PLAYERS: the next press under the attract race never quits."""
+        if config.TITLE_ITEMS[self.title_index] == "QUIT":
+            self.title_index = 0
+
     def _attract(self) -> None:
-        self._title_defaults()  # a new visitor: the rows as they find them, PLAYERS under A
+        self._off_quit()  # (the rows wait for ATTRACT_RESET: the visitor may be reading)
         self.seed = self.rng.randrange(1 << 30)
         self.race = Race(self.seed, 0, finish_all=True, bots=config.ATTRACT_BOTS)
         self.drivers = ai.field(self.race, self.seed, config.ATTRACT_LEVEL)
@@ -448,6 +457,9 @@ class Match:
                 self.tips_seen[e.car].add(e.value)
                 banners[:] = [b for b in banners if b.kind != "tip"]
                 banners.append(Banner("tip", e.value, config.TIP_TIME))
+        elif e.kind == "box_full":  # the box broke, the item held stays: say so
+            banners[:] = [b for b in banners if b.kind != "full"]
+            banners.append(Banner("full", e.value, config.FULL_TIME))
         elif e.kind == "check":
             banners[:] = [b for b in banners if b.kind not in ("lap", "gate")]
         elif e.kind == "lap" and e.value != config.LAPS:

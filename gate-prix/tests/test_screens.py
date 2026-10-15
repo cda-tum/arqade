@@ -155,6 +155,10 @@ def busy(m):
     p1.blind_time = 1.0
     m.banners["p1"] += [Banner("tip", "TUNNEL", 1.0), Banner("final", 3, 2.0)]
     m.banners["p1"].append(Banner("reveal", "DECOHERENCE", 0.5))
+    m.banners["p1"].append(Banner("full", "MEASURE", 0.5))
+    if "p2" in m.players:
+        m.race.racer("p2").item = "SPLIT"
+        m.banners["p2"].append(Banner("full", "SPLIT", 0.5))
     from gate_prix import storm
 
     p1.hazards = storm.storm(random.Random(1), 8, p1.car.z + 2000, p1.car.z + 60000, race.track)
@@ -268,6 +272,43 @@ def test_the_gantry_holds_still_in_the_countdown_and_only_grows_as_the_race_star
         assert all(b >= a for a, b in zip(shown, shown[1:]))
 
 
+def refuse_scaling(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("scaled or re-rendered per frame")
+
+    for name in ("smoothscale", "scale", "rotozoom", "rotate"):
+        monkeypatch.setattr(pygame.transform, name, refuse)
+    monkeypatch.setattr(sprites, "render_sprite", refuse)
+    from gate_prix import bloch, wordmark
+
+    monkeypatch.setattr(bloch, "sphere", refuse)
+    monkeypatch.setattr(wordmark, "build", refuse)
+
+
+@pytest.mark.parametrize("mode", [1, 2])
+def test_the_results_and_the_title_draw_from_caches_only(renderer, monkeypatch, mode):
+    """The results' circuits, checks and Bloch spheres, and the title's wordmark, are drawn
+    once at start-up: per frame they are blits."""
+    from gate_prix.match import RESULT
+
+    m = started(mode)
+    m.race.racer("p1").circuit.take(0, "H")
+    m._freeze()
+    m._set(RESULT)
+    m.t = config.RESULT_LOCK + 0.1
+    renderer.draw(m)  # the first frame may fill the text cache
+    refuse_scaling(monkeypatch)
+    for _ in range(5):
+        renderer.draw(m)
+    title = Match(random.Random(4))
+    title.update(DT, FrameInput())
+    monkeypatch.undo()
+    renderer.draw(title)
+    refuse_scaling(monkeypatch)
+    for _ in range(5):
+        renderer.draw(title)
+
+
 def test_the_title_the_card_and_quit_draw(renderer):
     from gate_prix.render import field_line, title_rows
 
@@ -300,3 +341,17 @@ def test_every_item_has_an_icon_at_every_size_used():
         for size in (30, 44, 56):
             img = icons.icon(item, size)
             assert img.get_size() == (size, size) and icons.icon(item, size) is img
+
+
+def test_the_text_cache_is_bounded_and_keeps_what_is_still_used(renderer):
+    from gate_prix.render import TEXT_CACHE
+
+    renderer._text.clear()
+    keep = renderer.text("LAP 1/3", 12)
+    for i in range(TEXT_CACHE + 50):
+        renderer.text(f"{i}", 10)
+        if i % 100 == 0:
+            assert renderer.text("LAP 1/3", 12) is keep  # used all along: never dropped
+    assert len(renderer._text) <= TEXT_CACHE
+    assert renderer.text("LAP 1/3", 12) is keep
+    assert ("0", 10, (255, 255, 255), True) not in renderer._text  # the oldest went first

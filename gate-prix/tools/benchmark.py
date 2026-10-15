@@ -6,13 +6,14 @@ and then with the boost, warp and Task 5d effects at their heaviest.
 Plain surfaces and pygame.font.init() only, with no display at all, because the cabinet's
 SDL has no dummy video driver: it runs the same on the cabinet and on a desktop without a
 screen. Each frame is the whole road: the background, the road, every roadside sprite, the
-race's arches and item boxes, a row of 3 arches always coming up, and 6 cars. The "warp"
+race's arches and item boxes, a row of 3 arches always coming up, and 6 cars (5 CPUs and
+P1 in 1P, 4 and both players in 2P). Each run is made twice and the first discarded. The "warp"
 runs add what a player sees in the LIGHT SPEED! warp, in every view at once (the worst
 case): the field of view widened (a projection constant and the camera pulled in), the
 camera shake, exhaust flames on every car, the marker over the right arch, the
 star-streak tunnel and the edge tint; and the second playtest's: every car tilted in a
-drift with its sparks, a noise storm of clouds and mines ahead, a DECOHERENCE cloud, the
-gantry and its lights, and the minimap. It prints the mean, 95th percentile and worst
+drift with its sparks and its Bloch orb, a noise storm of clouds and mines ahead, a
+DECOHERENCE cloud, the gantry and its lights, and the minimap. It prints the mean, 95th percentile and worst
 milliseconds per frame. Desktop guide: worst <= 4 ms.
 """
 
@@ -28,26 +29,26 @@ import time
 
 import pygame
 
-from gate_prix import circuit, config, track
+from gate_prix import bloch, circuit, config, track
 from gate_prix.minimap import Minimap
 from gate_prix.render import MAP, Renderer, fov, shake
 from gate_prix.road import RoadView
 from gate_prix.sprites import SpriteCache, tilt_kind
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
-CPU = tuple(config.CPU_COLORS)[:4]
+CPU = tuple(config.CPU_COLORS)
 
 
 def objects_for(fridge, statics, cams, frame: int):
-    """The race's own objects, a 3-arch row and 4 CPU cars always ahead of P1, and the
-    players' cars."""
+    """The race's own objects, a 3-arch row, the players' cars and CPU cars ahead of P1:
+    6 cars in all, as in a race (5 CPUs in 1P, 4 in 2P)."""
     lead = cams[0][0]
     cycle = 2.4 * config.TOP_SPEED  # the row sweeps from the draw distance to the car
     ahead = cycle - (frame * config.TOP_SPEED / config.FPS) % cycle + config.CAR_AHEAD
     row = [(lead + ahead, x, kind) for x, kind in
            ((-0.62, "arch:H:lit"), (0.0, "arch:X"), (0.62, "arch:Z"))]
     cars = [(lead + 1500 + 2600 * i + 900 * math.sin(frame / 40 + i), 0.5 * math.sin(i + frame / 90),
-             f"car:{name}") for i, name in enumerate(CPU)]
+             f"car:{name}") for i, name in enumerate(CPU[:config.CARS - len(cams)])]
     players = [(z + config.CAR_AHEAD, x, f"car:{name}") for (z, x), name in zip(cams, ("p1", "p2"))]
     return statics + row + cars + players
 
@@ -70,6 +71,8 @@ def run(views, frames: int, fridge, statics, cache, renderer=None) -> list[float
             cars = [(z, x, kind) for z, x, kind in objects if kind.startswith("car:")]
             objects = [o for o in objects if not o[2].startswith("car:")]
             objects += [(z, x, tilt_kind(kind, 9 * math.sin(frame / 20))) for z, x, kind in cars]
+            objects += [(z, x, f"orb:{bloch.NAMES[i % len(bloch.NAMES)]}")
+                        for i, (z, x, _) in enumerate(cars)]
             objects += [(z - 1.0, x, f"flame:{frame // 3 % 4}") for z, x, _ in cars]
             objects += [(z - 0.5, x, f"spark:2:{frame // 3 % 3}") for z, x, _ in cars]
             lead = cams[0][0]
@@ -138,16 +141,19 @@ def main(argv=None) -> None:
         for views in (views2, views1):
             run(views, 150, fridge, statics, cache)
             run(views, 150, fridge, statics, cache, renderer)
-    if args.profile:
-        profiler = cProfile.Profile()
-        profiler.enable()
-    times2 = run(views2, args.frames, fridge, statics, cache)
-    if args.profile:
-        profiler.disable()
-        pstats.Stats(profiler).sort_stats("tottime").print_stats(15)
-    times1 = run(views1, args.frames, fridge, statics, cache)
-    warp2 = run(views2, args.frames, fridge, statics, cache, renderer)
-    warp1 = run(views1, args.frames, fridge, statics, cache, renderer)
+    # every run twice, the first discarded: its worst frames were the first blits of sizes
+    # the warm-up had not reached yet, not the frame's own cost
+    for keep in (False, True):
+        if args.profile and keep:
+            profiler = cProfile.Profile()
+            profiler.enable()
+        times2 = run(views2, args.frames, fridge, statics, cache)
+        if args.profile and keep:
+            profiler.disable()
+            pstats.Stats(profiler).sort_stats("tottime").print_stats(15)
+        times1 = run(views1, args.frames, fridge, statics, cache)
+        warp2 = run(views2, args.frames, fridge, statics, cache, renderer)
+        warp1 = run(views1, args.frames, fridge, statics, cache, renderer)
     report("2 views of 480x540", times2)
     report("1 view of 960x540", times1)
     report("2 views, warp", warp2)

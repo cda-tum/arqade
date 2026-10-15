@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pygame
 
-from gate_prix import ai, config, track
+from gate_prix import ai, bloch, config, track
 from gate_prix.race import Race
 
 DEMO_SEED = 24  # its first row: three arches, the right one (Z) far over on the right
@@ -78,8 +78,10 @@ class Demo:
     def objects(self) -> list:
         """What the demo's road shows: the first lap's rows and P1's car (with its flame)."""
         car = self.car
+        orb = bloch.state_of(tuple(self.race.racer("p1").circuit.slots))
         objects = track.arch_objects(self.race.rows[:2]) + [(0.0, 0.0, "gantry"),
-                                                            (car.z, car.x, car.kind)]
+                                                            (car.z, car.x, car.kind),
+                                                            (car.z, car.x, f"orb:{orb}")]
         if car.boost > 0:
             objects.append((car.z - 1.0, car.x, f"flame:{int(self.race.time * 20) % 4}"))
         return objects

@@ -1,5 +1,4 @@
-"""Everything on screen: the race views, the HUD, the banners, the effects and the menus
-(the look file's polish comes in Task 6).
+"""Everything on screen: the race views, the HUD, the banners, the effects and the menus.
 
 - 2 players: two 480x540 views side by side, P1 on the left, P2 on the right, a thin
   divider between (each projects the road VIEW_2P_SPREAD wide, so nothing is squeezed).
@@ -11,7 +10,10 @@
   GO), every car, their exhaust flames while they boost and the SPLIT clones
   (translucent) as sprites, and a bouncing marker over every right arch. The people's cars
   (P1 blue, P2 red) have a white outline, so you find your own among the bots' neutral ones
-  (sprites.py; the attract race has no people, so nobody is outlined). A drifting car is
+  (sprites.py; the attract race has no people, so nobody is outlined). Every car carries
+  its qubit on its engine cover: an orb in its state's colour, its Bloch arrow pointing
+  where the car's circuit so far has put |0> (bloch.py; drawn just after the car, moved
+  with its tilt). A drifting car is
   tilted, with sparks at its rear wheels (white, blue at charge 1, gold at 2) and the
   mini-turbo's flash as it lets go; a tunnelling car is a see-through shimmer. MEASURE
   shots fly as gold orbs on a beam from their shooter, DECOHERENCE clouds sit on the road,
@@ -23,7 +25,7 @@
     row "TO THE LINE", and on the final lap "FINAL LAP: NO GATES", with a flag;
   - top right, the place and the lap, and under them (1P: beside them), while an item is
     held, its slot pulsing with the item's icon, its name and A (in 1P also one line on
-    what it does);
+    what it does), and ITEM FULL, its edge flashing red, when a box gave nothing new;
   - while a racer is `blind` (a DECOHERENCE cloud), its NEXT GATE badge is static and says
     NO SIGNAL, and the ▼ over the right arch is left out;
   - near the car, each row's flash: RIGHT GATE +BOOST, WRONG GATE or MISSED, and a box's
@@ -42,25 +44,31 @@
   boosting), a slight camera shake at speed, and the field of view widening with speed
   above the top (a projection constant and the camera pulled in: `RoadView.draw`'s depth
   and ahead), plus the exhaust flames.
-- The 3-2-1-GO countdown; the title (PLAYERS / BOTS / LEVEL / QUIT, each value between
-  arrows, dimmed at its end), pause and result screens (the bots named CPU1, CPU2 ...).
+- The 3-2-1-GO countdown; the title (the logo's GATE PRIX wordmark over PLAYERS / BOTS /
+  LEVEL / QUIT, each value between arrows, dimmed at its end), pause and the results: the
+  places (the bots named CPU1, CPU2 ...), and per player the accuracy and the check, the
+  circuit under the target's with a ✓ or ✗ row of its own, and the final state on a Bloch
+  sphere beside the target's.
 
 Nothing is scaled per frame and no text is rendered twice: text goes through a cache, and
 the gate badges, dots, panels, speed lines, tunnel, tint, markers, start lights, item icons,
-the minimap's outline, the HOW TO PLAY card's pieces and the title's backdrop are drawn
-once, at start-up (behind the loading screen), as are the sprite cache (with its tilted and
-tunnelling cars) and the backgrounds. Per frame the effects are blits of those (and one copy of a view, when a
-freeze starts).
+the minimap's outline, the HOW TO PLAY card's pieces, the title's backdrop and wordmark and
+the results' gate boxes and Bloch spheres are drawn once, at start-up (behind the loading
+screen), as are the sprite cache (with its tilted and tunnelling cars and the qubit's orbs)
+and the backgrounds; the gantry is drawn at its exact size from fills and its own
+pre-rendered pieces (gantry.py). Per frame the effects are blits of those (and one copy of
+a view, when a freeze starts). The text cache is an LRU of TEXT_CACHE renders.
 """
 
 from __future__ import annotations
 
 import math
 import random
+from collections import OrderedDict
 
 import pygame
 
-from gate_prix import config, icons, sprites, track
+from gate_prix import bloch, config, icons, sprites, track, wordmark
 from gate_prix.circuit import GATES
 from gate_prix.gantry import Gantry
 from gate_prix.match import COUNTDOWN, HOWTO, PAUSED, RACE, RESULT, TITLE, Match
@@ -83,6 +91,7 @@ OK = (60, 200, 110)
 BAD = (230, 60, 70)
 EMPTY = (70, 74, 96)
 GHOST_TEXT = (170, 230, 255)  # the SPLIT clone's pale cyan
+FULL = (255, 96, 104)  # ITEM FULL
 FLASHES = {  # a row's outcome, near the car
     "right": ("RIGHT GATE +BOOST", (110, 190, 255)),
     "wrong": ("WRONG GATE", (255, 90, 96)),
@@ -100,7 +109,13 @@ ITEM_COLORS = {"SPLIT": GHOST_TEXT, "QEC": (120, 230, 160), "MEASURE": (255, 200
 BADGE = 56  # the NEXT GATE badge, px
 DOT = 12  # a slot's dot under it
 DOT_STEP = 13
-SMALL = 14  # the CIRCUIT CHECK's and the results' gate boxes
+SMALL = 14  # the CIRCUIT CHECK's gate boxes
+RESULT_BOX = 18  # the results' gate boxes, every RESULT_STEP px, a lap's gap between laps
+RESULT_STEP = 23
+RESULT_LAP_GAP = 10
+RESULT_PANEL = (900, 120)  # a player's panel on the results
+SPHERE = 78  # the results' Bloch spheres, px
+WORDMARK = 560  # the title's GATE PRIX, px wide
 PULSE = 8  # the held item's slot pulses through this many pre-drawn steps
 LINE_FRAMES = 4  # speed lines and the tunnel are animated over this many pre-drawn frames
 TINTS = (70, 130, 190)  # the warp's edge tint, by strength
@@ -113,6 +128,7 @@ MAP = (170, 118)  # the minimap's box
 TILT = 0.45  # a drifting car's tilt, as a share of its slide's angle (20 degrees: 9)
 STORM = (200, 170, 255)  # STORM AHEAD's violet
 SHOT = (255, 200, 90)
+TEXT_CACHE = 600  # rendered texts kept (least recently used dropped first)
 ORDINALS = ("1st", "2nd", "3rd", "4th", "5th", "6th")
 NAMES = {"p1": "P1", "p2": "P2"}
 
@@ -199,10 +215,12 @@ class Renderer:
                           RoadView((W - VIEW_W, 0, VIEW_W, VIEW_H), spread=spread)]}
         for size in SIZES:
             Background.for_size(size)
-        self._text: dict[tuple, pygame.Surface] = {}
+        self._text: OrderedDict[tuple, pygame.Surface] = OrderedDict()
         self._sprites: list = []
         self._arches: tuple[Race | None, list] = (None, [])
         self._small = self._gate_boxes(SMALL)
+        self._result_boxes = self._gate_boxes(RESULT_BOX)
+        self._spheres = {name: bloch.sphere(name, SPHERE, font) for name in bloch.NAMES}
         self._badges = self._next_badges()
         self._dots = self._slot_dots()
         self._lines = {(size, strong): [self._speed_lines(size, k, strong) for k in range(LINE_FRAMES)]
@@ -221,6 +239,7 @@ class Renderer:
         self._gantries = [(n * track.fridge().lap_length(), 0.0, "gantry")
                           for n in range(config.LAPS + 1)]
         self._backdrop = self._title_backdrop()
+        self._wordmark = wordmark.build(WORDMARK)
         self.howto = TutorialCard(self)
         self._in_howto = False
         self.frame = 0
@@ -228,21 +247,26 @@ class Renderer:
     # --- Cached pieces -----------------------------------------------------------------------
 
     def text(self, s: str, px: int, col=WHITE, shadow: bool = True) -> pygame.Surface:
+        """The text, rendered once: an LRU cache of TEXT_CACHE renders, so a long session's
+        changing texts (times, names) never grow it, and what is drawn every frame stays."""
         key = (s, px, col, shadow)
-        img = self._text.get(key)
-        if img is None:
-            if len(self._text) > 600:
-                self._text.clear()
-            face = font(px)
-            fg = face.render(s, True, col)
-            if shadow:
-                d = max(1, px // 12)
-                img = pygame.Surface((fg.get_width() + d, fg.get_height() + d), pygame.SRCALPHA)
-                img.blit(face.render(s, True, INK), (d, d))
-                img.blit(fg, (0, 0))
-            else:
-                img = fg
-            self._text[key] = img
+        cache = self._text
+        img = cache.get(key)
+        if img is not None:
+            cache.move_to_end(key)
+            return img
+        while len(cache) >= TEXT_CACHE:
+            cache.popitem(last=False)
+        face = font(px)
+        fg = face.render(s, True, col)
+        if shadow:
+            d = max(1, px // 12)
+            img = pygame.Surface((fg.get_width() + d, fg.get_height() + d), pygame.SRCALPHA)
+            img.blit(face.render(s, True, INK), (d, d))
+            img.blit(fg, (0, 0))
+        else:
+            img = fg
+        cache[key] = img
         return img
 
     def put(self, s: str, px: int, col=WHITE, shadow=True, **anchor) -> pygame.Rect:
@@ -459,8 +483,9 @@ class Renderer:
         surf = pygame.Surface((W, H))
         cam_z = -2.6 * config.CAR_AHEAD
         objects = track.arch_objects(race.rows) + race.box_objects() + self._gantries
-        objects.append((cam_z + config.CAR_AHEAD, 0.0, "car:p1"))
-        objects.append((cam_z + config.CAR_AHEAD + 2600, 0.5, "car:p2"))
+        for z, x, kind in ((cam_z + config.CAR_AHEAD, 0.0, "car:p1"),
+                           (cam_z + config.CAR_AHEAD + 2600, 0.5, "car:p2")):
+            objects += [(z, x, kind), (z, x, "orb:+z")]  # on the grid: |0>, no gates yet
         view.draw(surf, race.track, cam_z, 0.0, self._sprites, objects)
         self.gantry.lights = ("green", config.GANTRY_LIGHTS)
         view.draw_sprites(surf, self._sprites, self.cache)
@@ -504,14 +529,18 @@ class Renderer:
         elif state == RESULT:
             self._result(match)
 
-    def _car_kind(self, car) -> str:
+    def _car_kind(self, car) -> tuple[str, float]:
         """A car's sprite now: see-through while it tunnels, tilted while it drifts (and
-        wobbling while it spins out)."""
+        wobbling while it spins out). And the tilt it is drawn at, in degrees."""
         if car.tunnelling:
-            return f"{car.kind}:ghost{(self.frame // 5) % sprites.GHOST_FRAMES}"
+            return f"{car.kind}:ghost{(self.frame // 5) % sprites.GHOST_FRAMES}", 0.0
         if car.spinning:
-            return sprites.tilt_kind(car.kind, 8 * math.sin(self.frame * 0.7))
-        return sprites.tilt_kind(car.kind, math.degrees(car.drift_angle) * TILT)
+            degrees = 8 * math.sin(self.frame * 0.7)
+        else:
+            degrees = math.degrees(car.drift_angle) * TILT
+        kind = sprites.tilt_kind(car.kind, degrees)
+        steps = max(-sprites.TILTS, min(sprites.TILTS, round(degrees / sprites.TILT_STEP)))
+        return kind, steps * sprites.TILT_STEP if kind != car.kind else 0.0
 
     def _objects(self, race: Race) -> list:
         """Every sprite object of the race that every view shows: arches, the gantries,
@@ -525,7 +554,12 @@ class Renderer:
                 for i, (z, x, _) in enumerate(race.deco_objects())]
         for i, r in enumerate(race.racers):
             car = r.car
-            out.append((car.z, car.x, self._car_kind(car)))
+            kind, degrees = self._car_kind(car)
+            out.append((car.z, car.x, kind))
+            # its qubit, at the car's own distance (so the same cached size, drawn just after
+            # it), on its engine cover: moved sideways as far as the cover is by the tilt
+            lean = math.sin(math.radians(degrees)) * sprites.ORB_Y
+            out.append((car.z, car.x + lean, f"orb:{bloch.state_of(tuple(r.circuit.slots))}"))
             if car.boost > 0:
                 out.append((car.z - 1.0, car.x, f"flame:{(flick + i) % sprites.FLAME_FRAMES}"))
             if car.drifting:
@@ -714,15 +748,16 @@ class Renderer:
         self.put(ordinal(racer.place), 30, WHITE, center=(px, y + 30))
         lap = "FINISHED" if racer.finished else f"LAP {racer.lap}/{config.LAPS}"
         self.put(lap, 12, SOFT, center=(px, y + 58))
-        self._item(rect, racer, narrow)
+        self._item(match, rect, racer, narrow)
         if car_id == "p1" and narrow:  # P1's name bottom left, else bottom right: clear
             self.put(NAMES[car_id], 18, col, bottomleft=(x + 14, y + rect.height - 8))  # of the map
         else:
             self.put(NAMES[car_id], 18, col, bottomright=(x + rect.width - 14, y + rect.height - 8))
         self._banners(match, rect, racer)
 
-    def _item(self, rect: pygame.Rect, racer, narrow: bool) -> None:
-        """The held item, pulsing: its icon, its name and A (in 1P one line on what it does)."""
+    def _item(self, match: Match, rect: pygame.Rect, racer, narrow: bool) -> None:
+        """The held item, pulsing: its icon, its name and A (in 1P one line on what it does);
+        ITEM FULL, its edge flashing red, after a box driven through with it held."""
         x, y = rect.topleft
         if narrow:
             px, py, w, h = x + rect.width - 174, y + 78, 166, 56
@@ -730,19 +765,31 @@ class Renderer:
             px, py, w, h = x + W - 452, y + 8, 330, 64
         if racer.item is not None:
             k = round((PULSE - 1) * (0.5 + 0.5 * math.sin(self.frame * 0.18)))
-            edge = mix((110, 116, 150), GOLD, k / (PULSE - 1))
+            # ITEM FULL: a box was driven through with this held; the slot's edge flashes red
+            full = match.banner(racer.car.id, "full") is not None
+            if full and (self.frame // 5) % 2 == 0:
+                edge = FULL
+            else:
+                edge = mix((110, 116, 150), GOLD, k / (PULSE - 1))
             self.surface.blit(self.panel(w, h, edge, 225), (px, py))
             name = racer.item
             self.surface.blit(icons.icon(name, ICON), (px + 6, py + (h - ICON) // 2))
             if narrow:
                 self.put(name, 15 if len(name) <= 7 else 14, ITEM_COLORS[name],
                          midleft=(px + 54, py + 18))
-                self.put("PRESS A", 13, GOLD, midleft=(px + 54, py + 39))
+                if full:
+                    self.put("ITEM FULL", 13, FULL, midleft=(px + 54, py + 39))
+                else:
+                    self.put("PRESS A", 13, GOLD, midleft=(px + 54, py + 39))
             else:
                 self.put(name, 20 if len(name) <= 7 else 14, ITEM_COLORS[name],
                          midleft=(px + 58, py + 20))
                 self.put("PRESS", 10, LABEL, midright=(px + w - 60, py + 20))
-                self.put(ITEM_LINES[name], 12, WHITE, midleft=(px + 58, py + 46))
+                if full:
+                    self.put("ITEM FULL: USE IT TO TAKE ANOTHER", 12, FULL,
+                             midleft=(px + 58, py + 46))
+                else:
+                    self.put(ITEM_LINES[name], 12, WHITE, midleft=(px + 58, py + 46))
                 self.surface.blit(self._buttons[k], (px + w - 54, py + 9))
         elif racer.split:
             self.surface.blit(self.panel(w, 34, GHOST_TEXT, 200), (px, py))
@@ -840,7 +887,7 @@ class Renderer:
 
     def _title(self, match: Match) -> None:
         cx = W // 2
-        self.put("GATE PRIX", 78, WHITE, center=(cx, 112))
+        self.surface.blit(self._wordmark, self._wordmark.get_rect(center=(cx, 100)))
         self.put("STEER THROUGH THE GLOWING GATE TO BUILD THE TARGET CIRCUIT", 14, SOFT,
                  center=(cx, 168))
         rows = title_rows(match)
@@ -894,10 +941,10 @@ class Renderer:
         surf = self.surface
         surf.blit(self._shade[215], (0, 0))
         cx = W // 2
-        self.put("RESULTS", 34, WHITE, center=(cx, 34))
+        self.put("RESULTS", 34, WHITE, center=(cx, 32))
         rows = match.results or []
         for i, row in enumerate(rows):
-            y = 76 + 27 * i
+            y = 72 + 26 * i
             col = config.CAR_COLORS[row.colour]
             bright = row.player
             self.put(ordinal(row.place), 18, WHITE if bright else SOFT, midright=(250, y))
@@ -907,35 +954,57 @@ class Renderer:
             self.put(race_time(row.time), 16, WHITE if bright else SOFT, midleft=(470, y))
             gates = f"{row.right}/{config.SLOTS} GATES"
             self.put(gates, 16, (255, 230, 120) if bright else (150, 156, 180), midleft=(590, y))
-        players = [r for r in rows if r.player]
-        y = 260
-        for row in players:
+        y = 72 + 26 * len(rows) + 6
+        for row in (r for r in rows if r.player):
             self._circuit_rows(match, row, y)
-            y += 104
+            y += RESULT_PANEL[1] + 6
         if match.t >= config.RESULT_LOCK:
-            self.put("A: REMATCH        B: TITLE", 18, (255, 230, 120), center=(cx, H - 24))
+            self.put("A: REMATCH        B: TITLE", 18, (255, 230, 120), center=(cx, H - 22))
 
     def _circuit_rows(self, match: Match, row, y: int) -> None:
-        """A player's whole circuit under the target's, with its accuracy."""
+        """A player's panel: their accuracy and check on the left; their whole circuit
+        under the target's, a ✓ or ✗ under each slot (a row of its own, so nothing
+        crowds); and on the right their final state on a Bloch sphere beside the
+        target's."""
         target = match.race.target  # the row's own circuit is frozen at the finish
         col = config.PLAYER_COLORS[row.car]
-        w = 18 * config.SLOTS + 150
+        w, h = RESULT_PANEL
         x = (W - w) // 2
-        self.surface.blit(self.panel(w, 94, col), (x, y))
-        self.put(NAMES[row.car], 22, col, midleft=(x + 14, y + 26))
-        acc = row.right / config.SLOTS
-        self.put(f"{acc:.0%}", 16, WHITE, midleft=(x + 14, y + 54))
-        check = "-" if row.check_right is None else f"CHECK {row.check_right}/{config.CHECK_SLOTS}"
-        self.put(check, 10, LABEL, midleft=(x + 14, y + 76))
-        self.put("TARGET", 9, LABEL, midleft=(x + 70, y + 26))
-        self.put("YOU", 9, LABEL, midleft=(x + 70, y + 56))
-        x0 = x + 120
+        self.surface.blit(self.panel(w, h, col), (x, y))
+        self.put(NAMES[row.car], 24, col, midleft=(x + 16, y + 26))
+        self.put(f"{row.right}/{config.SLOTS} GATES", 18, WHITE, midleft=(x + 16, y + 58))
+        check = "NO CHECK" if row.check_right is None else \
+            f"CHECK {row.check_right}/{config.CHECK_SLOTS}"
+        self.put(check, 14, LABEL, midleft=(x + 16, y + 86))
+        bx0 = x + 230
+        self.put("TARGET", 11, LABEL, midright=(bx0 - 10, y + 24))
+        self.put("YOU", 11, LABEL, midright=(bx0 - 10, y + 54))
+        boxes = self._result_boxes
+        b = RESULT_BOX + 8
         for i in range(config.SLOTS):
-            bx = x0 + 18 * i
-            self.surface.blit(self._small[(target[i], "plain")], (bx - 4, y + 18 - 4))
-            if row.results[i] is not None:
-                state = "ok" if row.results[i] else "bad"
-                self.surface.blit(self._small[(row.slots[i], state)], (bx - 4, y + 48 - 4))
+            bx = bx0 + RESULT_STEP * i + (RESULT_LAP_GAP if i >= config.ROWS_PER_LAP else 0)
+            self.surface.blit(boxes[(target[i], "plain")], (bx - 4, y + 24 - b // 2))
+            result = row.results[i]
+            if result is None:
+                continue
+            self.surface.blit(boxes[(row.slots[i], "plain")], (bx - 4, y + 54 - b // 2))
+            if not result:
+                pygame.draw.rect(self.surface, BAD, (bx - 3, y + 54 - b // 2 + 1, b - 2, b - 2), 2,
+                                 border_radius=4)
+            dot = self._dots["ok" if result else "bad"]
+            self.surface.blit(dot, dot.get_rect(center=(bx + RESULT_BOX // 2, y + 84)))
+        # the final states: yours, and the target's
+        mine = bloch.state_of(tuple(row.slots))
+        aim = bloch.state_of(tuple(target))
+        sx = x + w - 2 * SPHERE - 40
+        for k, (who, state) in enumerate((("YOU", mine), ("TARGET", aim))):
+            px = sx + k * (SPHERE + 24)
+            self.surface.blit(self._spheres[state], (px, y + 2))
+            self.put(f"{who} {bloch.STATES[state][1]}", 13, bloch.STATES[state][2],
+                     center=(px + SPHERE // 2, y + h - 14))
+        same = mine == aim
+        self.put("=" if same else "≠", 26, OK if same else BAD,
+                 center=(sx + SPHERE + 12, y + 2 + SPHERE // 2))
 
 
 def loading_screen(surface: pygame.Surface) -> None:

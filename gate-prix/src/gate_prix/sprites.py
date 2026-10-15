@@ -11,6 +11,9 @@ road renderer reports for every sprite it projects.
 The people's cars (`OUTLINED`: P1's and P2's) are drawn with a white outline round their
 body, at every size, so a player finds their own car among the bots' at a glance.
 
+The cars are drawn without an orb: each car's qubit is an `orb:<state>` sprite of its own
+(bloch.py's four states), blitted over it, so a car's sprites don't multiply by its state.
+
 Only plain surfaces are used (no display needed), so the benchmark runs on the cabinet.
 """
 
@@ -22,7 +25,7 @@ from importlib import resources
 
 import pygame
 
-from gate_prix import config
+from gate_prix import bloch, config
 from gate_prix.circuit import GATES
 
 WHITE = (255, 255, 255)
@@ -36,6 +39,7 @@ def mix(a, b, k):
 
 
 _FONTS: dict[int, pygame.font.Font] = {}
+pygame.register_quit(_FONTS.clear)  # a Font outlives pygame.quit() only to segfault when used
 
 
 def font(px: int) -> pygame.font.Font:
@@ -275,8 +279,10 @@ def draw_flame(surf, x, y, u, frame):
         _ellipse(surf, (235, 250, 255, 255), px - w * 0.03, py - h * 0.03, w * 0.06, h * 0.2 * n)
 
 
-def draw_car(surf, x, y, u, col, ghost=False):
-    """A racer from behind: a low wedge, a rear wing, glowing tail lights and its Bloch orb."""
+def draw_car(surf, x, y, u, col, ghost=False, orb=True):
+    """A racer from behind: a low wedge, a rear wing, glowing tail lights and (with `orb`)
+    a plain Bloch orb. The game's cars are drawn without it: their orb shows their qubit
+    (`draw_orb`, blitted over them per frame)."""
     w = config.CAR_WIDTH * u
     s = w / 300
     h = 120 * s
@@ -299,6 +305,8 @@ def draw_car(surf, x, y, u, col, ghost=False):
         if not ghost:
             _glow(surf, x + sx * w * 0.33, y - h * 0.39, 24 * s, (255, 80, 90), 140)
         _rect(surf, (18, 18, 26), x + sx * w * 0.5 - w * 0.07, y - h * 0.32, w * 0.14, h * 0.34, rad=4 * s)
+    if not orb:
+        return
     if not ghost:
         _glow(surf, x, y - h * 0.62, 26 * s, (200, 240, 255), 160)
     _circle(surf, (230, 248, 255), x, y - h * 0.62, 12 * s)
@@ -306,6 +314,26 @@ def draw_car(surf, x, y, u, col, ghost=False):
 
 
 GHOST = (170, 230, 255)
+ORB_Y = 0.62 * 0.4 * config.CAR_WIDTH  # the orb's centre above the car's foot (road half-widths)
+ORB_R = 15 / 300 * config.CAR_WIDTH  # its radius
+ORB_GLOW = 2.0 * ORB_R
+
+
+def draw_orb(surf, x, y, u, state):
+    """A car's qubit on its engine cover: a glass orb in the state's colour, its equator,
+    and the Bloch arrow pointing where the car's circuit so far has put |0> (bloch.py)."""
+    col = bloch.STATES[state][2]
+    cx, cy = x, y - ORB_Y * u
+    r = ORB_R * u
+    _glow(surf, cx, cy, ORB_GLOW * u, col, 150)
+    _circle(surf, mix(col, INK, 0.6), cx, cy, r)
+    lay = _layer(surf)
+    pygame.draw.ellipse(lay, (*mix(col, WHITE, 0.5), 120),
+                        pygame.Rect(round(cx - r), round(cy - r * 0.3), max(2, round(2 * r)),
+                                    max(1, round(0.6 * r))), max(1, round(r * 0.08)))
+    surf.blit(lay, (0, 0))
+    _circle(surf, mix(col, WHITE, 0.35), cx, cy, r, max(1, round(r * 0.12)))
+    bloch.draw_arrow(surf, cx, cy, r * 0.82, state, max(1.0, r * 0.15))
 
 
 # --- The second playtest's sprites: drifting, the storm, the items (the start and finish
@@ -420,21 +448,21 @@ def _kinds_v2(kinds):
     for level in range(3):
         for f in range(SPARK_FRAMES):
             kinds[f"spark:{level}:{f}"] = (lambda s, x, y, u, lv=level, f=f: draw_sparks(s, x, y, u, lv, f),
-                                           (-0.26, -0.18, 0.26, 0.02))
+                                           (-0.28, -0.18, 0.28, 0.06))
     for level in (1, 2):
         kinds[f"turbo:{level}"] = (lambda s, x, y, u, lv=level: draw_turbo(s, x, y, u, lv),
-                                   (-0.2, -0.2, 0.2, 0.03))
+                                   (-0.2, -0.24, 0.2, 0.13))
     c = config.HAZARD_SIZE["cloud"]
     d = config.DECO_SIZE
     for f in range(STATIC_FRAMES):
         kinds[f"static:{f}"] = (lambda s, x, y, u, f=f: draw_static(s, x, y, u, f),
-                                (-1.15 * c, -1.6 * c, 1.15 * c, 0.1 * c))
+                                (-1.12 * c, -1.6 * c, 1.12 * c, 0.5 * c))
         kinds[f"deco:{f}"] = (lambda s, x, y, u, f=f: draw_static(s, x, y, u, f, DECO_CLOUD, d),
-                              (-1.15 * d, -1.6 * d, 1.15 * d, 0.1 * d))
+                              (-1.12 * d, -1.6 * d, 1.12 * d, 0.5 * d))
     m = config.HAZARD_SIZE["mine"]
     for f in range(MINE_FRAMES):
-        kinds[f"mine:{f}"] = (lambda s, x, y, u, f=f: draw_mine(s, x, y, u, f), (-2.1 * m, -3.5 * m, 2.1 * m, 0.2 * m))
-    kinds["shot"] = (draw_shot, (-0.17, -0.3, 0.17, 0.0))
+        kinds[f"mine:{f}"] = (lambda s, x, y, u, f=f: draw_mine(s, x, y, u, f), (-2.1 * m, -3.5 * m, 2.1 * m, 0.6 * m))
+    kinds["shot"] = (draw_shot, (-0.17, -0.3, 0.17, 0.045))
 
 # kind: (draw(surf, x, y, u), extents (left, top, right, bottom) in road half-widths)
 _A = config.ARCH_HALF_WIDTH
@@ -445,9 +473,9 @@ _LIT_EXT = (-1.61 * _A, -2.16 * _A, 1.61 * _A, 1.06 * _A)  # the right arch and 
 
 def _kinds():
     kinds = {
-        "coax": (draw_coax, (-0.03, -0.51, 0.03, 0.01)),
-        "attenuator": (draw_attenuator, (-0.04, -0.13, 0.04, 0.01)),
-        "standoff": (draw_standoff, (-0.04, -0.9, 0.04, 0.01)),
+        "coax": (draw_coax, (-0.045, -0.515, 0.045, 0.015)),  # (their shadows are wide)
+        "attenuator": (draw_attenuator, (-0.06, -0.135, 0.06, 0.015)),
+        "standoff": (draw_standoff, (-0.065, -0.915, 0.065, 0.02)),
         "box": (draw_box, (-0.24, -0.55, 0.24, 0.03)),
         "clone": (lambda s, x, y, u: draw_car(s, x, y, u, GHOST, ghost=True), (-0.21, -0.15, 0.21, 0.03)),
     }
@@ -457,7 +485,12 @@ def _kinds():
         kinds[f"arch:{g}"] = (lambda s, x, y, u, g=g: draw_arch(s, x, y, u, g, False), _ARCH_EXT)
         kinds[f"arch:{g}:lit"] = (lambda s, x, y, u, g=g: draw_arch(s, x, y, u, g, True), _LIT_EXT)
     for name, col in config.CAR_COLORS.items():
-        kinds[f"car:{name}"] = (lambda s, x, y, u, col=col: draw_car(s, x, y, u, col), (-0.21, -0.15, 0.21, 0.03))
+        kinds[f"car:{name}"] = (lambda s, x, y, u, col=col: draw_car(s, x, y, u, col, orb=False),
+                                (-0.21, -0.15, 0.21, 0.03))
+    g = ORB_GLOW + 0.004
+    for state in bloch.NAMES:  # drawn with the car's foot as theirs, over the car
+        kinds[f"orb:{state}"] = (lambda s, x, y, u, st=state: draw_orb(s, x, y, u, st),
+                                 (-g, -ORB_Y - g, g, -ORB_Y + g))
     _kinds_v2(kinds)
     return kinds
 
@@ -523,8 +556,9 @@ def sprite_scales() -> list[float]:
     return [lo * (hi / lo) ** (i / (n - 1)) for i in range(n)]
 
 
-def render_sprite(kind: str, scale: float) -> tuple[pygame.Surface, int, int]:
-    """One sprite at one scale: drawn at 2x, cropped, smoothscaled. Its surface and anchor."""
+def sprite_canvas(kind: str, scale: float) -> tuple[pygame.Surface, int, int]:
+    """A sprite drawn at 2x on a canvas its extents (and a pad) wide: the canvas and the
+    foot's place on it. Nothing it draws may reach the canvas's edge (a test checks)."""
     draw, (left, top, right, bottom) = _KIND_TABLE[kind]
     u = scale * SS
     pad = (ARCH_PAD if kind.startswith("arch:") else 4) * SS
@@ -532,8 +566,15 @@ def render_sprite(kind: str, scale: float) -> tuple[pygame.Surface, int, int]:
     ch = math.ceil((bottom - top) * u) + 2 * pad
     cx = math.ceil(-left * u) + pad
     cy = math.ceil(-top * u) + pad
-    canvas = pygame.Surface((cw, ch), pygame.SRCALPHA)
-    draw(canvas, cx, cy, u)
+    out = pygame.Surface((cw, ch), pygame.SRCALPHA)
+    draw(out, cx, cy, u)
+    return out, cx, cy
+
+
+def render_sprite(kind: str, scale: float) -> tuple[pygame.Surface, int, int]:
+    """One sprite at one scale: drawn at 2x, cropped, smoothscaled. Its surface and anchor."""
+    canvas, cx, cy = sprite_canvas(kind, scale)
+    cw, ch = canvas.get_size()
     if kind in OUTLINED:
         canvas = outlined(canvas, max(1.0, min(OUTLINE_MAX, scale * OUTLINE)) * SS)
     if kind == "clone":

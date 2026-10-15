@@ -3,7 +3,7 @@ import random
 import pygame
 import pytest
 
-from gate_prix import circuit, config, road, sprites, track
+from gate_prix import bloch, circuit, config, road, sprites, track
 from gate_prix.road import RoadView
 from gate_prix.sprites import Background, SpriteCache
 from gate_prix.track import SEG, Track
@@ -186,6 +186,7 @@ def test_the_sprite_cache_holds_every_kind_at_every_size(cache):
     expected |= {f"spark:{lv}:{f}" for lv in range(3) for f in range(sprites.SPARK_FRAMES)}
     expected |= {f"{k}:{f}" for k in ("static", "deco") for f in range(sprites.STATIC_FRAMES)}
     expected |= {f"mine:{f}" for f in range(sprites.MINE_FRAMES)}
+    expected |= {f"orb:{state}" for state in bloch.NAMES}
     derived = set()
     for name in config.CAR_COLORS:
         derived |= {f"car:{name}:t{k}" for k in range(-sprites.TILTS, sprites.TILTS + 1) if k}
@@ -199,6 +200,19 @@ def test_the_sprite_cache_holds_every_kind_at_every_size(cache):
         # within a pixel: far away an arch's badge keeps a minimum size, so it barely grows
         assert all(b >= a - 1 for a, b in zip(heights, heights[1:])), kind
         assert heights[-1] > 4 * heights[0], kind
+
+
+@pytest.mark.parametrize("kind", sprites.KINDS)
+def test_no_sprite_is_cut_off_at_its_canvas_edge(cache, kind):
+    """Each kind's extents hold all of it, its shadow and glows too, at every size: nothing
+    drawn reaches the edge of the canvas it is drawn on."""
+    for scale in cache.scales[::5] + [cache.scales[-1]]:
+        img, _, _ = sprites.sprite_canvas(kind, scale)
+        w, h = img.get_size()
+        edge = [(x, y) for x in range(w) for y in (0, h - 1)] + \
+               [(x, y) for y in range(h) for x in (0, w - 1)]
+        touching = [p for p in edge if img.get_at(p)[3] > 8]
+        assert not touching, (kind, round(scale), touching[:3])
 
 
 def test_a_gate_letter_keeps_a_minimum_size_far_away(cache):
