@@ -90,7 +90,7 @@ def main(argv=None) -> None:
         pygame.display.set_caption("GATE PRIX drive demo")
     race = Race(args.seed, args.views)
     statics = track.arch_objects(race.rows)
-    bots = ai.field(race, args.seed)
+    bots = ai.field(race, args.seed, "TOUGH")
     views = ([RoadView((0, 0, W, 270)), RoadView((0, 270, W, 270))] if args.views == 2
              else [RoadView((0, 0, W, H))])
     cache = SpriteCache.shared()

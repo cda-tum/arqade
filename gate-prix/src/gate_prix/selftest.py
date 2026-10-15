@@ -4,7 +4,7 @@ It plays, as a visitor would, and checks the match at every turn:
 1. the title, untouched until the attract race starts, then a while of it; the menu: BOTS
    stepped down and back up with left and right (clamped at 5), a held stick down onto
    QUIT (it stays there), a held diagonal up a row (and no value changed), back on QUIT;
-2. Start on QUIT: a 1 player, 5 TOUGH bots match (Start never quits), its HOW TO PLAY card
+2. Start on QUIT: a 1 player, 5 EASY bots match (Start never quits), its HOW TO PLAY card
    (a press in its first 0.3 s ignored, then X goes on), the countdown, a race steered by
    the AI with the stick mashed on top (A
    pressed at random, Select tapped, Start to pause, the pause menu moved and B to
@@ -15,7 +15,7 @@ It plays, as a visitor would, and checks the match at every turn:
 3. PLAYERS 2, BOTS 2, LEVEL BRUTAL (picked with the stick): the card, then a race of four
    with both pads driven the same way, to the result, B to the title;
 4. a race left untouched: 60 s later it is back on the title, its rows reset (1 player,
-   5 bots, TOUGH);
+   5 bots, EASY);
 5. QUIT, with A: the game exits (the script fails if it is still running a frame later).
 
 It stops after SECONDS of game time (exit 0 if every check held until then) or at the
@@ -159,11 +159,12 @@ class Script:
     def _script(self):
         m = self.match
         yield from self.idle(0.5)
-        check(m.state == TITLE and (m.mode, m.bot_count, m.level) == (1, 5, "TOUGH")
-              and not m.attract, "the title at 1 player, 5 bots, TOUGH")
+        check(m.state == TITLE and (m.mode, m.bot_count, m.level) == (1, 5, "EASY")
+              and not m.attract, "the title at 1 player, 5 bots, EASY")
         yield from self.snap("title")
         yield from self.idle(config.ATTRACT_DELAY)
-        check(m.attract and m.race is not None and m.race.players == 2, "the attract race")
+        check(m.attract and m.race is not None and m.race.players == 0
+              and len(m.viewed) == 2, "the attract race: bots only, two views")
         yield from self.idle(8.0)
         yield from self.snap("attract")
         yield from self.idle(DT)
@@ -195,11 +196,11 @@ class Script:
             yield self._press(nav=(1 if k % 9 == 0 else 0, -1 if k == 2 else 0),
                               stick=(1, -1 if k >= 2 else 0))
             check(m.title_index == (3 if k < 2 else 2), "a held diagonal steps once")
-        check(m.level == "TOUGH", "a diagonal never changes a value")
+        check(m.level == "EASY", "a diagonal never changes a value")
         yield from self.tap(nav=(0, 1))
         check(m.title_index == 3, "back on QUIT")
         yield from self.tap("p2", start=True)
-        check(m.state == HOWTO and (m.mode, m.bot_count, m.level) == (1, 5, "TOUGH")
+        check(m.state == HOWTO and (m.mode, m.bot_count, m.level) == (1, 5, "EASY")
               and not m.quit_requested, "Start on QUIT begins the race, with the card")
         yield from self.idle(0.1)
         yield from self.tap(a=True)
@@ -208,8 +209,8 @@ class Script:
         yield from self.snap("howto-1p")
         yield from self.tap("p2", button=True)  # X: any button goes on
         check(m.state == COUNTDOWN and m.race.players == 1 and len(m.race.racers) == 6
-              and {d.level for d in m.drivers.values()} == {"TOUGH"},
-              "any button: the 1P countdown, 5 TOUGH bots")
+              and {d.level for d in m.drivers.values()} == {"EASY"},
+              "any button: the 1P countdown, 5 EASY bots")
         yield from self.idle(1.4)
         yield from self.snap("countdown")
         yield from self.idle(config.COUNTDOWN - 1.4 + 0.1)
@@ -303,7 +304,7 @@ class Script:
         yield from self.tap(start=True)
         check(m.state == COUNTDOWN, "Start on the card goes on, never pauses it")
         yield from self.idle(config.IDLE_TIMEOUT + 0.5)
-        check(m.state == TITLE and (m.mode, m.bot_count, m.level) == (1, 5, "TOUGH"),
+        check(m.state == TITLE and (m.mode, m.bot_count, m.level) == (1, 5, "EASY"),
               "60 s untouched: the title, its rows reset")
         yield from self.snap("idle-title")
         yield from self.idle(0.5)

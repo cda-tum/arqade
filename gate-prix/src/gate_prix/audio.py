@@ -6,7 +6,8 @@ the streak, with a boost whoosh on top; a wrong or missed one buzzes; the CIRCUI
 plays a fanfare (a bigger one for a perfect circuit) as the view freezes, and the LIGHT
 SPEED! warp after it is a long rising whoosh; the countdown beeps, items and boxes chime and cars
 thud when they bump. Each item has its own sound as it is used; a MEASURE that lands zaps
-its victim and rings for its shooter, and a DECOHERENCE cloud crackles for whoever drives
+its victim (a bot too: what happens to a bot sounds as it does for a person) and rings
+for its shooter, and a DECOHERENCE cloud crackles for whoever drives
 through it and chimes for its dropper; a mine spins you out with a falling whine.
 
 Everything is rendered in a background thread at start-up (a second or two on the Pi), so
@@ -232,10 +233,14 @@ def sound_for(event, players=()) -> str | None:
 
 def sounds_for(events: list, players=()) -> list[str]:
     """The frame's sounds, each at most once (`players`: the cars people drive). When both
-    sides of a hit are players (P1 MEASUREs P2), both sounds play."""
+    sides of a hit are players (P1 MEASUREs P2), both sounds play, and a player's MEASURE
+    hitting a bot plays the bot's "collapsed" zap with the shooter's ring."""
     names = []
     for e in events:
         names.append(sound_for(e, players))
+        if (isinstance(e, Event) and e.kind == "collapse" and e.car not in players
+                and e.value in players):
+            names.append("collapsed")  # the bot it hit is collapsed, as a person would be
         if (isinstance(e, Event) and e.kind in SCORED and e.car in players
                 and e.value in players and e.value != e.car):
             names.append(SCORED[e.kind])

@@ -1,7 +1,7 @@
 """The computer drivers, at three levels: one `Driver` gives one car its controls each frame,
 as a person's pad would. Pure Python, no pygame, so it is tested like the rules.
 
-One AI drives every car that has no person in it: the bots in a race, all six cars of the
+One AI drives every car that has no person in it: the bots in a race, the bots of the
 attract race behind the title (at TOUGH), a player's car once it is past the line, and the
 HOW TO PLAY card's demo. It returns the same `Controls` a person's stick and A become
 (steer, brake, use the item; `pace` is its handicap, see below), so the race never knows
@@ -57,7 +57,8 @@ lockstep. What the parts do:
   BOT_TUNNEL_LOOK seconds ahead; DECOHERENCE when a car is close behind it, in line.
 - **Pace:** `Controls.pace` is its `pace` times its rubber-banding by place (`rubber`:
   the multiplier in 1st and in last, in a straight line between), within PACE_LIMITS. A
-  person always drives at 1.0, so no level is ever faster than a person on the same line.
+  person always drives at 1.0, so no level outruns a person on the same line, except by
+  the rubber-banding at the back (TOUGH up to 3%, BRUTAL 2% in last place).
 """
 
 from __future__ import annotations
@@ -114,7 +115,7 @@ def jittered(skill: Skill, j: float) -> Skill:
 class Driver:
     """One car's computer driver at a level (a name of SKILLS, or a Skill of its own)."""
 
-    def __init__(self, car_id: str, level: str | Skill = config.DEFAULT_LEVEL, seed: int = 0,
+    def __init__(self, car_id: str, level: str | Skill, seed: int = 0,
                  offset: float | None = None, traffic: bool = True) -> None:
         """`offset` is its own offset from the racing line (random when None; `field` spreads
         them out). `traffic=False` drives on the exact racing line with no avoidance: only
@@ -436,8 +437,7 @@ def offsets(n: int, seed: int) -> list[float]:
     return [config.BOT_OFFSET_MAX * v for v in spread(n, seed)]
 
 
-def field(race, seed: int, level: str = config.DEFAULT_LEVEL,
-          players: str | None = None) -> dict[str, Driver]:
+def field(race, seed: int, level: str, players: str | None = None) -> dict[str, Driver]:
     """Drivers at `level` for the race's bots and, with `players` a level, drivers at that
     level for the people's cars too (the attract race). Their offsets from the line are
     spread out, so that no two drive in each other's tracks, and the bots' jitter is spread

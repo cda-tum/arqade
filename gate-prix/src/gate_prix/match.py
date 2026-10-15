@@ -1,11 +1,11 @@
 """The match flow: title, countdown, race, pause and result. Pure (no pygame).
 
 `Match.update(dt, FrameInput)` steps it and returns the frame's cues: `Cue`s for the menus
-and the countdown, plus the race's own `race.Event`s for the players' cars (the sound and
-the HUD use both).
+and the countdown, plus the race's own `race.Event`s for the players' cars and the bots'
+bumps and hits a player can see (the sound and the HUD use them).
 
     TITLE --A/Start--> HOWTO --any button--> COUNTDOWN (3-2-1-GO) --> RACE --> RESULT
-      ^  \\_ 3 s untouched: an attract race of 6 AI cars plays behind the title   |
+      ^  \\_ 3 s untouched: an attract race of 5 bots plays behind the title      |
       |                                     A/Start rematches (no HOWTO card) |
       +----------------- B, QUIT TO TITLE, or 60 s untouched ------------------+
 
@@ -18,13 +18,16 @@ the HUD use both).
   value, one step per push, clamped too, and only on a push straight sideways (a diagonal
   moves the row, never a value). Only the first pad whose stick is pushed counts, so when
   the pads disagree P1's wins. Changing PLAYERS keeps a full field full (5 bots alone, 4
-  with two) and otherwise clamps BOTS. Whenever the attract race starts or is stopped the
-  row goes back to PLAYERS, so the visitor who stops it never finds QUIT under A. A begins
+  with two) and otherwise clamps BOTS. The rows start at 1 player, 5 bots, EASY (a level
+  a first-time visitor can beat), and go back to that whenever an attract race starts (a
+  new visitor is coming); when it is stopped too the highlight is on PLAYERS, so the
+  visitor who stops it never finds QUIT under A. A begins
   the race with the rows' settings, or on QUIT quits at once (`quit_requested`, the main
   loop's clean exit). Start always begins, never quits. B does nothing.
   After ATTRACT_DELAY seconds untouched an attract race plays behind it:
-  `Race(seed, 2, finish_all=True)`, all six cars driven by the AI at ATTRACT_LEVEL,
-  silently (the AI drives, it never touches the menu). Any input stops it (and that
+  `Race(seed, 0, bots=ATTRACT_BOTS, finish_all=True)`, bots only (neutral colours, CPU
+  names, nobody outlined) at ATTRACT_LEVEL, its two split views following two of them
+  (`viewed`), silently (the AI drives, it never touches the menu). Any input stops it (and that
   frame's stick changes nothing); A or Start still begins at once.
 - **The HOW TO PLAY card** (HOWTO) comes before every match begun from the title, never
   before a rematch. Its first HOWTO_GUARD seconds ignore the buttons; after that any button
@@ -43,10 +46,12 @@ the HUD use both).
   pad does nothing: the car drives straight on (the line is on the start straight) and loses
   no distance. The race, and any other player, runs on.
 - **Events:** a player gets the race's events of its own car, and those aimed at another car
-  from its own (`AIMED`: its bumps, its MEASURE hitting, its cloud driven through). So the
-  bots' own personal cues (their drifts and turbos, streaks, boxes, items, laps) never reach
-  the sound or the HUD; what a bot does *to* a person (a bump, a MEASURE hit, a cloud) does,
-  through the person's own car.
+  from its own (`AIMED`: its bumps, its MEASURE hitting, its cloud driven through). What
+  happens to a bot sounds as it does for a person: a bump or a MEASURE hit (`HEARD`)
+  between two bots is passed on too when a player can see it (the bot within HEAR_AHEAD
+  ahead of a player's car or HEAR_BEHIND behind it). The bots' continuous and personal cues
+  (their drifts and turbos, streaks, boxes, items, laps, checks) never reach the sound or
+  the HUD.
 - **Banners**, per player, for the HUD: "gate" flashes each row's outcome for FLASH_TIME
   (value ("right", streak), ("wrong", slot) or ("miss", slot); one at a time), "tip" says how
   to use an item on its first pickup (value the item; once per item and player each
@@ -72,7 +77,7 @@ import random
 from dataclasses import dataclass, field, replace
 
 from gate_prix import ai, config
-from gate_prix.car import Controls
+from gate_prix.car import Controls, _wrapped
 from gate_prix.race import Event, Race
 
 PLAYERS = ("p1", "p2")
@@ -85,6 +90,8 @@ RESULT = "result"
 # race events whose value is another car, cued to that car's player too: the other side of
 # a bump, the shooter of a MEASURE that hit, the dropper of a cloud that was driven through
 AIMED = ("bump", "collapse", "decohered")
+# what happens to a bot that a player hears when they can see it: a bump, a MEASURE hit
+HEARD = ("bump", "collapse")
 
 
 @dataclass(frozen=True)
@@ -180,6 +187,7 @@ class Match:
         self.drivers: dict[str, ai.Driver] = {}  # the AI's cars: the bots, and players past the line
         self.seed = 0
         self.attract = False
+        self.attract_view: tuple[str, ...] = ()  # the two bots the attract race's views follow
         self.title_wait = True  # the title waits for every button to be let go (at launch too)
         self.pause_index = 0
         self.paused_from = RACE
@@ -198,6 +206,13 @@ class Match:
         if self.race is None or self.attract:
             return ()
         return PLAYERS[: self.race.players]
+
+    @property
+    def viewed(self) -> tuple[str, ...]:
+        """The cars the split views follow: the players', or in the attract race two bots."""
+        if self.race is not None and self.attract:
+            return self.attract_view
+        return self.players
 
     @property
     def countdown(self) -> int:
@@ -332,11 +347,12 @@ class Match:
             self._new_race(events)
 
     def _attract(self) -> None:
-        self.title_index = 0  # whoever stops the demo finds PLAYERS under A, never QUIT
+        self._title_defaults()  # a new visitor: the rows as they find them, PLAYERS under A
         self.seed = self.rng.randrange(1 << 30)
-        self.race = Race(self.seed, 2, finish_all=True)
-        level = config.ATTRACT_LEVEL
-        self.drivers = ai.field(self.race, self.seed, level, players=level)
+        self.race = Race(self.seed, 0, finish_all=True, bots=config.ATTRACT_BOTS)
+        self.drivers = ai.field(self.race, self.seed, config.ATTRACT_LEVEL)
+        ids = [r.car.id for r in self.race.racers]
+        self.attract_view = tuple(sorted(self.rng.sample(ids, 2), key=ids.index))
         self.attract = True
 
     def _new_race(self, events: list) -> None:
@@ -389,6 +405,8 @@ class Match:
         for e in race.update(dt, self._controls(inp)):
             if e.car in mine or (e.kind in AIMED and e.value in mine):
                 events.append(e)
+            elif e.kind in HEARD and self._seen(e.car):
+                events.append(e)  # between two bots, in sight of a player
             if e.car in mine:
                 self._on_event(e)
         self._tick_banners(dt)
@@ -406,6 +424,17 @@ class Match:
         if all(r.finished for r in racers) or late:
             self._freeze()
             events.append(Cue("finish"))
+
+    def _seen(self, car_id: str) -> bool:
+        """Whether a player can see this car: within HEAR_AHEAD ahead of a player's car or
+        HEAR_BEHIND behind it (a lap apart counts: the same place on the track)."""
+        race = self.race
+        z = race.racer(car_id).car.z
+        for p in self.players:
+            dz = _wrapped(z - race.racer(p).car.z, race.lap_length)
+            if -config.HEAR_BEHIND <= dz <= config.HEAR_AHEAD:
+                return True
+        return False
 
     def _on_event(self, e: Event) -> None:
         banners = self.banners[e.car]

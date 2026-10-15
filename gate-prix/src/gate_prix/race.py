@@ -250,13 +250,14 @@ def grid(players: int, cars: int = config.CARS) -> list[tuple[float, float]]:
 class Race:
     """A race of LAPS laps of the track for 1 or 2 players and `bots` bots (by default as
     many as fill the field: CARS in all). 1 player and no bots is a time trial, 2 and none a
-    duel. A race of no players and only bots is for the tests and tools."""
+    duel. A race of no players and only bots is the attract race's (and the tests' and
+    tools')."""
 
     def __init__(self, seed: int, players: int, rng: random.Random | None = None,
                  course: track.Track | None = None, finish_all: bool = False,
                  bots: int | None = None) -> None:
         if players not in (0, 1, 2):
-            raise ValueError(f"a race has 1 or 2 players, not {players}")
+            raise ValueError(f"a race has 0 to {config.MAX_PLAYERS} players, not {players}")
         bots = config.CARS - players if bots is None else bots
         if not 0 <= bots <= config.CARS - players or players + bots == 0:
             raise ValueError(f"{players} players and {bots} bots: at most {config.CARS} cars")

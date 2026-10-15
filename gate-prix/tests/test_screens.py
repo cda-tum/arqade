@@ -202,7 +202,7 @@ def test_the_title_the_card_and_quit_draw(renderer):
     m.update(DT, FrameInput())
     assert [label for label, *_ in title_rows(m)] == list(config.TITLE_ITEMS)
     assert title_rows(m)[:3] == [("PLAYERS", "1", True, False), ("BOTS", "5", False, True),
-                                 ("LEVEL", "TOUGH", False, False)]
+                                 ("LEVEL", "EASY", True, False)]
     renderer.draw(m)
     m.bot_count = 0
     assert field_line(m) == "A TIME TRIAL: JUST YOU"

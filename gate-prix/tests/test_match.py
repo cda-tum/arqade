@@ -6,7 +6,8 @@ import random
 import pytest
 
 from gate_prix import config
-from gate_prix.match import (AIMED, COUNTDOWN, HOWTO, PAUSED, RACE, RESULT, TITLE, Cue,
+from gate_prix.race import Shot
+from gate_prix.match import (AIMED, COUNTDOWN, HEARD, HOWTO, PAUSED, RACE, RESULT, TITLE, Cue,
                              FrameInput,
                              Match, PlayerInput)
 
@@ -101,9 +102,9 @@ def settings(m: Match) -> tuple:
     return m.mode, m.bot_count, m.level
 
 
-def test_the_title_starts_at_one_player_five_bots_tough_and_steps_through_four_rows():
+def test_the_title_starts_at_one_player_five_easy_bots_and_steps_through_four_rows():
     m = fresh(1)
-    assert m.state == TITLE and settings(m) == (1, 5, "TOUGH") and m.title_index == 0
+    assert m.state == TITLE and settings(m) == (1, 5, "EASY") and m.title_index == 0
     assert config.TITLE_ITEMS == ("PLAYERS", "BOTS", "LEVEL", "QUIT")
     events = m.update(DT, DOWN)
     assert m.title_index == 1 and cues(events, "blip")
@@ -118,18 +119,18 @@ def test_the_title_starts_at_one_player_five_bots_tough_and_steps_through_four_r
     for _ in range(3):
         m.update(DT, UP)  # clamped at the top too
     assert m.title_index == 0
-    assert settings(m) == (1, 5, "TOUGH")  # moving between the rows changes no value
+    assert settings(m) == (1, 5, "EASY")  # moving between the rows changes no value
 
 
 def test_left_and_right_change_the_highlighted_rows_value_clamped():
     m = fresh(1)
     # PLAYERS: 1 or 2, and a full field stays full (5 bots alone, 4 with two)
     events = tap(m, RIGHT)
-    assert settings(m) == (2, 4, "TOUGH") and cues(events, "blip")
+    assert settings(m) == (2, 4, "EASY") and cues(events, "blip")
     events = tap(m, RIGHT)
-    assert settings(m) == (2, 4, "TOUGH") and not cues(events, "blip")  # clamped, silent
+    assert settings(m) == (2, 4, "EASY") and not cues(events, "blip")  # clamped, silent
     tap(m, LEFT)
-    assert settings(m) == (1, 5, "TOUGH")
+    assert settings(m) == (1, 5, "EASY")
     # BOTS: 0 up to 6 - players
     tap(m, DOWN)
     for _ in range(7):
@@ -140,22 +141,21 @@ def test_left_and_right_change_the_highlighted_rows_value_clamped():
     assert m.bot_count == 2
     tap(m, UP)
     tap(m, RIGHT)
-    assert settings(m) == (2, 2, "TOUGH")  # not a full field: kept as it was
+    assert settings(m) == (2, 2, "EASY")  # not a full field: kept as it was
     tap(m, DOWN)
     for _ in range(5):
         tap(m, RIGHT)
     assert m.bot_count == 4  # 2 players: at most 4 bots
     tap(m, UP)
     tap(m, LEFT)
-    assert settings(m) == (1, 5, "TOUGH")  # full again: 5 with one player
-    # LEVEL: EASY, TOUGH, BRUTAL
+    assert settings(m) == (1, 5, "EASY")  # full again: 5 with one player
+    # LEVEL: EASY (the default), TOUGH, BRUTAL
     tap(m, DOWN)
     tap(m, DOWN)
     tap(m, LEFT)
-    assert m.level == "EASY"
-    tap(m, LEFT)
-    assert m.level == "EASY"
+    assert m.level == "EASY"  # clamped
     tap(m, RIGHT)
+    assert m.level == "TOUGH"
     tap(m, RIGHT)
     tap(m, RIGHT)
     assert m.level == "BRUTAL"
@@ -193,7 +193,7 @@ def test_a_held_diagonal_moves_one_row_up_or_down_and_never_a_value(dx, dy, star
     steps = [b - a for a, b in zip(rows, rows[1:]) if a != b]
     assert rows[-1] == want and all(d == (1 if dy > 0 else -1) for d in steps), rows[:20]
     if lag == 0:
-        assert settings(m) == (1, 5, "TOUGH")
+        assert settings(m) == (1, 5, "EASY")
 
 
 def test_two_pads_held_opposite_ways_follow_p1():
@@ -231,6 +231,18 @@ def test_a_held_sideways_push_changes_a_value_one_step():
     assert held_down(m, 2.0, dx=1, dy=0) == 1 and m.bot_count == 4
 
 
+def test_an_attract_race_resets_the_rows_for_the_next_visitor():
+    m = fresh(1)
+    tap(m, RIGHT)  # 2 players
+    tap(m, DOWN)
+    tap(m, LEFT)  # 3 bots
+    tap(m, DOWN)
+    tap(m, RIGHT)  # TOUGH
+    assert settings(m) == (2, 3, "TOUGH") and m.title_index == 2
+    run(m, config.ATTRACT_DELAY + 0.5)
+    assert m.attract and settings(m) == (1, 5, "EASY") and m.title_index == 0
+
+
 @pytest.mark.parametrize("button", [A, START])
 def test_a_title_left_on_quit_offers_players_once_the_attract_race_runs(button):
     """The next visitor's first press (A, most likely) starts a match, never quits."""
@@ -243,7 +255,7 @@ def test_a_title_left_on_quit_offers_players_once_the_attract_race_runs(button):
     assert m.attract and m.title_index == 0  # back on PLAYERS
     events = m.update(DT, button)
     assert not m.quit_requested and not cues(events, "quit")
-    assert m.state == HOWTO and settings(m) == (2, 4, "TOUGH")
+    assert m.state == HOWTO and settings(m) == (1, 5, "EASY")  # the attract race reset them
 
 
 def test_a_on_quit_quits_at_once():
@@ -261,7 +273,8 @@ def test_start_never_quits_it_begins_the_race_as_set_from_quit():
     tap(m, DOWN)
     tap(m, LEFT)  # 3 bots
     tap(m, DOWN)
-    tap(m, LEFT)  # EASY
+    tap(m, RIGHT)
+    tap(m, LEFT)  # EASY again
     tap(m, DOWN)  # QUIT
     events = m.update(DT, START)
     assert not m.quit_requested and not cues(events, "quit")
@@ -313,7 +326,7 @@ def test_the_input_that_stops_the_attract_race_changes_nothing(inp):
     run(m, config.ATTRACT_DELAY + 0.5)
     assert m.attract
     events = m.update(DT, inp)
-    assert not m.attract and m.title_index == 0 and settings(m) == (1, 5, "TOUGH")
+    assert not m.attract and m.title_index == 0 and settings(m) == (1, 5, "EASY")
     assert not cues(events, "blip")
     m.update(DT, IDLE)
     tap(m, RIGHT)
@@ -331,7 +344,7 @@ def test_a_or_start_shows_the_card_then_the_countdown_with_the_chosen_field(butt
         through_card(m)
         assert m.race.players == mode and not m.attract
         assert len(m.race.racers) == config.CARS  # the bots fill the field
-        assert {d.level for d in m.drivers.values()} == {"TOUGH"}
+        assert {d.level for d in m.drivers.values()} == {"EASY"}  # the default level
 
 
 # --- The HOW TO PLAY card --------------------------------------------------------------------
@@ -385,9 +398,11 @@ def test_the_attract_race_runs_after_3_s_untouched_and_any_input_stops_it():
     run(m, 0.2)
     assert m.state == TITLE and m.attract and m.race is not None
     race = m.race
-    assert race.players == 2 and race.finish_all
-    assert set(m.drivers) == {r.car.id for r in race.racers}  # the AI drives P1 and P2 too
+    assert race.players == 0 and race.finish_all and len(race.racers) == config.ATTRACT_BOTS
+    assert set(m.drivers) == {r.car.id for r in race.racers}  # bots only: nobody drives
     assert {d.level for d in m.drivers.values()} == {config.ATTRACT_LEVEL} == {"TOUGH"}
+    assert m.players == () and len(m.viewed) == 2 and set(m.viewed) <= set(m.drivers)
+    assert all(v.startswith("cpu") for v in m.viewed)  # neutral colours, CPU names
     events = run(m, 2.0)
     assert race.time > 1.5 and not events  # the attract race is silent
     m.update(DT, frame(p2={"steer": 0.5}))
@@ -483,23 +498,61 @@ def test_race_events_of_the_players_reach_the_sound_and_the_hud():
     assert [e for e in events if getattr(e, "kind", None) == "right" and e.car == "p1"]
 
 
-def test_a_bots_own_cues_stay_silent_what_it_does_to_a_person_sounds():
-    """The sound policy: a bot's drifts, turbos, streaks, boxes and items never reach the
-    sound or the HUD; a bump or a hit it gives a person does, through the person's car."""
+def place(m: Match, car_id: str, z: float, x: float) -> None:
+    car = m.race.racer(car_id).car
+    car.z = car.prev_z = z
+    car.x = car.prev_x = x
+    car.speed = m.race.racer("p1").car.speed
+
+
+def bumps_of(events):
+    return sorted((e.car, e.value) for e in events if getattr(e, "kind", None) == "bump")
+
+
+def test_a_bots_own_cues_stay_silent():
+    """The sound policy: a bot's drifts, turbos, streaks, boxes, items, laps and checks never
+    reach the sound or the HUD; only bumps and hits (HEARD) a player can see do."""
     m = started()
     events = run(m, 25.0, frame(p1={"steer": 0.0}))
     race_events = [e for e in events if not isinstance(e, Cue)]
-    bots = {r.car.id for r in m.race.racers if not r.player}
-    assert all(e.car == "p1" or (e.kind in AIMED and e.value == "p1") for e in race_events)
-    assert not any(e.car in bots for e in race_events if e.kind not in AIMED)
-    p1, c1, c2 = m.race.racer("p1").car, m.race.racer("cpu1").car, m.race.racer("cpu2").car
-    c1.z, c1.x, c1.speed = p1.z + 100.0, p1.x + 0.1, p1.speed  # a bot bumps P1
-    c2.z, c2.x = c1.z + 50_000.0, 0.0
-    m.race.racer("cpu3").car.z, m.race.racer("cpu3").car.x = c2.z + 100.0, 0.1  # and a bot
-    events = m.update(DT, frame(p1={"steer": 0.0}))
-    bumps = [(e.car, e.value) for e in events if getattr(e, "kind", None) == "bump"]
-    # both sides of P1's bump (one sound: a frame's sounds play once); the bots' own is silent
-    assert sorted(bumps) == [("cpu1", "p1"), ("p1", "cpu1")]
+    assert race_events
+    for e in race_events:
+        assert e.car == "p1" or (e.kind in AIMED and e.value == "p1") or e.kind in HEARD, e
+
+
+def test_a_bump_with_a_person_sounds_on_their_side():
+    m = started()
+    run(m, 2.0)
+    p1 = m.race.racer("p1").car
+    for i, car_id in enumerate(("cpu2", "cpu3", "cpu4", "cpu5")):  # out of the way
+        place(m, car_id, p1.z - 60_000.0 - 3000.0 * i, 0.0)
+    place(m, "cpu1", p1.z + 100.0, p1.x + 0.1)
+    # both sides of P1's bump (one sound: a frame's sounds play once)
+    assert bumps_of(m.update(DT, IDLE)) == [("cpu1", "p1"), ("p1", "cpu1")]
+
+
+@pytest.mark.parametrize("ahead, heard", [(3000.0, True), (-800.0, True),
+                                          (config.HEAR_AHEAD + 2000.0, False),
+                                          (-config.HEAR_BEHIND - 1500.0, False)])
+def test_what_happens_to_a_bot_sounds_when_a_player_can_see_it(ahead, heard):
+    """A bump between two bots, and a bot's MEASURE hitting another, sound as they would
+    for a person, when it happens in a player's view (or just behind them)."""
+    m = started()
+    run(m, 2.0)
+    p1 = m.race.racer("p1").car
+    place(m, "p1", p1.z, -0.8)
+    for i, car_id in enumerate(("cpu3", "cpu4", "cpu5")):
+        place(m, car_id, p1.z + 70_000.0 + 3000.0 * i, 0.0)
+    place(m, "cpu1", p1.z + ahead, 0.3)
+    place(m, "cpu2", p1.z + ahead + 100.0, 0.4)  # cpu1 runs into it
+    want = [("cpu1", "cpu2"), ("cpu2", "cpu1")] if heard else []
+    assert bumps_of(m.update(DT, IDLE)) == want
+    place(m, "cpu2", p1.z + ahead, 0.9)
+    m.race.shots.append(Shot("cpu2", "cpu1", config.MEASURE_FLIGHT))  # landing now
+    events = m.update(DT, IDLE)
+    hits = [(e.car, e.value) for e in events if getattr(e, "kind", None) == "collapse"]
+    assert hits == ([("cpu1", "cpu2")] if heard else [])
+    assert m.race.racer("cpu1").car.spinning  # it was hit either way
 
 
 # --- Pause -----------------------------------------------------------------------------------
@@ -585,7 +638,7 @@ def test_a_minute_untouched_goes_back_to_the_title_at_one_player(paused):
     assert m.state != TITLE
     m.level = "BRUTAL"
     run(m, 1.1)
-    assert m.state == TITLE and settings(m) == (1, 5, "TOUGH") and m.race is None
+    assert m.state == TITLE and settings(m) == (1, 5, "EASY") and m.race is None
 
 
 def test_touching_anything_keeps_the_race_going():

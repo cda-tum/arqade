@@ -23,7 +23,7 @@ VIEW_2P_SPREAD = 320
 CARS = 6  # the most cars in a race: people (1 or 2) and bots together
 MAX_PLAYERS = 2
 LEVELS = ("EASY", "TOUGH", "BRUTAL")  # the bots' level, one for all of them (ai.SKILLS)
-DEFAULT_LEVEL = "TOUGH"
+DEFAULT_LEVEL = "EASY"  # the title's, as a visitor finds it: one they can beat
 LAPS = 3
 ROWS_PER_LAP = 8
 GATE_LAPS = 2  # gate rows stand on laps 1 and 2 only: the final lap is a gate-free sprint
@@ -210,6 +210,10 @@ BOT_TUNNEL_LOOK = 0.5  # a hazard or cloud still in its path this close: TUNNEL
 BOT_TRAFFIC = 2 * 400.0  # TUNNEL in traffic: a car this close ahead or alongside (CAR_LENGTH)
 BOT_DECO_BEHIND = 8000.0  # DECOHERENCE when a car is this close behind it, in line
 BOT_DECO_LINE = 0.6  # in line: within this sideways
+# A bump or a MEASURE hit between two bots sounds for a person who can see it: the bot is
+# within the person's draw distance ahead, or a few car lengths behind.
+HEAR_AHEAD = 120 * 200.0  # DRAW_SEGMENTS * SEG
+HEAR_BEHIND = 3 * 400.0  # 3 * CAR_LENGTH
 BOT_BLIND_SKILL = 0.5  # a bot picking its arch while blind does it at this times its aim
 BOT_FUMBLE = 0.8  # seconds after the pickup a bot that fumbles an item uses it, wherever
 
@@ -246,7 +250,8 @@ CAR_WIDTH = 0.32  # in road half-widths, as the look's own car beside its road
 
 # --- Flow ------------------------------------------------------------------------------
 ATTRACT_DELAY = 3.0  # untouched seconds on the title before the attract race plays
-ATTRACT_LEVEL = "TOUGH"  # the attract race: all six cars, P1's and P2's too
+ATTRACT_LEVEL = "TOUGH"  # the attract race behind the title: bots only
+ATTRACT_BOTS = 5  # its cars (the bots' five colours); the two split views follow two of them
 IDLE_TIMEOUT = 60.0  # untouched seconds anywhere but the title: back to the title, its rows reset
 COUNTDOWN = 3.0  # 3, 2, 1 a second each, then GO
 GO_TIME = 0.8  # GO! stays up this long into the race

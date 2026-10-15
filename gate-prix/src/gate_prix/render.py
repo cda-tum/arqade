@@ -3,8 +3,8 @@
 
 - 2 players: two 480x540 views side by side, P1 on the left, P2 on the right, a thin
   divider between (each projects the road VIEW_2P_SPREAD wide, so nothing is squeezed).
-  1 player: one 960x540 view. The attract race behind the title is drawn as a 2-player
-  race (the AI driving both players' cars).
+  1 player: one 960x540 view. The attract race behind the title (bots only) is drawn in
+  two views as well, following two of its bots (`match.viewed`).
 - Each view is a `RoadView` of the track from behind its own car, with the arches, the
   item boxes, the start and finish gantry over the chequered lap line (its five start
   lights red one by one in the countdown, all green from GO), every car, their exhaust
@@ -570,9 +570,10 @@ class Renderer:
 
     def _race(self, match: Match, hud: bool) -> None:
         race = match.race
-        views = self.views[race.players]
+        followed = [race.racer(c) for c in match.viewed]  # the players', or two bots'
+        views = self.views[len(followed)]
         objects = self._objects(race)
-        for i, (view, racer) in enumerate(zip(views, race.racers)):
+        for i, (view, racer) in enumerate(zip(views, followed)):
             p = racer.car.id
             mine = objects + self._hazards(race, p) if racer.hazards else objects
             if hud and match.frozen(p):
@@ -580,7 +581,7 @@ class Renderer:
             else:
                 self._frozen.pop(p, None)
                 self._view(match, view, racer, mine, i, hud)
-        if race.players == 2:
+        if len(followed) == 2:
             x = VIEW_W
             pygame.draw.line(self.surface, INK, (x, 0), (x, H), 4)
             pygame.draw.line(self.surface, (200, 205, 225), (x, 0), (x, H), 1)
@@ -883,6 +884,9 @@ class Renderer:
             y = 220 + 40 * i
             chosen = match.title_index == i
             col = WHITE if chosen else (150, 156, 180)
+            idle = label == "LEVEL" and match.bot_count == 0  # no bots: no level to set
+            if idle:
+                col = EMPTY if not chosen else (150, 156, 180)
             if chosen:
                 self.surface.blit(self.panel(380, 36, (200, 205, 225), 220), (cx - 190, y - 18))
                 self.put("▶", 16, GOLD, center=(cx - 168, y))
@@ -891,8 +895,8 @@ class Renderer:
                 continue
             self.put(label, 20, col, midleft=(cx - 146, y))
             vx = cx + 92
-            self.put(value, 20, GOLD if chosen else col, center=(vx, y))
-            if chosen:
+            self.put(value, 20, GOLD if chosen and not idle else col, center=(vx, y))
+            if chosen and not idle:
                 arrow = (255, 230, 120)
                 self.put("◀", 14, arrow if not lo else EMPTY, center=(vx - 70, y))
                 self.put("▶", 14, arrow if not hi else EMPTY, center=(vx + 70, y))

@@ -74,6 +74,12 @@ def test_the_shooter_and_the_victim_of_a_hit_hear_different_sounds():
     # P1 measures P2: both sounds, once each
     both = audio.sounds_for([Event("collapse", "p2", "p1")], ("p1", "p2"))
     assert set(both) == {"collapsed", "scored"}
+    # P1 measures a bot: the bot's zap, as a person's, and P1's ring
+    assert set(audio.sounds_for([hit], ("p1",))) == {"collapsed", "scored"}
+    # what happens between two bots (passed on by the match when a player sees it)
+    assert audio.sounds_for([Event("collapse", "cpu1", "cpu2")], ("p1",)) == ["collapsed"]
+    assert audio.sounds_for([Event("bump", "cpu1", "cpu2"), Event("bump", "cpu2", "cpu1")],
+                            ("p1",)) == ["bump"]
     # every item has a sound of its own
     names = {audio.sound_for(Event("item", "p1", item)) for item in config.ITEMS}
     assert len(names) == len(config.ITEMS)

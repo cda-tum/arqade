@@ -25,11 +25,11 @@ PLAY card.
   fill the rest of the field by default (5 against one player, 4 against two), or as many
   as the title's BOTS row says: none at all is a time trial alone, or a duel for two.
 - **The bots** are one AI (`ai.py`) at the title's **LEVEL**, the same for all of them:
-  - **EASY**, for a first-time visitor: it goes for the right arch only about 45% of the
+  - **EASY** (the default), for a first-time visitor: it goes for the right arch only about 45% of the
     time, drives at 94% of the top speed, brakes into the sharp curves instead of drifting,
     misses half the hazards, fumbles half its items (using them at once, wherever it is),
     reacts late (it looks at the traffic every fifth of a second) and wanders off its line;
-  - **TOUGH** (the default) makes a decent player work: about 4 rows in 5 right, drifts
+  - **TOUGH** makes a decent player work: about 4 rows in 5 right, drifts
     most sharp curves, sees nearly every hazard, plays every item at its moment, and is
     rubber-banded a little (3% slower in front, 3% quicker at the back);
   - **BRUTAL** is as near perfect as the game allows: every right arch, every curve
@@ -120,9 +120,12 @@ PLAY card.
   accuracy ("14/16 GATES") and its check ("CHECK 12/16"). A rematches, B goes to the title.
 - **2 players:** the race ends when both have finished, or 40 s after the first one did
   (the other is placed where they are). A finished car is driven on by the AI.
-- **Sounds:** what a bot does to you (a bump, a MEASURE that hits you, its cloud you
-  drive through) sounds as it does from a person; a bot's own drifts, boosts, streaks,
-  boxes and items stay silent, so a full field never turns into noise.
+- **Sounds:** what happens to a bot sounds as it does for a person: a bump or a MEASURE
+  hit, yours or between two bots you can see (the bot within your view ahead, or a few car
+  lengths behind you). What a bot does to you (a bump, a MEASURE, its cloud you drive
+  through) sounds as from a person, and your MEASURE hitting a bot zaps it as well as
+  ringing for you. A bot's own drifts, boosts, streaks, boxes, items and checks stay
+  silent, so a full field never turns into noise.
 
 ## Controls
 
@@ -139,15 +142,16 @@ PLAY card.
 | Quit | Start + Select on one pad | 1 + 3, or Esc | 2 + 4, or Esc |
 
 - **Title:** four rows, **PLAYERS** (1 or 2), **BOTS** (0 up to 6 minus the players; 5 by
-  default), **LEVEL** (EASY, TOUGH or BRUTAL; TOUGH by default) and **QUIT**. The stick
+  default), **LEVEL** (EASY, TOUGH or BRUTAL; EASY by default, dimmed when there are no bots) and **QUIT**. The stick
   moves up and down one row per push, and left and right change the highlighted row's
   value one step per push, both stopping at the ends (no wrap); a diagonal moves the row
   and never a value. Going to 2 players keeps a full field full (4 bots), and back to 1
   fills it again. A line under the rows says what you picked ("A TIME TRIAL: JUST YOU").
   A or Start begins the race as set; A on **QUIT** quits the game at once, and Start never
   quits. B does nothing. A button already held when the game starts must be let go first.
-  Untouched for 3 s, an attract race of 6 cars driven by the AI at TOUGH plays behind it;
-  whoever stops it finds PLAYERS highlighted, never QUIT.
+  Untouched for 3 s, an attract race of 5 bots at TOUGH plays behind it, its two split
+  views following two of them; it resets the rows for the next visitor (1 player, 5 bots,
+  EASY), and whoever stops it finds PLAYERS highlighted, never QUIT.
 - **HOW TO PLAY:** every match begun from the title (not a rematch) opens on a card: the
   goal, a demo of a car steering through the glowing arch and boosting (the real race and
   the AI at BRUTAL), and the controls (the stick: steer, brake, STICK BACK + STEER: DRIFT; the
@@ -155,7 +159,7 @@ PLAY card.
   first 0.3 s; the stick doesn't. Start + Select still quits and the idle timeout runs.
 - **Pause:** Start, on either pad. The stick moves, A picks, B or Start resumes.
 - **Idle:** 60 s untouched anywhere (paused too) returns to the title, its rows reset (1
-  player, 5 bots, TOUGH).
+  player, 5 bots, EASY).
 - With 1 player either pad drives. The accelerator is automatic.
 - The keyboard is a dev fallback only: P1's keys avoid `l x r b y a`, which the cabinet's
   P1 encoder also types, and the cabinet's loader passes `--no-keyboard`. The stick is read
@@ -180,7 +184,7 @@ From the repo root, `./arqade.sh` runs it from the ARQADE launcher's menu too.
 
 `--selftest SECONDS` plays a scripted session through the real loop and renderer, as fast
 as the machine draws: the title and the attract race, BOTS stepped down and up, the menu
-held down onto QUIT and back, Start on QUIT (1 player, 5 TOUGH bots) and its HOW TO PLAY
+held down onto QUIT and back, Start on QUIT (1 player, 5 EASY bots) and its HOW TO PLAY
 card (a press in its first 0.3 s ignored), a 1P race steered by the AI with the stick
 mashed on top (pause and resume, the result, a rematch, QUIT TO TITLE with A held), 2
 players with 2 BRUTAL bots: the card and the race to the result, a race left alone until

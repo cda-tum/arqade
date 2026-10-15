@@ -100,7 +100,8 @@ def test_the_levels_are_the_three_and_named_alike_everywhere():
     assert config.LEVELS == ("EASY", "TOUGH", "BRUTAL")
     assert tuple(SKILLS) == config.LEVELS
     assert all(s.name == name for name, s in SKILLS.items())
-    assert config.DEFAULT_LEVEL == config.ATTRACT_LEVEL == "TOUGH"
+    assert config.DEFAULT_LEVEL == "EASY"  # the title's: a first-time visitor can win
+    assert config.ATTRACT_LEVEL == config.AUTOPILOT_LEVEL == "TOUGH"  # a race worth watching
 
 
 def test_each_level_is_better_than_the_one_below_at_every_number():
@@ -113,14 +114,15 @@ def test_each_level_is_better_than_the_one_below_at_every_number():
     assert (brutal.aim, brutal.pace, brutal.drift, brutal.sees, brutal.items) == (1, 1, 1, 1, 1)
     assert brutal.informed and not tough.informed and not easy.informed
     for s in SKILLS.values():
-        assert s.pace <= 1.0  # no level outruns a person on the same line
+        # no level outruns a person on the same line, but for the rubber-banding at the back
+        assert s.pace <= 1.0 and s.pace * s.rubber[0] <= 1.0
         assert config.PACE_LIMITS[0] <= s.pace * min(s.rubber)
         assert max(s.rubber) * s.pace <= config.PACE_LIMITS[1]
 
 
 def test_a_driver_takes_a_level_by_name_or_a_skill_of_its_own():
     assert Driver("cpu1", "EASY").skill is SKILLS["EASY"]
-    assert Driver("cpu1").level == config.DEFAULT_LEVEL
+    assert Driver("cpu1", "BRUTAL").level == "BRUTAL"
     mine = custom(aim=0.3)
     assert Driver("cpu1", mine).skill is mine
 
@@ -237,7 +239,7 @@ def test_controls_are_in_range_and_deterministic(level):
 def test_bots_hold_their_own_offsets_from_the_line_spread_across_the_field():
     for seed in range(5):
         race = Race(seed=seed, players=2)
-        offsets = sorted(d.offset for d in ai.field(race, seed, players="TOUGH").values())
+        offsets = sorted(d.offset for d in ai.field(race, seed, "TOUGH", players="TOUGH").values())
         assert len(offsets) == config.CARS
         assert offsets[0] == pytest.approx(-config.BOT_OFFSET_MAX)
         assert offsets[-1] == pytest.approx(config.BOT_OFFSET_MAX)

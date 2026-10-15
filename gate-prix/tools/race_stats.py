@@ -73,7 +73,7 @@ def park(race, racer):
     return Controls(*aim(car, -2.1, race.track.segment_at(car.z)))
 
 
-def one(seed: int, player: str, naive: bool, level: str = config.DEFAULT_LEVEL,
+def one(seed: int, player: str, naive: bool, level: str = "TOUGH",
         bots: int | None = None, right: float = 0.6):
     race = Race(seed=seed, players=1, finish_all=True, bots=bots)
     drivers = ai.field(race, seed, level, players=level if player == "ai" else None)
