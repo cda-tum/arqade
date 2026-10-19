@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
-`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, `qarrera/`, more later) built for the same
+`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, `qarrera/`, `gate-prix/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
 Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. (`launcher/`
 runs them all from one menu on an ordinary PC instead.) This file
@@ -710,6 +710,9 @@ worked out with the cabinet's owners over several rounds:
   - Qarrera: a slot-car set's box lid, the game's voxel racers
     sprite-stacked on one curve of its space track, and a leaning
     pixel-italic title over a band of the track's red-and-blue kerb.
+  - Gate Prix: a behind-the-car racer's attract screen, the title on the
+    start gantry's banner over the road, lights green, the right gate
+    glowing ahead of the car.
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really

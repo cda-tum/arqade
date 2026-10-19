@@ -91,4 +91,12 @@
 		<marquee>./images/qarrera-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./gate_prix.pygame</path>
+		<name>Gate Prix</name>
+		<desc>Kart racing through a dilution fridge, for 1 or 2 players against computer racers: steer through the glowing gate to build the target quantum circuit. Every right gate is a boost, and the CIRCUIT CHECK before the final lap pays out for a perfect circuit.</desc>
+		<image>./images/gate_prix-wide.png</image>
+		<marquee>./images/gate_prix-marquee.png</marquee>
+		<lang>en</lang>
+	</game>
 </gameList>
