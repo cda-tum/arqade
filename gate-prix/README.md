@@ -17,6 +17,21 @@ gates left you.
 - Controls: the car accelerates by itself, the stick steers, pulling it back
   brakes (and drifts, with a direction), A uses the item, Start pauses.
 
+## Sound and music
+
+Every sound effect is synthesised at start-up (`audio.py`). There is no
+engine sound: the hum that followed the car's speed was tiring on the
+cabinet (2026-10-19). A person's car is heard only while it boosts, as a soft
+nitro hiss that gets louder with the boost and fades out when it ends. Every
+right gate still rings, with a whoosh.
+
+The title and the HOW TO PLAY card play "vapormall" by Bolt Action, looping
+(`src/gate_prix/assets/music/`, from Batocera's own menu music). It fades in
+on the title and out when the countdown starts. Its licence allows
+non-commercial use with credit, so the title screen credits it, and so does
+this README: music by [Bolt Action](https://www.youtube.com/channel/UCduGZR4WsJJ_NGdRhLA07qA),
+"vapormall" (`assets/music/LICENSE.md` has the terms).
+
 The design and the look it was built to are in
 `../docs/superpowers/specs/2026-10-12-gate-prix-design.md` and
 `2026-10-12-gate-prix-look.py`. The rules have moved on since (for example,

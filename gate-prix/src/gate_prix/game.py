@@ -19,7 +19,7 @@ from gate_prix import config
 from gate_prix.audio import NullAudio, make_audio
 from gate_prix.display import make_display, present
 from gate_prix.input import Input
-from gate_prix.match import RACE, Match
+from gate_prix.match import HOWTO, RACE, TITLE, Match
 from gate_prix.render import Renderer, loading_screen
 from gate_prix.sprites import font
 
@@ -78,8 +78,8 @@ def run(fullscreen: bool, window_size: str, show_fps: bool, seed: int | None = N
             return script.finish() if script is not None else 0
         audio.play_events(events, match.players)
         racing = match.state == RACE and not match.attract and match.race is not None
-        audio.engines({p: match.race.racer(p).car.speed / config.TOP_SPEED
-                       for p in match.players} if racing else {})
+        audio.nitro({p: match.race.racer(p).car.boost for p in match.players} if racing else {})
+        audio.menu_music(match.state in (TITLE, HOWTO))
         renderer.draw(match)
         if show_fps:
             fps = round(clock.get_fps())
