@@ -76,7 +76,9 @@ Each game ships its own `deploy_batocera.sh` (see `quantum-pong/` and
   the ROMs folder entirely.
 - A tiny loader script goes to `/userdata/roms/pygame/<game_name>.pygame`:
   it just does `sys.path.insert(0, ".../games/<game_name>")` then imports and
-  calls that game's `main()`, typically with `--fullscreen`.
+  calls that game's `main()`, typically with `--fullscreen`. It also
+  installs the idle exit (see "Idle exit" below), so the deploy copies
+  `batocera/arqade_idle.py` beside the package.
 - Rewriting the loader's **content** does not require an EmulationStation
   rescan/restart — ES only re-reads the ROM list/directory structure at scan
   time, not each file's contents at launch time. So once a game's `.pygame`
@@ -499,8 +501,8 @@ left mid-round, or a round needs to stop without power-cycling anything.
   add items such as RESTART.
 - **In the menu:** the stick moves the selection, A picks an item, and Start
   or B resumes.
-- **Start + Select still quits at once**, paused or not, and the idle timeout
-  back to the title keeps running while paused.
+- **Start + Select still quits at once**, paused or not, and the idle exit
+  (see below) keeps running while paused.
 
 Where the games stand (2026-10-01): every game follows it except
 Superconductor, whose pause screen goes to its menu with Select rather than
@@ -550,8 +552,7 @@ up (players, mode, map, …) and right before play or the countdown starts:
   that dismisses the card does nothing in the game.
 - It shows on every match started from the title, but not on an in-match
   RESTART or on a rematch from the game-over screen.
-- Start + Select still quits from it, and the game's idle timeout keeps
-  running.
+- Start + Select still quits from it, and the idle exit keeps running.
 - The attract bot has to press a button to get past it.
 
 Where the games stand (2026-10-12): all eleven games have the QUIT row and the
@@ -560,6 +561,48 @@ card. The card lives in `<package>/tutorial.py`, except in Overquqed, where
 card is `howto.py`. Each demo runs the game's own rules and draw code on a
 small scripted scene. Every game also has synthesized sound effects now (Ion
 Surfer was the last to get them, in `ion_surfer/sound.py`).
+
+### Idle exit: 20 s untouched and the game closes (all games, nothing to do)
+
+A game nobody touches for 20 seconds exits (2026-10-14), on any screen: title,
+HOW TO PLAY card, mid-round, paused. The cabinet is then back on ES's game
+list, and ES's screensaver starts the attract reels 15 s later; in the PC
+launcher the menu does the same. A game left running never keeps the cabinet
+out of its attract mode.
+
+- **It lives outside the games**, in `batocera/arqade_idle.py`. Its
+  `install()` wraps `pygame.event.get` (which every game reads its input
+  through) and raises `SystemExit` from it, as the launcher's Esc does. Every
+  `deploy_batocera.sh` copies it to `/userdata/games/<rom>/` and the loader
+  calls `arqade_idle.install()`; the launcher's `child.py` installs it too.
+  A new game gets it by following the same deploy shape, with no game code.
+- **Input** is a button pressed or released, a stick crossing half
+  deflection (drift doesn't count), a key or a mouse button. A held
+  joystick button, stick or hat counts for as long as it is held, up to
+  40 s, so holding the stick over is never idle.
+- **"Held" must never get stuck**, or the game never closes. That happened
+  on the cabinet (2026-10-19, games left in their menus): evmapy echoes P1's
+  stick as arrow and keypad keys, and when the stick jumps from one side
+  straight to the other between two reads it presses the new key without
+  releasing the old one (kempniu/evmapy `source.py`, `_normalize_event`
+  reports one threshold crossing per event). The game saw a KEYDOWN with no
+  KEYUP. So now:
+  - keys count only as they go down or up, never as held (on the cabinet
+    each one is an echo of P1's pad, whose joystick events count anyway);
+  - every call checks what the events say is held against the pad itself
+    (`get_button`/`get_axis`/`get_hat` through `pygame.joystick.Joystick(i)`,
+    so the launcher's virtual pads too), so a release the game threw away
+    still lets go;
+  - nothing counts as held for more than 40 s after it went down, so a
+    jammed button closes the game a minute later.
+- **Only time spent reading events counts**: a gap of more than 0.25 s
+  between two `event.get` calls (loading) counts as 0.25 s.
+- Running a game on its own (`uv run ...`) and the attract capture
+  (`attract/capture.py`) don't install it.
+- The games' own, older idle timeouts (60 s back to the title in Brawl-Ket,
+  Gate Drop, Overquqed, Planck Time, ...) are still there but never fire on
+  the cabinet or in the launcher any more. They only matter when a game runs
+  on its own.
 
 ## Player colours: left is blue, right is red (a taste)
 
@@ -776,6 +819,8 @@ already-deployed `.pygame` loader's content to call `main(["--input-test",
 from the existing menu entry, press each physical button one at a time
 (release before the next), and read back the raw numbers shown — then restore
 the loader (redeploy normally) once done. No ES rescan needed for either step.
+Drop its `arqade_idle.install()` line while you do, or the test closes after
+20 s without a press.
 
 ## Font quirks (bundled Press Start 2P)
 

@@ -12,6 +12,8 @@ Before the game is imported, this installs two things into pygame:
   with the fake ones.
 - **The exit key.** Esc ends the game from anywhere, so every game has the
   same way back to the menu, whatever its own controls.
+- **The idle exit** (batocera/arqade_idle.py, the cabinet's own): a game
+  nobody touches for 20 s ends too, and the menu's attract reels follow.
 
 Both come from the JSON in the ARQADE_INPUT environment variable (written by
 runner.py). Polling games (`Joystick(i).get_button(n)`) and event-driven ones
@@ -21,11 +23,14 @@ runner.py). Polling games (`Joystick(i).get_button(n)`) and event-driven ones
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
 import os
 import sys
+from pathlib import Path
 
 ENV_VAR = "ARQADE_INPUT"
+IDLE_MODULE = Path(__file__).resolve().parents[3] / "batocera" / "arqade_idle.py"
 
 
 class VirtualPad:
@@ -196,6 +201,16 @@ def install(config: dict):
     return restore
 
 
+def load_idle():
+    """batocera/arqade_idle.py, the module the cabinet's loaders install too.
+    Loaded by path: putting batocera/ on sys.path would hand the game every
+    other script in there as well."""
+    spec = importlib.util.spec_from_file_location("arqade_idle", IDLE_MODULE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     src_dir, package, game_args = argv[0], argv[1], argv[2:]
@@ -204,6 +219,7 @@ def main(argv: list[str] | None = None) -> None:
     config = json.loads(os.environ.get(ENV_VAR) or "{}")
     if config:
         install(config)
+    load_idle().install()
     importlib.import_module(f"{package}.main").main(game_args)
 
 

@@ -26,6 +26,8 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 
 # Stage a clean copy of the package (strip dev-only cruft) plus the loader.
 cp -r "$SCRIPT_DIR/src/overquqed" "$STAGE_DIR/overquqed"
+# The idle exit (../batocera/arqade_idle.py) goes beside the package.
+cp "$SCRIPT_DIR/../batocera/arqade_idle.py" "$STAGE_DIR/arqade_idle.py"
 find "$STAGE_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 rm -f "$STAGE_DIR/overquqed/py.typed"
 
@@ -38,8 +40,10 @@ import sys
 
 sys.path.insert(0, "${GAMES_DIR}")
 from overquqed.main import main
+import arqade_idle
 
 if __name__ == "__main__":
+    arqade_idle.install()  # 20 s untouched: back to the game list
     main(["--fullscreen", "--no-keyboard"])
 EOF
 chmod +x "$STAGE_DIR/${GAME_NAME}.pygame"
@@ -47,6 +51,7 @@ chmod +x "$STAGE_DIR/${GAME_NAME}.pygame"
 echo "Deploying to ${HOST} ..."
 ssh "$HOST" "mkdir -p '${GAMES_DIR}' && rm -rf '${GAMES_DIR}/overquqed'"
 scp -r "$STAGE_DIR/overquqed" "$HOST:${GAMES_DIR}/overquqed"
+scp "$STAGE_DIR/arqade_idle.py" "$HOST:${GAMES_DIR}/arqade_idle.py"
 scp "$STAGE_DIR/${GAME_NAME}.pygame" "$HOST:${ROM_FILE}"
 ssh "$HOST" "chmod +x '${ROM_FILE}'"
 
