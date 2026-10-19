@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
-`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, `qircuit/`, more later) built for the same
+`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, `qarrera/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
 Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. (`launcher/`
 runs them all from one menu on an ordinary PC instead.) This file
@@ -376,7 +376,8 @@ that is how the lockdown above was verified rather than assumed.
 
 ### Experimental games: a hidden dev mode (`batocera/experimental.py`)
 
-A game that isn't ready for visitors (Qircuit, 2026-10-12) can still be
+A game that isn't ready for visitors (Qarrera, then called Qircuit, from
+2026-10-12 until it went public on 2026-10-19) can still be
 deployed and tried on the cabinet itself. Its deploy script **parks** the
 loader at `/userdata/games/<rom>/<rom>.pygame` instead of in
 `/userdata/roms/pygame/`, so ES never lists it. Then:
@@ -401,7 +402,7 @@ loader at `/userdata/games/<rom>/<rom>.pygame` instead of in
 - **How:** turning it on symlinks each parked loader into the ROMs folder and
   calls ES's local HTTP API (`127.0.0.1:1234`, always on): `POST
   /addgames/pygame` with a partial gamelist adds the games to the running
-  list in place, named after the ROM (`qircuit` → `Qircuit`), with no reload
+  list in place, named after the ROM (`qarrera` → `Qarrera`), with no reload
   splash. `POST /removegames/pygame` takes them out again and unlinks their
   files, which are only the links. **Don't point `removegames` at a real
   ROM: it deletes the file.**
@@ -415,7 +416,7 @@ loader at `/userdata/games/<rom>/<rom>.pygame` instead of in
   and hooked; `--on`/`--off` do it over SSH.
 
 Checked on the cabinet (Batocera 39, 2026-10-13): `--on` and `--off` over SSH
-add Qircuit to the running list and take it out again (`GET
+add Qircuit (now Qarrera) to the running list and take it out again (`GET
 /systems/pygame/games` shows it), and the parked loader stays. Not yet seen
 there: the pad combo, the screensaver hook and a reboot. The event hooks were
 checked against batocera-emulationstation's source (`Scripting.cpp`,
@@ -423,9 +424,9 @@ checked against batocera-emulationstation's source (`Scripting.cpp`,
 
 **The cabinet's Python has no numpy, no PyOpenGL and no pip** (checked
 2026-10-13). The other games need only pygame; a game that needs more has to
-bring it along in its deploy: Qircuit's `deploy_batocera.sh` unpacks the
+bring it along in its deploy: Qarrera's `deploy_batocera.sh` unpacks the
 aarch64 / CPython 3.11 wheels of numpy and PyOpenGL into
-`/userdata/games/qircuit/vendor/` and its loader adds that to `sys.path`.
+`/userdata/games/qarrera/vendor/` and its loader adds that to `sys.path`.
 With that it runs, on OpenGL ES under sway (2026-10-13).
 
 ## Local PC launcher (`launcher/`, `./arqade.sh`)
@@ -508,7 +509,7 @@ Where the games stand (2026-10-01): every game follows it except
 Superconductor, whose pause screen goes to its menu with Select rather than
 through a menu item. That one is deliberately left as it is.
 
-- Gate Drop, Planck Time, Brawl-Ket, Qircuit, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
+- Gate Drop, Planck Time, Brawl-Ket, Qarrera, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
   RESUME and QUIT TO TITLE.
 - Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
   from Start to Select, so that Start can pause there too.
@@ -626,7 +627,7 @@ like the button convention: new games follow it from the start.
 
 ## AI opponents: one AI per game, three levels (a precedent)
 
-Qircuit is the first game with computer opponents, and it sets the pattern
+Qarrera is the first game with computer opponents, and it sets the pattern
 for any game that gets them later.
 
 - **Three levels, named the same everywhere: EASY, TOUGH, BRUTAL.**
@@ -634,19 +635,19 @@ for any game that gets them later.
   - TOUGH: a decent player has to work for the win.
   - BRUTAL: as close to perfect as the game allows. It also knows everything
     the game state tells it: items, hazards, where every rival is.
-- **A level is a handful of numbers, not separate code.** Qircuit's `ai.py`
+- **A level is a handful of numbers, not separate code.** Qarrera's `ai.py`
   has one `Skill` dataclass and a `SKILLS` dict keyed by level (how hard it
   corners, how early it brakes, how often it thinks, whether it reads the
   gates). One driver class runs all three.
 - **One AI per game, in the game's package (`<package>/ai.py`).** It is pure:
   it reads the game's own state and returns the same controls a person's
-  input becomes (Qircuit: up or down on its cruise speed, a wire change),
+  input becomes (Qarrera: up or down on its cruise speed, a wire change),
   never more. So it plays by the same rules and is unit tested like the rules.
 - **Everything that plays the game without a person uses that one AI:**
   - the in-game opponents;
-  - any demo racing behind the title (Qircuit's title shows four bots);
+  - any demo racing behind the title (Qarrera's title shows four bots);
   - the attract-reel bot, `batocera/attract/bots/<rom>.py`, which turns the
-    AI's controls into virtual pad presses (`bots/qircuit.py` is short:
+    AI's controls into virtual pad presses (`bots/qarrera.py` is short:
     menus, then stick moves).
 
   The older games' reel bots predate this and keep their own logic. A game
@@ -657,20 +658,20 @@ for any game that gets them later.
   title menu. One person gets bots by default, so a lone visitor always has
   a race. Bots take the places people leave free.
   - At most four people: the cabinet has two sticks and two button clusters.
-  - Bots can push the field past four (Qircuit allows 8 cars in all) where
+  - Bots can push the field past four (Qarrera allows 8 cars in all) where
     the game has room for it.
 - **Bots never wear a player's colour**, nor a hue leaning towards one. P1–P4
   are blue, red, green and purple, and orange, pink, cyan and teal lean
   towards them (see "Player colours"), so bots get neutral colours (yellow,
   white, grey, tan, ...) and are labelled CPU1, CPU2, and so on. People's
-  cars or cursors are marked as well (Qircuit outlines them in white), so you
+  cars or cursors are marked as well (Qarrera outlines them in white), so you
   find your own among many.
 - **Bots don't make every sound.** What happens to them (a bump, a crash)
-  sounds as it does for people. Continuous or personal cues (Qircuit's drift
+  sounds as it does for people. Continuous or personal cues (Qarrera's drift
   and red warning, being put back in, taking the lead) sound only for
   people, or eight cars turn into noise.
 - **Test the ladder:** alone on the same track, BRUTAL is faster than TOUGH,
-  TOUGH than EASY, and EASY clearly slower (`qircuit/tests/test_ai.py`).
+  TOUGH than EASY, and EASY clearly slower (`qarrera/tests/test_ai.py`).
   None of them should make the mistakes the game punishes, unless a level
   makes them on purpose.
 
@@ -706,6 +707,9 @@ worked out with the cabinet's owners over several rounds:
   - Planck Time: die-cut vinyl stickers on the title screen's purple checker:
     a handheld mid-MEASURE!, its fuse lit, and the rainbow wordmark with its
     stopwatch.
+  - Qarrera: a slot-car set's box lid, the game's voxel racers
+    sprite-stacked on one curve of its space track, and a leaning
+    pixel-italic title over a band of the track's red-and-blue kerb.
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really

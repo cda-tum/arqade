@@ -83,4 +83,12 @@
 		<marquee>./images/brawl_ket-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./qarrera.pygame</path>
+		<name>Qarrera</name>
+		<desc>Slot-car racing on the four wires of a quantum circuit, for 1 to 4 players and computer racers: pick your speed and your wire, grab the gates, and lead the pack. Every second in front counts.</desc>
+		<image>./images/qarrera-wide.png</image>
+		<marquee>./images/qarrera-marquee.png</marquee>
+		<lang>en</lang>
+	</game>
 </gameList>
