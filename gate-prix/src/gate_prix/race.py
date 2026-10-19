@@ -1,5 +1,6 @@
-"""The race: six cars on THE FRIDGE, their circuits, the gate rows, laps, the CIRCUIT CHECK,
-places and the finish.
+"""The race: up to six cars on THE FRIDGE (1 or 2 players, cars "p1" and "p2", and up to
+CARS of them in all bots, "cpu1" to "cpu5" in config.CPU_COLORS' order), their circuits, the
+gate rows, laps, the CIRCUIT CHECK, places and the finish.
 
 Pure Python, no pygame. `Race.update(dt, controls)` steps every car, resolves bumps and the
 rows each car crossed, counts laps, and returns the frame's cues as `Event`s:
@@ -35,7 +36,7 @@ Rules decided here:
   decoy: each as wide as it is drawn), or none. Rows are crossed strictly in order, so row k
   of the race is always the car's slot k.
 - A right gate gives `streak_boost(streak)`. The CIRCUIT CHECK, as a car crosses into the
-  final lap, compares all 16 slots with the target, once per car (the CPUs too, by their
+  final lap, compares all 16 slots with the target, once per car (the bots too, by their
   own circuits). Its `check_boost(distance)` starts CHECK_FREEZE seconds later (cued
   "warp"): meanwhile a player's view is frozen on the comparison (the match's and the
   renderer's business) while the car drives on, losing no distance. No boost (all 16
@@ -43,7 +44,7 @@ Rules decided here:
   the strongest one running, and a weaker, longer one carries on after it (`Car.give_boost`),
   so a right gate never slows a car down.
 - Places: finished cars in the order they finished, then the rest by laps and distance (the
-  order of `racers`, players first, breaks a tie). The race is over once every player has finished; CPU cars still
+  order of `racers`, players first, breaks a tie). The race is over once every player has finished; bots still
   racing are placed where they are. An over race no longer changes. `finish_all` races on
   until every car has finished instead (the attract race, and the tests).
 - Item boxes stand at the track's box lines, lap after lap; each box is one object, so a box
@@ -100,7 +101,12 @@ from typing import NamedTuple
 from gate_prix import circuit, config, storm, track
 from gate_prix.car import Car, Controls, bump
 
-CPU_COLOURS = tuple(config.CPU_COLORS)
+CPU_COLOURS = tuple(config.CPU_COLORS)  # cpu1's colour first
+
+
+def label(car_id: str) -> str:
+    """A car's name on screen: P1, P2, CPU1, CPU2 ..."""
+    return car_id.upper()
 
 
 class Event(NamedTuple):
@@ -159,6 +165,11 @@ class Racer:
         self.hazards: list[storm.Hazard] = []  # its own noise storm, from its check
         self.next_hazard = 0
         self.blind_time = 0.0  # seconds its NEXT GATE badge and arch marker stay blank
+
+    @property
+    def label(self) -> str:
+        """Its name on screen: P1, P2, CPU1 ..."""
+        return label(self.car.id)
 
     @property
     def check_right(self) -> int | None:
@@ -220,30 +231,39 @@ def arch_at(row: track.GateRow, x: float) -> track.Arch | None:
     return best
 
 
-def grid(players: int) -> list[tuple[float, float]]:
-    """The (z, x) of each car on the grid, players first. Two lanes, the right lane half a
-    row back; the players start side by side in the back row, P1 on the left and P2 on the
-    right, so that neither starts ahead."""
+def grid(players: int, cars: int = config.CARS) -> list[tuple[float, float]]:
+    """The (z, x) of each of `cars` cars on the grid, players first. Two lanes, the right
+    lane half a row back; the players start side by side in the back row, P1 on the left
+    and P2 on the right, so that neither starts ahead, and the bots fill the rows ahead (and
+    the back row's right lane, behind a lone player)."""
     spots = []
-    for k in range(config.CARS):
+    for k in range(max(cars, 1)):
         row, lane = divmod(k, 2)
         z = -(config.GRID_FIRST + row * config.GRID_GAP + lane * config.GRID_GAP / 2)
         spots.append((z, config.GRID_LANES[lane]))
-    back = config.CARS - 2
+    back = 2 * ((cars - 1) // 2) if players else len(spots)
     rest = [s for k, s in enumerate(spots) if not back <= k < back + players]
     mine = [(spots[back][0], config.GRID_LANES[i]) for i in range(players)]
-    return mine + rest
+    return (mine + rest)[:cars]
 
 
 class Race:
-    """A race of LAPS laps of the track for 1 or 2 players and the CPU racers."""
+    """A race of LAPS laps of the track for 1 or 2 players and `bots` bots (by default as
+    many as fill the field: CARS in all). 1 player and no bots is a time trial, 2 and none a
+    duel. A race of no players and only bots is the attract race's (and the tests' and
+    tools')."""
 
     def __init__(self, seed: int, players: int, rng: random.Random | None = None,
-                 course: track.Track | None = None, finish_all: bool = False) -> None:
-        if players not in (1, 2):
-            raise ValueError(f"a race has 1 or 2 players, not {players}")
+                 course: track.Track | None = None, finish_all: bool = False,
+                 bots: int | None = None) -> None:
+        if players not in (0, 1, 2):
+            raise ValueError(f"a race has 0 to {config.MAX_PLAYERS} players, not {players}")
+        bots = config.CARS - players if bots is None else bots
+        if not 0 <= bots <= config.CARS - players or players + bots == 0:
+            raise ValueError(f"{players} players and {bots} bots: at most {config.CARS} cars")
         self.seed = seed
         self.players = players
+        self.bots = bots
         # for the items (Task 4): a stream of its own, not a copy of the target's
         self.rng = rng if rng is not None else random.Random(f"{seed}:items")
         self.track = course if course is not None else track.fridge()
@@ -255,11 +275,11 @@ class Race:
         self.box_lines = sorted((n * self.lap_length + z, k) for n in range(config.LAPS)
                                 for k, (z, _) in enumerate(self.track.boxes))
         self._box_back: dict[tuple[int, int], float] = {}  # a taken box: when it is back
-        ids = [f"p{i + 1}" for i in range(players)]
-        ids += list(CPU_COLOURS[: config.CARS - players])
+        ids = [(f"p{i + 1}", f"p{i + 1}") for i in range(players)]
+        ids += list(zip(config.CPU_IDS, CPU_COLOURS))[:bots]
         self.racers: list[Racer] = []
-        for i, (car_id, (z, x)) in enumerate(zip(ids, grid(players))):
-            car = Car(car_id, car_id, x)
+        for i, ((car_id, colour), (z, x)) in enumerate(zip(ids, grid(players, len(ids)))):
+            car = Car(car_id, colour, x)
             car.z = car.prev_z = z
             self.racers.append(Racer(car, self.target, i < players))
         self._by_id = {r.car.id: r for r in self.racers}
@@ -390,7 +410,8 @@ class Race:
             c.time -= dt
         self.clouds = [c for c in self.clouds if c.time > 1e-9]
         self._place()
-        if all(r.finished for r in self.racers if r.player or self.finish_all):
+        if all(r.finished for r in self.racers
+               if r.player or self.finish_all or not self.players):
             self.over = True
         return events
 

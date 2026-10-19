@@ -713,9 +713,8 @@ worked out with the cabinet's owners over several rounds:
   - Qarrera: a slot-car set's box lid, the game's voxel racers
     sprite-stacked on one curve of its space track, and a leaning
     pixel-italic title over a band of the track's red-and-blue kerb.
-  - Gate Prix: a behind-the-car racer's attract screen, the title on the
-    start gantry's banner over the road, lights green, the right gate
-    glowing ahead of the car.
+  - Gate Prix: a motorsport livery, heavy italic race lettering with speed
+    cuts over the finish chequer, P1's car through the glowing H gate.
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really

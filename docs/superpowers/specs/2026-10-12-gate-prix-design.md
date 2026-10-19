@@ -188,3 +188,158 @@ are not part of v1.
 - **`bot`:** over seeds, a CPU finishes every race, the best CPU's streak rate is about 85%,
   and a perfect human (a scripted bot hitting every right gate) beats the field.
 - **Snapshots and a benchmark,** checked by eye against the mockup and measured on the Pi.
+
+## Changes after the first playtest (2026-10-12)
+
+The user played the first playable build. It "still feels a bit clunky": the speed and
+boosts didn't feel like much, and there was too much to read. They didn't know how to use
+items, the "next gate / incorrect gate" idea was confusing, and they didn't notice the
+CIRCUIT CHECK boost.
+
+- **No gates on the final lap.** Gate rows run on laps 1–2 only, 8 per lap, so the target
+  has **16 gates**. The CIRCUIT CHECK covers all 16 as a car starts lap 3, and lap 3 is a
+  gate-free sprint powered by the check boost. Item boxes stay on every lap.
+- **The right arch is unmissable.** It glows brightly, with a bouncing ▼ marker above it.
+  Decoys are drawn dimmer and smaller.
+- **A simpler overlay.**
+  - One big **NEXT GATE** badge replaces the TARGET and YOU wires.
+  - Under it, a row of your gates so far as ✓ green and ✗ red dots, 16 in all.
+  - Each row you pass flashes **RIGHT GATE +BOOST** (blue) or **WRONG GATE** (red) near your
+    car, and a missed row flashes **MISSED**.
+- **Items explain themselves.**
+  - While you hold an item, the slot pulses and shows its name, a big **A**, and one line:
+    "SPLIT: a clone takes a second gate" or "QEC: fixes your last wrong gate".
+  - The first pickup of each item in a session shows a banner: "PRESS A TO USE SPLIT".
+- **The CIRCUIT CHECK is an event.**
+  - As a car crosses into lap 3, that player's view freezes for about 1 s. A panel compares
+    the circuits ("14/16 GATES CORRECT", with the wrong ones marked).
+  - Then comes the **LIGHT SPEED!** warp: a star-streak tunnel, the field of view widening, a
+    tint at the edges of the screen, and a whoosh.
+  - The check boost is strong and long enough that you visibly pass cars. The CPUs get the
+    same check by their own accuracy.
+  - The freeze applies only to that player's view and clock. The race keeps running for the
+    others, but that player loses no distance: their car keeps moving during the freeze.
+- **Speed you can feel.**
+  - A higher sense of speed: roadside objects closer to the road, speed lines at top speed,
+    and a slight camera shake.
+  - Boosts widen the field of view and show exhaust flames, with a boost whoosh.
+  - Top speed rises about 10–15% if the lap stays readable, and the boost tables are retuned
+    so a streak boost is clearly felt.
+
+## Changes after the second playtest (2026-10-13, on the cabinet)
+
+The user played the build on the cabinet in experimental mode. The frame rate is good on
+the Pi. Their feedback was:
+- the split screen should be vertical;
+- the finish line isn't visible;
+- the game needs a minimap;
+- the final lap is a bit lame;
+- drifting would be cool;
+- the items are boring, and more items with icons are needed.
+
+They picked the "noise storm" final lap and the MEASURE, TUNNEL and DECOHERENCE items.
+
+### Rules (Task 5c)
+
+- **Drifting.**
+  - **Starting and holding:** pull the stick back *and* steer, with |steer| ≥ 0.4, at ≥ 60%
+    of top speed. Pulling straight back is still the brake.
+  - **While drifting:** the car slides at an angle, turns tighter (the curve's outward push
+    is reduced) and loses a little speed, down to 92% of what it would have.
+  - **Charge:** level 1 at 0.7 s of drifting, level 2 at 1.5 s.
+  - **Releasing** the drift gives a **mini-turbo** through `give_boost`: level 1 is +25% for
+    0.6 s, level 2 is +40% for 1.0 s.
+  - **Ending:** a drift with no charge ends with nothing. Letting go of the stick, slowing
+    below 50% or a bump ends the drift; a bump ends it with no turbo.
+  - **CPUs** drift in the sharpest curves by skill.
+- **The noise storm (the final lap).** Lap 3 has no gates. Instead each racer meets its own
+  **decoherence hazards**, visible and active only for that racer.
+  - **How many:** 4 + 2 × (16 − right) hazards (a perfect circuit gets 4, 8/16 gets 20, capped
+    at 24). They are spread over the lap, never within 1 s of the finish line, and always leave
+    a clear line one car wide.
+  - **Static clouds:** wide and soft. Driving through one removes your boosts and caps your
+    speed at 70% for 1 s.
+  - **Bit-flip mines:** small and sharp. One spins you out: your speed falls to 40%, you can't
+    steer for 0.8 s, and your streak is irrelevant by then.
+  - **The CIRCUIT CHECK warp** still happens; the storm comes on top of it.
+  - **TUNNEL** makes you immune.
+- **Items (5 in all).** Boxes always give an item, so no box is ever empty. Lap 3 boxes never
+  give SPLIT or QEC.
+
+  | Item | Effect |
+  |---|---|
+  | SPLIT | as before: a mirrored clone for the next 2 rows, where either car counts |
+  | QEC | as before: your most recent wrong or empty slot becomes right |
+  | **MEASURE** | a homing shot at the nearest car ahead, within 30,000 units. It **collapses** that car: a spin-out (40% speed, no steering for 0.8 s), its streak reset, its boosts cleared. If no car is in range it fizzles. TUNNEL makes a car immune. |
+  | **TUNNEL** | quantum tunnelling for 3 s: you pass through cars (no bumps), drive off-road at full speed, and are immune to hazards, clouds and MEASURE |
+  | **DECOHERENCE** | drops a static cloud on the road just behind you, where it stays 10 s or until a car hits it. A car that drives through it loses its boosts, and its NEXT GATE badge and right-arch marker **go blank for 1.5 s** (or, on lap 3, it takes the cloud hazard's slowdown) |
+
+  - **Weights by place:** the back of the field gets more of MEASURE, TUNNEL and SPLIT; the
+    front more of DECOHERENCE and QEC. The table is in config.
+  - **CPUs:** they fire MEASURE when a car is ahead in range, use TUNNEL in traffic or before
+    a hazard, drop DECOHERENCE when a car is close behind, and use SPLIT and QEC as before.
+- **From Task 5b's review:**
+  - a held SPLIT that runs out of rows is cued (`split_end`), and no SPLIT or QEC is rolled
+    past the last row;
+  - the results show the check as "CHECK 12/16" (the number right), not a Hamming distance;
+  - a check below +5% boost shows **NO BOOST** instead of the full LIGHT SPEED! show.
+
+### Screens (Task 5d)
+
+- **Vertical split screen.** 2P is two 480x540 views side by side, P1 on the left and P2 on
+  the right, with a thin divider. The HUD is laid out for the narrow view:
+  - the NEXT GATE badge at the top left;
+  - 16 dots in two rows of 8;
+  - the place and lap at the top right;
+  - the item slot under them.
+
+  1P keeps the full 960x540 view.
+- **The finish line.** A chequered band across the road at the lap line, under a **start and
+  finish gantry**: two posts and a "GATE PRIX" banner with five start lights. The lights go red
+  one by one in the countdown and all green at GO. As a racer crosses it, a LAP 2/3 or FINAL
+  LAP banner shows.
+- **The minimap.** The lap's plan view, built from the track's curves, with:
+  - a dot per car in its colour (yours bigger, with a ring);
+  - small ticks for the gate rows and boxes;
+  - the finish line.
+
+  In 1P it sits in the bottom-left corner; in 2P one shared map straddles the divider at the
+  bottom. Pre-render the outline once, and draw only the dots per frame.
+- **Drifting:** the car sprite is tilted at the drift angle, using cached rotated variants at a
+  few angles. Sparks behind the rear wheels turn from white to blue (level 1) to gold
+  (level 2), and the mini-turbo flash shows.
+- **The noise storm:** the static clouds (crackling grey-violet) and the bit-flip mines (small
+  spiked orbs marked with an X) are drawn in that racer's view only. A STORM AHEAD banner
+  shows at the start of lap 3.
+- **Item icons**, one for each item, used in the slot, the first-pickup banner and the box
+  reveal:
+  - SPLIT: two overlapping car silhouettes;
+  - QEC: a shield with a check mark;
+  - MEASURE: a meter needle, or an eye collapsing onto a dot;
+  - TUNNEL: a ghost car passing through a wall;
+  - DECOHERENCE: a static cloud.
+
+  The item effects are drawn too: the MEASURE shot's beam, a TUNNEL car's translucency and
+  shimmer, the DECOHERENCE cloud on the road, and a blanked badge.
+- **AGENTS.md's new rules:**
+  - **A QUIT row** on the title menu: 1 PLAYER / 2 PLAYERS / QUIT, moved with stick up and
+    down and clamped (no wrap, so a held stick stays put). A on QUIT quits at once. Start never
+    quits: it begins play with the highlighted mode, or 1 PLAYER if QUIT is highlighted. The
+    attract bots never pick it.
+  - **A HOW TO PLAY card** before every match started from the title (not on a rematch). It is
+    drawn in the game's look, with:
+    - the goal in 1–3 lines ("Drive through the glowing gate. Build the circuit. Fewer
+      mistakes = a faster final lap.");
+    - an animated demo using the game's own code: a car steering through the right arch and
+      boosting;
+    - the controls drawn as the L X R / Y B A cluster with A lit, plus the stick for
+      steer/brake/drift and START;
+    - a blinking PRESS ANY BUTTON TO START.
+
+    Any button on either pad dismisses it, but the stick doesn't. Presses in the first 0.3 s
+    are ignored, and the dismissing press does nothing in the game. Start + Select still quits,
+    and the idle timeout runs. The attract race skips it, since it is not started from the
+    title by a player.
+- **From Task 5b's review:**
+  - in 2P the first-pickup tip never covers a gate flash;
+  - "FINAL LAP: NO GATES" shows only from lap 3, with "TO THE LINE" after row 16 until then.

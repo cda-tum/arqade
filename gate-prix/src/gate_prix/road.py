@@ -24,6 +24,7 @@ import math
 import pygame
 
 from gate_prix import config
+from gate_prix.gantry import Gantry
 from gate_prix.sprites import Background, SpriteCache
 
 SEG = config.SEG
@@ -38,6 +39,7 @@ CENTRE_HALF_WIDTH = 0.015  # in road half-widths
 CHEQUER = ((18, 18, 26), (240, 240, 246))  # the finish line's squares
 CHEQUER_COLUMNS = 10
 AA_ROWS = 2  # segments at least this many rows tall get anti-aliased edges
+EDGE_BIAS = 1e-6  # in segments: see `place`
 
 Sprite = tuple[str, float, float, float, float]  # kind, x, y (its foot), scale, clip y
 
@@ -146,7 +148,10 @@ class RoadView:
         zs = self.z
         if rel_z <= NEAR or rel_z >= zs[-1]:
             return None
-        k = int((rel_z - zs[0]) // SEG)
+        # an object exactly on a segment's far edge (the gantry on the lap line) belongs to
+        # that segment, not the next: the clip below then never flips between the two as
+        # rounding does from frame to frame
+        k = math.floor((rel_z - zs[0]) / SEG - EDGE_BIAS)
         k = min(self.segments - 1, max(0, k))
         f = (rel_z - zs[k]) / SEG
         wx = self.wx[k] + (self.wx[k + 1] - self.wx[k]) * f
@@ -260,10 +265,14 @@ class RoadView:
 
     def draw_sprites(self, surface: pygame.Surface, sprites: list[Sprite],
                      cache: SpriteCache | None = None) -> None:
-        """Blit the sprites `draw` reported, in order, into this view's rect."""
+        """Blit the sprites `draw` reported, in order, into this view's rect. The gantry is
+        drawn at its exact size instead, by `Gantry` (see gantry.py)."""
         view = surface if self.rect == surface.get_rect() else surface.subsurface(self.rect)
         cache = cache or SpriteCache.shared()
+        gantry = Gantry.shared()
         w = self.width
         for kind, x, y, scale, clip_y in sprites:
-            if -scale < x < w + scale:
+            if kind == "gantry":
+                gantry.draw(view, x, y, scale, clip_y)
+            elif -scale < x < w + scale:
                 cache.blit(view, kind, x, y, scale, clip_y)

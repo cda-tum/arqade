@@ -1,118 +1,234 @@
-"""Gate Prix app icon: lights out under the start gantry, the right gate glowing ahead.
+"""GATE PRIX: a racing livery, the P1 car through the glowing H gate.
 
-The look is a behind-the-car arcade racer's attract screen, Super Scaler style: one-point
-perspective down the road into the dilution fridge, gold plate overhead, and the title
-where the game itself writes it, on the start gantry's banner across the road. Its five
-start lights are all green: GO. Under it the right gate's arch glows, H on its badge, a dim
-decoy beside it, and the player's blue car is about to drive through. No other icon is a
-first-person scene or a sign hung over the action.
+The hero is the game's one move: steering through the right arch. Seen from
+behind, as the game is, P1's blue car (the game's own draw_car, boosting,
+its draw_flame jets lit) drives into the semicircular H arch (draw_arch, lit:
+its glow, its light curtain and the gold badge at its crown), on the game's
+own road: the dark anodised deck, the gold and white rumble, the cyan
+waveguide dashes. The road bends away to the right past the gate, so
+the race reads left to right, and the LIGHT SPEED! warp's own star streaks
+(Renderer._tunnel_frame, sparser) rush out of the arch round it. Behind is
+the deep cryo-blue of the fridge's shield wall with its cold mist at the
+horizon.
 
-Everything is the game's own and drawn by its own code: the fridge, the road, the roadside
-coax and standoffs and the chequered lap line are road.RoadView projecting track.fridge()
-(the lap line under the gantry, where the race starts); the gantry, the arches and the car
-are sprites.render_sprite at the exact scale the projection gives them (the game's sprite
-cache stops at its own view's sizes); the lit lights are render.Renderer._light_discs.
-
-The scene is drawn once, big, on a canvas PAD_MAX px wider than the square on every side;
-the square logo and its extended version (generate_logos.py) are crops of that same
-picture, so the margin simply shows more of the fridge.
+The look is a motorsport livery, which no other icon has: GATE PRIX in heavy
+italic race lettering (the game's own DejaVu Sans Condensed Bold), white with
+speed cuts trailing off to the left, over the finish line's chequer, and the
+gold of the H gate as its one accent.
 """
 
 from __future__ import annotations
 
+import math
+import random
 import sys
 
 import kit
 import pygame
 
 sys.path.insert(0, str(kit.ROOT / "gate-prix/src"))
-
-from gate_prix import sprites, track  # noqa: E402
-from gate_prix.render import Renderer  # noqa: E402
-from gate_prix.road import RoadView  # noqa: E402
+from gate_prix import config, road  # noqa: E402
+from gate_prix.sprites import draw_arch, draw_car, draw_flame  # noqa: E402
 
 ROM = "gate_prix"
-
-S = 1024
-PAD_MAX = 512  # the picture runs on this far past the square on every side
-HORIZON_AT = 0.5  # the horizon's height in the square
-ZOOM = 1234.0  # the projection's half-height for the square, px (the game's view: 270)
-CEILING = (196, 150, 60)  # the gold plate overhead, where the view runs out above
-# What stands on the road, as (distance ahead of the camera, offset in road half-widths,
-# sprite kind), far to near. The gantry stands on the lap line, so it comes first.
-SQUARE = (
-    (8000.0, 0.0, "gantry"),
-    (4000.0, -0.5, "arch:Z"),
-    (4000.0, 0.0, "arch:H:lit"),
-    (2670.0, 0.0, "car:p1"),
-)
-WIDE = (  # the same, closer together, to fit under the wide tile's banner
-    (5440.0, 0.0, "gantry"),
-    (4300.0, -0.6, "arch:Z"),
-    (4300.0, 0.0, "arch:H:lit"),
-    (3200.0, 0.0, "car:p1"),
-)
+FONT = kit.ROOT / "gate-prix/src/gate_prix/assets/fonts/DejaVuSansCondensed-Bold.ttf"
+SS = 2                       # every scene is drawn at SS times its size, then smoothscaled
+BLUE = config.PLAYER_COLORS["p1"]
+GOLD = config.GATE_COLORS["H"]
+WHITE = (255, 255, 255)
+INK = (8, 10, 24)
+SKY = [(6, 8, 24), (10, 14, 34), (26, 44, 92), (96, 150, 200)]  # the shield wall, darkest overhead
+GROUND = [(10, 14, 34), (16, 22, 48)]
+MIST = (180, 220, 255)
+STREAK = (150, 200, 255)  # the warp's pale blue streaks (the rest are white)
+STREAKS = 44
+SLANT = 0.24
 
 
-def scene(size: tuple[int, int], horizon: float, zoom: float, things) -> pygame.Surface:
-    """The road scene on a `size` canvas: the horizon at y = `horizon`, the projection's
-    half-height `zoom` px at the game's own 960x540 aspect, and `things` on the road."""
-    width, height = size
-    view = RoadView((0, 0, width, round(2 * zoom)), spread=zoom * 480 / 270)
-    surf = pygame.Surface(view.rect.size)
-    found: list = []
-    view.draw(surf, track.fridge(), -things[0][0], 0.0, found, ())
-    cache: dict = {}
+# --- the scene ------------------------------------------------------------------------------
 
-    def put(kind, x, y, scale, clip_y=None):
-        key = (kind, round(scale, 1))
-        if key not in cache:
-            cache[key] = sprites.render_sprite(kind, scale)
-        img, ax, ay = cache[key]
-        top = round(y) - ay
-        rows = img.get_height() if clip_y is None else min(img.get_height(), round(clip_y) - top)
-        if rows > 0:
-            surf.blit(img, (round(x) - ax, top), (0, 0, img.get_width(), rows))
 
-    for kind, x, y, scale, clip_y in found:  # the roadside, far to near
-        if -scale < x < width + scale:
-            put(kind, x, y, scale, clip_y)
-    discs = Renderer._light_discs()["green"]
-    for z, offset, kind in things:
-        x, y, scale, _ = view.place(z, offset)
-        put(kind, x, y, scale)
-        if kind == "gantry":  # its lights, all lit: GO
-            r = sprites.LIGHT_R * scale
-            disc = min(discs, key=lambda d: abs(d.get_width() / 6 - r))
-            half = disc.get_width() // 2
-            for lx in sprites.LIGHT_X:
-                surf.blit(disc, (round(x + lx * scale) - half, round(y - sprites.LIGHT_Y * scale) - half))
-    out = pygame.Surface(size)
-    out.fill(CEILING)
-    out.blit(surf, (0, round(horizon - view.horizon)))
+def scene(size: tuple[int, int], horizon: float, arch_at: tuple[float, float], arch_r: float,
+          keep_out: tuple[float, float, float, float]) -> pygame.Surface:
+    """The road, the H arch and the car, at SS times `size`.
+
+    `arch_at` is the arch's foot (its centre on the road), `arch_r` its outer
+    radius, both in output pixels; the road's vanishing point is under it.
+    No streak crosses `keep_out` (x, y, w, h, in output pixels): the title goes there.
+    """
+    w, h = size[0] * SS, size[1] * SS
+    hy = round(horizon * SS)
+    ax, ay, r = arch_at[0] * SS, arch_at[1] * SS, arch_r * SS
+    keep_out = [pygame.Rect(*(round(v * SS) for v in keep_out))]
+    s = pygame.Surface((w, h), pygame.SRCALPHA)
+    s.blit(kit.gradient((w, hy + 1), SKY), (0, 0))
+    s.blit(kit.gradient((w, h - hy), GROUND), (0, hy))
+    # the road: its half-width grows in proportion to the depth below the horizon; at the
+    # arch's foot it is RW arch radii, so the arch spans most of it
+    rw = 1.55 * r / (ay - hy)
+    seg = 0.9  # segments alternate every `seg` of 1/depth
+    for y in range(hy + 1, h):
+        d = y - hy
+        z = (ay - hy) / d  # 1 at the arch, growing into the distance
+        cx = ax + (0.18 * (z - 1) ** 2 * r / z if z > 1 else 0)  # bending right past the arch
+        hw = rw * d
+        band = int(z / seg * 4) % 2
+        rumble = road.RUMBLE[band]
+        deck = road.ROAD[int(z / seg * 2) % 2]
+        edge = hw * config.RUMBLE
+        pygame.draw.line(s, rumble, (cx - edge, y), (cx + edge, y))
+        pygame.draw.line(s, deck, (cx - hw, y), (cx + hw, y))
+        if int(z / seg * 3) % 2 == 0:
+            cw = max(1.0, hw * road.CENTRE_HALF_WIDTH)
+            pygame.draw.line(s, road.CENTRE, (cx - cw, y), (cx + cw, y))
+    # the cold mist at the horizon
+    band = round(h * 0.035)
+    mist = pygame.Surface((w, 2 * band), pygame.SRCALPHA)
+    for y in range(2 * band):
+        a = round(120 * (1 - abs(y - band) / band) ** 1.5)
+        pygame.draw.line(mist, (*MIST, a), (0, y), (w, y))
+    s.blit(mist, (0, hy - band))
+    # the LIGHT SPEED! warp's star streaks, rushing out of the arch
+    warp(s, (ax, hy), r, keep_out)
+    # the lit arch's glow, then the arch and, passing through it, the car
+    s.blit(kit.radial((w, h), (ax, ay - r * 0.55), r * 2.0, kit.shade(GOLD, 0.55)), (0, 0),
+           special_flags=pygame.BLEND_RGB_ADD)
+    u_arch = r / config.ARCH_HALF_WIDTH
+    draw_arch(s, ax, ay, u_arch, "H", True)
+    car_y = ay + 0.06 * r
+    u_car = u_arch * (car_y - hy) / (ay - hy) * 0.86  # a little under the game's size: more arch shows
+    car_x = ax - 0.02 * r
+    draw_car(s, car_x, car_y, u_car, BLUE)
+    draw_flame(s, car_x, car_y, u_car, 1)
+    return s
+
+
+def warp(s: pygame.Surface, vp: tuple[float, float], r: float, keep_out: list[pygame.Rect]) -> None:
+    """The warp's star-streak tunnel (Renderer._tunnel_frame): white and pale blue streaks
+    from round the vanishing point out towards the edges, squashed to the view's ellipse.
+    Sparser than the game's, and none crossing the `keep_out` rects (the title)."""
+    rnd = random.Random(11)
+    lay = pygame.Surface(s.get_size(), pygame.SRCALPHA)
+    cx, cy = vp
+    reach = max(s.get_size())
+    drawn = 0
+    while drawn < STREAKS:
+        a = rnd.uniform(0, 2 * math.pi)
+        phase = rnd.uniform(0.2, 1.0)
+        r0 = r * 0.9 + reach * 0.5 * phase ** 1.6
+        r1 = r0 + reach * (0.1 + 0.3 * phase)
+        p0 = (cx + r0 * math.cos(a), cy + r0 * 0.55 * math.sin(a))
+        p1 = (cx + r1 * math.cos(a), cy + r1 * 0.55 * math.sin(a))
+        if any(k.clipline(p0, p1) for k in keep_out):
+            continue
+        col = WHITE if rnd.random() < 0.6 else STREAK
+        width = max(2, round(reach / 1024 * (1.5 + 3.5 * phase)))
+        pygame.draw.line(lay, (*col, round(70 + 150 * phase)), p0, p1, width)
+        drawn += 1
+    s.blit(lay, (0, 0))
+
+
+# --- the lettering ----------------------------------------------------------------------
+
+
+def _shear(surf: pygame.Surface, slant: float) -> pygame.Surface:
+    """Italicise: shift each row right by slant * its height above the baseline."""
+    w, h = surf.get_size()
+    out = pygame.Surface((w + round(h * slant), h), pygame.SRCALPHA)
+    for y in range(h):
+        out.blit(surf, (round((h - y) * slant), y), (0, y, w, 1))
     return out
+
+
+def chequer(width: int, rows: int, cell: int) -> pygame.Surface:
+    """The finish line's chequer, `rows` squares high, fading out to the left."""
+    cols = math.ceil(width / cell)
+    s = pygame.Surface((cols * cell, rows * cell), pygame.SRCALPHA)
+    for j in range(rows):
+        for i in range(cols):
+            col = road.CHEQUER[(i + j) % 2]
+            pygame.draw.rect(s, col, (i * cell, j * cell, cell, cell))
+    fade = pygame.Surface(s.get_size(), pygame.SRCALPHA)
+    for x in range(fade.get_width()):
+        t = x / fade.get_width()
+        a = round(255 * min(1.0, t / 0.45) ** 1.3)
+        pygame.draw.line(fade, (255, 255, 255, a), (x, 0), (x, fade.get_height()))
+    s.blit(fade, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    return s
+
+
+def title(width: int) -> pygame.Surface:
+    """GATE PRIX in heavy italic race lettering, speed cuts trailing left, on the chequer."""
+    px = 300
+    shape = kit.text_shape("GATE PRIX", FONT, px, pixel=False, tracking=4)
+    shape = kit.trim(shape)
+    tw, th = shape.get_size()
+    # two speed cuts through the lower third of the letters, running out to the left
+    lead = round(th * 0.9)
+    letters = pygame.Surface((tw + lead, th), pygame.SRCALPHA)
+    letters.blit(shape, (lead, 0))
+    cuts = [(0.70, 0.045), (0.83, 0.045)]  # below the bowls of P and R, so no sliver is left
+    for cy, ch in cuts:
+        pygame.draw.rect(letters, (0, 0, 0, 0), (lead, round(th * cy), tw, max(2, round(th * ch))))
+    lines = pygame.Surface(letters.get_size(), pygame.SRCALPHA)
+    for k, (cy, ch) in enumerate(cuts):
+        y = round(th * cy)
+        length = round(lead * (0.95 - 0.3 * k))
+        for x in range(length):
+            a = round(255 * (x / length) ** 1.5)
+            pygame.draw.line(lines, (255, 255, 255, a), (lead - length + x, y), (lead - length + x,
+                             y + max(2, round(th * ch)) - 1))
+    # the ink: an outline round the letters and a hard drop to the lower left
+    margin = 40
+    body = kit.pad(letters, margin)
+    outline = kit.dilate(body, 9, INK)
+    out = pygame.Surface(body.get_size(), pygame.SRCALPHA)
+    d = 14
+    drop = kit.tint(outline, GOLD)
+    out.blit(drop, (-d // 2, d))
+    out.blit(outline, (0, 0))
+    paint = kit.gradient(body.get_size(), [WHITE, WHITE, (210, 228, 255)])
+    out.blit(kit.tint(body, paint), (0, 0))
+    out.blit(kit.pad(lines, margin), (0, 0))
+    out = _shear(out, SLANT)
+    # the chequer under it, slanted with it
+    cell = round(th * 0.13)
+    flag = chequer(round(tw * 1.02), 2, cell)
+    fl = pygame.Surface((flag.get_width() + 2 * margin, flag.get_height() + 2 * margin), pygame.SRCALPHA)
+    fl.blit(flag, (margin, margin))
+    fl = _shear(fl, SLANT)
+    total = pygame.Surface((max(out.get_width(), fl.get_width() + lead) + 20,
+                            out.get_height() + fl.get_height()), pygame.SRCALPHA)
+    total.blit(fl, (lead + margin * 0 - round(fl.get_height() * SLANT * 0.5) - 20,
+                    out.get_height() - margin - 6))
+    total.blit(out, (0, 0))
+    total = kit.trim(total)
+    return kit.fit(total, width, width)
+
+
+# --- the three layouts --------------------------------------------------------------------
 
 
 def art(size: int, pad: int = 0) -> pygame.Surface:
     """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on every side
-    (see generate_logos.py: extended/), the same picture with more of the fridge round it."""
-    assert pad <= PAD_MAX
-    full = scene((S + 2 * PAD_MAX, S + 2 * PAD_MAX), PAD_MAX + HORIZON_AT * S, ZOOM, SQUARE)
-    out = full.subsurface((PAD_MAX - pad, PAD_MAX - pad, S + 2 * pad, S + 2 * pad)).copy()
-    return out if size == S else pygame.transform.smoothscale(out, (round((S + 2 * pad) * size / S),) * 2)
+    (see generate_logos.py: extended/), the road, the wall and the warp running on."""
+    full = size + 2 * pad
+    big = scene((full, full), pad + size * 0.5, (pad + size * 0.53, pad + size * 0.77), size * 0.245,
+                (0, 0, full, pad + size * 0.34))
+    out = pygame.transform.smoothscale(big, (full, full)).convert()
+    out = kit.finish(out, vignette_strength=0.45)
+    kit.blit_center(out, title(round(size * 0.86)), (pad + size * 0.5, pad + size * 0.2))
+    return out
 
 
 def wide(width: int, height: int) -> pygame.Surface:
-    W, H = 1024, 512
-    out = scene((W, H), 331, ZOOM / 2, WIDE)
-    return out if (width, height) == (W, H) else pygame.transform.smoothscale(out, (width, height))
+    big = scene((width, height), height * 0.44, (width * 0.27, height * 0.78), height * 0.3,
+                (width * 0.38, 0, width * 0.6, height * 0.5))
+    out = pygame.transform.smoothscale(big, (width, height)).convert()
+    out = kit.finish(out, vignette_strength=0.45)
+    kit.blit_center(out, title(round(width * 0.52)), (width * 0.655, height * 0.27))
+    return out
 
 
 def marquee() -> pygame.Surface:
-    """The gantry's banner alone, its title and chequers, on transparency."""
-    u = 600
-    img, ax, ay = sprites.render_sprite("gantry", u)
-    half = round((sprites.GANTRY_POST + 0.08) * u) - 1
-    top = ay - round(sprites.GANTRY_TOP * u) + 1
-    bottom = ay - round(sprites.GANTRY_BANNER * u) - 1
-    return img.subsurface((ax - half, top, 2 * half, bottom - top)).copy()
+    return title(1400)

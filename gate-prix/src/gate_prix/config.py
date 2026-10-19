@@ -20,9 +20,10 @@ VIEW_2P = (480, 540)  # side by side: P1 on the left, P2 on the right, a thin di
 VIEW_2P_SPREAD = 320
 
 # --- The race --------------------------------------------------------------------------
-CARS = 6
-CPU_CARS_2P = 4
-CPU_CARS_1P = 5
+CARS = 6  # the most cars in a race: people (1 or 2) and bots together
+MAX_PLAYERS = 2
+LEVELS = ("EASY", "TOUGH", "BRUTAL")  # the bots' level, one for all of them (ai.SKILLS)
+DEFAULT_LEVEL = "EASY"  # the title's, as a visitor finds it: one they can beat
 LAPS = 3
 ROWS_PER_LAP = 8
 GATE_LAPS = 2  # gate rows stand on laps 1 and 2 only: the final lap is a gate-free sprint
@@ -46,8 +47,8 @@ STREAK_TIME_MAX = 2.5
 # of them wrong: ((CHECK_SLOTS - d) / CHECK_SLOTS) ** 2 * CHECK_BOOST extra speed, for
 # CHECK_TIME_BASE + (CHECK_SLOTS - d) * CHECK_TIME_PER_SLOT seconds: the LIGHT SPEED! warp.
 # A perfect circuit is +100% for 6 s, 14/16 +77% for 5.5 s, 12/16 +56% for 5 s, 8/16 +25%
-# for 4 s. Squared, so that accuracy pays: the CPUs get the same check by their own
-# circuits, and a better circuit's warp passes a CPU up to ~2 s ahead.
+# for 4 s. Squared, so that accuracy pays: the bots get the same check by their own
+# circuits, and a better circuit's warp passes a bot up to ~2 s ahead.
 CHECK_SLOTS = SLOTS
 CHECK_BOOST = 1.00
 CHECK_TIME_BASE = 2.0
@@ -135,10 +136,10 @@ BUMP_COOLDOWN = 0.3  # seconds before the same two cars can bump (and cue it) ag
 # The starting grid: two lanes, the rows of cars a little apart behind the line.
 GRID_LANES = (-0.4, 0.4)
 GRID_FIRST = 300.0  # the front row's distance behind the line
-GRID_GAP = 1000.0  # between the rows; a CPU in the right lane is half of it further back
+GRID_GAP = 1000.0  # between the rows; a car in the right lane is half of it further back
 
 # Pace: a speed multiplier on top of everything else, from the controls. Humans always drive
-# at 1.0; the CPU racers use it for their skill and the rubber-banding.
+# at 1.0; the bots use it for their level and the rubber-banding (ai.Skill).
 PACE_LIMITS = (0.9, 1.1)
 
 # --- Items -----------------------------------------------------------------------------------
@@ -187,34 +188,30 @@ STORM_MINES = 0.4  # the share of bit-flip mines; the rest are static clouds
 HAZARD_SIZE = {"cloud": 0.28, "mine": 0.1}  # their radii (road half-widths): wide, and small
 HAZARD_X_MAX = 0.9  # a hazard's centre stays on the road, within this
 
-# --- The CPU racers --------------------------------------------------------------------------
-BOT_SKILL_BEST = 0.85  # the CPU skills spread evenly from the best down to the worst
-BOT_SKILL_WORST = 0.60
+# --- The bots (ai.py; each level's own numbers are its Skill there) -----------------------------
 BOT_LOOK = 600.0  # how far ahead on the racing line a bot steers for (world units)
 BOT_ROW_LEAD = 1.5  # seconds before a gate row a bot lines up for its arch
 BOT_OFFSET_MAX = 0.3  # each bot keeps its own offset from the racing line, up to this
 BOT_GOAL_MAX = 0.9  # and never aims further out than this (the road is -1 to 1)
+BOT_WEAVE_RATE = 0.9  # radians a second: a weaving bot's slow sway either side of its line
 BOT_GAP_CLEAR = 0.08  # aiming for a gap, it keeps this far outside every arch
 BOT_DECOY = 0.6  # a bot that misses aims for a decoy this often (when there is one)
 BOT_AVOID_TIME = 0.8  # a car it would reach within this many seconds, in its path, is passed
 BOT_YIELD_TIME = 0.5  # and it makes way for a faster car that would hit it within this
 BOT_AVOID_CLEAR = 0.38  # passing, it aims this far beside the car (CAR_WIDTH and a margin)
-BOT_BRAKE_SKILL = 0.7  # bots below this skill brake into sharp curves; the rest never brake
-BOT_BRAKE = 0.5  # how hard
-BOT_BRAKE_LOOK = 3000.0  # how far ahead they look for the curve: braking before it, in line
+BOT_BRAKE_LOOK = 3000.0  # how far ahead a braking bot looks for a sharp curve, braking before it
 BOT_SPLIT_LEAD = 0.6  # seconds before a row with decoys a bot uses its SPLIT
-BOT_DRIFT_CURVE = 2.5  # a bot drifts (by its skill) through curves sharper than this
+BOT_DRIFT_CURVE = 2.5  # a bot drifts (by its level) through curves sharper than this
 BOT_HAZARD_LOOK = 1.2  # seconds ahead a bot looks for hazards and clouds to steer round
+BOT_HAZARD_LOOK_INFORMED = 1.5  # and a BRUTAL one
 BOT_HAZARD_CLEAR = 0.06  # steering round one, it keeps this far outside its reach
 BOT_HAZARD_WAVE = 1600.0  # and round any others within this of it (a staggered pair's half)
 BOT_TUNNEL_LOOK = 0.5  # a hazard or cloud still in its path this close: TUNNEL
 BOT_TRAFFIC = 2 * 400.0  # TUNNEL in traffic: a car this close ahead or alongside (CAR_LENGTH)
 BOT_DECO_BEHIND = 8000.0  # DECOHERENCE when a car is this close behind it, in line
 BOT_DECO_LINE = 0.6  # in line: within this sideways
-BOT_BLIND_SKILL = 0.5  # a bot picking its arch while blind does it at this times its skill
-BOT_PACE_WORST = 0.99  # the pace of the worst skill; the best drives at 1.0
-BOT_RUBBER_FIRST = 0.97  # rubber-banding: the pace multiplier in 1st place ...
-BOT_RUBBER_LAST = 1.03  # ... and in last, in a straight line between
+BOT_BLIND_SKILL = 0.5  # a bot picking its arch while blind does it at this times its aim
+BOT_FUMBLE = 0.8  # seconds after the pickup a bot that fumbles an item uses it, wherever
 
 # --- The world and the camera (the look file's numbers) ---------------------------------
 # Lateral positions (car x, arch offsets, roadside sprites) are in road half-widths: -1 to 1
@@ -228,6 +225,10 @@ CAR_AHEAD = 760.0  # camera to its own car: the car's wheels then sit 10 px abov
 DRAW_SEGMENTS = 120  # how far ahead the road is projected (2.4 s at top speed)
 HORIZON = 112 / 270  # the horizon's height, as a fraction of a view's height
 PARALLAX_TILES = 3  # how many background widths scroll past in one full turn (a lap)
+# A bump or a MEASURE hit between two bots sounds for a person who can see it: the bot is
+# within the person's draw distance ahead, or a few car lengths behind (match.Match._seen).
+HEAR_AHEAD = DRAW_SEGMENTS * SEG
+HEAR_BEHIND = 3 * CAR_LENGTH
 
 # --- Gate rows -----------------------------------------------------------------------------
 ARCH_HALF_WIDTH = 0.22  # an arch's outer radius: a car within it of the offset goes through
@@ -248,12 +249,16 @@ SPRITE_SCALE_MAX = 1000.0
 CAR_WIDTH = 0.32  # in road half-widths, as the look's own car beside its road
 
 # --- Flow ------------------------------------------------------------------------------
-ATTRACT_DELAY = 3.0  # untouched seconds on the title before the CPU racers play
-ATTRACT_SKILL = 0.725  # the bots driving P1's and P2's cars in the attract race
-IDLE_TIMEOUT = 60.0  # untouched seconds anywhere but the title: back to the title, 1 PLAYER
+ATTRACT_DELAY = 3.0  # untouched seconds on the title before the attract race plays
+# untouched seconds on the title before its rows go back to the defaults: long enough to read
+# the title (the attract race starting does not touch them), short of a new visitor arriving
+ATTRACT_RESET = 30.0
+ATTRACT_LEVEL = "TOUGH"  # the attract race behind the title: bots only
+ATTRACT_BOTS = 5  # its cars (the bots' five colours); the two split views follow two of them
+IDLE_TIMEOUT = 60.0  # untouched seconds anywhere but the title: back to the title, its rows reset
 COUNTDOWN = 3.0  # 3, 2, 1 a second each, then GO
 GO_TIME = 0.8  # GO! stays up this long into the race
-AUTOPILOT_SKILL = 0.725  # a player's car after the line is driven on by a bot
+AUTOPILOT_LEVEL = "TOUGH"  # a player's car after the line is driven on by the AI
 FINISH_GRACE = 40.0  # 2P: once one player has finished, the other has this long to
 FINISH_DELAY = 3.0  # the finish banner, before the result screen
 RESULT_LOCK = 1.0  # the result screen ignores the buttons this long (a mashed A)
@@ -273,25 +278,28 @@ SHAKE = 7.0  # the camera's height jitter (world units) at top speed ...
 SHAKE_BOOST = 14.0  # ... and at +100%
 LIGHT_SPEED_TEXT = 1.3  # seconds the LIGHT SPEED! title stays up
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
-TITLE_ITEMS = ("1 PLAYER", "2 PLAYERS", "QUIT")  # the title's rows; QUIT exits the game
+TITLE_ITEMS = ("PLAYERS", "BOTS", "LEVEL", "QUIT")  # the title's rows; QUIT exits the game
 HOWTO_GUARD = 0.3  # the HOW TO PLAY card ignores the buttons this long (the A that chose)
 REVEAL_TIME = 0.9  # a box's item pops up over the car this long
+FULL_TIME = 1.0  # ITEM FULL flashes in the slot this long, on a box hit with an item held
 FINAL_BANNER = 2.4  # FINAL LAP / STORM AHEAD stays up this long after the check's freeze
 GANTRY_LIGHTS = 5  # the start lights: red one by one in the countdown, all green at GO
 
 # --- Colours ---------------------------------------------------------------------------
 # The one source of the players' colours (the look's): P1 blue on the left, P2 red on the right.
 PLAYER_COLORS = {"p1": (80, 170, 255), "p2": (255, 80, 90)}
-# The CPU racers, best first: never a player's hue (P1's blue, cyan and teal; P2's red,
-# orange and pink) and clear of the gates' (H gold, X red, Z blue, Y purple). Only greens are
-# left as hues, so two greens far apart, and three greys apart in brightness.
+# The bots' colours, CPU1 first (a race with fewer bots uses the first ones): neutral only,
+# never a player's hue nor one leaning towards it (P1-P4 are blue, red, green and purple;
+# cyan, teal, orange and pink lean), so greys and pale warm tones, apart in brightness, and
+# the pale yellow far paler than the H gate's gold. The graphite only comes with a fifth bot.
 CPU_COLORS = {
-    "green": (30, 180, 90),  # emerald
     "white": (236, 238, 246),
-    "lime": (150, 220, 40),
-    "steel": (120, 124, 138),
-    "black": (60, 60, 72),  # only in 1P races (the fifth CPU); lighter than the road
+    "tan": (176, 148, 106),
+    "silver": (150, 154, 166),
+    "cream": (238, 228, 150),
+    "graphite": (72, 72, 76),  # lighter than the road, and no blue in it
 }
+CPU_IDS = tuple(f"cpu{i + 1}" for i in range(CARS - 1))  # their car ids; labels CPU1, CPU2 ...
 CAR_COLORS = {**PLAYER_COLORS, **CPU_COLORS}
 GATE_COLORS = {  # shared with the other games
     "H": (248, 192, 40),
