@@ -149,6 +149,7 @@ def _sky(size: tuple[int, int], top: float, hy: int, sun_at: tuple[float, float,
     `unit` is the size of the square the stripes and glints are measured in."""
     w, h = size
     s = pygame.Surface(size)
+    s.fill(NAVY)  # above `top`, if it is inside
     s.blit(kit.gradient((w, round(hy - top)), [NAVY, NIGHT, (110, 70, 160), g.RED, ORANGE, g.GOLD]), (0, top))
     # the sun: GOLD disc sitting on the horizon, cut by poster stripes
     cx, cy, r = sun_at
@@ -188,16 +189,32 @@ def title(width: int) -> pygame.Surface:
     return kit.fit(kit.trim(out), width, width)
 
 
-def scene(size: int) -> pygame.Surface:
-    """Sky, sun, sea and the wave, drawn at SS times the size."""
-    s = sky(size * SS)
-    s.blit(wave(size * SS), (0, 0))
-    return pygame.transform.smoothscale(s, (size, size))
+def scene(size: int, pad: int = 0) -> pygame.Surface:
+    """Sky, sun, sea and the wave, drawn at SS times the size; with `pad`,
+    `pad` px more of them on every side, the swell running on past both
+    edges (wide()'s voltages)."""
+    if not pad:
+        s = sky(size * SS)
+        s.blit(wave(size * SS), (0, 0))
+        return pygame.transform.smoothscale(s, (size, size))
+    n, o = size * SS, pad * SS
+    full = (n + 2 * o, n + 2 * o)
+    hy = round(n * HORIZON)
+    s = _sky(full, o, hy + o, (n * 0.66 + o, hy - n * 0.1 + o, n * 0.19), n)
+    # world x sampled: past both edges of the padded canvas (the curve is mirrored)
+    span = (math.floor((ORIGIN[0] - pad) / K) - 8, math.ceil((1024 + pad - ORIGIN[0]) / K) + 8)
+    face = _face(WIDE_VOLTS, span)
+    i = min(range(len(face)), key=lambda q: abs(face[q][0] - ION_X))
+    k = n / 1024
+    s.blit(_wave(full, [(x * k + o, y * k + o) for x, y in face], i, k), (0, 0))
+    return pygame.transform.smoothscale(s, (size + 2 * pad, size + 2 * pad))
 
 
-def art(size: int) -> pygame.Surface:
-    out = scene(size)
-    kit.blit_center(out, title(round(size * 0.84)), (size / 2, size * 0.855))
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, the sky, sea and swell running on (see generate_logos.py: extended/)."""
+    out = scene(size, pad)
+    kit.blit_center(out, title(round(size * 0.84)), (pad + size / 2, pad + size * 0.855))
     return out
 
 

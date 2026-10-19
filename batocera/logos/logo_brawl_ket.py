@@ -80,11 +80,13 @@ def burst(center, r_in: float, r_out: float, points: int, color, phase: float = 
     return pts
 
 
-def panel(size: int | tuple[int, int], impact: tuple[float, float], k: float = 1.0) -> pygame.Surface:
+def panel(size: int | tuple[int, int], impact: tuple[float, float], k: float = 1.0,
+          reach: float | None = None) -> pygame.Surface:
     """The comic panel: each player's side of a diagonal split, halftone dots
     growing towards the impact, and speed lines bursting out of it. `size` is
     a side, or (width, height); `k` scales the dots, lines and burst, which
-    are sized for puppets at ZOOM."""
+    are sized for puppets at ZOOM. The dots fade out `reach` px from the
+    impact (by default 3/4 of the longer side)."""
     W, H = (size, size) if isinstance(size, int) else size
     surf = pygame.Surface((W, H))
     surf.fill(P.INK)
@@ -99,7 +101,7 @@ def panel(size: int | tuple[int, int], impact: tuple[float, float], k: float = 1
     # halftone: dots on a 45-degree grid, bigger near the impact
     dots = pygame.Surface((W, H), pygame.SRCALPHA)
     step = round(26 * k)
-    reach = max(W, H) * 0.75
+    reach = reach or max(W, H) * 0.75
     for gy in range(-1, H // step + 2):
         for gx in range(-1, W // step + 2):
             x = gx * step + (step // 2 if gy % 2 else 0)
@@ -155,24 +157,27 @@ def title(scale: int) -> pygame.Surface:
     return out
 
 
-def art(size: int) -> pygame.Surface:
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, the panel and the title band running on (see generate_logos.py: extended/)."""
+    full = size + 2 * pad
     h, fist = hero()
     big = kit.nearest(h, ZOOM)
-    pos = (round(size / 2 - big.get_width() / 2), round(size * 0.035))
+    pos = (pad + round(size / 2 - big.get_width() / 2), pad + round(size * 0.035))
     impact = (pos[0] + fist[0] * ZOOM, pos[1] + fist[1] * ZOOM)
-    surf = panel(size, impact)
+    surf = panel(full, impact, reach=size * 0.75)
     # the puppets on top, with a thin ink drop shadow so they stand off the burst
     shadow = kit.tint(big, P.INK)
     shadow.set_alpha(150)
     surf.blit(shadow, (pos[0] + 10, pos[1] + 10))
     surf.blit(big, pos)
     # the title band along the bottom
-    band = pygame.Rect(0, round(size * 0.74), size, round(size * 0.26))
-    surf.fill(P.INK, band)
-    surf.fill(P.CREAM, (0, band.y, size, 6))
+    band = pygame.Rect(0, pad + round(size * 0.74), size, round(size * 0.26))
+    surf.fill(P.INK, (0, band.y, full, full - band.y))
+    surf.fill(P.CREAM, (0, band.y, full, 6))
     word = title(15)
     word = kit.fit(word, size - 80, band.h - 40, smooth=False) if word.get_width() > size - 80 else word
-    kit.blit_center(surf, word, (size / 2, band.centery + 4))
+    kit.blit_center(surf, word, (full / 2, band.centery + 4))
     return surf
 
 

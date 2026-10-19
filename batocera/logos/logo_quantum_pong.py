@@ -29,7 +29,7 @@ import pygame
 sys.path.insert(0, str(kit.ROOT / "quantum-pong/src"))
 
 from quantum_pong import config, fonts  # noqa: E402
-from quantum_pong import main as qp  # noqa: E402
+from quantum_pong import sprites  # noqa: E402
 from quantum_pong.gates import Gate, apply_h  # noqa: E402
 from quantum_pong.pong import Ball  # noqa: E402
 
@@ -49,19 +49,19 @@ KW = 4
 
 
 def gate_sprite(kind: str, k: int) -> pygame.Surface:
-    """One gate exactly as main._draw_gate draws it, upscaled k times."""
-    label_surfaces = qp._make_gate_label_surfaces(fonts.load_font(10))
+    """One gate exactly as sprites.draw_gate draws it, upscaled k times."""
+    label_surfaces = sprites.make_gate_label_surfaces(fonts.load_font(10))
     n = config.GATE_RADIUS * 2 + 2
     surf = pygame.Surface((n, n), pygame.SRCALPHA)
-    qp._draw_gate(surf, label_surfaces, Gate(kind=kind, x=n / 2, y=n / 2, spawned_at=0.0))
+    sprites.draw_gate(surf, label_surfaces, Gate(kind=kind, x=n / 2, y=n / 2, spawned_at=0.0))
     return kit.nearest(surf, k)
 
 
 def ball_sprite(k: int) -> pygame.Surface:
-    """The ball as main._draw_ball draws it (white with a dark 1px rim)."""
+    """The ball as sprites.draw_ball draws it (white with a dark 1px rim)."""
     n = config.BALL_RADIUS * 2 + 2
     surf = pygame.Surface((n, n), pygame.SRCALPHA)
-    qp._draw_ball(surf, Ball(x=n / 2, y=n / 2, vx=0, vy=0))
+    sprites.draw_ball(surf, Ball(x=n / 2, y=n / 2, vx=0, vy=0))
     return kit.nearest(surf, k)
 
 
@@ -129,7 +129,14 @@ def split_ball(surf: pygame.Surface, k: int, start: tuple[float, float], split: 
         kit.blit_center(surf, ball_sprite(k), (split[0] + out.vx * far, split[1] + out.vy * far))
 
 
-def art(size: int) -> pygame.Surface:
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, on more of the same black (see generate_logos.py: extended/)."""
+    if pad:
+        out = pygame.Surface((size + 2 * pad, size + 2 * pad))
+        out.fill(BG)
+        out.blit(art(size), (pad, pad))
+        return out
     s = size / 1024
     k = max(1, round(K * s))
     surf = pygame.Surface((size, size))

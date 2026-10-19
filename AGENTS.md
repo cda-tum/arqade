@@ -680,7 +680,10 @@ for any game that gets them later.
 `batocera/logos/` renders every game's logo with `generate_logos.py`: a
 1024x1024 `<rom>-logo.png`, a 1024x512 `<rom>-wide.png` for the cabinet's
 game list (the same identity re-laid out, not a crop) and a transparent
-`<rom>-marquee.png`. Each game
+`<rom>-marquee.png`. `extended/<rom>-logo.png` is the square logo on a
+1792x1792 canvas, its background drawn on outwards (`art(size, pad)`), for
+50 mm round pin badges: only their middle 38 mm show on the face, and every
+title sits inside that. Each game
 has its own `logo_<rom>.py`, which imports the game's package and draws with
 the game's own sprite and draw functions. `kit.py` has the shared lettering
 and light effects. A new game gets a module there too. These preferences were

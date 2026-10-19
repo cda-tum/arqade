@@ -111,12 +111,16 @@ def _hero() -> pygame.Surface:
     return surf
 
 
-def art(size: int) -> pygame.Surface:
-    surf = _floor(size, size)
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, the wall and the floor running on (a pad of whole floor
+    tiles keeps the tiles where they were under the chef) (see generate_logos.py: extended/)."""
+    full = size + 2 * pad
+    surf = _floor(full, full, wall_h=WALL_H + pad)
     title = _title(12)
-    kit.blit_center(surf, title, (size / 2, WALL_H / 2 - 6))
+    kit.blit_center(surf, title, (full / 2, pad + WALL_H / 2 - 6))
     hero = kit.nearest(_hero(), HERO_SCALE)
-    surf.blit(hero, hero.get_rect(midbottom=(size // 2, size - 66)))
+    surf.blit(hero, hero.get_rect(midbottom=(full // 2, pad + size - 66)))
     return surf
 
 

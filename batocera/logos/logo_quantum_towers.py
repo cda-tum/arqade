@@ -128,15 +128,18 @@ def _sky(width: int, height: int) -> pygame.Surface:
     return sky
 
 
-def art(size: int) -> pygame.Surface:
-    canvas = _sky(size, size)
-    top_y = 66
-    tower, gold = _tower((size - top_y) // K + 1)
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, the sky running on and the tower down to the bottom (see generate_logos.py: extended/)."""
+    full = size + 2 * pad
+    canvas = _sky(full, full)
+    top_y = pad + 66
+    tower, gold = _tower((full - top_y) // K + 1)
     tower = kit.nearest(tower, K)
     # centre the tower body itself, so the climber hangs out to the right
-    x = size // 2 - WIDTH * K // 2
+    x = full // 2 - WIDTH * K // 2
     light = (x + gold.centerx * K, top_y + gold.centery * K)
-    canvas.blit(kit.radial((size, size), light, 300, (150, 96, 20), 0.9), (0, 0),
+    canvas.blit(kit.radial((full, full), light, 300, (150, 96, 20), 0.9), (0, 0),
                 special_flags=pygame.BLEND_ADD)
     canvas.blit(tower, (x, top_y))
     return canvas
