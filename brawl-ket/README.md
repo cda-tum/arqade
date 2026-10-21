@@ -135,6 +135,7 @@ uv run python -m brawl_ket --fps    # with the FPS overlay
 uv run pytest
 uv run python tools/snapshot.py /tmp/brawl-snaps   # poses, moves, fights and screens to PNGs
 uv run python tools/benchmark.py                    # frame cost (on the cabinet: see below)
+uv run python tools/balance.py                      # bot-against-bot win rates for every pairing
 ```
 
 ## Layout

@@ -9,6 +9,11 @@ follows ordered rules: react, finish a chain, then walk in / strike / throw / ju
 Colour must match to hurt, so it strikes with A when the rival is in its own basis
 and with B when not, sometimes switches (Y) to dodge an attack that would hurt it,
 and throws a rival who keeps switching (a throw hurts either colour).
+
+ERWIN boxes against a shot or a heavy that would hurt her and pops out when the rival comes
+near a box, pounces on crouchers and scratches jumpers; DOS COPYs incoming shots, PASTEs at
+once, FLOPPYs at range, BLUE SCREENs a rival who is close and CRT DROPs on one under him. DOS
+never switches, so he never uses Y to dodge or feint.
 """
 
 from __future__ import annotations
@@ -30,6 +35,12 @@ PRESS_GAP = 4           # frames between two presses, so every press is a fresh 
 LONG_CROUCH = 40        # a rival crouched this long gets thrown
 SWITCH_MEMORY = 180     # frames over which the rival's switches are counted
 SWITCHER = 2            # a rival who switched this often in SWITCH_MEMORY gets thrown
+BOX_DANGER = 60         # ERWIN boxes against a shot or a heavy this close (90 made her win 65% against DOS)
+BOX_POP = 50            # ... and pops out once the rival is this close to either box
+POUNCE_RANGE = (60, 170)    # ERWIN pounces on a crouching rival this far away
+COPY_REACH = (30, 110)  # a rival's shot this far from DOS, coming, is worth a COPY
+SCREEN_RANGE = 80       # DOS's BLUE SCREEN reaches a rival this close (50 px past his case)
+DROP_RANGE = 30         # DOS stomps on a rival this close under him
 
 _BUSY = ("hitstun", "knockdown")
 
@@ -53,6 +64,7 @@ class Bot:
         self.switches: deque[int] = deque()     # the frames the rival switched on
         self.t = 0
         self.air_pressed = False
+        self.box_hold = 0               # THE BOX: how long this bot stays in the boxes
 
     def input(self, fight: Fight) -> FighterInput:
         me, rival = fight.fighters[self.player], fight.fighters[self.rival]
@@ -65,6 +77,8 @@ class Bot:
         if self._wants_dodge(me, rival):     # a switch works in any state, hitstun included
             self.gap = PRESS_GAP
             return FighterInput(down=self.down, y=True)
+        if me.boxed:
+            return self._in_box(me, rival)
         if me.action in _BUSY:
             self.chain.clear()
             return FighterInput(down=self.down)
@@ -77,9 +91,10 @@ class Bot:
             return FighterInput(dx=-toward)                     # back out of a field that hurts
         if me.stance == "air":
             return self._in_air(me, rival, toward, dist)
-        phoebe = self._phoebe(fight, me, rival, toward, dist)
-        if phoebe is not None:
-            return phoebe
+        for rule in (self._phoebe, self._erwin, self._dos):
+            special = rule(fight, me, rival, toward, dist)
+            if special is not None:
+                return special
         self.air_pressed = False
         if me.action == "attack":
             return self._continue_chain(me, toward)
@@ -124,6 +139,8 @@ class Bot:
     def _wants_dodge(self, me, rival) -> bool:
         """Switch basis `react` frames into a rival attack whose colour would hurt: from neutral
         a dodge, mid-string (in hitstun) a way to turn the rest of it away."""
+        if me.char.fixed_basis is not None:     # DOS can't switch: his Y is COPY / PASTE
+            return False
         m = rival.move
         if m is None or rival.action != "attack" or rival.phase != "startup" or rival.frame != self.react:
             return False
@@ -166,18 +183,89 @@ class Bot:
         return basis.hurts(basis.error_for(shot.move.colour, shot.basis), target.basis)
 
     def _in_air(self, me, rival, toward: int, dist: float) -> FighterInput:
-        laser = me.char.moves["air.X"]
-        if laser.hover and not self.air_pressed and self.gap == 0 and "air.X" not in me.air_used \
-                and abs(dist - (me.y + 50)) < 45 and self.would_hurt(me, laser, rival):
-            # the shot leaves 50 px ahead at hand height (59 px) and falls one px per px, so it
-            # meets a standing body about y + 50 px ahead, give or take its height: fire
+        air = me.char.moves["air.X"]
+        ready = not self.air_pressed and self.gap == 0 and "air.X" not in me.air_used
+        if air.hover and air.projectile is not None and ready and abs(dist - (me.y + 50)) < 45 \
+                and self.would_hurt(me, air, rival):
+            # LASER: the shot leaves 50 px ahead at hand height (59 px) and falls one px per px, so
+            # it meets a standing body about y + 50 px ahead, give or take its height: fire
             self.air_pressed = True
             return self._press("x", toward)
+        if air.hover and air.hit_every and ready and dist <= 60 and abs(me.y - rival.y) <= 50 \
+                and self.would_hurt(me, air, rival):
+            self.air_pressed = True
+            return self._press("x", toward)                     # SCRATCH a rival beside her
+        if air.dive is not None and air.dive[0] == 0 and ready and abs(rival.x - me.x) <= DROP_RANGE \
+                and me.y > rival.y + 30:
+            self.air_pressed = True
+            return self._press("x", 0)                          # CRT DROP on a rival under him
         if not self.air_pressed and self.gap == 0 and dist <= AIR_RANGE:
             self.air_pressed = True
             button = "x" if self.rng.random() < 0.3 else self.matching(me, rival)
             return self._press(button, toward)
         return FighterInput(dx=toward)
+
+    def _in_box(self, me, rival) -> FighterInput:
+        """THE BOX: pop out (A, with the swipe) once the rival comes near either box, or after a
+        while of its own choosing."""
+        if me.box_t == 0:
+            self.box_hold = self.rng.randrange(20, 70)
+        near = min(abs(rival.x - x) for x in me.boxes) <= BOX_POP
+        if self.gap == 0 and (near or me.box_t >= self.box_hold):
+            return self._press("a", 0)
+        return FighterInput()
+
+    def _erwin(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
+        """ERWIN on the ground: THE BOX against a shot or a heavy that would hurt her, POUNCE on a
+        crouching rival, and a jump to SCRATCH a rival in the air."""
+        box, pounce = me.char.moves["stand.X"], me.char.moves["crouch.X"]
+        if not box.superpose or me.action not in ("idle", "walk", "crouch") or self.gap > 0:
+            return None
+        if me.cooldowns.get("stand.X", 0) == 0:
+            shot = any(s.owner == self.rival and (s.x - me.x) * s.vx < 0 and abs(s.x - me.x) <= BOX_DANGER
+                       and self.would_hurt_shot(s, me) for s in fight.shots)
+            m = rival.move
+            heavy = rival.action == "attack" and m is not None and rival.phase == "startup" and m.damage >= 8 \
+                and m.kind != "throw" and dist <= BOX_DANGER and self.would_hurt(rival, m, me)
+            if (shot and self.rng.random() < self.skill * 0.5) or (heavy and self.rng.random() < self.skill * 0.3):
+                self.down = False
+                return self._press("x", 0)
+        if rival.stance == "crouch" and POUNCE_RANGE[0] <= dist <= POUNCE_RANGE[1] \
+                and me.cooldowns.get("crouch.X", 0) == 0 and self.would_hurt(me, pounce, rival) \
+                and self.rng.random() < 0.05:
+            self.down = True
+            press = self._press("x", 0)                         # POUNCE, from a crouch ...
+            self.down = False                                   # ... and up again: no sitting there
+            return press
+        if rival.y > 30 and dist <= 110 and self.rng.random() < 0.04:
+            self.down = False
+            return FighterInput(up=True, dx=toward)             # up after a jumper, to scratch
+        return None
+
+    def _dos(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
+        """DOS: PASTE at once, COPY a rival's shot that is about to arrive, BLUE SCREEN a rival
+        who is close, and now and then a hop to CRT DROP on them."""
+        if not me.char.copy_paste or me.action not in ("idle", "walk", "crouch") or self.gap > 0:
+            return None
+        if me.clipboard is not None:
+            self.down = False
+            return self._press("y", 0)                          # PASTE
+        coming = any(s.owner == self.rival and (s.x - me.x) * s.vx < 0
+                     and COPY_REACH[0] <= abs(s.x - me.x) <= COPY_REACH[1] for s in fight.shots)
+        if coming and self.rng.random() < self.skill * 0.6:
+            self.down = False
+            return self._press("y", 0)                          # COPY
+        screen = me.char.moves["crouch.X"]
+        if dist <= SCREEN_RANGE and me.cooldowns.get("crouch.X", 0) == 0 and self.would_hurt(me, screen, rival) \
+                and self.rng.random() < 0.05:
+            self.down = True
+            press = self._press("x", 0)                         # BLUE SCREEN, from a crouch ...
+            self.down = False                                   # ... and up again (a crouching DOS invites POUNCE)
+            return press
+        if dist <= 60 and rival.y == 0 and self.rng.random() < 0.01:
+            self.down = False
+            return FighterInput(up=True, dx=toward)             # a hop, to come down on them
+        return None
 
     def _on_ground(self, me, rival, toward: int, dist: float) -> FighterInput:
         roll = self.rng.random()
@@ -211,7 +299,7 @@ class Bot:
         if roll < 0.03 and dist > 90 and ready and special.kind == "projectile" \
                 and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, special, rival):
             return self._press("x", 0)                          # a PHOTON that will hurt
-        if roll < 0.04 and ready:
+        if roll < 0.04 and ready and me.char.fixed_basis is None:
             self.gap = PRESS_GAP
             return FighterInput(dx=toward, y=True)              # a feint: switch colour at range
         return FighterInput(dx=toward)
@@ -219,4 +307,4 @@ class Bot:
     def _press(self, button: str, dx: int) -> FighterInput:
         self.gap = PRESS_GAP
         return FighterInput(dx=dx, down=self.down, a=button == "a", b=button == "b",
-                            x=button == "x")
+                            x=button == "x", y=button == "y")

@@ -39,7 +39,16 @@ from .config import (
     STAGES,
 )
 from .dos import BEIGE, CLIP_W, clip_icon, draw_dos, draw_floppy
-from .erwin import EYE, FADE_STEPS, draw_collapse, draw_erwin, draw_holo_box, draw_superposed
+from .erwin import (
+    EYE,
+    FADE_STEPS,
+    HOLO_PHASES,
+    draw_collapse,
+    draw_erwin,
+    draw_holo_box,
+    draw_superposed,
+    holo_sprite,
+)
 from .fight import Fight
 from .fighter import Fighter
 from .fonts import load_font
@@ -546,6 +555,14 @@ class Renderer:
             self._reset()
             for p in PLAYERS:
                 self.trail[p] = self.last_health[p] = fight.fighters[p].health
+            for f in fight.fighters.values():   # THE BOX's sprites now, not mid-round
+                if f.char.build == "cat":
+                    for fur in BASIS_BODY.values():
+                        for facing in (1, -1):
+                            for phase in range(HOLO_PHASES):
+                                holo_sprite(fur, facing, phase)
+                            for step in range(1, FADE_STEPS):     # ... and every step of a fade
+                                holo_sprite(fur, facing, 0, step)
         self.t += 1
         self._start_effects(events)
 

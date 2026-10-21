@@ -771,3 +771,13 @@ def test_choose_your_fighter_cycles_through_all_five_in_order() -> None:
         seen.append(ROSTER[m.picks["p1"]].name)
         m.update(press("right", "p1"))
     assert seen == order and m.picks["p1"] == 0         # and round again
+
+
+def test_the_demo_picks_its_fighters_from_all_five() -> None:
+    from brawl_ket.match import ROSTER
+    m = Match(random.Random(3))
+    seen = set()
+    for _ in range(40):
+        m._start_attract()
+        seen |= {f.char.name for f in m.attract.fighters.values()}
+    assert len(ROSTER) == 5 and seen == {c.name for c in ROSTER}

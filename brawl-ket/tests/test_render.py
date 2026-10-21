@@ -491,13 +491,18 @@ def boxed_fight(r, frames=40):
 
 
 def test_superposed_erwin_is_two_boxes_drawn_from_cached_sprites(surface):
-    from brawl_ket.erwin import HOLO_PHASES, holo_sprite
+    from brawl_ket.erwin import FADE_STEPS, HOLO_PHASES, holo_sprite
     from brawl_ket.stages import MARGIN
     holo_sprite.cache_clear()
     r = Renderer(surface)
     fight = boxed_fight(r)
+    # every box sprite is built as the fight starts (a hitch on the cabinet otherwise, the first
+    # time she boxes), all of them fit the cache, and drawing her boxed builds nothing new
     info = holo_sprite.cache_info()
-    assert info.currsize <= HOLO_PHASES and info.hits > info.misses
+    assert info.currsize == info.misses <= min(info.maxsize, 2 * 2 * (HOLO_PHASES + FADE_STEPS))
+    for _ in range(20):
+        r.draw_fight(fight, fight.step({}))
+    assert holo_sprite.cache_info().misses == info.misses and fight.fighters["p1"].boxed
     for x in fight.fighters["p1"].boxes:
         changed = [(i, j) for i in range(round(x) - 30, round(x) + 31, 3) for j in range(FLOOR_Y - 50, FLOOR_Y - 4, 3)
                    if surface.get_at((i, j)) != r.stage.get_at((i + MARGIN, j + MARGIN))]
