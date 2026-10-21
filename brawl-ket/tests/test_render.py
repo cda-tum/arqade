@@ -1,5 +1,8 @@
 """Smoke tests: bot-against-bot fights render without errors."""
 
+import importlib.util
+from pathlib import Path
+
 import pygame
 import pytest
 
@@ -414,3 +417,120 @@ def test_the_stage_select_scales_each_preview_once(surface, monkeypatch):
             m.t += 1
             r.draw(m, [])
     assert len(calls) == len(config.STAGES)
+
+
+# --- the approved looks: the game draws each new fighter exactly as its look script does ---------
+
+LOOKS = Path(__file__).resolve().parents[2] / "docs" / "superpowers" / "specs"
+
+
+@pytest.fixture
+def look(monkeypatch):
+    """Load an approved look script. It writes its build into the skeleton's tables when it is
+    imported, so for the test those tables are copies."""
+    from brawl_ket import poses as PS
+
+    def load(name: str):
+        path = LOOKS / name
+        if not path.exists():
+            pytest.skip(f"{name} is not in this checkout")
+        for table in ("SCALE", "HEAD_R", "LIMB_W"):
+            monkeypatch.setattr(PS, table, dict(getattr(PS, table)))
+        monkeypatch.setattr(PS, "BUILD_BONES", {k: dict(v) for k, v in PS.BUILD_BONES.items()})
+        spec = importlib.util.spec_from_file_location(path.stem.replace("-", "_"), path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    return load
+
+
+def same_pixels(a: pygame.Surface, b: pygame.Surface, mode: str = "RGB") -> bool:
+    return pygame.image.tostring(a, mode) == pygame.image.tostring(b, mode)
+
+
+@pytest.mark.parametrize("name,strike", [("idle", None), ("crouch", None), ("jump", None),
+                                         ("heavy_hit", ("hand_f", PURPLE)), ("sweep_hit", ("foot_f", PURPLE))])
+@pytest.mark.parametrize("facing", [1, -1])
+@pytest.mark.parametrize("fur", [GREEN, PURPLE], ids=["green", "purple"])
+def test_erwin_matches_her_approved_look(look, name, strike, facing, fur):
+    from brawl_ket.erwin import draw_erwin
+    from brawl_ket.poses import POSES, joints
+    ref = look("2026-10-21-brawl-ket-erwin-look.py")
+    pygame.init()
+    a, b = pygame.Surface((240, 240)), pygame.Surface((240, 240))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    feet = (120.0, 220.0)
+    ref.draw_erwin(a, POSES[name], feet, facing, fur, strike)
+    draw_erwin(b, joints(POSES[name], "cat", feet, facing), facing, fur, strike)
+    assert same_pixels(a, b)
+
+
+def test_the_holographic_boxes_are_her_colour():
+    from brawl_ket.erwin import CARD, holo_sprite
+    pygame.init()
+    for fur in (GREEN, PURPLE):
+        out, _pool = holo_sprite(fur, 1, 0)
+        seen = {tuple(out.get_at((x, y)))[:3] for x in range(0, out.get_width(), 2)
+                for y in range(0, out.get_height(), 2)}
+        assert fur in seen and CARD not in seen
+
+
+def boxed_fight(r, frames=40):
+    """ERWIN (p1) in THE BOX `frames` frames after the split, drawn every frame."""
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import ERWIN
+    fight = Fight({"p1": ERWIN, "p2": ROBERT}, seed=1)
+    fight.fighters["p2"].x = 600
+    r.draw_fight(fight, fight.step({"p1": FighterInput(x=True)}))
+    for _ in range(ERWIN.moves["stand.X"].startup + frames):
+        r.draw_fight(fight, fight.step({}))
+    assert fight.fighters["p1"].boxed
+    return fight
+
+
+def test_superposed_erwin_is_two_boxes_drawn_from_cached_sprites(surface):
+    from brawl_ket.erwin import HOLO_PHASES, holo_sprite
+    from brawl_ket.stages import MARGIN
+    holo_sprite.cache_clear()
+    r = Renderer(surface)
+    fight = boxed_fight(r)
+    info = holo_sprite.cache_info()
+    assert info.currsize <= HOLO_PHASES and info.hits > info.misses
+    for x in fight.fighters["p1"].boxes:
+        changed = [(i, j) for i in range(round(x) - 30, round(x) + 31, 3) for j in range(FLOOR_Y - 50, FLOOR_Y - 4, 3)
+                   if surface.get_at((i, j)) != r.stage.get_at((i + MARGIN, j + MARGIN))]
+        assert len(changed) > 40, x
+
+
+def test_a_collapse_shows_one_real_cardboard_box_then_clears(surface):
+    from brawl_ket.erwin import CARD
+    from brawl_ket.fighter import FighterInput
+    r = Renderer(surface)
+    fight = boxed_fight(r)
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True)}))
+    erwin = fight.fighters["p1"]
+    assert not erwin.boxed and {"box_pop", "box_fade"} <= {fx.kind for fx in r.effects}
+    real = round(erwin.boxes[erwin.box_real])
+    seen = {tuple(surface.get_at((i, j)))[:3] for i in range(real - 34, real + 35, 2) for j in range(FLOOR_Y - 46, FLOOR_Y, 2)}
+    assert CARD in seen
+    for _ in range(60):
+        r.draw_fight(fight, fight.step({}))
+    assert not [fx for fx in r.effects if fx.kind in ("box_pop", "box_fade")]
+
+
+def test_erwins_kicking_leg_is_lit_in_the_attacks_colour(surface):
+    from brawl_ket.erwin import cat_leg_points
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import ERWIN
+    from brawl_ket.poses import joints
+    r = Renderer(surface)
+    fight = Fight({"p1": ERWIN, "p2": ROBERT})
+    fight.fighters["p2"].x = 600
+    for i in range(3):
+        r.draw_fight(fight, fight.step({"p1": FighterInput(down=True, b=i == 0)}))
+    f = fight.fighters["p1"]
+    assert f.action == "attack" and f.phase == "startup"
+    j = joints(r.pose_last["p1"], "cat", (f.x, FLOOR_Y - f.y), f.facing)
+    knee, hock = cat_leg_points(j, "f", f.facing)
+    assert PURPLE in limb_colours(surface, r, f, {"knee": knee, "hock": hock}, "knee", "hock")

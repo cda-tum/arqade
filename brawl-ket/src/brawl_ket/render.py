@@ -37,20 +37,22 @@ from .config import (
     STAGE_NAMES,
     STAGES,
 )
+from .erwin import EYE, FADE_STEPS, draw_collapse, draw_erwin, draw_holo_box, draw_superposed
 from .fight import Fight
 from .fighter import Fighter
 from .fonts import load_font
+from .ink import _ball, _block, _boot, _poly, _pt, _towards, limb
 from .moves import Character
 from .stages import MARGIN, make_stage
 from .poses import BASE_BONES, HEAD_R, LIMB_W, POSES, SCALE, Pose, joints, pose_for
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 PLAYERS = ("p1", "p2")
-ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL}
+ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL, "ERWIN": EYE}
 
 # how each build is drawn (the skeleton's proportions are in poses.py)
-TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5, "cat": 5}   # the lean torso is this much thicker than a limb
-PLATES = {"lean": False, "heavy": True, "toy": False, "cat": False}   # armour: the heavy's wedge torso, plates, helm
+TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5}   # the lean torso is this much thicker than a limb
+PLATES = {"lean": False, "heavy": True, "toy": False}   # armour: the heavy's wedge torso, plates, helm
 # PHOEBE (the "toy" build): a scientist, not a puppet. Her neutral colours; the coat, the lining
 # and her trousers are shades of her basis colour (docs/.../2026-10-09-brawl-ket-phoebe-design.md)
 SKIN = (232, 176, 128)
@@ -72,6 +74,7 @@ ERROR_COLOUR = {basis.X: GREEN, basis.Z: PURPLE, basis.Y: P.WHITE}
 BADGE = {basis.Z_BASIS: "0/1", basis.X_BASIS: "+/-"}     # the basis's states, on the health bar
 # the striking limb's joints, from the shoulder or hip out to the hand or foot that lands
 STRIKE_LIMB = {"hand_f": ("shoulder_f", "elbow_f", "hand_f"), "foot_f": ("hip", "knee_f", "foot_f")}
+SELF_LIT = ("cat",)   # builds that draw their own lit limb: the striker adds only its trail and tip
 TRAIL_LEN = 5               # a live strike's hand or foot leaves this many fading echoes
 LEGEND_CHIP = 14            # the A / B colour chips under each health bar, px
 LEGEND_W = 2 * LEGEND_CHIP + 4
@@ -82,6 +85,7 @@ STRIKER = {
     "PHOTON": "hand_f", "PHASE SLIDE": "foot_f", "HADAMARD DIVE": "foot_f",
     "MEASURE": "hand_f", "COLLAPSE": "foot_f",
     "LIGHT PILLAR": "hand_f", "LASER": "hand_f",
+    "BOX SWIPE": "hand_f", "POUNCE": "hand_f", "SCRATCH": "hand_f",
 }
 
 # effect lengths, in frames
@@ -97,6 +101,8 @@ HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
 SWITCH_FLASH_FRAMES = 8     # a switch (an H): the body flashes white as its colour changes
 MEASURE_FLASH_FRAMES = 12   # MEASURE: the rival flashes in BOHR's colour as it collapses
 COLLAPSE_FRAMES = 14        # ... with a ring closing in on it
+BOX_POP_FRAMES = 14         # THE BOX: the real cardboard box shows this long after a collapse
+BOX_FADE_FRAMES = 16        # ... and the other one dissolves over this long
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
 PREVIEW_W, PREVIEW_H = 320, 180     # CHOOSE YOUR STAGE's preview: the stage at half size
@@ -173,30 +179,16 @@ def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
 # --- the puppet --------------------------------------------------------------------------------
 
 
-def _pt(p) -> tuple[int, int]:
-    return (round(p[0]), round(p[1]))
-
-
-def limb(surf: pygame.Surface, a, b, w: int, color, ink=P.INK) -> None:
-    """A capsule from a to b, w px thick, with a 2 px ink outline."""
-    a, b = _pt(a), _pt(b)
-    for c, ww in ((ink, w + 4), (color, w)):
-        pygame.draw.line(surf, c, a, b, ww)
-        pygame.draw.circle(surf, c, a, ww // 2)
-        pygame.draw.circle(surf, c, b, ww // 2)
-
-
-def _ball(surf: pygame.Surface, p, r: int, color) -> None:
-    p = _pt(p)
-    pygame.draw.circle(surf, P.INK, p, r + 2)
-    pygame.draw.circle(surf, color, p, r)
-
-
 def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body, accent,
-                flare: float = 0.0) -> dict:
+                flare: float = 0.0, strike: tuple[str, tuple] | None = None, mood: str = "calm",
+                led: bool = False, eject: bool = False) -> dict:
     """One fighter, back limbs first. Returns the joints (screen px). `flare` (px) blows a
-    coat's hem out behind (PHOEBE's; the puppets ignore it)."""
+    coat's hem out behind (PHOEBE's); `strike` = (joint, colour) is the lit limb, for a build
+    that draws its own (SELF_LIT); `mood`, `led` and `eject` are DOS's screen (dos.py)."""
     j = joints(pose, build, feet, facing)
+    if build == "cat":
+        draw_erwin(surf, j, facing, body, strike)
+        return j
     if build == "toy":
         _draw_scientist(surf, j, pose, facing, body, accent, flare)
         return j
@@ -237,23 +229,6 @@ def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body,
     limb(surf, j["elbow_f"], j["hand_f"], w - 2, body)
     _ball(surf, j["hand_f"], w // 2 + 1, accent)
     return j
-
-
-def _block(surf: pygame.Surface, p, half: int, color, radius: int = 3) -> None:
-    """A square (a gauntlet), `half` px from its centre to each side, with a 2 px ink outline."""
-    rect = pygame.Rect(0, 0, 2 * half, 2 * half)
-    rect.center = _pt(p)
-    pygame.draw.rect(surf, P.INK, rect.inflate(4, 4), border_radius=radius + 2)
-    pygame.draw.rect(surf, color, rect, border_radius=radius)
-    surf.fill(P.lighten(color, 0.5), (rect.x + 2, rect.y + 2, max(2, half - 2), 2))
-
-
-def _boot(surf: pygame.Surface, foot, facing: int, w: int, color) -> None:
-    """A heavy boot: a block on the foot, its toe pointing the way the fighter faces."""
-    rect = pygame.Rect(0, 0, w + 10, w - 2)
-    rect.midbottom = _pt((foot[0] + 3 * facing, foot[1] + w // 2 + 1))
-    pygame.draw.rect(surf, P.INK, rect.inflate(4, 4), border_radius=4)
-    pygame.draw.rect(surf, color, rect, border_radius=3)
 
 
 def _draw_armoured(surf: pygame.Surface, j: dict, build: str, facing: int, body, accent) -> None:
@@ -330,16 +305,6 @@ def _draw_armoured(surf: pygame.Surface, j: dict, build: str, facing: int, body,
     # the forearm and gauntlet, in front of everything
     limb(surf, j["elbow_f"], j["hand_f"], w - 1, body)
     _block(surf, j["hand_f"], w // 2 + 2, accent)
-
-
-def _towards(a, b, k: float) -> tuple[float, float]:
-    return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)
-
-
-def _poly(surf: pygame.Surface, pts, color, ink: int = 2) -> None:
-    pts = [_pt(p) for p in pts]
-    pygame.draw.polygon(surf, color, pts)
-    pygame.draw.polygon(surf, P.INK, pts, ink)
 
 
 def _shoe(surf: pygame.Surface, foot, facing: int) -> None:
@@ -439,6 +404,19 @@ def tunnel_visibility(f: Fighter) -> float:
     return min(1.0, (f.frame - f.startup - m.active + 1) / max(1, round(m.recovery * 0.6)))
 
 
+def strike_of(f: Fighter) -> tuple[str, tuple] | None:
+    """The joint an attack lands with and the colour its whole limb is lit in, from its
+    wind-up to the end of its active frames (a throw, both colours, is lit green), or None."""
+    m = f.move
+    if f.action != "attack" or m is None or f.phase not in ("startup", "active"):
+        return None
+    joint = STRIKER.get(m.name)
+    if joint is None:
+        return None
+    error = basis.error_for(m.colour, f.attack_basis)
+    return joint, GREEN if error == basis.Y else ERROR_COLOUR[error]
+
+
 # --- static art ----------------------------------------------------------------------------------
 
 
@@ -454,6 +432,7 @@ class Effect:
     life: int
     color: tuple = P.WHITE
     text: str = ""
+    facing: int = 1
 
 
 class Renderer:
@@ -581,6 +560,14 @@ class Renderer:
                 self.body_flash[e.player] = (colour, MEASURE_FLASH_FRAMES)
                 self.effects.append(Effect("collapse", f.x, FLOOR_Y - f.y - 60, COLLAPSE_FRAMES,
                                            COLLAPSE_FRAMES, BASIS_BODY[f.basis]))
+            elif e.kind == "box_collapse" and e.player and self._fight is not None:
+                f = self._fight.fighters[e.player]
+                fur = BASIS_BODY[f.basis]
+                real, other = f.boxes[f.box_real], f.boxes[1 - f.box_real]
+                self.effects.append(Effect("box_pop", real, FLOOR_Y, BOX_POP_FRAMES, BOX_POP_FRAMES, fur,
+                                           facing=f.facing))
+                self.effects.append(Effect("box_fade", other, FLOOR_Y, BOX_FADE_FRAMES, BOX_FADE_FRAMES, fur,
+                                           facing=f.facing))
             elif e.kind == "fizzle":          # a LASER reaching the floor
                 self.effects.append(Effect("spark", e.x, e.y - 3, SPARK_FRAMES // 2, SPARK_FRAMES // 2, P.WHITE))
             elif e.kind == "shockwave":
@@ -636,6 +623,11 @@ class Renderer:
                 r = round(46 * (1 - k)) + 4
                 pygame.draw.circle(surf, P.INK, _pt((fx.x + ox, fx.y + oy)), r + 1, 4)
                 pygame.draw.circle(surf, fx.color, _pt((fx.x + ox, fx.y + oy)), r, 2)
+            elif world and fx.kind == "box_pop":     # the box she is in, real cardboard
+                draw_collapse(surf, fx.x + ox, fx.y + oy, fx.facing, fx.color, age)
+            elif world and fx.kind == "box_fade":    # the other one dissolving in a dither
+                step = 1 + min(FADE_STEPS - 2, age * (FADE_STEPS - 1) // fx.life)
+                draw_holo_box(surf, fx.x + ox, fx.y + oy, fx.facing, fx.color, 0, step)
             elif world and fx.kind == "popup":
                 if fx.left < 10 and fx.left % 4 < 2:
                     continue
@@ -684,6 +676,8 @@ class Renderer:
     def _shadow(self, key: str, f: Fighter, ox: int, oy: int) -> None:
         """The shadow, ringed in the player's colour (P1 blue, P2 red, as the cabinet's sides):
         who is who, now that the bodies are the colours of their bases. Gone in a TUNNEL."""
+        if f.boxed:                 # the boxes stand in pools of their own light
+            return
         if f.action == "attack" and f.move is not None and f.move.tunnel and tunnel_visibility(f) <= 0:
             return
         w = max(18, 52 - f.y * 0.2)
@@ -701,6 +695,10 @@ class Renderer:
             body, accent = flash, P.WHITE
         elif f.action in ("hitstun", "knockdown") and f.frame < HIT_FLASH_FRAMES:
             body, accent = P.lighten(body, 0.6), P.WHITE
+        if f.boxed:                 # THE BOX: two holographic boxes, no body
+            self.trails[key].clear()
+            draw_superposed(self.surface, (f.boxes[0] + ox, f.boxes[1] + ox), FLOOR_Y + oy, f.facing, body, self.t)
+            return f.boxes[0], FLOOR_Y - 60.0
         feet = (f.x + ox, FLOOR_Y - f.y + oy)
         pose = self._pose(key, f)
         # a long coat blows out behind her as she moves, and trails in a jump
@@ -712,8 +710,10 @@ class Renderer:
             if seen < 1:
                 j = self._dissolved(pose, f, feet, body, accent, flare, seen)
                 return j["head"][0] - ox, j["head"][1] - oy
-        j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare)
+        j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare, strike=strike_of(f))
         self._striker(key, f, j)
+        if f.action == "attack" and m is not None and m.name == "SCRATCH" and f.phase == "active":
+            self._claws(f, j)
         if f.action == "attack" and m is not None and m.name == "LIGHT PILLAR":
             self._pillar(f, m, j, ox, oy)
         if f.action == "attack" and m is not None and m.projectile is not None and m.projectile.vy \
@@ -813,27 +813,38 @@ class Renderer:
         pygame.draw.circle(self.surface, P.INK, _pt((hx, hy)), r + 2)
         pygame.draw.circle(self.surface, P.lighten(colour, 0.4), _pt((hx, hy)), r)
 
+    def _claws(self, f: Fighter, j: dict) -> None:
+        """SCRATCH: three white claw marks in front of her paw on the first frames of each swipe."""
+        if (f.frame - f.startup) % f.move.hit_every >= 3:
+            return
+        hx, hy = j["hand_f"]
+        for k in (-6, 0, 6):
+            a = (hx + f.facing * 6, hy + k - 6)
+            b = (hx + f.facing * 16, hy + k + 6)
+            pygame.draw.line(self.surface, P.INK, _pt(a), _pt(b), 4)
+            pygame.draw.line(self.surface, P.WHITE, _pt(a), _pt(b), 2)
+
     def _striker(self, key: str, f: Fighter, j: dict) -> None:
         """The whole arm or leg an attack lands with is drawn in the attack's colour, from its
         wind-up to the end of its active frames, so a player sees before contact whether it
         will match; while it is live, its hand or foot leaves a fading trail. A throw (both
-        colours) is green outlined in purple. A repeating field (CHARGE NOISE) crackles instead."""
+        colours) is green outlined in purple. CHARGE NOISE crackles instead. A SELF_LIT build
+        drew its lit limb itself (ERWIN's cat leg): only the trail and the tip are added."""
         m = f.move
         trail = self.trails[key]
         if f.action != "attack" or m is None or f.phase not in ("startup", "active"):
             trail.clear()
             return
-        if m.hit_every:
+        if m.name == "CHARGE NOISE":
             trail.clear()
             self._charge_noise(f, m, j)
             return
-        joint = STRIKER.get(m.name)
-        if joint is None:
+        lit = strike_of(f)
+        if lit is None:
             trail.clear()
             return
-        error = basis.error_for(m.colour, f.attack_basis)
-        fill = GREEN if error == basis.Y else ERROR_COLOUR[error]
-        edge = PURPLE if error == basis.Y else P.INK
+        joint, fill = lit
+        edge = PURPLE if basis.error_for(m.colour, f.attack_basis) == basis.Y else P.INK
         surf = self.surface
         w = LIMB_W[f.char.build]
         if f.phase == "active":         # the trail, oldest first, under the limb
@@ -845,10 +856,11 @@ class Renderer:
                 pygame.draw.circle(surf, P.lighten(c, 0.5), p, r)
         else:
             trail.clear()
-        a, b, c = (j[name] for name in STRIKE_LIMB[joint])
-        limb(surf, a, b, w, fill, ink=edge)
-        limb(surf, b, c, w - 1, fill, ink=edge)
-        tip = _pt(c)
+        if f.char.build not in SELF_LIT:
+            a, b, c = (j[name] for name in STRIKE_LIMB[joint])
+            limb(surf, a, b, w, fill, ink=edge)
+            limb(surf, b, c, w - 1, fill, ink=edge)
+        tip = _pt(j[joint])
         r = w // 2 + (4 if f.phase == "active" else 2)
         pygame.draw.circle(surf, edge, tip, r + 2)
         pygame.draw.circle(surf, fill, tip, r)
@@ -929,7 +941,8 @@ class Renderer:
 
     def _boxes(self, fight: Fight, ox: int, oy: int) -> None:
         for f in fight.fighters.values():
-            pygame.draw.rect(self.surface, P.GOOD, pygame.Rect(f.hurtbox).move(ox, oy), 1)
+            for rect in (f.box_rects() if f.boxed else (f.hurtbox,)):
+                pygame.draw.rect(self.surface, P.GOOD, pygame.Rect(rect).move(ox, oy), 1)
             m = f.move
             if m is not None and m.hitbox is not None and f.phase == "active":
                 pygame.draw.rect(self.surface, P.BAD, pygame.Rect(f.world_box(m.hitbox)).move(ox, oy), 1)

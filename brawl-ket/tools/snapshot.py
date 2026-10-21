@@ -16,6 +16,8 @@ Writes:
   slam bounces), the landing shockwave just after it opens (green too: it bounces), and spread out;
 - bohr_noise_*.png: BOHR's CHARGE NOISE on a ROBERT: the wind-up sparks, and the field crackling;
 - bohr_measure.png: MEASURE connecting on a purple ROBERT, 3 frames on (the collapse into green);
+- moves_cat.png, erwin_*.png: ERWIN's moves; THE BOX superposed (green, then purple after a Y),
+  the collapse (0 and 3 frames on) and the swipe; a PHOTON measuring her; POUNCE and SCRATCH;
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
 - screen_*.png: the match flow: the title (and with QUIT picked), the attract demo, select (and
@@ -46,7 +48,7 @@ from brawl_ket import palette as P
 from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
-from brawl_ket.moves import BOHR, ROBERT
+from brawl_ket.moves import BOHR, ERWIN, ROBERT
 from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
 from brawl_ket.render import Renderer, draw_puppet, outlined
 
@@ -314,6 +316,51 @@ def screen_frames(out_dir: str) -> None:
     save(surface, out_dir, "screen_result.png")
 
 
+def erwin_frames(out_dir: str) -> None:
+    """ERWIN against a ROBERT: THE BOX and its collapse, a measurement, POUNCE and SCRATCH."""
+    from brawl_ket.fighter import IDLE, FighterInput
+
+    surface = pygame.Surface((W, H))
+    # THE BOX: split, switched to purple, then collapsed (seed 1: into box 1) with a swipe
+    fight, r = Fight({"p1": ERWIN, "p2": ROBERT}, seed=1), Renderer(surface)
+    presses = {0: FighterInput(x=True), 30: FighterInput(y=True), 60: FighterInput(a=True)}
+    saves = {18: "erwin_box", 40: "erwin_box_purple", 60: "erwin_collapse_0", 63: "erwin_collapse_3",
+             66: "erwin_swipe"}
+    for i in range(70):
+        r.draw_fight(fight, fight.step({"p1": presses.get(i, IDLE), "p2": IDLE}), {"p1": 0, "p2": 0})
+        if i in saves:
+            save(surface, out_dir, f"{saves[i]}.png")
+    # a PHOTON into box 2 measures her
+    fight, r, since = Fight({"p1": ERWIN, "p2": ROBERT}), Renderer(surface), None
+    for i in range(120):
+        events = fight.step({"p1": FighterInput(x=i == 0), "p2": FighterInput(x=i == 12)})
+        r.draw_fight(fight, events, {"p1": 0, "p2": 0})
+        if since is None and any(e.kind == "box_collapse" for e in events):
+            since = 0
+        elif since is not None:
+            since += 1
+        if since == 2:
+            save(surface, out_dir, "erwin_measured.png")
+            break
+    # POUNCE on a crouching ROBERT, mid-leap
+    fight, r = Fight({"p1": ERWIN, "p2": ROBERT}), Renderer(surface)
+    fight.fighters["p2"].x = fight.fighters["p1"].x + 150
+    for i in range(ERWIN.moves["crouch.X"].startup + 8):
+        r.draw_fight(fight, fight.step({"p1": FighterInput(down=True, x=i == 0), "p2": FighterInput(down=True)}),
+                     {"p1": 0, "p2": 0})
+    save(surface, out_dir, "erwin_pounce.png")
+    # SCRATCH from a short hop, on its first claw
+    fight, r = Fight({"p1": ERWIN, "p2": ROBERT}), Renderer(surface)
+    fight.fighters["p2"].x = fight.fighters["p1"].x + 44
+    erwin = fight.fighters["p1"]
+    for i in range(12):
+        inp = FighterInput(up=True) if i == 0 else FighterInput(x=i == 1)
+        r.draw_fight(fight, fight.step({"p1": inp, "p2": IDLE}), {"p1": 0, "p2": 0})
+        if erwin.phase == "active":
+            save(surface, out_dir, "erwin_scratch.png")
+            break
+
+
 def main(argv: list[str]) -> None:
     if len(argv) != 1:
         sys.exit(__doc__)
@@ -324,6 +371,8 @@ def main(argv: list[str]) -> None:
         save(pose_sheet(build), out_dir, f"poses_{build}.png")
     save(move_sheet(ROBERT), out_dir, "moves_lean.png")
     save(move_sheet(BOHR), out_dir, "moves_heavy.png")
+    save(move_sheet(ERWIN), out_dir, "moves_cat.png")
+    erwin_frames(out_dir)
     bohr_frames(out_dir)
     scripted_frames(out_dir)
     close_frame(out_dir)
