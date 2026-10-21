@@ -31,6 +31,7 @@ ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOH
 
 TITLE = "title"
 SELECT = "select"
+ROSTER_COLS = 5         # CHOOSE YOUR FIGHTER's portrait grid: this many to a row
 STAGE_SELECT = "stage_select"
 TUTORIAL = "tutorial"
 ROUND_INTRO = "round_intro"
@@ -80,6 +81,15 @@ class FrameInput:
     @property
     def pause(self) -> bool:
         return any(self.pauses.values())
+
+
+def grid_move(pick: int, dx: int, dy: int) -> int:
+    """CHOOSE YOUR FIGHTER's cursor: left and right go round the whole roster; up and down
+    move a row (ROSTER_COLS portraits), and stop at the grid's edge."""
+    if dx:
+        return (pick + dx) % len(ROSTER)
+    to = pick + dy * ROSTER_COLS
+    return to if 0 <= to < len(ROSTER) else pick
 
 
 class Match:
@@ -201,8 +211,8 @@ class Match:
             elif inp.confirms[p]:
                 self.ready[p] = True
                 events.append(Cue("blip"))
-            elif inp.nav[p][0]:
-                self.picks[p] = (self.picks[p] + inp.nav[p][0]) % len(ROSTER)
+            elif inp.nav[p][0] or inp.nav[p][1]:
+                self.picks[p] = grid_move(self.picks[p], *inp.nav[p])
                 events.append(Cue("blip"))
         # on once both are ready; back from the stage select both still are, and one A goes on
         if all(self.ready.values()) and inp.confirm:

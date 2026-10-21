@@ -125,6 +125,12 @@ PREVIEW_Y = 148                     # ... centred here
 CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are centred here
 BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 
+# CHOOSE YOUR FIGHTER's layout: each player's pick big on their side, the portrait strip below
+SIDE_X = 176                # px from the middle to each side's fighter
+SIDE_FLOOR = 178            # ... whose feet stand here
+PORTRAIT = 56               # a portrait tile, px square
+PORTRAIT_GAP = 8
+PORTRAIT_Y = 284            # the (last) row of portraits' top
 # the select screen: what each fighter is, in a line, and how its X moves are entered
 TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY", "PHOEBE": "TALL AND TRICKY",
           "ERWIN": "QUICK AND SLIPPERY", "DOS": "SLOW AND CLASSICAL"}
@@ -188,6 +194,25 @@ def outlined(text: str, size: int, color, outline=P.INK, thick: int = 1) -> pyga
 def legend_colours(f) -> dict[str, tuple]:
     """The colour each of a fighter's buttons hits in now: A its own basis's, B the other's."""
     return {"A": BASIS_BODY[f.basis], "B": BASIS_BODY[basis.hadamard(f.basis)]}
+
+
+@lru_cache(maxsize=16)
+def portrait(name: str) -> pygame.Surface:
+    """CHOOSE YOUR FIGHTER's portrait: the fighter's head and shoulders, cut from their own
+    drawing (idle, facing right, in green), PORTRAIT px square."""
+    from .moves import CHARACTERS
+    char = CHARACTERS[name]
+    big = pygame.Surface((200, 220), pygame.SRCALPHA)
+    j = draw_puppet(big, POSES["idle"], char.build, (100, 210), 1, GREEN, ACCENT.get(char.name, P.CREAM))
+    hx = round(j["head"][0])
+    # framed from just above the top of the head (ears and antennae included), whatever the build
+    column = pygame.mask.from_surface(big)
+    top = next(y for y in range(big.get_height()) if any(column.get_at((x, y)) for x in range(hx - 14, hx + 15)))
+    crop = pygame.Rect(0, 0, PORTRAIT, PORTRAIT)
+    crop.midtop = (hx, top - 4)
+    out = pygame.Surface((PORTRAIT, PORTRAIT), pygame.SRCALPHA)
+    out.blit(big, (0, 0), crop)
+    return out
 
 
 def panel_lines(char: Character) -> tuple[tuple[str, tuple], ...]:
@@ -1284,51 +1309,79 @@ class Renderer:
         blit_center(self.surface, outlined("DEMO", 8, P.MIST), (W / 2, 64))
 
     def _select(self, match: M.Match) -> None:
+        """CHOOSE YOUR FIGHTER, Street Fighter style: a strip of portraits at the bottom, one
+        cursor per player (P1 blue, P2 red; both can sit on one), and each player's pick big on
+        their side, facing the middle, with what it is and its specials."""
         self._backdrop()
-        self._call("CHOOSE YOUR FIGHTER", P.WHITE, y=24, size=16)
+        surf = self.surface
+        self._call("CHOOSE YOUR FIGHTER", P.WHITE, y=16, size=16)
         for key, side in (("p1", -1), ("p2", 1)):
-            self._select_panel(key, side, M.ROSTER[match.picks[key]], match.ready[key])
-        blit_center(self.surface, outlined("STICK: CHOOSE   A: READY   B: BACK", 8, P.MIST), (W / 2, H - 12))
+            self._select_side(key, side, M.ROSTER[match.picks[key]], match.ready[key])
+        blit_center(surf, outlined("VS", 32, P.GOLD, thick=2), (W / 2, 104))
+        self._portraits(match)
+        blit_center(surf, outlined("STICK: CHOOSE   A: READY   B: BACK", 8, P.MIST), (W / 2, H - 10))
 
-    def _select_panel(self, key: str, side: int, char: Character, ready: bool) -> None:
+    def _select_side(self, key: str, side: int, char: Character, ready: bool) -> None:
+        """One player's half: the fighter big, facing the middle (flexing once ready), the name,
+        what it is, and its three specials with the colour each one hits in."""
         surf = self.surface
         color = PLAYER_COLORS[key]
-        cx = W / 2 + side * 156
-        panel = pygame.Rect(0, 0, 296, 290)
-        panel.center = (round(cx), 186)
-        pygame.draw.rect(surf, P.INK, panel.inflate(4, 4), border_radius=8)
-        pygame.draw.rect(surf, P.NIGHT, panel, border_radius=7)
-        pygame.draw.rect(surf, color if ready else P.shade(color, 0.6), panel, 2, border_radius=7)
-        surf.blit(outlined(key.upper(), 8, color), (panel.x + 8, panel.y + 8))
-        # the fighter, facing the middle, flexing once ready
-        floor = panel.y + 176
-        rect = pygame.Rect(0, 0, 52, 8)
+        cx = W / 2 + side * SIDE_X
+        floor = SIDE_FLOOR
+        surf.blit(outlined(key.upper(), 8, color), (12 if side < 0 else W - 28, 32))
+        rect = pygame.Rect(0, 0, 60, 10)
         rect.center = (round(cx), floor + 2)
         pygame.draw.ellipse(surf, SHADOW, rect)
+        pygame.draw.ellipse(surf, color, rect, 2)
         draw_puppet(surf, POSES["jab_hit" if ready else "idle"], char.build, (cx, floor), -side, GREEN,
                     ACCENT.get(char.name, P.CREAM))
-        # the name between arrows (the arrows go once the pick is locked in)
-        name = outlined(char.name, 16, color, thick=2)
-        blit_center(surf, name, (cx, floor + 20))
-        if not ready:
-            nudge = 2 if (self.t // 15) % 2 else 0
-            for d in (-1, 1):
-                arrow = outlined("<" if d < 0 else ">", 16, P.WHITE, thick=2)
-                blit_center(surf, arrow, (cx + d * (name.get_width() / 2 + 18 + nudge), floor + 20))
-        # what it is: its code and its build
-        lines = panel_lines(char)
-        gap = 11 if len(lines) <= 3 else 10         # DOS's four lines still clear his moves
-        for i, (line, colour) in enumerate(lines):
-            blit_center(surf, outlined(line, 8, colour), (cx, floor + 36 + gap * i))
-        # the X moves: the buttons, the names, and the colour each one hits in
+        blit_center(surf, outlined(char.name, 16, color, thick=2), (cx, floor + 18))
+        blit_center(surf, outlined(TRAITS.get(char.name, ""), 8, P.MIST), (cx, floor + 34))
+        top = floor + 48
+        if char.copy_paste:                 # DOS: what his Y does, and his one colour, on one line
+            self._parts(((CLASSICAL_LINES[1] + "  ", P.MIST), (CLASSICAL_LINES[-1], BASIS_BODY[char.fixed_basis])),
+                        (cx, floor + 45))
+            top += 10
+        left = round(cx - 118)
         for i, (slot, how) in enumerate(X_INPUTS):
-            y = floor + 76 + 12 * i
+            y = top + 11 * i
             move = char.moves[slot]
-            surf.blit(outlined(how, 8, P.GOLD), (panel.x + 14, y))
-            surf.blit(outlined(move.name, 8, P.WHITE), (panel.x + 82, y))
-            self._colour_chip(move, (panel.right - 12, y + 4))
+            surf.blit(outlined(how, 8, P.GOLD), (left, y))
+            surf.blit(outlined(move.name, 8, P.WHITE), (left + 62, y))
+            self._colour_chip(move, (left + 236, y + 4))
         if ready:
-            self._stamp("READY!", (panel.right - 58, panel.y + 20), P.GOOD)
+            self._stamp("READY!", (cx + side * 64, floor - 120), P.GOOD)
+
+    def _portraits(self, match: M.Match) -> None:
+        """The roster as a strip (ROSTER_COLS to a row) of portraits, each fighter's head and
+        shoulders; the players' cursors frame their picks, P1's outside P2's when they share one,
+        each with its 1P / 2P tag, and turn solid once that player is ready."""
+        surf = self.surface
+        n = len(M.ROSTER)
+        cols = min(n, M.ROSTER_COLS)
+        rows = -(-n // M.ROSTER_COLS)
+        width = cols * PORTRAIT + (cols - 1) * PORTRAIT_GAP
+        x0 = round(W / 2 - width / 2)
+        y0 = PORTRAIT_Y - (rows - 1) * (PORTRAIT + PORTRAIT_GAP)
+        tiles = []
+        for i, char in enumerate(M.ROSTER):
+            tile = pygame.Rect(x0 + (i % M.ROSTER_COLS) * (PORTRAIT + PORTRAIT_GAP),
+                               y0 + (i // M.ROSTER_COLS) * (PORTRAIT + PORTRAIT_GAP), PORTRAIT, PORTRAIT)
+            tiles.append(tile)
+            picked = [k for k in PLAYERS if match.picks[k] == i]
+            pygame.draw.rect(surf, P.INK, tile.inflate(4, 4), border_radius=4)
+            pygame.draw.rect(surf, P.SLATE if picked else P.NIGHT, tile, border_radius=3)
+            surf.blit(portrait(char.name), tile)
+        blink = (self.t // 8) % 2
+        for key, inset, tag_side in (("p1", 0, -1), ("p2", 3, 1)):
+            tile = tiles[match.picks[key]]
+            colour = PLAYER_COLORS[key]
+            ring = tile.inflate(8 - 2 * inset, 8 - 2 * inset)
+            lit = colour if match.ready[key] or blink else P.lighten(colour, 0.6)     # blinks till ready
+            pygame.draw.rect(surf, P.INK, ring.inflate(2, 2), 4, border_radius=5)
+            pygame.draw.rect(surf, lit, ring, 3, border_radius=5)
+            tag = outlined(key[1] + "P", 8, colour)
+            surf.blit(tag, (ring.left - 2 if tag_side < 0 else ring.right - tag.get_width() + 2, ring.top - 11))
 
     def _stage_select(self, match: M.Match) -> None:
         """CHOOSE YOUR STAGE: a big preview of the backdrop, its name between arrows, and a

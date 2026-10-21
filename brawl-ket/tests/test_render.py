@@ -707,3 +707,24 @@ def test_the_title_still_shows_both_colours(surface):
     r.draw(M.Match(random.Random(1)), [])
     seen = {tuple(surface.get_at((x, y)))[:3] for x in range(440, 481, 2) for y in range(FLOOR_Y - 110, FLOOR_Y - 40, 2)}
     assert PURPLE in seen               # ERWIN on the right: DOS, last in the roster, can't be purple
+
+
+def test_every_fighter_has_a_portrait_framed_on_its_head():
+    from brawl_ket.render import PORTRAIT, portrait
+    for name in CHARACTERS:
+        img = portrait(name)
+        assert img.get_size() == (PORTRAIT, PORTRAIT)
+        rows = [y for y in range(PORTRAIT) if any(img.get_at((x, y))[3] for x in range(PORTRAIT))]
+        assert rows and rows[0] <= 6 and rows[-1] == PORTRAIT - 1, name   # the head at the top, the body to the bottom
+
+
+def test_choose_your_fighter_frames_both_picks_in_the_players_colours(surface):
+    import random
+    from brawl_ket import match as M
+    from brawl_ket.config import PLAYER_COLORS
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    m.state, m.picks, m.ready = M.SELECT, {"p1": 3, "p2": 4}, {"p1": True, "p2": True}
+    r.draw(m, [])
+    seen = {tuple(surface.get_at((x, y)))[:3] for x in range(0, surface.get_width(), 2) for y in range(270, 345, 2)}
+    assert PLAYER_COLORS["p1"] in seen and PLAYER_COLORS["p2"] in seen

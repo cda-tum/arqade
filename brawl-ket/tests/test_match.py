@@ -781,3 +781,22 @@ def test_the_demo_picks_its_fighters_from_all_five() -> None:
         m._start_attract()
         seen |= {f.char.name for f in m.attract.fighters.values()}
     assert len(ROSTER) == 5 and seen == {c.name for c in ROSTER}
+
+
+def test_the_fighter_cursor_goes_round_the_row_and_stops_at_the_grids_edge() -> None:
+    from brawl_ket.match import ROSTER, ROSTER_COLS, grid_move
+    last = len(ROSTER) - 1
+    assert grid_move(0, -1, 0) == last and grid_move(last, 1, 0) == 0      # left and right wrap
+    assert grid_move(2, 0, -1) == 2                                         # no row above
+    below = 2 + ROSTER_COLS
+    assert grid_move(2, 0, 1) == (below if below <= last else 2)            # a row down, if there is one
+
+
+def test_up_and_down_on_select_move_by_a_row() -> None:
+    m = Match(random.Random(1))
+    m.update(press("confirm"))
+    assert m.state == SELECT
+    before = m.picks["p1"]
+    m.update(FrameInput(activity=True, nav={"p1": (0, 1), "p2": (0, 0)}))
+    from brawl_ket.match import ROSTER, ROSTER_COLS
+    assert m.picks["p1"] == (before + ROSTER_COLS if before + ROSTER_COLS < len(ROSTER) else before)

@@ -14,7 +14,7 @@ too hard to read).
 - **The game:** five fighters (ROBERT, BOHR, PHOEBE, ERWIN and DOS), versus only, best of 3
   rounds of 60 s.
 - **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat; ERWIN, Schrodinger's cat; DOS, a walking all-in-one computer) at 640x360 (x3 on the cabinet), the
-  title (PLAY / QUIT) with a bot demo, character select, stage select, a HOW TO PLAY card,
+  title (PLAY / QUIT) with a bot demo, a portrait-grid fighter select, stage select, a HOW TO PLAY card,
   round calls and pause.
 - **Stages:** five backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
   for each match; the title demo always rolls), kept for all its rounds. Visual only:
@@ -67,8 +67,15 @@ colour from the wind-up on, so you see before contact whether it will match. A w
 
 ## The flow
 
-Title (PLAY / QUIT) -> character select -> CHOOSE YOUR STAGE -> **HOW TO PLAY** ->
+Title (PLAY / QUIT) -> CHOOSE YOUR FIGHTER -> CHOOSE YOUR STAGE -> **HOW TO PLAY** ->
 ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
+
+- **CHOOSE YOUR FIGHTER** is Street Fighter style: a strip of portraits along the
+  bottom (five to a row; up and down move a row once there are more), one cursor
+  per player (P1 blue, P2 red, both on one portrait if they pick the same fighter),
+  blinking until that player presses A. Each player's pick stands big on their side,
+  facing the middle, with what it is and its three specials. B un-readies, or goes
+  back to the title.
 
 - **The title** is a menu: the stick picks PLAY or QUIT, A takes it. QUIT ends
   the game at once, back to EmulationStation (or the launcher), the same way out
