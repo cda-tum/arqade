@@ -2,7 +2,7 @@
 
 Pure logic, no pygame. Its only randomness is THE BOX's 50/50s, drawn from the fight's own
 random.Random(seed): the same inputs and the same seed always give the same round. The
-fight drives two Fighters (fighter.py), spawns and moves the shots,
+fight drives two Fighters (fighter.py), spawns and moves the shots, keeps M-CUTIE's traps,
 resolves hitboxes against hurtboxes, turns each attack's colour rule into an error
 using its attacker's basis at the moment of the hit (basis.py), lets the defender's
 basis decide between damage and a block, applies the specials' twists, and reports
@@ -31,6 +31,10 @@ from .config import (
     STAGE_RIGHT,
     START_X,
     THROW_SLACK,
+    TRAP_ARM,
+    TRAP_LIFE,
+    TRAP_MAX,
+    TRAP_REACH,
 )
 from .fighter import IDLE, STUN_DECAY, Fighter, FighterInput
 from .moves import HIGH, LOW, Box, Character, Move
@@ -78,6 +82,35 @@ class Shot:
 
 
 @dataclass
+class Trap:
+    """M-CUTIE's ION TRAP on the floor: arming for its first TRAP_ARM frames, then armed until a
+    rival on the ground stands in it; then closed (used up), shown for the hold's length. Its
+    colour is the basis she was in when she set it, for good. Gone after TRAP_LIFE frames, or
+    when its owner is knocked down."""
+
+    owner: str
+    move: Move          # the hold it closes with; its hitbox is the catch box, round x
+    x: float
+    basis: str
+    age: int = 0        # frames since it was set
+    closed: int = 0     # > 0: closed, this many frames still shown
+    held: str | None = None     # ... on whom (None: on an empty box)
+
+    @property
+    def armed(self) -> bool:
+        return not self.closed and self.age >= TRAP_ARM
+
+    @property
+    def state(self) -> str:
+        return "closed" if self.closed else "armed" if self.armed else "arming"
+
+    @property
+    def box(self) -> Rect:
+        assert self.move.hitbox is not None
+        return _world_box(self.x, 0.0, 1, self.move.hitbox)
+
+
+@dataclass
 class _Landing:
     """A COLLAPSE-style shockwave window opened when a fighter lands."""
 
@@ -96,6 +129,7 @@ class _Strike:
     where: tuple[float, float]
     shot: Shot | None = None
     box: frozenset[int] | None = None   # THE BOX: which of the defender's boxes it touched
+    trap: Trap | None = None            # ION TRAP: the trap that closes
 
 
 def _world_box(x: float, y: float, facing: int, box: Box) -> Rect:
@@ -155,6 +189,7 @@ class Fight:
             f.body_width = self.body_width
             f.rng = self.rng
         self.shots: list[Shot] = []
+        self.traps: list[Trap] = []         # M-CUTIE's, oldest first
         self.frames_left = ROUND_FRAMES
         self.hitstop = 0
         self.over = False
@@ -181,6 +216,7 @@ class Fight:
         self._move_shots(events)
         self._catch(events)
         self._resolve_hits(events)
+        self._step_traps()
         self.frames_left -= 1
         self._check_end(events)
         return events
@@ -201,7 +237,8 @@ class Fight:
                     assert proj is not None
                     speed = proj.speed
                     if data.get("paste"):   # PASTE: level, from his drive slot, in the colour it was fired in
-                        y, vy, shot_basis = f.y + DRIVE_SLOT_Y - proj.box.y, 0.0, data["basis"]
+                        slot_y = f.y if proj.floor else f.y + DRIVE_SLOT_Y - proj.box.y    # a wave stays on the floor
+                        y, vy, shot_basis = slot_y, 0.0, data["basis"]
                         speed = max(speed, PASTE_SPEED)     # a pasted BOX DROP flies too
                     else:
                         y, vy, shot_basis = f.y, proj.vy, f.attack_basis
@@ -210,6 +247,8 @@ class Fight:
                         speed * f.facing, proj.lifetime, shot_basis, vy,
                     ))
                     events.append(Event("projectile", key))
+                elif kind == "trap":
+                    self._set_trap(key, f, data["move"])
                 else:
                     events.append(Event(kind, key))
                     if kind == "land" and data["dive"] and f.move is not None \
@@ -248,17 +287,48 @@ class Fight:
                 s.life = 0
                 left, _, w, _ = s.box
                 events.append(Event("fizzle", s.owner, None, left + w / 2, FLOOR_Y))
-        # shots of different owners cancel each other, with no event
+        # shots of different owners cancel each other, with no event; a wave on the floor
+        # (M-CUTIE's) cancels any rival shot across its whole column, whatever its height
         dead: set[int] = set()
         for i, s in enumerate(self.shots):
             for j in range(i + 1, len(self.shots)):
                 t = self.shots[j]
-                if s.owner != t.owner and _overlap(s.box, t.box) is not None:
+                if s.owner != t.owner and _overlap(_cancel_box(s), _cancel_box(t)) is not None:
                     dead.update((i, j))
         self.shots = [
             s for i, s in enumerate(self.shots)
             if i not in dead and s.life > 0 and not self._off_stage(s)
         ]
+
+    def _set_trap(self, key: str, f: Fighter, move: Move) -> None:
+        """ION TRAP: a trap on the floor TRAP_REACH px in front of her, in her colour; a third
+        of hers replaces the oldest."""
+        assert move.trap is not None
+        mine = [t for t in self.traps if t.owner == key and not t.closed]
+        if len(mine) >= TRAP_MAX:
+            self.traps.remove(mine[0])
+        self.traps.append(Trap(key, move.trap, _clamp(f.x + f.facing * TRAP_REACH), f.attack_basis))
+
+    def _step_traps(self) -> None:
+        """Traps age; a closed one shows for its hold, then goes; all of a knocked-down owner's
+        go at once, and an open one after TRAP_LIFE frames."""
+        kept = []
+        for t in self.traps:
+            if self.fighters[t.owner].action == "knockdown":
+                continue
+            t.age += 1
+            if t.closed:
+                t.closed -= 1
+                if t.closed == 0:
+                    continue
+            elif t.age >= TRAP_LIFE:
+                continue
+            kept.append(t)
+        self.traps = kept
+
+    def _close(self, trap: Trap, held: str | None, events: list[Event]) -> None:
+        trap.closed, trap.held = trap.move.hitstun, held
+        events.append(Event("trap_close", held, None, trap.x, FLOOR_Y))
 
     @staticmethod
     def _off_stage(s: Shot) -> bool:
@@ -312,7 +382,26 @@ class Fight:
             if touch is not None:
                 strikes.append(_Strike(None, s.owner, rival_key, s.move, s.facing, touch[0], s, box=touch[1]))
 
+        caught: set[str] = set()
+        for t in self.traps:
+            rival_key = _other(t.owner)
+            target = self.fighters[rival_key]
+            # a rival on the ground and free to move (one reeling across it is caught once they
+            # come to rest in it); not one tunnelling, getting up or knocked down
+            if not t.armed or rival_key in caught or target.y > 0 or target.action in _STUNNED \
+                    or target.wakeup or target.intangible:
+                continue
+            touch = self._touch(t.box, target)
+            if touch is not None:
+                caught.add(rival_key)
+                side = 1 if target.x >= t.x else -1
+                strikes.append(_Strike(None, t.owner, rival_key, t.move, side, touch[0], box=touch[1], trap=t))
+
+        traps = [st.trap for st in strikes if st.trap is not None]
         strikes = self._measure(strikes, events)
+        for t in traps:         # a trap that measured a box and found him in the other closes empty
+            if not any(st.trap is t for st in strikes):
+                self._close(t, None, events)
 
         # Every strike was found against the state at the start of the resolution,
         # so a trade (both fighters connecting on the same frame) applies both.
@@ -385,9 +474,12 @@ class Fight:
         # The colour rule against the basis the attack started in: a move's colour is fixed
         # when it starts (a switch mid-swing doesn't recolour it), as its limb has shown; a
         # shot keeps the colour it was fired in, a shockwave its slam's.
-        attack_basis = st.shot.basis if st.shot is not None else owner.attack_basis
+        attack_basis = st.shot.basis if st.shot is not None else st.trap.basis if st.trap is not None \
+            else owner.attack_basis
         error = basis.error_for(m.colour, attack_basis)
         result = defender.take_hit(m, error, st.from_facing)
+        if st.trap is not None:             # ION TRAP: it closes round them, hurt or not
+            self._close(st.trap, st.defender, events)
         if defender.char.copy_paste:        # DOS hit: his mouse's cable is cut
             self.shots = [s for s in self.shots if not (s.owner == st.defender and s.move.pull)]
         if m.pull and st.shot is not None:  # MOUSE CABLE: reeled in to just in front of him, hit or not
@@ -492,6 +584,15 @@ class Fight:
             self.over = True
             events.append(Event("timeout"))
             self.winner = None if h1 == h2 else ("p1" if h1 > h2 else "p2")
+
+
+def _cancel_box(s: Shot) -> Rect:
+    """The box a shot cancels a rival's with: its own, or for a wave on the floor its whole
+    column, floor to sky."""
+    left, top, w, h = s.box
+    if s.move.projectile is not None and s.move.projectile.floor:
+        return (left, 0.0, w, float(FLOOR_Y))
+    return (left, top, w, h)
 
 
 def _clamp(x: float) -> float:

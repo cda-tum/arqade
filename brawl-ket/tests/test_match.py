@@ -760,9 +760,9 @@ def test_dos_starts_every_round_with_an_empty_clipboard() -> None:
     assert m.state == ROUND_INTRO and m.fight.fighters["p1"].clipboard is None
 
 
-def test_choose_your_fighter_cycles_through_all_five_in_order() -> None:
+def test_choose_your_fighter_cycles_through_all_six_in_order() -> None:
     from brawl_ket.match import ROSTER
-    order = ["ROBERT", "BOHR", "PHOEBE", "ERWIN", "DOS"]
+    order = ["ROBERT", "BOHR", "PHOEBE", "ERWIN", "DOS", "M-CUTIE"]
     assert [c.name for c in ROSTER] == order
     m = Match(random.Random(1))
     m.update(press("confirm"))
@@ -773,14 +773,14 @@ def test_choose_your_fighter_cycles_through_all_five_in_order() -> None:
     assert seen == order and m.picks["p1"] == 0         # and round again
 
 
-def test_the_demo_picks_its_fighters_from_all_five() -> None:
+def test_the_demo_picks_its_fighters_from_all_six() -> None:
     from brawl_ket.match import ROSTER
     m = Match(random.Random(3))
     seen = set()
     for _ in range(40):
         m._start_attract()
         seen |= {f.char.name for f in m.attract.fighters.values()}
-    assert len(ROSTER) == 5 and seen == {c.name for c in ROSTER}
+    assert len(ROSTER) == 6 and seen == {c.name for c in ROSTER}
 
 
 def test_the_fighter_cursor_goes_round_the_row_and_stops_at_the_grids_edge() -> None:
@@ -800,3 +800,14 @@ def test_up_and_down_on_select_move_by_a_row() -> None:
     m.update(FrameInput(activity=True, nav={"p1": (0, 1), "p2": (0, 0)}))
     from brawl_ket.match import ROSTER, ROSTER_COLS
     assert m.picks["p1"] == (before + ROSTER_COLS if before + ROSTER_COLS < len(ROSTER) else before)
+
+
+def test_m_cutie_starts_every_round_with_no_traps() -> None:
+    from brawl_ket.fight import Trap
+    from brawl_ket.moves import M_CUTIE, TRAP_HOLD
+    m = Match(random.Random(1))
+    to_fight(m, p1=5)
+    assert m.fight.fighters["p1"].char is M_CUTIE and m.fight.traps == []
+    m.fight.traps.append(Trap("p1", TRAP_HOLD, 300.0, "Z"))
+    ko(m, "p2")
+    assert m.state == ROUND_INTRO and m.fight.traps == []

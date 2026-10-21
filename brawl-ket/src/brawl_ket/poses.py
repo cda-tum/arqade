@@ -120,6 +120,13 @@ POSES: dict[str, Pose] = {
     "stomp": Pose(0, 8, 0, -8, 0, 130, 160, -130, -160),
     # DOS's COPY: both fists up in front of the case, holding up the CTRL+C frame
     "copy": Pose(4, 26, -4, -24, -12, 105, 120, 95, 115),
+    # M-CUTIE's stand.X AMPLITUDE AMPLIFICATION, charging: hands cupped together in front of her
+    # chest (her approved look's CHARGE); the wave leaves with PHOTON's push ("cast")
+    "charge": Pose(2, 26, -4, -24, -12, 62, 150, 52, 158),
+    # M-CUTIE's crouch.X ION TRAP: crouched, the front hand reaching down to set it on the floor
+    "place": Pose(28, 95, -4, 30, -86, 40, 15, 30, 155),
+    # M-CUTIE's air.X SPIN: in the air, the front leg straight out, arms flung wide (the look's SPIN)
+    "spin": Pose(-4, 92, 92, 24, -60, 60, 150, 30, 150),
 }
 POSE_NAMES = tuple(POSES)
 
@@ -132,10 +139,12 @@ BUILD_BONES = {
     "cat": {"torso": 24, "neck": 7, "thigh": 15, "shin": 18, "upper_arm": 12, "forearm": 12},
     # DOS: a tall case on short legs, stubby arms; his "head" joint is the top of the case
     "dos": {"torso": 33, "shoulder": 15, "thigh": 14, "shin": 15, "upper_arm": 10, "forearm": 10, "neck": 4.5},
+    # M-CUTIE: PHOEBE's long-limbed build, a little shorter in the body and legs, thinner limbs
+    "cutie": {"torso": 22, "shoulder": 19, "thigh": 17, "shin": 17, "upper_arm": 12, "forearm": 12, "neck": 7},
 }
-SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1, "cat": 2.1, "dos": 2.2}     # the mockup's proportions: about 130 px tall
-HEAD_R = {"lean": 13, "heavy": 15, "toy": 14, "cat": 17, "dos": 15}
-LIMB_W = {"lean": 12, "heavy": 16, "toy": 12, "cat": 13, "dos": 13}
+SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1, "cat": 2.1, "dos": 2.2, "cutie": 2.1}   # the mockup's proportions: about 130 px tall
+HEAD_R = {"lean": 13, "heavy": 15, "toy": 14, "cat": 17, "dos": 15, "cutie": 15}
+LIMB_W = {"lean": 12, "heavy": 16, "toy": 12, "cat": 13, "dos": 13, "cutie": 12}
 CASE_TILT = 0.3         # DOS's case leans only this much of a pose's lean: the legs do the work
 LEAN_SCALE = {"dos": CASE_TILT}
 # DOS's arms come out of the case's sides, under the screen: each arm's joints move `front` px
@@ -270,6 +279,8 @@ def _action_pose(f: Fighter) -> Pose:
         return lerp(POSES["walk1"], POSES["walk2"], _smooth(k if k <= 1 else 2 - k))
     if a == "jump":
         return POSES["jump"]
+    if a == "charging":         # AMPLITUDE AMPLIFICATION: held, hands cupped, while it charges
+        return POSES["charge"]
     if a == "hitstun":
         if f.stun <= EASE_FRAMES:
             return lerp(_stance_pose(f), POSES["hitstun"], f.stun / (EASE_FRAMES + 1))

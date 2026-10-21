@@ -21,7 +21,7 @@ from brawl_ket.poses import (
 
 BUILDS = tuple(SCALE)
 FEET = (320.0, float(FLOOR_Y))
-ACTIONS = ("idle", "walk", "crouch", "jump", "attack", "hitstun", "knockdown", "boxed")
+ACTIONS = ("idle", "walk", "crouch", "jump", "attack", "hitstun", "knockdown", "boxed", "charging")
 KEYS = {"hip", "neck", "head", "shoulder_f", "elbow_f", "hand_f", "shoulder_b", "elbow_b",
         "hand_b", "knee_f", "foot_f", "knee_b", "foot_b"}
 
@@ -232,6 +232,7 @@ STRIKER = {
     "MEASURE": "hand_f", "CHARGE NOISE": "hand_f", "COLLAPSE": "foot_f",
     "LIGHT PILLAR": "hand_f",
     "POUNCE": "hand_f", "CRT DROP": "foot_f",
+    "SPIN": "foot_f",
 }
 REACH = 12      # px: a joint is drawn with a fist/foot about this big around it
 
@@ -332,3 +333,14 @@ def test_dos_leans_only_a_little_and_his_arms_come_out_of_the_case():
     assert idle["foot_f"] == plain["foot_f"] and idle["hand_f"][0] > plain["hand_f"][0] + 20
     for name in POSE_NAMES:                 # every other build is drawn on joints() itself
         assert drawn_joints(POSES[name], "lean", FEET, 1) == joints(POSES[name], "lean", FEET, 1)
+
+
+def test_m_cutie_charges_with_her_hands_cupped_in_front_of_her():
+    from brawl_ket.moves import M_CUTIE
+    f = Fighter(M_CUTIE, FEET[0], 1)
+    f.action = "charging"
+    for frame in range(20):
+        f.frame = frame
+        assert pose_for(f) == POSES["charge"]
+    j = joints(POSES["charge"], "cutie", FEET, 1)
+    assert j["hand_f"][0] > j["shoulder_f"][0] + 20 and j["hand_f"][1] < j["shoulder_f"][1]

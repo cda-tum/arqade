@@ -8,7 +8,7 @@ at 60 Hz.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 
 from . import config
@@ -39,6 +39,8 @@ class Projectile:
     box: Box
     lifetime: int
     vy: float = 0.0                     # px per frame up (< 0: down, like PHOEBE's LASER)
+    floor: bool = False                 # it runs along the floor (M-CUTIE's wave): a PASTE keeps it
+                                        # there, and it cancels any rival shot it meets across (fight.py)
 
 
 @dataclass(frozen=True)
@@ -86,12 +88,18 @@ class Move:
     pull: bool = False                  # its shot reels the rival in, hit or bounced (MOUSE CABLE: fight.py)
     catch: Box | None = None            # COPY: the window that catches a rival's shot or field (fight.py, _catch)
     paste: bool = False                 # PASTE: fires the clipboard's shot on its first active frame
+    # AMPLITUDE AMPLIFICATION: the press starts a charge ("charging", fighter.py) that every
+    # further X press grows a step; it fires charge[steps - 1], one wave per step
+    charge: tuple[Move, ...] = ()
+    trap: Move | None = None            # ION TRAP: sets a trap (fight.py, Trap) that closes with this move
+    hold: bool = False                  # a trap's hold: hitstun with no push at all, hurt or not
+    floor_recovery: bool = False        # SPIN: its recovery waits for the floor (a miss lands into it)
 
 
 @dataclass(frozen=True)
 class Character:
     name: str
-    build: str                          # "lean" / "heavy" / "toy" / "cat" / "dos" (poses scale)
+    build: str                          # "lean" / "heavy" / "toy" / "cat" / "dos" / "cutie" (poses scale)
     health: int
     walk: float
     jump_vy: float
@@ -488,10 +496,11 @@ DOS = Character(
     }),
     extra=MappingProxyType({
         # Y with an empty clipboard: a CTRL+C window in front of him for 0.2 s; a rival's shot
-        # that meets it is caught (fight.py). A miss leaves him 0.3 s of recovery.
+        # that meets it is caught (fight.py). A miss leaves him 0.3 s of recovery. The window
+        # starts 16 px up: low enough for M-CUTIE's smallest wave (20 px), above the mouse's 16.
         "copy": Move(
             "COPY", 2, 12, 18, None, OWN, MID,
-            damage=0, hitstun=1, knockback=0.0, kind="special", catch=Box(14, 20, 40, 110),
+            damage=0, hitstun=1, knockback=0.0, kind="special", catch=Box(14, 16, 40, 114),
             poses=("copy", "copy", "idle"),
         ),
         # Y with a shot in the clipboard: fired straight ahead from his drive slot, at its own
@@ -504,4 +513,68 @@ DOS = Character(
     }),
 )
 
-CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE, "ERWIN": ERWIN, "DOS": DOS}
+# AMPLITUDE AMPLIFICATION's waves, one per step: (height px, damage). Taller with every step, from
+# the floor up, so a small one can be jumped and a big one hardly; MID, so a crouch never ducks it.
+AMP_STEPS = ((20, 7), (28, 8), (36, 10), (44, 11), (52, 13), (60, 15))
+
+
+def _wave(step: int, height: int, damage: int) -> Move:
+    """The wave fired at `step`: a microwave drive pulse along the floor, a little slower than
+    PHOTON, its box as wide as the pulse's bright middle (cutie.py draws it)."""
+    w = 2 * round((12 + 0.42 * height) / 2)
+    return Move(
+        "AMPLITUDE AMPLIFICATION", 3, 1, 16, None, OWN, MID,
+        damage=damage, hitstun=18, knockback=3.0,
+        kind="projectile", cooldown=config.frames(2.0), cue=f"wave{step}",
+        projectile=Projectile(3.5, Box(-w // 2, 0, w, height), 180, floor=True),
+        poses=("charge", "cast", "cast"),
+    )
+
+
+AMP_WAVES = tuple(_wave(n, h, d) for n, (h, d) in enumerate(AMP_STEPS, start=1))
+
+# ION TRAP's hold, round the trap's x: it closes on a rival on the ground who steps between its
+# electrodes (LOW: a jump clears it) and holds them for 0.5 s, with no push. The colour rule
+# decides the damage, not the hold.
+TRAP_HOLD = Move(
+    "ION TRAP", 1, 1, 1, Box(-18, 0, 36, 26), OWN, LOW,
+    damage=4, hitstun=config.frames(0.5), knockback=0.0, hold=True, kind="special",
+)
+
+M_CUTIE = Character(
+    name="M-CUTIE",
+    build="cutie",
+    health=105,                         # in the middle
+    walk=1.8,                           # a little slower than ROBERT
+    jump_vy=11.5,
+    gravity=0.5,                        # an apex of about 132 px: in the middle
+    hurt_stand=Box(-16, 0, 32, 116),    # a little shorter than ROBERT, and wider: her cage skirt
+    hurt_crouch=Box(-18, 0, 36, 92),    # is 60 px across at its hem
+    moves=MappingProxyType({
+        **{slot: ROBERT.moves[slot] for slot in NORMALS},   # the shared normals, as ROBERT's
+        # Each X press is a step: the first starts the charge, she stands still, and the wave
+        # fires CHARGE_WAIT frames after the last press or at once at CHARGE_CAP. A hit loses it.
+        # The slot's own numbers are the 1-step wave's.
+        "stand.X": replace(AMP_WAVES[0], charge=AMP_WAVES),
+        # A trap on the floor TRAP_REACH px in front of her (fight.py, Trap): it arms after
+        # TRAP_ARM frames and closes on the first rival on the ground who steps in.
+        "crouch.X": Move(
+            "ION TRAP", 10, 1, 14, None, OWN, LOW,
+            damage=0, hitstun=1, knockback=0.0,
+            kind="special", trap=TRAP_HOLD, cooldown=config.frames(1.0), cue="trap_set",
+            poses=("crouch", "place", "crouch"),
+        ),
+        # She stops falling and spins forward at her height, the front leg out: 24 frames at
+        # 4 px a frame (96 px), hitting every 8 (at most three times). Then she drops, and the
+        # recovery waits for the floor.
+        "air.X": Move(
+            "SPIN", 4, 24, 10, Box(6, 34, 66, 34), OWN, MID,
+            damage=4, hitstun=10, knockback=1.0, hit_every=8, lunge=4.0,
+            kind="special", hover=True, once_per_jump=True, floor_recovery=True, cue="spin",
+            poses=("jump", "spin", "jump"),
+        ),
+    }),
+)
+
+CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE, "ERWIN": ERWIN, "DOS": DOS,
+                                    "M-CUTIE": M_CUTIE}

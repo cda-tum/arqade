@@ -168,6 +168,10 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 "box_split": "box_split", "box_collapse": "box_collapse", "pounce": "pounce", "box_drop": "box_drop",
                 "floppy": "floppy", "mouse": "mouse", "crt_drop": "crt_drop", "copy": "copy",
                 "paste": "paste",
+                # M-CUTIE (stand-ins until her own sounds: Task 3); "trap" is the fighter's own,
+                # which the fight turns into a trap on the floor
+                **{f"charge{n}": None for n in range(1, 7)}, **{f"wave{n}": "photon" for n in range(1, 7)},
+                "trap": None, "trap_set": "blip", "trap_close": None, "spin": "swing",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw
               "laser": "photon",    # a LASER is a projectile too: its zap, not the photon's

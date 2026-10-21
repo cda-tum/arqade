@@ -44,7 +44,7 @@ def share(a: str, b: str) -> float:
 
 
 def test_every_new_pairing_is_checked():
-    assert len(PAIRS) == 7          # ERWIN against the other four, DOS against the first three
+    assert len(PAIRS) == 9          # ERWIN against the other five, DOS against the four besides ERWIN
 
 
 @pytest.mark.parametrize("pair", PAIRS, ids="-".join)

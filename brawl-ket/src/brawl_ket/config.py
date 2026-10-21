@@ -38,6 +38,12 @@ DRIVE_SLOT_Y = 80        # DOS: FLOPPY and a PASTE leave his drive slot this hig
 COPY_CAUGHT_RECOVERY = 6  # ... and a COPY that catches a shot recovers in this many frames (a miss: all 18)
 PASTE_SPEED = 4.0        # ... and a PASTE flies at least this fast, px per frame (a falling BOX DROP has
                          # next to no speed of its own across)
+CHARGE_CAP = 6           # AMPLITUDE AMPLIFICATION: M-CUTIE's wave grows to at most this many steps
+CHARGE_WAIT = frames(0.25)  # ... and fires this long after her last X press (15 frames), or at once at the cap
+TRAP_REACH = 70          # ION TRAP: she sets it this far in front of her, px
+TRAP_ARM = frames(0.3)   # ... it arms this long after it is set (18 frames)
+TRAP_LIFE = frames(10.0)  # ... and is gone this long after (600 frames), if nobody stepped in
+TRAP_MAX = 2             # ... at most this many of hers at once: one more replaces the oldest
 ROUNDS_TO_WIN = 2
 HITSTOP = 5
 HITSTOP_KNOCKDOWN = 10   # a hit that knocks down freezes the fight a little longer

@@ -6,7 +6,7 @@ from brawl_ket import config
 from brawl_ket.fight import SHOT_SPAWN_OFFSET
 from brawl_ket.basis import BOTH, OPPOSITE, OWN, Z_BASIS
 from brawl_ket.moves import HIGH, LOW, MID
-from brawl_ket.moves import CHARACTERS, DOS, ERWIN, NORMALS, PHOEBE, ROBERT, SLOTS, Box
+from brawl_ket.moves import AMP_WAVES, CHARACTERS, DOS, ERWIN, M_CUTIE, NORMALS, PHOEBE, ROBERT, SLOTS, TRAP_HOLD, Box
 
 
 def all_moves():
@@ -49,6 +49,7 @@ STARTUPS = {   # spec section 3: (A, B on its own, B cancelled from a hit A)
     "PHOEBE": (5, 11, 8),
     "ERWIN": (4, 10, 7),
     "DOS": (8, 13, 9),
+    "M-CUTIE": (4, 10, 7),
 }
 
 
@@ -90,9 +91,11 @@ DAMAGE = {"A": 4, "B": 8, "X": 10, "throw": 10}     # spec section 1; MEASURE 12
 
 # by name: the specials whose damage isn't a special's 10 (MEASURE 12; TUNNEL only moves her; LASER a
 # little less; CHARGE NOISE a shock; THE BOX itself nothing, its swipe 8; BOX DROP a light box;
-# MOUSE CABLE a tap: its pull is the point)
+# MOUSE CABLE a tap: its pull is the point; AMPLITUDE AMPLIFICATION its 1-step wave (7 to 15 by
+# step); ION TRAP sets a trap, which holds for 4; SPIN 4 a hit)
 SPECIAL_DAMAGE = {"MEASURE": 12, "TUNNEL": 0, "LASER": 8, "CHARGE NOISE": 3, "THE BOX": 0, "BOX DROP": 8,
-                  "FLOPPY": 9, "MOUSE CABLE": 6, "CRT DROP": 12}
+                  "FLOPPY": 9, "MOUSE CABLE": 6, "CRT DROP": 12, "AMPLITUDE AMPLIFICATION": 7, "ION TRAP": 0,
+                  "SPIN": 4}
 
 
 def test_the_damage():
@@ -106,7 +109,7 @@ def test_the_damage():
 
 def test_health():
     assert {c.name: c.health for c in CHARACTERS.values()} == {
-        "ROBERT": 100, "BOHR": 115, "PHOEBE": 95, "ERWIN": 90, "DOS": 125}
+        "ROBERT": 100, "BOHR": 115, "PHOEBE": 95, "ERWIN": 90, "DOS": 125, "M-CUTIE": 105}
 
 
 def test_photon_has_a_cooldown():
@@ -135,7 +138,7 @@ def test_a_projectile_move_and_only_one_has_a_projectile():
 def test_only_a_projectile_has_no_hitbox():
     for c, slot, m in all_moves():
         if m.hitbox is None:
-            assert m.kind == "projectile" or m.tunnel or m.superpose, (c.name, slot)
+            assert m.kind == "projectile" or m.tunnel or m.superpose or m.trap is not None, (c.name, slot)
 
 
 def test_a_dive_is_only_ever_an_air_move():
@@ -254,8 +257,12 @@ SPECIALS = {   # (character, slot): (colour rule, height, twists): every special
     ("DOS", "stand.X"): (OWN, HIGH, ()),
     ("DOS", "crouch.X"): (OWN, LOW, ("pull",)),
     ("DOS", "air.X"): (OWN, MID, ()),
+    ("M-CUTIE", "stand.X"): (OWN, MID, ("charge",)),
+    ("M-CUTIE", "crouch.X"): (OWN, LOW, ("trap",)),
+    ("M-CUTIE", "air.X"): (OWN, MID, ("hit_every", "hover", "floor_recovery")),
 }
-TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover", "superpose", "leap", "pull")
+TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover", "superpose", "leap", "pull",
+          "charge", "trap", "floor_recovery")
 
 
 def test_the_specials_colours_and_twists():
@@ -268,7 +275,8 @@ def test_the_specials_colours_and_twists():
                      "BOHR": ["MEASURE", "CHARGE NOISE", "COLLAPSE"],
                      "PHOEBE": ["LIGHT PILLAR", "TUNNEL", "LASER"],
                      "ERWIN": ["THE BOX", "POUNCE", "BOX DROP"],
-                     "DOS": ["FLOPPY", "MOUSE CABLE", "CRT DROP"]}
+                     "DOS": ["FLOPPY", "MOUSE CABLE", "CRT DROP"],
+                     "M-CUTIE": ["AMPLITUDE AMPLIFICATION", "ION TRAP", "SPIN"]}
 
 
 def test_only_specials_have_twists():
@@ -363,3 +371,35 @@ def test_copy_and_paste_numbers():
     copy, paste = DOS.extra["copy"], DOS.extra["paste"]
     assert copy.catch is not None and copy.active == config.frames(0.2) and copy.recovery == config.frames(0.3)
     assert paste.paste and paste.startup <= 6 and paste.recovery <= 12
+
+
+# --- M-CUTIE ---------------------------------------------------------------------------------
+
+
+def test_m_cutie_stats():
+    m = CHARACTERS["M-CUTIE"]
+    assert (m.build, m.health, m.walk, m.jump_vy, m.gravity) == ("cutie", 105, 1.8, 11.5, 0.5)
+    assert m.walk < ROBERT.walk and m.fixed_basis is None and not m.copy_paste
+    healths = sorted(c.health for c in CHARACTERS.values())
+    apexes = sorted(apex(c) for c in CHARACTERS.values())
+    assert healths[0] < m.health < healths[-1] and apexes[0] < apex(m) < apexes[-1]    # in the middle
+    for slot in NORMALS:
+        assert m.moves[slot] is ROBERT.moves[slot], slot
+
+
+def test_m_cutie_specials():
+    amp, trap, spin = (M_CUTIE.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+    # AMPLITUDE AMPLIFICATION: six waves on the floor, each its own move; the slot is the first
+    assert amp.charge == AMP_WAVES and len(AMP_WAVES) == config.CHARGE_CAP
+    assert (amp.name, amp.damage, amp.projectile) == (AMP_WAVES[0].name, 7, AMP_WAVES[0].projectile)
+    for w in AMP_WAVES:
+        assert w.projectile.floor and w.projectile.box.y == 0 and w.projectile.speed == 3.5
+        assert (w.colour, w.height, w.cooldown) == (OWN, MID, config.frames(2.0))
+    # ION TRAP: no hitbox of its own; the trap's hold is LOW (a jump clears it), 4, 0.5 s, no push
+    assert trap.trap is TRAP_HOLD and trap.cooldown == config.frames(1.0) and trap.hitbox is None
+    assert (TRAP_HOLD.damage, TRAP_HOLD.height, TRAP_HOLD.hitstun, TRAP_HOLD.knockback) == (4, LOW, 30, 0.0)
+    assert TRAP_HOLD.hold and TRAP_HOLD.colour == OWN
+    # SPIN: hangs and spins forward, three hits at most, once per jump
+    assert spin.hover and spin.lunge and spin.once_per_jump and spin.floor_recovery
+    assert (spin.damage, spin.height) == (4, MID) and -(-spin.active // spin.hit_every) == 3
+    assert 90 <= spin.lunge * spin.active <= 110     # about 100 px

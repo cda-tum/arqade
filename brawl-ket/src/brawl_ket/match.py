@@ -27,7 +27,7 @@ from .moves import CHARACTERS
 from .tutorial import Lesson
 
 PLAYERS = ("p1", "p2")
-ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOHR, PHOEBE, ERWIN, DOS
+ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOHR, PHOEBE, ERWIN, DOS, M-CUTIE
 
 TITLE = "title"
 SELECT = "select"

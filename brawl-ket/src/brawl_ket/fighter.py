@@ -5,6 +5,8 @@ a FighterInput per frame, resolves hitboxes, works out each hit's error from the
 attack's colour rule (basis.py) and calls take_hit, which hurts only if the error
 changes the fighter's basis state. Everything is counted in integer frames at 60 Hz.
 THE BOX (ERWIN) is the "boxed" action: superposed in two boxes, with no body; the fight measures him.
+AMPLITUDE AMPLIFICATION (M-CUTIE) is the "charging" action: she stands still while X presses grow
+the wave, then fires it as an ordinary move.
 
 Coordinates: x is in screen px; y is the height above the floor (>= 0), and
 vy > 0 means moving up. world_box() turns a Box (relative to the feet) into
@@ -24,6 +26,8 @@ from .config import (
     BOX_SPLIT,
     BUFFER_FRAMES,
     CHAIN_MAX,
+    CHARGE_CAP,
+    CHARGE_WAIT,
     COPY_CAUGHT_RECOVERY,
     FLOOR_Y,
     STAGE_LEFT,
@@ -82,7 +86,7 @@ class Fighter:
         self.wakeup = 0                 # frames left of the invulnerability after getting up
         self.attack_basis = self.basis  # the basis the move in progress started in (its colour)
         self.crouching = False
-        self.action = "idle"        # idle walk crouch jump attack hitstun knockdown boxed
+        self.action = "idle"        # idle walk crouch jump attack hitstun knockdown boxed charging
         self.frame = 0              # frames into the action (0 on its first frame)
         self.move: Move | None = None
         self.slot: str | None = None
@@ -107,6 +111,8 @@ class Fighter:
         self.box_real = 0               # ... the box a collapse found him in (0 or 1)
         self.box_t = 0                  # ... frames superposed
         self.rival_boxes: tuple[float, float] | None = None   # the rival's two boxes while it is boxed
+        self.charge = 0                 # AMPLITUDE AMPLIFICATION: steps charged (0: not charging)
+        self.charge_wait = 0            # ... frames since the last step's press
 
     # --- derived state ----------------------------------------------------------------
 
@@ -262,6 +268,7 @@ class Fighter:
 
         if self.bounced:            # a diver hit in a trade stops springing up
             self.vy = min(self.vy, 0.0)
+        self.charge = self.charge_wait = 0      # a charge hit is lost: it never fires
         self.move = None
         self.slot = None
         self.chained = False
@@ -269,6 +276,8 @@ class Fighter:
         self.bounced = False
         self.buffer = []
         self.vx = (move.knockback if hurt else max(move.knockback, BLOCK_PUSH)) * from_facing
+        if move.hold:               # a trap holds them where they stand, hurt or not
+            self.vx = 0.0
         self.frame = 0
         if was_down:                # a knockdown is never cut short into hitstun
             self.stun = max(self.stun, KNOCKDOWN_FRAMES)
@@ -322,6 +331,7 @@ class Fighter:
     def knock_out(self, away: int, push: float) -> None:
         """Down for good: the round is over. Flies off `away` (+1 / -1) at least `push`
         px per frame, whatever hit it, and never gets up."""
+        self.charge = self.charge_wait = 0
         self.move = None
         self.slot = None
         self.chained = False
@@ -390,7 +400,7 @@ class Fighter:
         elif self.action == "attack":
             m = self.move
             assert m is not None
-            if self.bounced and self.y > 0:
+            if self.y > 0 and (self.bounced or (m.floor_recovery and self.frame >= self.startup + m.active)):
                 self.frame = self.startup + m.active    # the recovery starts on the floor
             if self.frame >= self.startup + m.active + m.recovery:
                 self._end_move()
@@ -419,6 +429,8 @@ class Fighter:
                     self.vx, self.vy = m.leap[0] * self.facing, m.leap[1]
                 if m.kind == "projectile":
                     events.append(("projectile", {"move": m}))
+                if m.trap is not None:  # ION TRAP: the fight sets it on the floor
+                    events.append(("trap", {"move": m}))
                 if m.paste and self.clipboard is not None:
                     shot, shot_basis = self.clipboard
                     self.clipboard = None
@@ -437,8 +449,9 @@ class Fighter:
                 self.vx = m.lunge * self.facing
         elif self.y == 0:
             self.vx = 0.0
-        elif m.dive is not None and self.frame == self.startup + m.active and not self.bounced:
-            self.vx = 0.0           # the dive ran out before the floor (a bounce keeps its drift)
+        elif (m.dive is not None or m.floor_recovery) and self.frame == self.startup + m.active \
+                and not self.bounced:
+            self.vx = 0.0           # the dive (or SPIN) ran out before the floor: she drops (a bounce keeps its drift)
 
     def _slot_for(self, btn: str, dx: int, rival_x: float) -> str:
         if self.y > 0:
@@ -454,6 +467,9 @@ class Fighter:
     def _act(self, inp: FighterInput, rival_x: float, events: list) -> None:
         if self.boxed:
             self._boxed(inp, events)
+            return
+        if self.action == "charging":
+            self._charging(events)
             return
         on_ground_free = self.action in _GROUND_FREE
         if on_ground_free and rival_x != self.x:
@@ -495,6 +511,9 @@ class Fighter:
             cancel = not free
             if cancel and not self.can_cancel(slot):
                 continue
+            if move.charge:             # AMPLITUDE AMPLIFICATION: the first press is its first step
+                self._start_charge(events)
+                return
             if slot == "paste" and self.clipboard is not None and self.clipboard[0].projectile is None:
                 self._paste_field(events)
                 return
@@ -566,6 +585,38 @@ class Fighter:
         self.box_t = 0
         events.append(("box_split", {}))
 
+    def _start_charge(self, events: list) -> None:
+        """AMPLITUDE AMPLIFICATION starts: one step charged, and she stands still. The cooldown
+        waits for the wave to fire."""
+        self.move = None
+        self.slot = None
+        self.chained = False
+        self.move_hit = False
+        self.crouching = False
+        self.buffer = []
+        self.vx = 0.0
+        self.action = "charging"
+        self.frame = 0
+        self.charge, self.charge_wait = 1, 0
+        events.append(("charge1", {}))
+
+    def _charging(self, events: list) -> None:
+        """Charging: every X press (buffered, so one in a hitstop freeze counts too) grows the
+        wave a step; A and B do nothing. It fires CHARGE_WAIT frames after the last press, or
+        at once on reaching CHARGE_CAP, as the step's own wave move (its colour fixed now)."""
+        pressed = any(p.button == "x" for p in self.buffer)
+        self.buffer = []
+        if pressed and self.charge < CHARGE_CAP:
+            self.charge += 1
+            self.charge_wait = 0
+            events.append((f"charge{self.charge}", {}))
+        else:
+            self.charge_wait += 1
+        if self.charge >= CHARGE_CAP or self.charge_wait >= CHARGE_WAIT:
+            wave = self.char.moves["stand.X"].charge[self.charge - 1]
+            self.charge = self.charge_wait = 0
+            self._start_move("stand.X", wave, False, events)
+
     def _boxed(self, inp: FighterInput, events: list) -> None:
         """Superposed: any button (A, B or X; Y only switches) or a new stick direction collapses
         it, or BOX_FRAMES at the latest. He lands in a random box, 50/50, with a swipe."""
@@ -577,7 +628,9 @@ class Fighter:
     def _physics(self, events: list) -> None:
         landed = False
         if self.hovering:               # LASER: she hangs in the air while she aims and fires
-            self.vx = self.vy = 0.0
+            self.vy = 0.0
+            if not (self.move.lunge and self.phase == "active"):
+                self.vx = 0.0           # (SPIN hangs at her height, but spins forward)
         elif self.y > 0 or self.vy > 0:
             if not self._diving():
                 self.vy -= self.char.gravity
@@ -598,8 +651,8 @@ class Fighter:
         m = self.move
         if self.action == "attack" and m is not None:
             self.vx = 0.0
-            if m.dive is not None or m.leap is not None:
-                # a dive or a leap that reaches the floor skips to its recovery
+            if m.dive is not None or m.leap is not None or m.floor_recovery:
+                # a dive, a leap or a SPIN that reaches the floor skips to its recovery
                 self.frame = max(self.frame, self.startup + m.active)
             else:
                 self._end_move()    # any other air move is land-cancelled
