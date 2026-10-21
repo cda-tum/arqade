@@ -11,9 +11,9 @@ replaces the repetition-code v1 and the Shor-code v2, which playtests found
 too hard to read).
 
 **Status:**
-- **The game:** three fighters (ROBERT, BOHR and PHOEBE), versus only, best of 3
+- **The game:** five fighters (ROBERT, BOHR, PHOEBE, ERWIN and DOS), versus only, best of 3
   rounds of 60 s.
-- **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat) at 640x360 (x3 on the cabinet), the
+- **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat; ERWIN, Schrodinger's cat; DOS, a walking all-in-one computer) at 640x360 (x3 on the cabinet), the
   title (PLAY / QUIT) with a bot demo, character select, stage select, a HOW TO PLAY card,
   round calls and pause.
 - **Stages:** five backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
@@ -53,10 +53,11 @@ changes, so the rule a player reads is: **colour must match to hurt.**
 - **Y switches basis:** an H on yourself, at once, in any state, even mid-attack,
   in hitstun or knocked down. For 10 frames after it you can't start an attack.
   Switching mid-string makes the rest of the string bounce.
+- **DOS is the exception.** A classical bit can't be in superposition, so he is always green: his Y doesn't switch, and MEASURE hurts him without collapsing him. His Y is COPY, then PASTE (below).
 - **Heights:** standing normals are HIGH (a crouch ducks them), crouching
   normals LOW (a jump clears them), air normals and throws MID.
 - **Damage:** light 4, heavy 8, special 10, throw 10, MEASURE 12, CHARGE NOISE
-  3 a shock, LASER 8. Health: ROBERT 100, BOHR 115, PHOEBE 95. Lights stun briefly enough that mashing
+  3 a shock, LASER 8, POUNCE 10, SCRATCH 4 a claw, THE BOX's swipe 8, FLOPPY 9, BLUE SCREEN 6, CRT DROP 12. Health: ROBERT 100, BOHR 115, PHOEBE 95, ERWIN 90, DOS 125. Lights stun briefly enough that mashing
   can't loop, and getting up from a knockdown is invulnerable for 8 frames.
 
 On screen: P1 has a blue ring under their feet and P2 a red one; each health
@@ -88,18 +89,21 @@ ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
 
 ## The fighters
 
-| | ROBERT | BOHR | PHOEBE |
-|---|---|---|---|
-| Build | lean and fast, high jump | heavy and slow, long reach, 115 health | tall and tricky, the longest pokes, 95 health; controls angles, not the ground |
-| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis | LIGHT PILLAR: a thick laser beam straight up from her raised palms: an anti-air that only ever catches someone in the air, and knocks them down (1.5 s cooldown) |
-| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) | TUNNEL: she dissolves and re-forms 50 px past the rival, facing them; a dotted line on the floor shows where. Untouchable only while gone, open while she re-forms (1.8 s cooldown) |
-| Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too | LASER: she hangs in the air, aims (a dotted line) and fires down and forward at 45 degrees, once per jump |
+| | ROBERT | BOHR | PHOEBE | ERWIN | DOS |
+|---|---|---|---|---|---|
+| Build | lean and fast, high jump | heavy and slow, long reach, 115 health | tall and tricky, the longest pokes, 95 health; controls angles, not the ground | quick and slippery, the highest jump, 90 health | slow and classical, the lowest jump, 125 health; **always green** |
+| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis | LIGHT PILLAR: a thick laser beam straight up from her raised palms: an anti-air that only ever catches someone in the air, and knocks them down (1.5 s cooldown) | THE BOX: she splits into two holographic boxes, where she stood and 120 px towards the rival. Any press or new stick direction (or 1.5 s) collapses it into a random box, with a swipe; anything that touches a box measures her, 50/50: she is in that box and it lands, or in the other and it whiffs (3 s cooldown, from the collapse) | FLOPPY: a spinning disk from his drive slot, slower than PHOTON (2.5 s cooldown) |
+| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) | TUNNEL: she dissolves and re-forms 50 px past the rival, facing them; a dotted line on the floor shows where. Untouchable only while gone, open while she re-forms (1.8 s cooldown) | POUNCE: a long low leap that knocks down; MID, so a crouch doesn't save you; a long landing (2 s cooldown) | BLUE SCREEN: his screen crashes blue and a shockwave rings out 50 px past his case, MID, a long stun, pushing you away (3 s cooldown) |
+| Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too | LASER: she hangs in the air, aims (a dotted line) and fires down and forward at 45 degrees, once per jump | SCRATCH: she hangs in the air and claws three times, once per jump | CRT DROP: a fast stomp straight down that knocks down; no shockwave, a long landing |
+| Y | switches your colour | switches your colour | switches your colour | switches her colour, even inside THE BOX | COPY: a CTRL+C frame catches a rival's shot into his clipboard (the icon by his chips); then PASTE fires it straight ahead in the colour it was fired in. Only when he is free to act |
 
 Her weakness: she has no ground projectile and the least health, so walking straight
 in on the ground (BOHR's game) is how you beat her. Design:
 `../docs/superpowers/specs/2026-10-09-brawl-ket-phoebe-design.md`.
 
-All three share the normals: A is a jab (standing, crouching, in the air), B a
+ERWIN's weakness is the least health, and THE BOX is a gamble; DOS's is that his rival only ever needs green attacks against him. Design: ../docs/superpowers/specs/2026-10-21-brawl-ket-erwin-dos-design.md.
+
+All five share the normals: A is a jab (standing, crouching, in the air), B a
 heavy, a sweep (knockdown) or a jump-in, and B up close while pushing towards
 the rival is a throw. A chains A, A, B.
 
@@ -138,12 +142,13 @@ uv run python tools/benchmark.py                    # frame cost (on the cabinet
 | Module | Role |
 |---|---|
 | `basis.py` | The two bases, which errors change which, H, and each attack's error from its colour rule. Pure, exact, tested against 2x2 matrices. |
-| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR and PHOEBE. |
-| `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). Pure. |
+| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR, PHOEBE, ERWIN and DOS. |
+| `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). THE BOX's 50/50s come from the fight's own seeded random.Random: the same seed and inputs give the same round. Pure. |
 | `match.py` | Title (PLAY / QUIT), select, stage select, HOW TO PLAY, rounds, the result, pause, idle and the attract demo. Pure. |
 | `tutorial.py` | The HOW TO PLAY card's scene: a real Fight played from a script, looping. Pure. |
 | `stages.py` | The backdrops, each drawn once (with its blinking lights); no green or purple in a large area, so the fighters stay readable. |
 | `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens (HOW TO PLAY draws its scene with a second, off-screen renderer). |
+| `ink.py`, `erwin.py`, `dos.py` | The drawing primitives; ERWIN's cat and THE BOX; DOS's case, screen faces, floppy and clipboard icon (both checked pixel for pixel against their approved look scripts, and cached so the cabinet keeps its frame budget). |
 | `bot.py` | The CPU for the attract demo and the tests. |
 | `audio.py` | Chiptune effects, adapted from Planck Time's. No music. |
 | `input.py`, `config.py` | Pads and the dev keyboard; every tuning number and button. |

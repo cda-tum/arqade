@@ -20,6 +20,7 @@ Writes:
   the collapse (0 and 3 frames on) and the swipe; a PHOTON measuring her; POUNCE and SCRATCH;
 - moves_dos.png, dos_*.png: DOS's moves; FLOPPY in flight; COPY's CTRL+C frame catching a PHOTON
   and the clipboard after it; PASTE; BLUE SCREEN; CRT DROP;
+- screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
 - screen_*.png: the match flow: the title (and with QUIT picked), the attract demo, select (and
@@ -256,6 +257,19 @@ def find_frames(out_dir: str, chars=(ROBERT, ROBERT), prefix: str = "fight") -> 
         print(f"never saw: {prefix} {name}")
 
 
+def select_frame(out_dir: str) -> None:
+    """CHOOSE YOUR FIGHTER with ERWIN and DOS picked: their traits, DOS's Y and ALWAYS GREEN."""
+    from brawl_ket import match as M
+
+    surface = pygame.Surface((W, H))
+    r, m = Renderer(surface), M.Match(random.Random(3))
+    m.state = M.SELECT
+    m.picks = {"p1": 3, "p2": 4}
+    for _ in range(4):
+        r.draw(m, [])
+    save(surface, out_dir, "screen_select_erwin_dos.png")
+
+
 def screen_frames(out_dir: str) -> None:
     """Every screen of the match flow, driven through a real Match."""
     from brawl_ket import match as M
@@ -425,6 +439,7 @@ def main(argv: list[str]) -> None:
     find_frames(out_dir)
     find_frames(out_dir, (ROBERT, BOHR), "vs")
     screen_frames(out_dir)
+    select_frame(out_dir)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import re
 from brawl_ket import audio, fight, fighter, match
 from brawl_ket.fight import Event
 from brawl_ket.match import Cue
+from brawl_ket.moves import CHARACTERS
 
 
 def test_every_match_cue_has_a_sound() -> None:
@@ -43,3 +44,22 @@ def test_measure_replaces_its_own_throws_thump() -> None:
 def test_null_audio_is_a_silent_stand_in() -> None:
     a = audio.NullAudio()
     a.play_events([Cue("blip"), Event("hit", "p1", "X")])
+
+
+NEW_SOUNDS = ("box_split", "box_collapse", "pounce", "scratch", "floppy", "blue_screen", "crt_drop", "copy", "paste")
+
+
+def test_erwin_and_dos_have_their_sounds() -> None:
+    sfx = audio.build_sfx()
+    for kind in NEW_SOUNDS:
+        assert audio.EVENT_SOUNDS.get(kind) in sfx, kind
+
+
+def test_every_moves_cue_has_a_sound() -> None:
+    moves = [m for c in CHARACTERS.values() for m in (*c.moves.values(), *c.extra.values())]
+    assert {m.cue for m in moves if m.cue} <= {k for k, s in audio.EVENT_SOUNDS.items() if s}
+
+
+def test_a_floppy_and_a_paste_replace_the_photons_sound() -> None:
+    assert audio.sounds_for([Event("projectile", "p1"), Event("floppy", "p1")]) == ["floppy"]
+    assert audio.sounds_for([Event("projectile", "p1"), Event("paste", "p1")]) == ["paste"]

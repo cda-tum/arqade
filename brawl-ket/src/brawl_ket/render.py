@@ -116,9 +116,12 @@ CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are c
 BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 
 # the select screen: what each fighter is, in a line, and how its X moves are entered
-TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY", "PHOEBE": "TALL AND TRICKY"}
+TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY", "PHOEBE": "TALL AND TRICKY",
+          "ERWIN": "QUICK AND SLIPPERY", "DOS": "SLOW AND CLASSICAL"}
 X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
 RULE_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR")
+# DOS can't switch: his Y copies a shot and then pastes it, and he is always green
+CLASSICAL_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y: COPY, THEN PASTE", "ALWAYS GREEN")
 HINT = "MATCH THEIR COLOUR TO HURT - Y SWITCHES"
 # the title's COLOUR MUST MATCH card: three beats, each a line of (text, colour) parts
 CARD_LINES = (
@@ -175,6 +178,16 @@ def outlined(text: str, size: int, color, outline=P.INK, thick: int = 1) -> pyga
 def legend_colours(f) -> dict[str, tuple]:
     """The colour each of a fighter's buttons hits in now: A its own basis's, B the other's."""
     return {"A": BASIS_BODY[f.basis], "B": BASIS_BODY[basis.hadamard(f.basis)]}
+
+
+def panel_lines(char: Character) -> tuple[tuple[str, tuple], ...]:
+    """CHOOSE YOUR FIGHTER's lines under a fighter's name, each (text, colour): what it is, then
+    its colour rules. DOS's say what his Y does instead, and the last one is in his one colour."""
+    rules = CLASSICAL_LINES if char.copy_paste else RULE_LINES
+    lines = [(TRAITS.get(char.name, ""), P.MIST), *((line, P.MIST) for line in rules)]
+    if char.fixed_basis is not None:
+        lines[-1] = (lines[-1][0], BASIS_BODY[char.fixed_basis])
+    return tuple(lines)
 
 
 def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
@@ -1236,7 +1249,9 @@ class Renderer:
     def _title(self, match: M.Match) -> None:
         self._backdrop(dim=False)
         surf = self.surface
-        for char, key, x, facing in ((M.ROSTER[0], "p1", 180, 1), (M.ROSTER[-1], "p2", 460, -1)):
+        # ROBERT green and the last fighter who can switch purple: the title shows both colours
+        rival = next(c for c in reversed(M.ROSTER) if c.fixed_basis is None)
+        for char, key, x, facing in ((M.ROSTER[0], "p1", 180, 1), (rival, "p2", 460, -1)):
             rect = pygame.Rect(0, 0, 52, 8)
             rect.center = (x, FLOOR_Y + 2)
             pygame.draw.ellipse(surf, SHADOW, rect)
@@ -1300,9 +1315,10 @@ class Renderer:
                 arrow = outlined("<" if d < 0 else ">", 16, P.WHITE, thick=2)
                 blit_center(surf, arrow, (cx + d * (name.get_width() / 2 + 18 + nudge), floor + 20))
         # what it is: its code and its build
-        lines = (TRAITS.get(char.name, ""), *RULE_LINES)
-        for i, line in enumerate(lines):
-            blit_center(surf, outlined(line, 8, P.MIST), (cx, floor + 36 + 11 * i))
+        lines = panel_lines(char)
+        gap = 11 if len(lines) <= 3 else 10         # DOS's four lines still clear his moves
+        for i, (line, colour) in enumerate(lines):
+            blit_center(surf, outlined(line, 8, colour), (cx, floor + 36 + gap * i))
         # the X moves: the buttons, the names, and the colour each one hits in
         for i, (slot, how) in enumerate(X_INPUTS):
             y = floor + 76 + 12 * i

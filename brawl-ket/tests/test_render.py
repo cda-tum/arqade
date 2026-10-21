@@ -314,9 +314,10 @@ def test_a_live_strike_leaves_a_trail(surface):
     assert fight.fighters["p1"].phase == "active"
     assert len(r.trails["p1"]) >= 2
 def test_the_teaching_text_is_ascii_capitals():
-    from brawl_ket.render import ANY_BUTTON, BUTTON_JOBS, CARD_LINES, GOAL_LINES, HINT, LESSON_LINES, RULE_LINES
+    from brawl_ket.render import (ANY_BUTTON, BUTTON_JOBS, CARD_LINES, CLASSICAL_LINES, GOAL_LINES, HINT, LESSON_LINES,
+                                  RULE_LINES, TRAITS)
     parts = (*CARD_LINES, *LESSON_LINES)
-    for text in (HINT, ANY_BUTTON, *RULE_LINES, *GOAL_LINES, *(job for _b, job in BUTTON_JOBS),
+    for text in (HINT, ANY_BUTTON, *RULE_LINES, *CLASSICAL_LINES, *TRAITS.values(), *GOAL_LINES, *(job for _b, job in BUTTON_JOBS),
                  *("".join(t for t, _ in line) for line in parts)):
         assert text.isascii() and text == text.upper(), text
 
@@ -654,3 +655,37 @@ def test_doss_screen_faces_are_drawn_once_and_blitted(surface):
         r.draw_fight(fight, events)
     info = screen_sprite.cache_info()
     assert info.hits > 2 * info.misses
+
+
+def test_the_select_panels_say_what_each_fighter_is():
+    from brawl_ket.moves import CHARACTERS
+    from brawl_ket.render import panel_lines
+    text = {name: [line for line, _c in panel_lines(c)] for name, c in CHARACTERS.items()}
+    assert text["ERWIN"][0] == "QUICK AND SLIPPERY" and "Y SWITCHES YOUR COLOUR" in text["ERWIN"]
+    assert text["DOS"] == ["SLOW AND CLASSICAL", "A AND X: YOUR COLOUR, B: THE OTHER", "Y: COPY, THEN PASTE",
+                           "ALWAYS GREEN"]
+    assert panel_lines(CHARACTERS["DOS"])[-1][1] == GREEN
+    for name in ("ROBERT", "BOHR", "PHOEBE"):
+        assert text[name][1:] == ["A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR"], name
+
+
+def test_choose_your_fighter_draws_every_fighter(surface):
+    import random
+
+    from brawl_ket import match as M
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    m.state = M.SELECT
+    for i in range(len(M.ROSTER)):
+        m.picks = {"p1": i, "p2": (i + 1) % len(M.ROSTER)}
+        r.draw(m, [])
+
+
+def test_the_title_still_shows_both_colours(surface):
+    import random
+
+    from brawl_ket import match as M
+    r = Renderer(surface)
+    r.draw(M.Match(random.Random(1)), [])
+    seen = {tuple(surface.get_at((x, y)))[:3] for x in range(440, 481, 2) for y in range(FLOOR_Y - 110, FLOOR_Y - 40, 2)}
+    assert PURPLE in seen               # ERWIN on the right: DOS, last in the roster, can't be purple

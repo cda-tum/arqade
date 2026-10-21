@@ -758,3 +758,16 @@ def test_dos_starts_every_round_with_an_empty_clipboard() -> None:
     dos.clipboard = (ROBERT.moves["stand.X"], "Z")
     ko(m, "p2")
     assert m.state == ROUND_INTRO and m.fight.fighters["p1"].clipboard is None
+
+
+def test_choose_your_fighter_cycles_through_all_five_in_order() -> None:
+    from brawl_ket.match import ROSTER
+    order = ["ROBERT", "BOHR", "PHOEBE", "ERWIN", "DOS"]
+    assert [c.name for c in ROSTER] == order
+    m = Match(random.Random(1))
+    m.update(press("confirm"))
+    seen = []
+    for _ in range(len(ROSTER)):
+        seen.append(ROSTER[m.picks["p1"]].name)
+        m.update(press("right", "p1"))
+    assert seen == order and m.picks["p1"] == 0         # and round again
