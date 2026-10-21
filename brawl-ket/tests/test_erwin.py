@@ -5,6 +5,7 @@ leaps and knocks down; SCRATCH hangs in the air and claws three times. And the f
 random source, which the 50/50s come from."""
 
 import random
+from dataclasses import replace
 
 import pytest
 
@@ -13,7 +14,7 @@ from brawl_ket.basis import X_BASIS
 from brawl_ket.config import BOX_FRAMES, BOX_SPLIT, STAGE_RIGHT, TUNNEL_PAST
 from brawl_ket.fight import Fight, Shot
 from brawl_ket.fighter import IDLE, FighterInput
-from brawl_ket.moves import BOHR, ERWIN, PHOEBE, ROBERT
+from brawl_ket.moves import BOHR, ERWIN, PHOEBE, ROBERT, Box
 
 X = FighterInput(x=True)
 A = FighterInput(a=True)
@@ -169,36 +170,47 @@ def test_a_shot_into_a_box_measures_her_and_flies_on_if_she_is_not_there(heads):
         assert me.x == me.boxes[1] and hits_on(events, "p1") == [] and shot in fight.shots
 
 
+@pytest.mark.parametrize("k", [0, 1])
 @pytest.mark.parametrize("heads", [True, False])
-def test_a_throw_in_reach_of_a_box_measures_her(heads):
+def test_a_throw_in_reach_of_a_box_measures_her(heads, k):
     fight, me, _ = boxed(seed=heads_seed(heads))
     rival = fight.fighters["p2"]
-    rival.x = me.boxes[0] + 46              # in throw range of box 1 (her x)
+    rival.x = me.boxes[k] + 46              # in throw range of box k (box 2 too, not just her x)
     events = []
     for i in range(10):
         events += step(fight, IDLE, FighterInput(dx=-1, b=True) if i == 0 else IDLE)
     got = [(e.kind, e.error) for e in hits_on(events, "p1")]
+    where = k if heads else 1 - k
+    assert not me.boxed and me.x == me.boxes[where]
     if heads:
         assert got == [("hit", basis.Y)] and me.action == "knockdown"
     else:
-        assert got == [] and me.x == me.boxes[1]
+        assert got == []
 
 
-def test_charge_noise_measures_with_its_first_shock_and_later_shocks_hit_her_body():
-    fight, me, _ = boxed(seed=heads_seed(False), rival=BOHR)
+@pytest.mark.parametrize("heads", [True, False])
+def test_an_attack_touching_both_boxes_always_finds_her(heads):
+    fight, me, _ = boxed(seed=heads_seed(heads))
+    rival = fight.fighters["p2"]
+    rival.x = me.boxes[0] + 40
+    big = replace(PHOTON, projectile=replace(PHOTON.projectile, box=Box(-100, 0, 220, 100)))
+    wide = Shot("p2", big, me.boxes[0] + 60, 0.0, -1.0, 200)    # a wall of light over both boxes
+    fight.shots.append(wide)
+    events = step(fight)
+    assert not me.boxed and kinds(hits_on(events, "p1")) == ["hit"] and wide not in fight.shots
+
+
+@pytest.mark.parametrize("heads", [True, False])
+def test_charge_noise_over_both_boxes_finds_her_with_its_first_shock(heads):
+    fight, me, _ = boxed(seed=heads_seed(heads), rival=BOHR)
     bohr = fight.fighters["p2"]
     bohr.x = me.boxes[0] + 50               # its field covers box 1 and the edge of box 2
     noise = BOHR.moves["crouch.X"]
-    events, measured = [], False
-    for i in range(noise.startup + 30):
-        ev = step(fight, IDLE, FighterInput(down=True, x=i == 0))
-        if not measured and "box_collapse" in kinds(ev):
-            measured = True
-            assert hits_on(ev, "p1") == []  # tails: the first shock found nothing
-        events += ev
-    assert measured and me.box_real == 1                # (the later shocks push her on)
-    later = hits_on(events, "p1")
-    assert later and later[0].kind == "hit"             # a later shock hits her body
+    events = []
+    for i in range(noise.startup + 5):
+        events += step(fight, IDLE, FighterInput(down=True, x=i == 0))
+    assert not me.boxed and "box_collapse" in kinds(events)
+    assert kinds(hits_on(events, "p1"))[:1] == ["hit"]
 
 
 def test_tunnel_past_a_superposed_erwin_goes_past_box_1():

@@ -104,6 +104,7 @@ class Fighter:
         self.boxes: tuple[float, float] = (self.x, self.x)  # THE BOX: where she stood, the far box
         self.box_real = 0               # ... the box a collapse found her in (0 or 1)
         self.box_t = 0                  # ... frames superposed
+        self.rival_boxes: tuple[float, float] | None = None   # the rival's two boxes while it is boxed
 
     # --- derived state ----------------------------------------------------------------
 
@@ -416,7 +417,10 @@ class Fighter:
     def _slot_for(self, btn: str, dx: int, rival_x: float) -> str:
         if self.y > 0:
             return f"air.{btn.upper()}"
-        if btn == "b" and dx == self.facing and abs(rival_x - self.x) <= self.throw_range:
+        reach = abs(rival_x - self.x)
+        if self.rival_boxes is not None:    # a throw in reach of either of the rival's boxes
+            reach = min(abs(bx - self.x) for bx in self.rival_boxes)
+        if btn == "b" and dx == self.facing and reach <= self.throw_range:
             return "throw"
         prefix = "crouch" if self.stance == "crouch" else "stand"
         return f"{prefix}.{btn.upper()}"
@@ -498,6 +502,8 @@ class Fighter:
         the stage, so it can land behind a rival who is close). She has no body until it collapses."""
         side = 1 if self.rival_x > self.x else -1 if self.rival_x < self.x else self.facing
         far = min(max(self.x + side * BOX_SPLIT, STAGE_LEFT), STAGE_RIGHT)
+        if far == self.x:           # a wall in the way: the second box goes the other side
+            far = min(max(self.x - side * BOX_SPLIT, STAGE_LEFT), STAGE_RIGHT)
         self.boxes = (self.x, far)
         self.move = None
         self.slot = None

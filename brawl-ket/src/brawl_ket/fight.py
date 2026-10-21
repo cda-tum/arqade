@@ -93,7 +93,7 @@ class _Strike:
     from_facing: int
     where: tuple[float, float]
     shot: Shot | None = None
-    box: int | None = None      # THE BOX: which of the defender's boxes it touched
+    box: frozenset[int] | None = None   # THE BOX: which of the defender's boxes it touched
 
 
 def _world_box(x: float, y: float, facing: int, box: Box) -> Rect:
@@ -189,6 +189,8 @@ class Fight:
         # p2 are treated alike (p1 stepping first must not change what p2 sees).
         start_x = {key: f.x for key, f in self.fighters.items()}
         for key, f in self.fighters.items():
+            rival = self.fighters[_other(key)]
+            f.rival_boxes = rival.boxes if rival.boxed else None
             for kind, data in f.step(inputs.get(key, IDLE), start_x[_other(key)]):
                 if kind == "projectile":
                     move = data["move"]
@@ -298,23 +300,23 @@ class Fight:
         self.shots = [s for s in self.shots if id(s) not in landed_shots]
 
     @staticmethod
-    def _touch(rect: Rect, target: Fighter) -> tuple[tuple[float, float], int | None] | None:
+    def _touch(rect: Rect, target: Fighter) -> tuple[tuple[float, float], frozenset[int] | None] | None:
         """Where an attack's rect meets the target: its body, or (THE BOX) the first box it
-        touches and which one."""
+        touches (the set of boxes: an attack can cover both)."""
         if target.boxed:
-            for k, box in enumerate(target.box_rects()):
-                where = _overlap(rect, box)
-                if where is not None:
-                    return where, k
-            return None
+            hits = {k: w for k, box in enumerate(target.box_rects())
+                    if (w := _overlap(rect, box)) is not None}
+            if not hits:
+                return None
+            return hits[min(hits)], frozenset(hits)
         where = _overlap(rect, target.hurtbox)
         return None if where is None else (where, None)
 
     def _measure(self, strikes: list[_Strike], events: list[Event]) -> list[_Strike]:
         """THE BOX: the first strike that touches a box (a hit, a shot, a throw, a field, a
-        shockwave) measures her, 50/50. She is in that box (the strikes on it land on her as
-        normal, the colour rule included) or in the other one (they find nothing: a shot flies
-        on). Either way she is free at once, with no swipe. A repeating move's shock that found
+        shockwave) measures her, 50/50. An attack touching one box: she is in it (it lands on
+        her as normal, the colour rule included) or in the other one (it finds nothing: a shot
+        flies on). An attack touching both boxes always finds her, whichever she is in. Either way she is free at once, with no swipe. A repeating move's shock that found
         nothing is still spent (CHARGE NOISE: later shocks hit her body)."""
         kept: list[_Strike] = []
         real: dict[str, int] = {}
@@ -324,11 +326,15 @@ class Fight:
                 continue
             d = self.fighters[st.defender]
             if st.defender not in real:
-                k = st.box if self.rng.random() < 0.5 else 1 - st.box
+                if len(st.box) == 2:
+                    k = 0 if self.rng.random() < 0.5 else 1
+                else:
+                    (only,) = st.box
+                    k = only if self.rng.random() < 0.5 else 1 - only
                 real[st.defender] = k
                 d.collapse(k, False, [])
                 events.append(Event("box_collapse", st.defender, None, d.x, FLOOR_Y))
-            if st.box == real[st.defender]:
+            if real[st.defender] in st.box:
                 kept.append(st)
             elif st.attacker is not None and st.move.hit_every:
                 a = self.fighters[st.attacker]
