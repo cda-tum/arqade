@@ -149,7 +149,7 @@ CUE_SOUNDS = {"blip": "blip", "confirm": "confirm", "pause": "pause", "round": "
 EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "whoosh", "measure": "measure",
                 "projectile": "photon", "shockwave": "shockwave",
                 "pillar": "pillar", "tunnel": "tunnel", "laser": "laser", "fizzle": "sizzle",
-                "box_split": None, "box_collapse": None,
+                "box_split": None, "box_collapse": None, "copy": None,
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw
               "laser": "photon"}    # a LASER is a projectile too: its zap, not the photon's

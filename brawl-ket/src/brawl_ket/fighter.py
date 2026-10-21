@@ -24,6 +24,7 @@ from .config import (
     BOX_SPLIT,
     BUFFER_FRAMES,
     CHAIN_MAX,
+    COPY_CAUGHT_RECOVERY,
     FLOOR_Y,
     STAGE_LEFT,
     STAGE_RIGHT,
@@ -75,7 +76,7 @@ class Fighter:
         self.vy = 0.0
         self.facing = facing
         self.health = char.health
-        self.basis = basis.Z_BASIS      # green: |0>, |1>
+        self.basis = char.fixed_basis or basis.Z_BASIS      # green: |0>, |1> (DOS: for good)
         self.switch_lock = 0            # frames left after a switch in which you can't attack
         self.switch_pending = False     # Y pressed in a hitstop freeze: applied on the next step
         self.wakeup = 0                 # frames left of the invulnerability after getting up
@@ -95,6 +96,7 @@ class Fighter:
         self.buffer: list[Press] = []   # oldest first
         self.throw_range: float = THROW_RANGE   # the fight sets it from the pairing's push box
         self.body_width: float = THROW_RANGE    # ... and the push box itself (TUNNEL needs room)
+        self.clipboard: tuple[Move, str] | None = None      # DOS: the shot COPY caught, and its basis
         self.rival_x = x                # where the rival stood at the start of this frame
         self.tunnel_from = self.x       # TUNNEL: where she dissolved, and where she re-forms
         self.tunnel_to = self.x
@@ -210,7 +212,7 @@ class Fighter:
             self.switch_lock -= 1
         if self.wakeup > 0:
             self.wakeup -= 1
-        if inp.y or self.switch_pending:
+        if not self.char.copy_paste and (inp.y or self.switch_pending):
             self.switch_pending = False
             self.switch()
             self.switch_lock = SWITCH_RECOVERY
@@ -238,13 +240,14 @@ class Fighter:
         The fight calls it during hitstop, when step() is not run, so a press made
         in the freeze (the chain-cancel window) is not lost.
         """
-        for btn in ("a", "b", "x"):
+        buttons = ("a", "b", "x", "y") if self.char.copy_paste else ("a", "b", "x")   # DOS: Y is a move
+        for btn in buttons:
             if getattr(inp, btn):
                 self.buffer.append(Press(btn, 0))
 
     def hold_switch(self, inp: FighterInput) -> None:
         """A Y pressed in a hitstop freeze (when step() isn't run) switches on the next step."""
-        if inp.y:
+        if inp.y and not self.char.copy_paste:
             self.switch_pending = not self.switch_pending   # two presses in a freeze cancel out
 
     def take_hit(self, move: Move, error: str, from_facing: int) -> str:
@@ -278,8 +281,27 @@ class Fighter:
         return "hit" if hurt else "block"
 
     def switch(self) -> None:
-        """An H on yourself: the basis (and so the body's colour) swaps at once."""
+        """An H on yourself: the basis (and so the body's colour) swaps at once. A fixed basis
+        (DOS: a classical bit can't be in superposition) never changes."""
+        if self.char.fixed_basis is not None:
+            return
         self.basis = basis.hadamard(self.basis)
+
+    def measured_into(self, b: str) -> bool:
+        """MEASURE projects this fighter onto basis b; True if that changed it. A fixed basis
+        never changes."""
+        if self.char.fixed_basis is not None or self.basis == b:
+            return False
+        self.basis = b
+        return True
+
+    def caught(self, move: Move, shot_basis: str) -> None:
+        """COPY caught a shot: it goes into the clipboard (with the basis it was fired in), and
+        the recovery is cut to COPY_CAUGHT_RECOVERY frames."""
+        m = self.move
+        assert m is not None
+        self.clipboard = (move, shot_basis)
+        self.frame = max(self.frame, self.startup + m.active + m.recovery - COPY_CAUGHT_RECOVERY)
 
     BOUNCE_VX, BOUNCE_VY = 2.0, 5.0     # px per frame: a DIVE springs back off what it hit
 
@@ -397,6 +419,10 @@ class Fighter:
                     self.vx, self.vy = m.leap[0] * self.facing, m.leap[1]
                 if m.kind == "projectile":
                     events.append(("projectile", {"move": m}))
+                if m.paste and self.clipboard is not None:
+                    shot, shot_basis = self.clipboard
+                    self.clipboard = None
+                    events.append(("projectile", {"move": shot, "basis": shot_basis, "paste": True}))
                 if m.cue is not None:
                     events.append((m.cue, {}))
                 if m.tunnel:            # gone: she is already where she will re-form
@@ -456,8 +482,14 @@ class Fighter:
 
     def _try_buffer(self, dx: int, rival_x: float, free: bool, events: list) -> None:
         for entry in reversed(self.buffer):
-            slot = self._slot_for(entry.button, dx, rival_x)
-            move = self.char.moves.get(slot)
+            if entry.button == "y":     # DOS: COPY, or PASTE with a shot in the clipboard; free, on the ground
+                if not free or self.y > 0:
+                    continue
+                slot = "paste" if self.clipboard is not None else "copy"
+                move = self.char.extra.get(slot)
+            else:
+                slot = self._slot_for(entry.button, dx, rival_x)
+                move = self.char.moves.get(slot)
             if move is None or self.cooldowns.get(slot, 0) > 0 or slot in self.air_used:
                 continue
             cancel = not free
@@ -482,6 +514,8 @@ class Fighter:
         if move.tunnel:
             self.tunnel_from = self.x
             self.tunnel_to = self._tunnel_target()
+        if move.catch is not None or move.paste:
+            self.crouching = False      # COPY and PASTE stand him up
         if self.y == 0:
             self.vx = 0.0
         self.action = "attack"
@@ -489,13 +523,15 @@ class Fighter:
         events.append(("attack", {"slot": slot}))
 
     def _tunnel_target(self) -> float:
-        """TUNNEL_PAST px past the rival, on their far side; if the stage has no room there
-        (the rival in a corner), TUNNEL_PAST px in front of them, on her own side."""
+        """TUNNEL_PAST px past the rival (or the push box, if that is wider: DOS's case), on
+        their far side; if the stage has no room there (the rival in a corner), as far in front
+        of them, on her own side."""
+        past = max(TUNNEL_PAST, self.body_width)
         side = 1 if self.rival_x > self.x else -1 if self.rival_x < self.x else self.facing
-        far = min(max(self.rival_x + side * TUNNEL_PAST, STAGE_LEFT), STAGE_RIGHT)
+        far = min(max(self.rival_x + side * past, STAGE_LEFT), STAGE_RIGHT)
         if (far - self.rival_x) * side >= self.body_width:
             return far
-        return min(max(self.rival_x - side * TUNNEL_PAST, STAGE_LEFT), STAGE_RIGHT)
+        return min(max(self.rival_x - side * past, STAGE_LEFT), STAGE_RIGHT)
 
     def _split(self, events: list) -> None:
         """THE BOX splits: box 1 where she stands, box 2 BOX_SPLIT px towards the rival (kept on

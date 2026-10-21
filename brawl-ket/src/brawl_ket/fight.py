@@ -21,6 +21,7 @@ from . import basis
 from .config import (
     BLOCK_HITSTOP,
     BODY_MARGIN,
+    DRIVE_SLOT_Y,
     FLOOR_Y,
     HITSTOP,
     HITSTOP_KNOCKDOWN,
@@ -177,6 +178,7 @@ class Fight:
         self._step_fighters(inputs, events)
         self._push_apart()
         self._move_shots(events)
+        self._catch_shots(events)
         self._resolve_hits(events)
         self.frames_left -= 1
         self._check_end(events)
@@ -194,11 +196,15 @@ class Fight:
             for kind, data in f.step(inputs.get(key, IDLE), start_x[_other(key)]):
                 if kind == "projectile":
                     move = data["move"]
-                    assert move.projectile is not None
+                    proj = move.projectile
+                    assert proj is not None
+                    if data.get("paste"):   # PASTE: level, from his drive slot, in the colour it was fired in
+                        y, vy, shot_basis = f.y + DRIVE_SLOT_Y - proj.box.y, 0.0, data["basis"]
+                    else:
+                        y, vy, shot_basis = f.y, proj.vy, f.attack_basis
                     self.shots.append(Shot(
-                        key, move, f.x + f.facing * SHOT_SPAWN_OFFSET, f.y,
-                        move.projectile.speed * f.facing, move.projectile.lifetime, f.attack_basis,
-                        move.projectile.vy,
+                        key, move, f.x + f.facing * SHOT_SPAWN_OFFSET, y,
+                        proj.speed * f.facing, proj.lifetime, shot_basis, vy,
                     ))
                     events.append(Event("projectile", key))
                 else:
@@ -255,6 +261,22 @@ class Fight:
     def _off_stage(s: Shot) -> bool:
         left, _, w, _ = s.box
         return left + w < STAGE_LEFT or left > STAGE_RIGHT
+
+    def _catch_shots(self, events: list[Event]) -> None:
+        """COPY: a rival's shot that meets the catch window while it is open is caught, before
+        it can hit him: gone from the stage and into his clipboard."""
+        for key, f in self.fighters.items():
+            m = f.move
+            if f.action != "attack" or m is None or m.catch is None or f.phase != "active":
+                continue
+            window = f.world_box(m.catch)
+            for s in self.shots:
+                where = _overlap(s.box, window) if s.owner != key else None
+                if where is not None:
+                    self.shots.remove(s)
+                    f.caught(s.move, s.basis)
+                    events.append(Event("copy", key, None, *where))
+                    break
 
     # --- hits ---------------------------------------------------------------------------
 
@@ -361,9 +383,8 @@ class Fight:
         if knocked:
             downed.add(st.defender)
         self.hitstop = max(self.hitstop, HITSTOP_KNOCKDOWN if knocked else HITSTOP)
-        if m.measure_rival and defender.basis != owner.basis:
-            # MEASURE projects the rival onto BOHR's basis
-            defender.basis = owner.basis
+        if m.measure_rival and defender.measured_into(owner.basis):
+            # MEASURE projects the rival onto BOHR's basis (never DOS: a classical bit)
             events.append(Event("measure", st.defender, None, x, y))
         if st.attacker is not None and owner.move is m:
             if m.switch_self_on_hit:        # HADAMARD DIVE: an H on the diver, at once
@@ -391,7 +412,11 @@ class Fight:
             return
         touch = self._touch(f.world_box(m.hitbox), rival)
         if touch is not None:
-            strikes.append(_Strike(key, key, rival_key, m, f.facing, touch[0], box=touch[1]))
+            where, box = touch
+            facing = f.facing
+            if m.push_out:      # BLUE SCREEN: away from him, whichever side the rival is on
+                facing = 1 if where[0] >= f.x else -1
+            strikes.append(_Strike(key, key, rival_key, m, facing, where, box=box))
 
     def _landing_strike(
         self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],

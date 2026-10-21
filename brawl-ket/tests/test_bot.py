@@ -39,7 +39,8 @@ def test_bots_land_hits_in_both_colours(pairing):
     for seed in SEEDS:
         _, events = play(seed, pairing)
         errors |= {e.error for e in events if e.kind == "hit"}
-    assert {"X", "Z"} <= errors, (pairing, errors)       # green and purple attacks both land
+    fixed = all(CHARACTERS[name].fixed_basis for name in pairing)
+    assert ({"X"} if fixed else {"X", "Z"}) <= errors, (pairing, errors)       # both colours land (DOS: green)
 
 
 def test_bots_switch_basis_sometimes():
@@ -55,11 +56,13 @@ def test_bots_are_deterministic(pairing):
         assert e1 == e2
 
 
-# ERWIN's bot doesn't use her specials until Task 6, so she is ROBERT with less health: Task 6
+# ERWIN and DOS have no bot logic of their own until Task 6 (they play as ROBERT does): Task 6
 # removes this list and the test takes PAIRINGS again.
 FAVOURED_PAIRINGS = [
     pytest.param(pair, marks=pytest.mark.xfail(reason="ERWIN's bot: Task 6", strict=False))
-    if pair == ("ROBERT", "ERWIN") else pair
+    if pair == ("ROBERT", "ERWIN") else
+    pytest.param(pair, marks=pytest.mark.xfail(reason="DOS's bot: Task 6", strict=False))
+    if pair == ("BOHR", "DOS") else pair
     for pair in PAIRINGS
 ]
 

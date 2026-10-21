@@ -14,7 +14,7 @@ positive lean tips the upper body forwards.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 
 from .fighter import Fighter
 
@@ -111,6 +111,15 @@ POSES: dict[str, Pose] = {
     "pounce": Pose(40, 140, 90, -70, -110, 100, 95, 85, 95),
     # ERWIN's air.X SCRATCH: hanging in the air, a paw raking forward
     "scratch": Pose(14, 100, 15, 40, -50, 60, 70, 30, 150),
+    # DOS's stand.X FLOPPY (and PASTE): braced, the front fist raised and the back one flung
+    # back, out of the drive slot's way (the look's EJECT)
+    "eject": Pose(-6, 30, -4, -26, -14, 150, 175, -60, -20),
+    # DOS's crouch.X BLUE SCREEN: the crash, arms flung straight out
+    "crash": Pose(-4, 32, -6, -32, -10, 95, 105, -95, -105),
+    # DOS's air.X CRT DROP: feet together straight down, arms up
+    "stomp": Pose(0, 8, 0, -8, 0, 130, 160, -130, -160),
+    # DOS's COPY: both fists up in front of the case, holding up the CTRL+C frame
+    "copy": Pose(4, 26, -4, -24, -12, 105, 120, 95, 115),
 }
 POSE_NAMES = tuple(POSES)
 
@@ -121,10 +130,17 @@ BUILD_BONES = {
     # ERWIN: ROBERT's height, a big head on a short neck; the long shin holds two cat-leg
     # segments (the lower leg and the long foot, up to the hock: erwin.py draws the hock)
     "cat": {"torso": 24, "neck": 7, "thigh": 15, "shin": 18, "upper_arm": 12, "forearm": 12},
+    # DOS: a tall case on short legs, stubby arms; his "head" joint is the top of the case
+    "dos": {"torso": 33, "shoulder": 15, "thigh": 14, "shin": 15, "upper_arm": 10, "forearm": 10, "neck": 4.5},
 }
-SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1, "cat": 2.1}     # the mockup's proportions: about 130 px tall
-HEAD_R = {"lean": 13, "heavy": 15, "toy": 14, "cat": 17}
-LIMB_W = {"lean": 12, "heavy": 16, "toy": 12, "cat": 13}
+SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1, "cat": 2.1, "dos": 2.2}     # the mockup's proportions: about 130 px tall
+HEAD_R = {"lean": 13, "heavy": 15, "toy": 14, "cat": 17, "dos": 15}
+LIMB_W = {"lean": 12, "heavy": 16, "toy": 12, "cat": 13, "dos": 13}
+CASE_TILT = 0.3         # DOS's case leans only this much of a pose's lean: the legs do the work
+LEAN_SCALE = {"dos": CASE_TILT}
+# DOS's arms come out of the case's sides, under the screen: each arm's joints move `front` px
+# across the body (towards the face) and `down` px down the screen (the look's numbers)
+ARM_SOCKETS = {"dos": {"f": (27.0, 0.0), "b": (-25.0, -4.0)}}
 
 
 def lerp(a: Pose, b: Pose, k: float) -> Pose:
@@ -163,6 +179,27 @@ def joints(pose: Pose, build: str, feet: tuple[float, float], facing: int) -> di
     dx = feet[0]
     dy = feet[1] - max(pts["foot_f"][1], pts["foot_b"][1]) - pose.drop
     return {k: (x + dx, y + dy) for k, (x, y) in pts.items()}
+
+
+def drawn_joints(pose: Pose, build: str, feet: tuple[float, float], facing: int) -> dict[str, tuple[float, float]]:
+    """joints() as the build is drawn, and as its hit- and hurtboxes are fitted. DOS: the case
+    leans only CASE_TILT of the pose's lean and his arms come out of the case's sides
+    (ARM_SOCKETS). Every other build: joints() itself."""
+    if build in LEAN_SCALE:
+        pose = replace(pose, lean=pose.lean * LEAN_SCALE[build])
+    j = joints(pose, build, feet, facing)
+    sockets = ARM_SOCKETS.get(build)
+    if sockets:
+        hip, neck = j["hip"], j["neck"]
+        tx, ty = neck[0] - hip[0], neck[1] - hip[1]
+        n = math.hypot(tx, ty) or 1.0
+        ux, uy = tx / n, ty / n
+        fx, fy = -uy * facing, ux * facing
+        for side, (front, down) in sockets.items():
+            for name in ("shoulder", "elbow", "hand"):
+                x, y = j[f"{name}_{side}"]
+                j[f"{name}_{side}"] = (x + fx * front, y + fy * front + down)
+    return j
 
 
 # --- which pose, this frame -----------------------------------------------------------------

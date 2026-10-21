@@ -13,6 +13,7 @@ from brawl_ket.poses import (
     POSES,
     SCALE,
     Pose,
+    drawn_joints,
     joints,
     lerp,
     pose_for,
@@ -231,6 +232,7 @@ STRIKER = {
     "MEASURE": "hand_f", "CHARGE NOISE": "hand_f", "COLLAPSE": "foot_f",
     "LIGHT PILLAR": "hand_f",
     "POUNCE": "hand_f", "SCRATCH": "hand_f",
+    "BLUE SCREEN": "hand_f", "CRT DROP": "foot_f",
 }
 REACH = 12      # px: a joint is drawn with a fist/foot about this big around it
 
@@ -255,7 +257,7 @@ def test_the_striking_limb_reaches_the_hitbox_on_impact(char, slot):
     move = c.moves[slot]
     f = Fighter(c, FEET[0], 1)
     f.action, f.move, f.slot, f.frame = "attack", move, slot, move.startup   # the first active frame
-    j = joints(pose_for(f), c.build, FEET, 1)
+    j = drawn_joints(pose_for(f), c.build, FEET, 1)
     point = j[STRIKER[move.name]]
     assert distance_to_box(point, screen_box(move)) <= REACH, (move.name, point)
 
@@ -319,3 +321,15 @@ def test_the_slide_is_drawn_under_a_photon():
     photon_bottom = ROBERT.moves["stand.X"].projectile.box.y
     assert head_top < photon_bottom and top < photon_bottom
     assert ROBERT.moves["crouch.X"].hurt_active.h < photon_bottom
+
+
+def test_dos_leans_only_a_little_and_his_arms_come_out_of_the_case():
+    from brawl_ket.poses import CASE_TILT
+    pose = POSES["crouch"]
+    j = drawn_joints(pose, "dos", FEET, 1)
+    tilt = math.degrees(math.atan2(j["neck"][0] - j["hip"][0], j["hip"][1] - j["neck"][1]))
+    assert tilt == pytest.approx(pose.lean * CASE_TILT)
+    idle, plain = drawn_joints(POSES["idle"], "dos", FEET, 1), joints(POSES["idle"], "dos", FEET, 1)
+    assert idle["foot_f"] == plain["foot_f"] and idle["hand_f"][0] > plain["hand_f"][0] + 20
+    for name in POSE_NAMES:                 # every other build is drawn on joints() itself
+        assert drawn_joints(POSES[name], "lean", FEET, 1) == joints(POSES[name], "lean", FEET, 1)

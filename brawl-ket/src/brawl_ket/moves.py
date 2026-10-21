@@ -8,11 +8,12 @@ at 60 Hz.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 
 from . import config
-from .basis import BOTH, OPPOSITE, OWN
+from .basis import BOTH, OPPOSITE, OWN, Z_BASIS
+from .config import DRIVE_SLOT_Y
 
 HIGH, MID, LOW = 0, 1, 2     # a move's height: a crouch ducks HIGH, a jump clears LOW
 HEIGHTS = ("HIGH", "MID", "LOW")
@@ -82,12 +83,15 @@ class Move:
     superpose: bool = False             # THE BOX: she splits into two boxes (fighter.py) until a collapse
     pop_out: Move | None = None         # ... and the swipe she pops out with when she collapses herself
     leap: tuple[float, float] | None = None   # (vx, vy) on the first active frame: an arc (POUNCE)
+    push_out: bool = False              # the hit pushes the rival away from the attacker, either side (BLUE SCREEN)
+    catch: Box | None = None            # COPY: the window that catches a rival's shot (fight.py, _catch_shots)
+    paste: bool = False                 # PASTE: fires the clipboard's shot on its first active frame
 
 
 @dataclass(frozen=True)
 class Character:
     name: str
-    build: str                          # "lean" / "heavy" / "toy" / "cat" (poses scale)
+    build: str                          # "lean" / "heavy" / "toy" / "cat" / "dos" (poses scale)
     health: int
     walk: float
     jump_vy: float
@@ -95,6 +99,9 @@ class Character:
     hurt_stand: Box
     hurt_crouch: Box
     moves: Mapping[str, Move]           # slot -> Move (read-only)
+    fixed_basis: str | None = None      # DOS: always this basis; Y and MEASURE never change it
+    copy_paste: bool = False            # DOS: Y is COPY / PASTE (`extra`), not a switch
+    extra: Mapping[str, Move] = field(default_factory=lambda: MappingProxyType({}))   # moves outside SLOTS
 
 
 SLOTS = (
@@ -398,4 +405,99 @@ ERWIN = Character(
     }),
 )
 
-CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE, "ERWIN": ERWIN}
+DOS = Character(
+    name="DOS",
+    build="dos",
+    health=125,                         # the most: big and slow
+    walk=1.6,
+    jump_vy=10.0,
+    gravity=0.55,                       # an apex of about 91 px: the lowest
+    hurt_stand=Box(-24, 0, 48, 140),    # the case: 54 px wide, its top 144 px up
+    hurt_crouch=Box(-26, 0, 52, 112),
+    fixed_basis=Z_BASIS,                # a classical bit: always green
+    copy_paste=True,
+    moves=MappingProxyType({
+        # BOHR's frame numbers, but slower jabs (8, not 6: with 125 health, 6 made him too strong);
+        # the boxes fit his fists, which come out of the case's sides
+        "stand.A": Move(
+            "jab", 8, 3, 10, Box(20, 58, 50, 16), OWN, HIGH,
+            damage=4, hitstun=17, knockback=1.0, lunge=1.5,
+            cancels=("stand.A", "stand.B"),
+            poses=("jab_wind", "jab_hit", "jab_wind"),
+        ),
+        "stand.B": Move(
+            "heavy", 13, 5, 20, Box(20, 60, 54, 22), OPPOSITE, HIGH,
+            damage=8, hitstun=22, knockback=6.0, chain_startup=9, lunge=3.0,
+            poses=("heavy_wind", "heavy_hit", "heavy_recover"),
+        ),
+        "crouch.A": Move(
+            "low jab", 8, 3, 11, Box(18, 20, 48, 14), OWN, LOW,
+            damage=4, hitstun=16, knockback=1.0, lunge=1.5,
+            cancels=("crouch.A", "crouch.B"),
+            poses=("low_wind", "low_hit", "low_wind"),
+        ),
+        "crouch.B": Move(
+            "sweep", 13, 4, 22, Box(14, 6, 62, 14), OPPOSITE, LOW,
+            damage=8, hitstun=24, knockback=2.5, knockdown=True, chain_startup=9, lunge=3.0,
+            poses=("sweep_wind", "sweep_hit", "crouch"),
+        ),
+        "air.A": Move(
+            "air jab", 5, 6, 5, Box(16, 34, 44, 20), OWN, MID,
+            damage=4, hitstun=15, knockback=1.5,
+            poses=("jump", "air_jab", "jump"),
+        ),
+        "air.B": Move(
+            "jump-in", 8, 6, 8, Box(10, 16, 40, 26), OPPOSITE, MID,
+            damage=8, hitstun=20, knockback=3.0,
+            poses=("jump", "air_kick", "jump"),
+        ),
+        "throw": Move(
+            "throw", 6, 2, 24, Box(0, 40, 56, 70), BOTH, MID,     # 56: it must reach past his broad push box
+            damage=10, hitstun=30, knockback=6.0, knockdown=True,
+            kind="throw",
+            poses=("throw_reach", "throw_hold", "idle"),
+        ),
+        # A spinning 3.5" disk out of his drive slot: slower than PHOTON, HIGH like it.
+        "stand.X": Move(
+            "FLOPPY", 14, 1, 22, None, OWN, HIGH,
+            damage=9, hitstun=18, knockback=3.0,
+            kind="projectile", cooldown=config.frames(2.5), cue="floppy",
+            projectile=Projectile(3.0, Box(0, DRIVE_SLOT_Y, 18, 18), 240),
+            poses=("cast_wind", "eject", "eject"),
+        ),
+        # His screen crashes blue and a shockwave rings out 50 px past his case on either side:
+        # MID (no ducking it), 110 px tall (high in a jump clears it), a long stun, and the rival
+        # pushed away whichever side they are on. His "get off me" move.
+        "crouch.X": Move(
+            "BLUE SCREEN", 10, 6, 24, Box(-74, 0, 148, 110), OWN, MID,
+            damage=6, hitstun=config.frames(0.6), knockback=5.0, push_out=True,
+            kind="special", cooldown=config.frames(3.0), cue="blue_screen",
+            poses=("crouch", "crash", "crouch"),
+        ),
+        # A fast stomp straight down; no shockwave. A miss lands into its long recovery.
+        "air.X": Move(
+            "CRT DROP", 4, 60, 20, Box(-24, 0, 48, 40), OWN, MID,
+            damage=12, hitstun=20, knockback=3.0, knockdown=True,
+            kind="special", dive=(0.0, 14.0), cue="crt_drop",
+            poses=("jump", "stomp", "crouch"),
+        ),
+    }),
+    extra=MappingProxyType({
+        # Y with an empty clipboard: a CTRL+C window in front of him for 0.2 s; a rival's shot
+        # that meets it is caught (fight.py). A miss leaves him 0.3 s of recovery.
+        "copy": Move(
+            "COPY", 2, 12, 18, None, OWN, MID,
+            damage=0, hitstun=1, knockback=0.0, kind="special", catch=Box(14, 20, 40, 110),
+            poses=("copy", "copy", "idle"),
+        ),
+        # Y with a shot in the clipboard: fired straight ahead from his drive slot, at its own
+        # speed, in the colour it was fired in.
+        "paste": Move(
+            "PASTE", 6, 1, 12, None, OWN, HIGH,
+            damage=0, hitstun=1, knockback=0.0, kind="special", paste=True, cue="paste",
+            poses=("cast_wind", "eject", "eject"),
+        ),
+    }),
+)
+
+CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE, "ERWIN": ERWIN, "DOS": DOS}

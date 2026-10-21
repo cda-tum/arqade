@@ -747,3 +747,14 @@ def test_a_rematch_skips_how_to_play_but_a_new_match_shows_it_again() -> None:
     m.update(idle())
     to_tutorial(m)
     assert m.state == TUTORIAL
+
+
+def test_dos_starts_every_round_with_an_empty_clipboard() -> None:
+    from brawl_ket.moves import DOS
+    m = Match(random.Random(1))
+    to_fight(m, p1=4)
+    dos = m.fight.fighters["p1"]
+    assert dos.char is DOS and dos.clipboard is None
+    dos.clipboard = (ROBERT.moves["stand.X"], "Z")
+    ko(m, "p2")
+    assert m.state == ROUND_INTRO and m.fight.fighters["p1"].clipboard is None

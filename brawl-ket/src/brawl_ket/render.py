@@ -51,8 +51,8 @@ PLAYERS = ("p1", "p2")
 ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL, "ERWIN": EYE}
 
 # how each build is drawn (the skeleton's proportions are in poses.py)
-TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5}   # the lean torso is this much thicker than a limb
-PLATES = {"lean": False, "heavy": True, "toy": False}   # armour: the heavy's wedge torso, plates, helm
+TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5, "dos": 8}   # the lean torso is this much thicker than a limb
+PLATES = {"lean": False, "heavy": True, "toy": False, "dos": True}   # armour: the heavy's wedge torso, plates, helm
 # PHOEBE (the "toy" build): a scientist, not a puppet. Her neutral colours; the coat, the lining
 # and her trousers are shades of her basis colour (docs/.../2026-10-09-brawl-ket-phoebe-design.md)
 SKIN = (232, 176, 128)

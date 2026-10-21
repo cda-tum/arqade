@@ -3,9 +3,9 @@ import importlib.util
 import pytest
 
 from brawl_ket import config
-from brawl_ket.basis import BOTH, OPPOSITE, OWN
+from brawl_ket.basis import BOTH, OPPOSITE, OWN, Z_BASIS
 from brawl_ket.moves import HIGH, LOW, MID
-from brawl_ket.moves import CHARACTERS, ERWIN, NORMALS, PHOEBE, ROBERT, SLOTS, Box
+from brawl_ket.moves import CHARACTERS, DOS, ERWIN, NORMALS, PHOEBE, ROBERT, SLOTS, Box
 
 
 def all_moves():
@@ -47,6 +47,7 @@ STARTUPS = {   # spec section 3: (A, B on its own, B cancelled from a hit A)
     "BOHR": (6, 13, 9),
     "PHOEBE": (5, 11, 8),
     "ERWIN": (4, 10, 7),
+    "DOS": (8, 13, 9),
 }
 
 
@@ -88,7 +89,8 @@ DAMAGE = {"A": 4, "B": 8, "X": 10, "throw": 10}     # spec section 1; MEASURE 12
 
 # by name: the specials whose damage isn't a special's 10 (MEASURE 12; TUNNEL only moves her; LASER a
 # little less; CHARGE NOISE a shock; THE BOX itself nothing, its swipe 8; SCRATCH a claw)
-SPECIAL_DAMAGE = {"MEASURE": 12, "TUNNEL": 0, "LASER": 8, "CHARGE NOISE": 3, "THE BOX": 0, "SCRATCH": 4}
+SPECIAL_DAMAGE = {"MEASURE": 12, "TUNNEL": 0, "LASER": 8, "CHARGE NOISE": 3, "THE BOX": 0, "SCRATCH": 4,
+                  "FLOPPY": 9, "BLUE SCREEN": 6, "CRT DROP": 12}
 
 
 def test_the_damage():
@@ -102,7 +104,7 @@ def test_the_damage():
 
 def test_health():
     assert {c.name: c.health for c in CHARACTERS.values()} == {
-        "ROBERT": 100, "BOHR": 115, "PHOEBE": 95, "ERWIN": 90}
+        "ROBERT": 100, "BOHR": 115, "PHOEBE": 95, "ERWIN": 90, "DOS": 125}
 
 
 def test_photon_has_a_cooldown():
@@ -160,9 +162,9 @@ def test_bohr_stats():
 
 def test_the_crouch_hurtbox_covers_the_drawn_crouch():
     # up to about the head's centre, as ROBERT's does: a hit on the drawn shoulders must land
-    from brawl_ket.poses import POSES, joints
+    from brawl_ket.poses import POSES, drawn_joints
     for c in CHARACTERS.values():
-        j = joints(POSES["crouch"], c.build, (0.0, 0.0), 1)
+        j = drawn_joints(POSES["crouch"], c.build, (0.0, 0.0), 1)
         assert -j["shoulder_f"][1] < c.hurt_crouch.h and abs(c.hurt_crouch.h + j["head"][1]) <= 4, c.name
 
 
@@ -247,8 +249,11 @@ SPECIALS = {   # (character, slot): (colour rule, height, twists): every special
     ("ERWIN", "stand.X"): (OWN, MID, ("superpose",)),
     ("ERWIN", "crouch.X"): (OWN, MID, ("leap",)),
     ("ERWIN", "air.X"): (OWN, MID, ("hit_every", "hover")),
+    ("DOS", "stand.X"): (OWN, HIGH, ()),
+    ("DOS", "crouch.X"): (OWN, MID, ("push_out",)),
+    ("DOS", "air.X"): (OWN, MID, ()),
 }
-TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover", "superpose", "leap")
+TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover", "superpose", "leap", "push_out")
 
 
 def test_the_specials_colours_and_twists():
@@ -260,7 +265,8 @@ def test_the_specials_colours_and_twists():
     assert names == {"ROBERT": ["PHOTON", "PHASE SLIDE", "HADAMARD DIVE"],
                      "BOHR": ["MEASURE", "CHARGE NOISE", "COLLAPSE"],
                      "PHOEBE": ["LIGHT PILLAR", "TUNNEL", "LASER"],
-                     "ERWIN": ["THE BOX", "POUNCE", "SCRATCH"]}
+                     "ERWIN": ["THE BOX", "POUNCE", "SCRATCH"],
+                     "DOS": ["FLOPPY", "BLUE SCREEN", "CRT DROP"]}
 
 
 def test_only_specials_have_twists():
@@ -324,3 +330,32 @@ def test_erwin_specials():
     assert pounce.active > 2 * pounce.leap[1] / ERWIN.gravity    # it always lands in its active frames
     assert scratch.hover and scratch.once_per_jump and (scratch.damage, scratch.height) == (4, MID)
     assert -(-scratch.active // scratch.hit_every) == 3          # three claws
+
+# --- DOS -------------------------------------------------------------------------------------
+
+
+def test_dos_stats():
+    d = CHARACTERS["DOS"]
+    assert (d.build, d.health, d.walk, d.jump_vy, d.gravity) == ("dos", 125, 1.6, 10.0, 0.55)
+    others = [c for c in CHARACTERS.values() if c is not d]
+    assert apex(d) < min(apex(c) for c in others) and d.health > max(c.health for c in others)
+    assert d.fixed_basis == Z_BASIS and d.copy_paste and set(d.extra) == {"copy", "paste"}
+    assert all(not c.copy_paste and c.fixed_basis is None for c in others)
+
+
+def test_dos_specials():
+    floppy, screen, drop = (DOS.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+    assert (floppy.damage, floppy.kind, floppy.cooldown) == (9, "projectile", config.frames(2.5))
+    assert floppy.projectile.speed == 3.0 < ROBERT.moves["stand.X"].projectile.speed
+    assert (screen.damage, screen.height, screen.hitstun, screen.cooldown) == (6, MID, config.frames(0.6),
+                                                                              config.frames(3.0))
+    half = DOS.hurt_stand.w / 2
+    assert screen.push_out and screen.hitbox.x == -(half + 50) and screen.hitbox.x + screen.hitbox.w == half + 50
+    assert (drop.damage, drop.height, drop.knockdown, drop.dive[0]) == (12, MID, True, 0.0)
+    assert drop.landing is None and 18 <= drop.recovery <= 22
+
+
+def test_copy_and_paste_numbers():
+    copy, paste = DOS.extra["copy"], DOS.extra["paste"]
+    assert copy.catch is not None and copy.active == config.frames(0.2) and copy.recovery == config.frames(0.3)
+    assert paste.paste and paste.startup <= 6 and paste.recovery <= 12
