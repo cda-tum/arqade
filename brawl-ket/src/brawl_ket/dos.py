@@ -162,7 +162,8 @@ def draw_floppy(surf, c, angle, color, facing):
 @lru_cache(maxsize=32)
 def clip_icon(kind: str | None, color) -> pygame.Surface:
     """His clipboard on the HUD: a little dark screen, empty, or showing the caught shot's tiny
-    sprite (a disk, a laser streak or a photon) in the colour it was fired in."""
+    sprite (a disk, a laser streak, a box, a bolt of electricity or a photon) in the colour it
+    was fired in."""
     s = pygame.Surface((CLIP_W, CLIP_H))
     s.fill(KEY)
     s.set_colorkey(KEY)
@@ -183,6 +184,13 @@ def clip_icon(kind: str | None, color) -> pygame.Surface:
     elif kind == "LASER":
         pygame.draw.line(s, color, (inner.left + 2, cy), (inner.right - 3, cy), 3)
         s.fill(P.WHITE, (inner.right - 4, cy - 1, 2, 2))
+    elif kind == "BOX DROP":                    # ERWIN's little box
+        s.fill(color, (cx - 4, cy - 2, 8, 6))
+        s.fill(P.lighten(color, 0.45), (cx - 1, cy - 2, 2, 5))
+        s.fill(P.shade(color, 0.7), (cx - 5, cy - 4, 4, 2))
+        s.fill(P.shade(color, 0.7), (cx + 1, cy - 4, 4, 2))
+    elif kind == "CHARGE NOISE":                # BOHR's electricity: a bolt
+        pygame.draw.lines(s, color, False, [(cx + 2, cy - 5), (cx - 2, cy), (cx + 2, cy), (cx - 2, cy + 5)], 2)
     else:
         pygame.draw.circle(s, color, (cx, cy), 4)
         s.fill(P.lighten(color, 0.6), (cx - 1, cy - 2, 2, 2))

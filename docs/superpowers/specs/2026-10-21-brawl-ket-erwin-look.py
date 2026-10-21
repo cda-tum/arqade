@@ -11,7 +11,7 @@ New in v2:
   poses.joints as for everyone; a hock is added between knee and foot, pushed back off the
   knee-foot line, so the leg reads thigh forward, long lower leg back, heel high, standing
   on the toe pads. Every shared pose still works.
-- THE BOX as a superposition: two holographic boxes in her basis colour at once, one cat in
+- THE BOX as a superposition: two holographic boxes in his basis colour at once, one cat in
   two places, then the collapse: one turns into real cardboard in a flash while the other
   fades out.
 """
@@ -239,7 +239,7 @@ def tail(surf, base, facing, fur, swish=0.0, scale=1.0, width=10):
 
 
 def box(surf, x, w, h, facing, fur, peek=True, floor=FLOOR_Y, head_r=16):
-    """A cardboard box on the floor, its flaps open; her ears and eyes peek over the rim.
+    """A cardboard box on the floor, its flaps open; his ears and eyes peek over the rim.
     Drawn in 3/4: the front face, the side face going back, the open top."""
     d = 10                                       # depth: the side face's slant
     f = facing
@@ -251,7 +251,7 @@ def box(surf, x, w, h, facing, fur, peek=True, floor=FLOOR_Y, head_r=16):
     # the dark inside
     poly(surf, [(left, top), bl, br, (left + w, top)], CARD_DEEP)
     if peek:
-        # her head, sunk in: only the ears and eyes clear the front rim
+        # his head, sunk in: only the ears and eyes clear the front rim
         hx = x + d / 2 + 2 * f
         layer = surf.subsurface(pygame.Rect(0, 0, surf.get_width(), top + 1))
         cat_head(layer, (hx, top - 7), head_r, facing, fur, P.lighten(fur, 0.55), peek=True)
@@ -327,7 +327,7 @@ def cat_leg(surf, j, side, facing, color, paw_color, w):
 def draw_erwin(surf, pose, feet, facing, fur, strike=None):
     """ERWIN on the shared skeleton. `strike` ("hand_f" or "foot_f", colour) lights an attack's
     whole arm or leg in its colour, as the game does."""
-    light = P.lighten(fur, 0.55)                # belly, muzzle, paws: a pale shade of her fur
+    light = P.lighten(fur, 0.55)                # belly, muzzle, paws: a pale shade of his fur
     dark = P.shade(fur, 0.68)
     j = joints(pose, "cat", feet, facing)
     at = frame(j, facing)
@@ -380,8 +380,8 @@ def _layer(size):
 
 
 def holo_box(surf, x, facing, fur, alpha=215, fade=0.0, seed=0):
-    """A holographic box: the same box with her ears and eyes over the rim, recoloured into
-    her basis colour with glowing edges, see-through, with scanline gaps and a few rows
+    """A holographic box: the same box with his ears and eyes over the rim, recoloured into
+    his basis colour with glowing edges, see-through, with scanline gaps and a few rows
     slipped sideways (it shimmers). `fade` 0..1 dissolves it away."""
     layer = _layer(surf.get_size())
     box(layer, x, BOX_W, BOX_H, facing, fur)
@@ -450,7 +450,7 @@ def star(surf, c, r, color):
 
 def collapse_flash(surf, x, fur):
     """The moment it collapses: a white rim round the now-real box, rays bursting off it and
-    two glints, in white and her colour."""
+    two glints, in white and his colour."""
     layer = _layer(surf.get_size())
     box(layer, x, BOX_W, BOX_H, 1, fur)
     mask = pygame.mask.from_surface(layer)

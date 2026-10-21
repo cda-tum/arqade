@@ -1,8 +1,8 @@
 """ERWIN's look: Schrodinger's cat on the shared skeleton, and THE BOX.
 
-Ported from her approved look, docs/superpowers/specs/2026-10-21-brawl-ket-erwin-look.py:
+Ported from his approved look, docs/superpowers/specs/2026-10-21-brawl-ket-erwin-look.py:
 draw_erwin and everything it calls are the look's own code, given the joints instead of a
-pose (tests/test_render.py checks her against the look pixel for pixel). The holographic
+pose (tests/test_render.py checks him against the look pixel for pixel). The holographic
 and cardboard boxes are the look's too, but each is drawn once per colour, facing and
 shimmer phase onto a small sprite (the look drew a full-screen layer every call), then only
 blitted: the superposition costs four blits a frame.
@@ -192,10 +192,10 @@ def cat_leg(surf, j, side, facing, color, paw_color, w):
 
 
 def draw_erwin(surf, j, facing, fur, strike=None):
-    """ERWIN at the joints `j` (poses.joints, build "cat"), in her basis colour `fur`.
+    """ERWIN at the joints `j` (poses.joints, build "cat"), in his basis colour `fur`.
     `strike` = (joint, colour) lights an attack's whole arm ("hand_f") or leg ("foot_f") in its
     colour, as on every fighter. Returns j."""
-    light = P.lighten(fur, 0.55)                # belly, muzzle, paws: a pale shade of her fur
+    light = P.lighten(fur, 0.55)                # belly, muzzle, paws: a pale shade of his fur
     dark = P.shade(fur, 0.68)
     at = frame(j, facing)
     w = LIMB_W["cat"]
@@ -236,7 +236,7 @@ def draw_erwin(surf, j, facing, fur, strike=None):
 
 
 def box(surf, x, w, h, facing, fur, floor, peek=True, head_r=16):
-    """A cardboard box on the floor, its flaps open; her ears and eyes peek over the rim.
+    """A cardboard box on the floor, its flaps open; his ears and eyes peek over the rim.
     Drawn in 3/4: the front face, the side face going back, the open top (the look's)."""
     d = 10
     f = facing
@@ -281,7 +281,7 @@ def _anchor(facing: int) -> int:
 
 
 def _flat_box(fur, facing: int, peek: bool = True) -> pygame.Surface:
-    """The cardboard box (with her ears and eyes over the rim if `peek`), on its own sprite."""
+    """The cardboard box (with his ears and eyes over the rim if `peek`), on its own sprite."""
     layer = _layer()
     box(layer, SPRITE_X, BOX_W, BOX_H, 1, fur, SPRITE_FLOOR, peek)
     if facing < 0:
@@ -311,7 +311,7 @@ def _dither(fade_step: int) -> pygame.Surface:
 
 @lru_cache(maxsize=64)
 def holo_sprite(fur, facing: int, phase: int, fade_step: int = 0) -> tuple[pygame.Surface, pygame.Surface]:
-    """A holographic box (the look's holo_box): the box recoloured into her basis colour with
+    """A holographic box (the look's holo_box): the box recoloured into his basis colour with
     glowing edges, see-through, with scanline gaps and a few rows slipped sideways by `phase`;
     `fade_step` / FADE_STEPS of it dissolved. Returns (the box, the pale pool it stands in),
     both SPRITE_W x SPRITE_H, to blit at (x - _anchor(facing), floor - SPRITE_FLOOR)."""
@@ -361,8 +361,8 @@ def draw_holo_box(surf, x, floor, facing, fur, phase, fade_step=0):
 
 @lru_cache(maxsize=16)
 def card_sprite(fur, facing: int) -> tuple[pygame.Surface, pygame.Surface]:
-    """The real cardboard box she turned out to be in, and its white silhouette (the rim). No
-    ears over its rim: in the game her real body is there, popping out of it."""
+    """The real cardboard box he turned out to be in, and its white silhouette (the rim). No
+    ears over its rim: in the game his real body is there, popping out of it."""
     card = _flat_box(fur, facing, peek=False)
     rim = pygame.mask.from_surface(card).to_surface(setcolor=(*P.WHITE, 255), unsetcolor=(0, 0, 0, 0))
     return card, rim
@@ -403,7 +403,7 @@ def draw_superposed(surf, boxes, floor, facing, fur, t):
 
 
 def draw_collapse(surf, x, floor, facing, fur, age):
-    """The collapse, `age` frames on: the box she is in is real cardboard, for its first
+    """The collapse, `age` frames on: the box he is in is real cardboard, for its first
     FLASH_FRAMES in a white rim with rays bursting off it and two glints (the look's
     collapse_flash)."""
     card, rim = card_sprite(fur, facing)
@@ -422,3 +422,21 @@ def draw_collapse(surf, x, floor, facing, fur, age):
         star(surf, (x - (BOX_W / 2 + 4) * facing, floor - BOX_H - 10), 9, P.WHITE)
         star(surf, (x + (BOX_W / 2 + 16) * facing, floor - BOX_H - 22), 6, P.lighten(fur, 0.6))
     surf.blit(card, pos)
+
+
+def draw_little_box(surf, center, color, tilt: int) -> None:
+    """BOX DROP's box: a little cardboard box in the attack's colour, flaps open on top, a tape
+    stripe down its front, rocking a pixel from side to side as it falls (`tilt` 0 or 1)."""
+    cx, cy = round(center[0]), round(center[1])
+    body = pygame.Rect(0, 0, 20, 14)
+    body.midtop = (cx + (1 if tilt else -1), cy - 5)
+    flaps = [((body.left, body.top), (body.left - 4, body.top - 5), (body.left + 8, body.top - 4), (body.left + 9, body.top)),
+             ((body.right, body.top), (body.right + 4, body.top - 5), (body.right - 8, body.top - 4), (body.right - 9, body.top))]
+    for flap in flaps:
+        pygame.draw.polygon(surf, P.INK, flap)
+        pygame.draw.polygon(surf, P.shade(color, 0.75), [(x, y + 1) for x, y in flap[:3]] + [flap[3]])
+    pygame.draw.rect(surf, P.INK, body.inflate(4, 4), border_radius=2)
+    pygame.draw.rect(surf, color, body)
+    surf.fill(P.shade(color, 0.7), (body.x, body.bottom - 4, body.w, 4))              # its shaded side
+    surf.fill(P.lighten(color, 0.45), (body.centerx - 2, body.y, 4, body.h - 4))      # the tape
+

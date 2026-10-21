@@ -105,17 +105,17 @@ POSES: dict[str, Pose] = {
     "laser": Pose(14, 100, 15, 40, -50, 45, 45, -40, 60),
     # ERWIN's stand.X THE BOX: ducking down into the box, paws tucked in
     "box_duck": Pose(24, 95, -4, 30, -86, 60, 170, 40, 160),
-    # ... and the swipe she pops out of it with: a paw raking low and forward
+    # ... and the swipe he pops out of it with: a paw raking low and forward
     "swipe": Pose(18, 70, 10, -20, -50, 80, 75, 30, 150),
     # ERWIN's crouch.X POUNCE: stretched out along the leap, paws first, hind legs trailing
     "pounce": Pose(40, 140, 90, -70, -110, 100, 95, 85, 95),
-    # ERWIN's air.X SCRATCH: hanging in the air, a paw raking forward
-    "scratch": Pose(14, 100, 15, 40, -50, 60, 70, 30, 150),
+    # ERWIN's air.X BOX DROP: in the air, a paw reaching down in front to let the box go
+    "drop": Pose(12, 100, 15, 40, -50, 25, 10, 30, 150),
     # DOS's stand.X FLOPPY (and PASTE): braced, the front fist raised and the back one flung
     # back, out of the drive slot's way (the look's EJECT)
     "eject": Pose(-6, 30, -4, -26, -14, 150, 175, -60, -20),
-    # DOS's crouch.X BLUE SCREEN: the crash, arms flung straight out
-    "crash": Pose(-4, 32, -6, -32, -10, 95, 105, -95, -105),
+    # DOS's crouch.X MOUSE CABLE: low, his arm flung forward along the floor after the mouse
+    "fling": Pose(18, 95, -4, 30, -86, 75, 85, 20, 150),
     # DOS's air.X CRT DROP: feet together straight down, arms up
     "stomp": Pose(0, 8, 0, -8, 0, 130, 160, -130, -160),
     # DOS's COPY: both fists up in front of the case, holding up the CTRL+C frame

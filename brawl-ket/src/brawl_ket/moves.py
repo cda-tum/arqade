@@ -80,11 +80,11 @@ class Move:
     hover: bool = False                 # the fall stops through startup and active (LASER)
     once_per_jump: bool = False         # usable once per jump (LASER)
     cue: str | None = None              # a sound event fired on the first active frame
-    superpose: bool = False             # THE BOX: she splits into two boxes (fighter.py) until a collapse
-    pop_out: Move | None = None         # ... and the swipe she pops out with when she collapses herself
+    superpose: bool = False             # THE BOX: he splits into two boxes (fighter.py) until a collapse
+    pop_out: Move | None = None         # ... and the swipe he pops out with when he collapses himself
     leap: tuple[float, float] | None = None   # (vx, vy) on the first active frame: an arc (POUNCE)
-    push_out: bool = False              # the hit pushes the rival away from the attacker, either side (BLUE SCREEN)
-    catch: Box | None = None            # COPY: the window that catches a rival's shot (fight.py, _catch_shots)
+    pull: bool = False                  # its shot reels the rival in, hit or bounced (MOUSE CABLE: fight.py)
+    catch: Box | None = None            # COPY: the window that catches a rival's shot or field (fight.py, _catch)
     paste: bool = False                 # PASTE: fires the clipboard's shot on its first active frame
 
 
@@ -354,11 +354,11 @@ PHOEBE = Character(
 
 NORMALS = ("stand.A", "stand.B", "crouch.A", "crouch.B", "air.A", "air.B", "throw")
 
-# THE BOX's two boxes, each around its own x: the drawn box (70 px wide, 48 tall) and her ears
+# THE BOX's two boxes, each around its own x: the drawn box (70 px wide, 48 tall) and his ears
 # over its rim. Every standing normal, PHOTON and FLOPPY touch it.
 BOX_HURT = Box(-36, 0, 72, 86)
 
-# The quick swipe ERWIN pops out of THE BOX with when she collapses it herself: MID, her colour,
+# The quick swipe ERWIN pops out of THE BOX with when he collapses it himself: MID, his colour,
 # a short reach (60 px ahead, about a jab's).
 BOX_SWIPE = Move(
     "BOX SWIPE", 3, 4, 14, Box(14, 50, 46, 36), OWN, MID,
@@ -377,9 +377,9 @@ ERWIN = Character(
     hurt_crouch=Box(-16, 0, 32, 100),
     moves=MappingProxyType({
         **{slot: ROBERT.moves[slot] for slot in NORMALS},   # the shared normals, as ROBERT's
-        # One cat, two places: she ducks into a box (startup, hittable), and on the first active
-        # frame it splits into two (fighter.py, _split). Collapsed by her (a press, a new stick
-        # direction, or BOX_FRAMES) she pops out with BOX_SWIPE; by the rival, it's a measurement
+        # One cat, two places: he ducks into a box (startup, hittable), and on the first active
+        # frame it splits into two (fighter.py, _split). Collapsed by him (a press, a new stick
+        # direction, or BOX_FRAMES) he pops out with BOX_SWIPE; by the rival, it's a measurement
         # (fight.py, _measure). The cooldown runs from the collapse.
         "stand.X": Move(
             "THE BOX", 8, 1, 4, None, OWN, MID,
@@ -395,12 +395,14 @@ ERWIN = Character(
             kind="special", leap=(6.0, 7.0), cooldown=config.frames(2.0), cue="pounce",
             poses=("crouch", "pounce", "crouch"),
         ),
-        # She hangs in the air (like LASER) and claws three times: on active frames 0, 8 and 16.
+        # He drops a little cardboard box from the air: it falls straight down just in front of
+        # him (MID, his colour) and ends on the floor. Once per jump. It's a shot, so DOS can COPY it.
         "air.X": Move(
-            "SCRATCH", 4, 24, 8, Box(12, 40, 46, 36), OWN, MID,
-            damage=4, hitstun=10, knockback=1.0, hit_every=8,
-            kind="special", hover=True, once_per_jump=True, cue="scratch",
-            poses=("jump", "scratch", "jump"),
+            "BOX DROP", 5, 1, 12, None, OWN, MID,
+            damage=8, hitstun=16, knockback=2.0,
+            kind="projectile", once_per_jump=True, cue="box_drop",
+            projectile=Projectile(0.5, Box(-18, 8, 22, 20), 90, vy=-7.0),
+            poses=("jump", "drop", "jump"),
         ),
     }),
 )
@@ -465,18 +467,20 @@ DOS = Character(
             projectile=Projectile(3.0, Box(0, DRIVE_SLOT_Y, 18, 18), 240),
             poses=("cast_wind", "eject", "eject"),
         ),
-        # His screen crashes blue and a shockwave rings out 50 px past his case on either side:
-        # MID (no ducking it), 110 px tall (high in a jump clears it), a long stun, and the rival
-        # pushed away whichever side they are on. His "get off me" move.
+        # He flings his mouse out along the floor on its cable (LOW: a jump clears it), about
+        # 180 px, and reels in whoever it touches, to just in front of him. The pull happens
+        # whatever their colour; the colour rule still decides the damage. He stays planted
+        # while the mouse is out (fight.py cuts the cable if he is hit).
         "crouch.X": Move(
-            "BLUE SCREEN", 10, 6, 24, Box(-74, 0, 148, 110), OWN, MID,
-            damage=6, hitstun=config.frames(0.6), knockback=5.0, push_out=True,
-            kind="special", cooldown=config.frames(3.0), cue="blue_screen",
-            poses=("crouch", "crash", "crouch"),
+            "MOUSE CABLE", 9, 1, 26, None, OWN, LOW,
+            damage=6, hitstun=30, knockback=0.0, pull=True,
+            kind="projectile", cooldown=config.frames(3.0), cue="mouse",
+            projectile=Projectile(12.0, Box(0, 4, 18, 12), 13),
+            poses=("crouch", "fling", "crouch"),
         ),
         # A fast stomp straight down; no shockwave. A miss lands into its long recovery.
         "air.X": Move(
-            "CRT DROP", 4, 60, 20, Box(-24, 0, 48, 40), OWN, MID,
+            "CRT DROP", 4, 60, 20, Box(-44, 0, 88, 64), OWN, MID,     # his whole case's width, and then some
             damage=12, hitstun=20, knockback=3.0, knockdown=True,
             kind="special", dive=(0.0, 14.0), cue="crt_drop",
             poses=("jump", "stomp", "crouch"),

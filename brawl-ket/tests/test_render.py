@@ -497,7 +497,7 @@ def test_superposed_erwin_is_two_boxes_drawn_from_cached_sprites(surface):
     r = Renderer(surface)
     fight = boxed_fight(r)
     # every box sprite is built as the fight starts (a hitch on the cabinet otherwise, the first
-    # time she boxes), all of them fit the cache, and drawing her boxed builds nothing new
+    # time he boxes), all of them fit the cache, and drawing his boxed builds nothing new
     info = holo_sprite.cache_info()
     assert info.currsize == info.misses <= min(info.maxsize, 2 * 2 * (HOLO_PHASES + FADE_STEPS))
     for _ in range(20):
@@ -595,18 +595,31 @@ def dos_frames(r, presses, frames, rival_x=600):
     return fight
 
 
-def test_blue_screen_turns_his_face_blue_and_rings_out_green(surface):
-    from brawl_ket.dos import BSOD
+def test_mouse_cable_draws_the_mouse_on_its_cable_back_to_him(surface):
     from brawl_ket.moves import DOS
+    mouse = DOS.moves["crouch.X"]
     r = Renderer(surface)
-    fight = dos_frames(r, {"down": True, "x": True}, DOS.moves["crouch.X"].startup + 2)
+    fight = dos_frames(r, {"down": True, "x": True}, mouse.startup + 6)
     dos = fight.fighters["p1"]
-    assert dos.phase == "active"
-    x = round(dos.x)
-    face = {tuple(surface.get_at((i, j)))[:3] for i in range(x - 30, x + 31, 2) for j in range(FLOOR_Y - 150, FLOOR_Y - 60)}
-    assert BSOD in face
-    ring = {tuple(surface.get_at((i, FLOOR_Y - 55)))[:3] for i in range(x + 30, x + 80)}
-    assert ring & {GREEN, P.lighten(GREEN, 0.35), P.WHITE}
+    (shot,) = [s for s in fight.shots if s.move is mouse]
+    left, top, w, h = shot.box
+    body = {tuple(surface.get_at((round(left + w / 2) + dx, round(top + h / 2))))[:3] for dx in (-3, 0, 3)}
+    assert GREEN in body or P.lighten(GREEN, 0.6) in body                   # the mouse, his colour
+    cable_x = round((dos.x + 30 + left) / 2)                                 # halfway out along the cable
+    cable = {tuple(surface.get_at((cable_x, j)))[:3] for j in range(FLOOR_Y - 50, FLOOR_Y)}
+    assert P.shade(GREEN, 0.7) in cable
+
+
+def test_a_falling_box_drop_is_a_little_box_in_his_colour(surface):
+    from brawl_ket.fight import Shot
+    from brawl_ket.moves import ERWIN
+    r = Renderer(surface)
+    fight = Fight({"p1": ERWIN, "p2": ROBERT}, seed=1)
+    fight.shots.append(Shot("p1", ERWIN.moves["air.X"], 300, 80.0, 0.5, 90, "Z", -7.0))
+    r.draw_fight(fight, [])
+    left, top, w, h = fight.shots[0].box
+    seen = {tuple(surface.get_at((i, j)))[:3] for i in range(round(left), round(left + w)) for j in range(round(top), round(top + h))}
+    assert GREEN in seen and P.lighten(GREEN, 0.45) in seen                 # the box and its tape
 
 
 def test_copy_holds_up_a_ctrl_c_frame(surface):

@@ -125,7 +125,7 @@ def test_erwin_waits_in_the_box_then_pops_out_near_the_rival():
     while not me.boxed:
         fight.step({})
     bot = Bot("p1", seed=1, skill=1.0)
-    assert not bot.input(fight).a                       # far from both boxes: she waits
+    assert not bot.input(fight).a                       # far from both boxes: he waits
     rival.x = me.boxes[1] + 30
     bot.gap = 0
     assert bot.input(fight).a                           # the rival came close: out with a swipe
@@ -154,8 +154,8 @@ def test_dos_never_uses_y_to_dodge_or_feint():
             fight.step(ins)
 
 
-@pytest.mark.parametrize("name,extra", [("ERWIN", {"box_split", "pounce", "scratch"}),
-                                        ("DOS", {"floppy", "blue_screen", "crt_drop", "copy", "paste"})])
+@pytest.mark.parametrize("name,extra", [("ERWIN", {"box_split", "pounce", "box_drop"}),
+                                        ("DOS", {"floppy", "mouse", "crt_drop", "copy", "paste"})])
 def test_the_new_bots_use_all_their_specials(name, extra):
     kinds: set[str] = set()
     for seed in range(40):

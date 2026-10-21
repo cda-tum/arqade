@@ -46,7 +46,7 @@ def test_null_audio_is_a_silent_stand_in() -> None:
     a.play_events([Cue("blip"), Event("hit", "p1", "X")])
 
 
-NEW_SOUNDS = ("box_split", "box_collapse", "pounce", "scratch", "floppy", "blue_screen", "crt_drop", "copy", "paste")
+NEW_SOUNDS = ("box_split", "box_collapse", "pounce", "box_drop", "floppy", "mouse", "crt_drop", "copy", "paste")
 
 
 def test_erwin_and_dos_have_their_sounds() -> None:

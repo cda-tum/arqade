@@ -1,18 +1,21 @@
 """DOS (docs/superpowers/specs/2026-10-21-brawl-ket-erwin-dos-design.md, sections 3 and 4): a
 classical bit, always green, so Y never switches him and MEASURE never collapses him; his Y
-is COPY (catch a rival's shot) and then PASTE (fire it back, straight ahead, in the colour it
-was fired in); FLOPPY, BLUE SCREEN and CRT DROP."""
+is COPY (catch a rival's shot, or BOHR's crackling field) and then PASTE (fire it back, straight
+ahead, in the colour it was fired in, or crackle with the field); FLOPPY, MOUSE CABLE and CRT
+DROP."""
 
 from brawl_ket import basis
 from brawl_ket.basis import X_BASIS, Z_BASIS
-from brawl_ket.config import COPY_CAUGHT_RECOVERY, DRIVE_SLOT_Y
+from brawl_ket.config import COPY_CAUGHT_RECOVERY, DRIVE_SLOT_Y, PASTE_SPEED
 from brawl_ket.fight import Fight, Shot, body_width
 from brawl_ket.fighter import IDLE, FighterInput
 from brawl_ket.moves import BOHR, DOS, ERWIN, PHOEBE, ROBERT
 
 Y = FighterInput(y=True)
 COPY, PASTE = DOS.extra["copy"], DOS.extra["paste"]
-FLOPPY, BLUE, DROP = (DOS.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+FLOPPY, MOUSE, DROP = (DOS.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+NOISE, BOX_DROP = BOHR.moves["crouch.X"], ERWIN.moves["air.X"]
+DOWN_X = FighterInput(down=True, x=True)
 PHOTON, LASER = ROBERT.moves["stand.X"], PHOEBE.moves["air.X"]
 TUNNEL = PHOEBE.moves["crouch.X"]
 TUNNEL_STEPS = TUNNEL.startup + TUNNEL.active + TUNNEL.recovery
@@ -181,7 +184,7 @@ def test_a_pasted_shot_into_a_box_measures_erwin():
     assert kinds(events).count("box_collapse") == 1
 
 
-# --- FLOPPY, BLUE SCREEN, CRT DROP ---------------------------------------------------------------
+# --- FLOPPY, MOUSE CABLE, CRT DROP --------------------------------------------------------------
 
 
 def test_floppy_leaves_his_drive_slot_at_3_px_a_frame():
@@ -194,32 +197,97 @@ def test_floppy_leaves_his_drive_slot_at_3_px_a_frame():
     assert shot.x - x == 3.0 and shot.y + FLOPPY.projectile.box.y == DRIVE_SLOT_Y and shot.basis == Z_BASIS
 
 
-def test_blue_screen_cannot_be_ducked():
-    fight = versus(DOS, ROBERT, 60)
+def mouse(gap, rival_basis=None, rival_input=IDLE, frames=45):
+    fight = versus(DOS, ROBERT, gap)
+    dos, rival = fight.fighters["p1"], fight.fighters["p2"]
+    if rival_basis is not None:
+        rival.basis = rival_basis
     events = []
-    for i in range(BLUE.startup + 2):
-        events += step(fight, FighterInput(down=True, x=i == 0), FighterInput(down=True))
+    for i in range(frames):
+        events += step(fight, DOWN_X if i == 0 else IDLE, rival_input)
+    return fight, dos, rival, events
+
+
+def test_mouse_cable_reels_a_rival_in_to_just_in_front_of_him():
+    fight, dos, rival, events = mouse(160)
+    assert "mouse" in kinds(events) and kinds(hits_on(events, "p2")) == ["hit"]
+    assert rival.health == ROBERT.health - MOUSE.damage
+    assert abs(rival.x - (dos.x + fight.body_width)) <= 6          # pulled right up to him
+
+
+def test_mouse_cable_pulls_a_rival_of_the_other_colour_without_hurting():
+    fight, dos, rival, events = mouse(160, rival_basis=X_BASIS)
+    assert kinds(hits_on(events, "p2")) == ["block"] and rival.health == ROBERT.health
+    assert abs(rival.x - (dos.x + fight.body_width)) <= 6
+
+
+def test_a_jump_clears_the_mouse_and_it_stops_at_its_reach():
+    fight, dos, rival, events = mouse(160, rival_input=FighterInput(up=True), frames=30)
+    assert hits_on(events, "p2") == [] and not fight.shots
+    fight, dos, rival, events = mouse(260)                         # out of reach
+    assert hits_on(events, "p2") == [] and rival.x == dos.x + 260
+
+
+def test_hitting_dos_cuts_his_mouse_cable():
+    fight = versus(DOS, ROBERT, 300)
+    dos = fight.fighters["p1"]
+    for i in range(MOUSE.startup + 2):
+        step(fight, DOWN_X if i == 0 else IDLE)
+    assert any(s.move is MOUSE for s in fight.shots)
+    # a level LASER (MID: his crouch doesn't duck it, as it would a PHOTON)
+    fight.shots.append(Shot("p2", LASER, dos.x + 10, 0.0, -LASER.projectile.speed, 30))
+    events = step(fight)
+    assert kinds(hits_on(events, "p1")) == ["hit"] and not any(s.move is MOUSE for s in fight.shots)
+
+
+def test_crt_drop_reaches_wide():
+    fight = versus(DOS, ROBERT, 200)
+    dos, rival = fight.fighters["p1"], fight.fighters["p2"]
+    events = step(fight, FighterInput(up=True))
+    for _ in range(8):
+        events += step(fight)
+    rival.x = dos.x + 50                    # beside him rather than under him: the old box missed
+    events += step(fight, FighterInput(x=True))
+    for _ in range(40):
+        events += step(fight)
     assert kinds(hits_on(events, "p2")) == ["hit"]
 
 
-def test_blue_screen_pushes_a_rival_behind_him_away_too():
-    fight = versus(DOS, ROBERT, 100)
-    dos, rival = fight.fighters["p1"], fight.fighters["p2"]
-    events = step(fight, FighterInput(down=True, x=True))
-    rival.x = dos.x - 60                    # crossed behind him during the wind-up
-    for _ in range(BLUE.startup + 2):
-        events += step(fight)
-    assert kinds(hits_on(events, "p2")) == ["hit"] and rival.vx < 0
+# --- COPY: ERWIN's box and BOHR's electricity ------------------------------------------------------
 
 
-def test_blue_screen_misses_a_rival_high_in_a_jump():
-    fight = versus(DOS, ROBERT, 60)
-    rival = fight.fighters["p2"]
-    rival.y, rival.vy, rival.action = 130.0, 6.0, "jump"
+def test_copy_catches_a_falling_box_and_pastes_it_flying_level():
+    fight = versus(DOS, ERWIN, 300)
+    dos = fight.fighters["p1"]
+    fight.shots.append(Shot("p2", BOX_DROP, dos.x + 40, 60.0, -0.5, 90, Z_BASIS, -7.0))
     events = []
-    for i in range(BLUE.startup + BLUE.active):
-        events += step(fight, FighterInput(down=True, x=i == 0))
-    assert hits_on(events, "p2") == []
+    for i in range(COPY.startup + 2):
+        events += step(fight, Y if i == 0 else IDLE)
+    assert "copy" in kinds(events) and dos.clipboard == (BOX_DROP, Z_BASIS)
+    while dos.action == "attack":
+        step(fight)
+    for i in range(PASTE.startup + 1):
+        step(fight, Y if i == 0 else IDLE)
+    (shot,) = fight.shots
+    assert shot.move is BOX_DROP and shot.vx == PASTE_SPEED and shot.vy == 0
+
+
+def test_copy_takes_bohrs_electricity_and_paste_crackles_with_it_in_its_colour():
+    fight = versus(DOS, BOHR, 60)
+    dos, bohr = fight.fighters["p1"], fight.fighters["p2"]
+    bohr.basis = X_BASIS                    # purple noise
+    events = []
+    for i in range(NOISE.startup + 4):
+        events += step(fight, Y if i == NOISE.startup - 3 else IDLE, DOWN_X if i == 0 else FighterInput(down=True))
+    assert "copy" in kinds(events) and dos.clipboard == (NOISE, X_BASIS)
+    assert bohr.phase == "recovery" and hits_on(events, "p1") == []     # his field is gone, unfelt
+    while dos.action == "attack" or bohr.action == "attack":
+        step(fight)
+    events = []
+    for i in range(NOISE.startup + 2):
+        events += step(fight, Y if i == 0 else IDLE)
+    assert dos.move is NOISE and dos.attack_basis == X_BASIS and dos.clipboard is None
+    assert "paste" in kinds(events) and kinds(hits_on(events, "p2")) == ["hit"]   # purple hurts purple
 
 
 def test_crt_drop_stomps_straight_down_and_knocks_down():

@@ -17,9 +17,10 @@ Writes:
 - bohr_noise_*.png: BOHR's CHARGE NOISE on a ROBERT: the wind-up sparks, and the field crackling;
 - bohr_measure.png: MEASURE connecting on a purple ROBERT, 3 frames on (the collapse into green);
 - moves_cat.png, erwin_*.png: ERWIN's moves; THE BOX superposed (green, then purple after a Y),
-  the collapse (0 and 3 frames on) and the swipe; a PHOTON measuring her; POUNCE and SCRATCH;
+  the collapse (0 and 3 frames on) and the swipe; a PHOTON measuring him; POUNCE and BOX DROP;
 - moves_dos.png, dos_*.png: DOS's moves; FLOPPY in flight; COPY's CTRL+C frame catching a PHOTON
-  and the clipboard after it; PASTE; BLUE SCREEN; CRT DROP;
+  and the clipboard after it; PASTE; MOUSE CABLE out and reeling in; COPY taking BOHR's
+  electricity, and PASTE crackling with it; CRT DROP;
 - screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
@@ -346,7 +347,7 @@ def erwin_frames(out_dir: str) -> None:
         r.draw_fight(fight, fight.step({"p1": presses.get(i, IDLE), "p2": IDLE}), {"p1": 0, "p2": 0})
         if i in saves:
             save(surface, out_dir, f"{saves[i]}.png")
-    # a PHOTON into box 2 measures her
+    # a PHOTON into box 2 measures him
     fight, r, since = Fight({"p1": ERWIN, "p2": ROBERT}), Renderer(surface), None
     for i in range(120):
         events = fight.step({"p1": FighterInput(x=i == 0), "p2": FighterInput(x=i == 12)})
@@ -365,20 +366,18 @@ def erwin_frames(out_dir: str) -> None:
         r.draw_fight(fight, fight.step({"p1": FighterInput(down=True, x=i == 0), "p2": FighterInput(down=True)}),
                      {"p1": 0, "p2": 0})
     save(surface, out_dir, "erwin_pounce.png")
-    # SCRATCH from a short hop, on its first claw
+    # BOX DROP from a jump, the box falling on a ROBERT below
     fight, r = Fight({"p1": ERWIN, "p2": ROBERT}), Renderer(surface)
-    fight.fighters["p2"].x = fight.fighters["p1"].x + 44
-    erwin = fight.fighters["p1"]
-    for i in range(12):
-        inp = FighterInput(up=True) if i == 0 else FighterInput(x=i == 1)
+    fight.fighters["p2"].x = fight.fighters["p1"].x + 30
+    for i in range(24):
+        inp = FighterInput(up=True) if i == 0 else FighterInput(x=i == 15)
         r.draw_fight(fight, fight.step({"p1": inp, "p2": IDLE}), {"p1": 0, "p2": 0})
-        if erwin.phase == "active":
-            save(surface, out_dir, "erwin_scratch.png")
-            break
+    save(surface, out_dir, "erwin_box_drop.png")
 
 
 def dos_frames(out_dir: str) -> None:
-    """DOS against a ROBERT: FLOPPY, COPY and PASTE, BLUE SCREEN and CRT DROP."""
+    """DOS against a ROBERT: FLOPPY, COPY and PASTE, MOUSE CABLE and CRT DROP; and against a
+    BOHR, COPY taking his electricity and PASTE crackling with it."""
     from brawl_ket.fighter import IDLE, FighterInput
 
     surface = pygame.Surface((W, H))
@@ -413,8 +412,25 @@ def dos_frames(out_dir: str) -> None:
     # PASTE: a purple PHOTON fired back
     scene("dos_paste", lambda i, f: FighterInput(y=i == 0), DOS.extra["paste"].startup + 12,
           setup=lambda f: setattr(f.fighters["p1"], "clipboard", (ROBERT.moves["stand.X"], "X")))
-    scene("dos_blue_screen", lambda i, f: FighterInput(down=True, x=i == 0), DOS.moves["crouch.X"].startup + 2,
-          rival_x=config.START_X["p1"] + 64)
+    mouse = DOS.moves["crouch.X"]
+    scene("dos_mouse", lambda i, f: FighterInput(down=True, x=i == 0), mouse.startup + 8,
+          rival_x=config.START_X["p1"] + 170)
+    scene("dos_mouse_reeled", lambda i, f: FighterInput(down=True, x=i == 0), mouse.startup + 22,
+          rival_x=config.START_X["p1"] + 170)
+    # COPY against BOHR's CHARGE NOISE (purple), then PASTE: DOS crackling purple
+    noise = BOHR.moves["crouch.X"]
+    fight, r = Fight({"p1": DOS, "p2": BOHR}), Renderer(surface)
+    dos, bohr = fight.fighters["p1"], fight.fighters["p2"]
+    bohr.x, bohr.basis = dos.x + 60, "X"
+    for i in range(noise.startup + 3):
+        r.draw_fight(fight, fight.step({"p1": FighterInput(y=i == noise.startup - 3),
+                                        "p2": FighterInput(down=True, x=i == 0)}), {"p1": 0, "p2": 0})
+    save(surface, out_dir, "dos_copy_noise.png")
+    while dos.action == "attack" or bohr.action == "attack":
+        r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
+    for i in range(noise.startup + 6):
+        r.draw_fight(fight, fight.step({"p1": FighterInput(y=i == 0)}), {"p1": 0, "p2": 0})
+    save(surface, out_dir, "dos_paste_noise.png")
     scene("dos_crt_drop", lambda i, f: FighterInput(up=True) if i == 0 else FighterInput(x=i == 9), 16,
           rival_x=config.START_X["p1"] + 30)
 

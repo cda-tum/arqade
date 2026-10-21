@@ -141,18 +141,18 @@ def build_sfx() -> dict[str, list[int]]:
         "sizzle": noise_wave(0.07, 0.12, decay=35, hold=1, seed=9),
         "shockwave": mix(tone(70, 0.3, 0.45, "sine", decay=8, slide=0.5), noise_wave(0.25, 0.3, decay=12, hold=6)),
         # ERWIN: THE BOX splitting (a wobble, up and down at once), the collapse (a pop and a
-        # bright blip), POUNCE (a springy leap), SCRATCH (three quick scratches)
+        # bright blip), POUNCE (a springy leap), BOX DROP (a cardboard flap and a falling whistle)
         "box_split": mix(tone(c("E5"), 0.18, 0.13, "triangle", decay=5, slide=1.5),
                          tone(c("E5", 7), 0.18, 0.1, "triangle", decay=5, slide=0.67)),
         "box_collapse": concat(noise_wave(0.03, 0.2, decay=40, hold=2, seed=13),
                                tone(c("B5"), 0.08, 0.2, "pulse", decay=14)),
         "pounce": tone(300, 0.14, 0.18, "square", decay=10, slide=2.4),
-        "scratch": concat(*(noise_wave(0.025, 0.16, decay=60, hold=1, seed=s) for s in (21, 22, 23))),
-        # DOS: FLOPPY (a drive's whirr and click), BLUE SCREEN (a crashing low buzz), CRT DROP (a
-        # heavy thud), COPY (two key clicks), PASTE (a click, then a blip)
+        "box_drop": concat(noise_wave(0.03, 0.16, decay=45, hold=2, seed=21), tone(900, 0.14, 0.12, "triangle", decay=6, slide=0.45)),
+        # DOS: FLOPPY (a drive's whirr and click), MOUSE CABLE (a click and a cable's zip), CRT DROP
+        # (a heavy thud), COPY (two key clicks), PASTE (a click, then a blip)
         "floppy": concat(tone(180, 0.08, 0.16, "saw", decay=6, slide=1.4), noise_wave(0.03, 0.18, decay=50, hold=4, seed=31)),
-        "blue_screen": mix(tone(110, 0.35, 0.22, "square", decay=4, slide=0.7),
-                           noise_wave(0.3, 0.14, decay=6, hold=8, seed=33)),
+        "mouse": concat(tone(c("D6"), 0.02, 0.18, "pulse"), mix(tone(500, 0.16, 0.12, "saw", decay=8, slide=1.8),
+                                                                noise_wave(0.16, 0.08, decay=14, hold=2, seed=33))),
         "crt_drop": mix(tone(90, 0.2, 0.35, "sine", decay=10, slide=0.5), noise_wave(0.15, 0.25, decay=18, hold=5, seed=35)),
         "copy": concat(tone(c("A5"), 0.03, 0.18, "pulse"), tone(0, 0.02, 0), tone(c("A5"), 0.03, 0.18, "pulse")),
         "paste": concat(tone(c("A5"), 0.03, 0.18, "pulse"), tone(0, 0.02, 0), tone(c("E6"), 0.07, 0.2, "pulse", decay=12)),
@@ -165,8 +165,8 @@ CUE_SOUNDS = {"blip": "blip", "confirm": "confirm", "pause": "pause", "round": "
 EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "whoosh", "measure": "measure",
                 "projectile": "photon", "shockwave": "shockwave",
                 "pillar": "pillar", "tunnel": "tunnel", "laser": "laser", "fizzle": "sizzle",
-                "box_split": "box_split", "box_collapse": "box_collapse", "pounce": "pounce", "scratch": "scratch",
-                "floppy": "floppy", "blue_screen": "blue_screen", "crt_drop": "crt_drop", "copy": "copy",
+                "box_split": "box_split", "box_collapse": "box_collapse", "pounce": "pounce", "box_drop": "box_drop",
+                "floppy": "floppy", "mouse": "mouse", "crt_drop": "crt_drop", "copy": "copy",
                 "paste": "paste",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw

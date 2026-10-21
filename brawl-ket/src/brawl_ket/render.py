@@ -46,6 +46,7 @@ from .erwin import (
     draw_collapse,
     draw_erwin,
     draw_holo_box,
+    draw_little_box,
     draw_superposed,
     holo_sprite,
 )
@@ -96,8 +97,8 @@ STRIKER = {
     "PHOTON": "hand_f", "PHASE SLIDE": "foot_f", "HADAMARD DIVE": "foot_f",
     "MEASURE": "hand_f", "COLLAPSE": "foot_f",
     "LIGHT PILLAR": "hand_f", "LASER": "hand_f",
-    "BOX SWIPE": "hand_f", "POUNCE": "hand_f", "SCRATCH": "hand_f",
-    "CRT DROP": "foot_f",
+    "BOX SWIPE": "hand_f", "POUNCE": "hand_f", "BOX DROP": "hand_f",
+    "MOUSE CABLE": "hand_f", "CRT DROP": "foot_f",
 }
 
 # effect lengths, in frames
@@ -450,15 +451,12 @@ def strike_of(f: Fighter) -> tuple[str, tuple] | None:
 
 def dos_screen(f: Fighter) -> tuple[str, bool, bool]:
     """DOS's screen this frame: (mood, his drive's busy light, a disk's edge in the slot).
-    Calm, angry while he attacks or reels, blue through BLUE SCREEN; the disk shows as FLOPPY
-    or PASTE fires."""
+    Calm, or angry while he attacks or reels; the disk shows as FLOPPY or PASTE fires."""
     m = f.move
     if f.action in ("hitstun", "knockdown"):
         return "angry", False, False
     if f.action != "attack" or m is None:
         return "calm", False, False
-    if m.name == "BLUE SCREEN":
-        return "blue", True, False
     fires = m.kind == "projectile" or m.paste
     return "angry", True, fires and f.startup - 2 <= f.frame < f.startup + m.active + 4
 
@@ -684,7 +682,7 @@ class Renderer:
                 r = round(46 * (1 - k)) + 4
                 pygame.draw.circle(surf, P.INK, _pt((fx.x + ox, fx.y + oy)), r + 1, 4)
                 pygame.draw.circle(surf, fx.color, _pt((fx.x + ox, fx.y + oy)), r, 2)
-            elif world and fx.kind == "box_pop":     # the box she is in, real cardboard
+            elif world and fx.kind == "box_pop":     # the box he is in, real cardboard
                 draw_collapse(surf, fx.x + ox, fx.y + oy, fx.facing, fx.color, age)
             elif world and fx.kind == "box_fade":    # the other one dissolving in a dither
                 step = 1 + min(FADE_STEPS - 2, age * (FADE_STEPS - 1) // fx.life)
@@ -786,19 +784,15 @@ class Renderer:
         j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare,
                         strike=strike_of(f), mood=mood, led=led, eject=eject)
         self._striker(key, f, j)
-        if f.action == "attack" and m is not None and m.name == "SCRATCH" and f.phase == "active":
-            self._claws(f, j)
         if f.action == "attack" and m is not None:
             if m.catch is not None:
                 self._copy_window(f, m, ox, oy)
-            elif m.name == "BLUE SCREEN":
-                self._blue_screen(f, m, ox, oy)
             elif m.name == "CRT DROP":
                 self._crt_drop(f, ox, oy)
         if f.action == "attack" and m is not None and m.name == "LIGHT PILLAR":
             self._pillar(f, m, j, ox, oy)
         if f.action == "attack" and m is not None and m.projectile is not None and m.projectile.vy \
-                and f.phase == "startup":
+                and m.hover and f.phase == "startup":                   # LASER's aim (not BOX DROP)
             self._laser_aim(f, j, oy)
         return j["head"][0] - ox, j["head"][1] - oy
 
@@ -894,17 +888,6 @@ class Renderer:
         pygame.draw.circle(self.surface, P.INK, _pt((hx, hy)), r + 2)
         pygame.draw.circle(self.surface, P.lighten(colour, 0.4), _pt((hx, hy)), r)
 
-    def _claws(self, f: Fighter, j: dict) -> None:
-        """SCRATCH: three white claw marks in front of her paw on the first frames of each swipe."""
-        if (f.frame - f.startup) % f.move.hit_every >= 3:
-            return
-        hx, hy = j["hand_f"]
-        for k in (-6, 0, 6):
-            a = (hx + f.facing * 6, hy + k - 6)
-            b = (hx + f.facing * 16, hy + k + 6)
-            pygame.draw.line(self.surface, P.INK, _pt(a), _pt(b), 4)
-            pygame.draw.line(self.surface, P.WHITE, _pt(a), _pt(b), 2)
-
     def _copy_window(self, f: Fighter, m, ox: int, oy: int) -> None:
         """COPY: a dashed CTRL+C frame round the catch window in front of him, pale while he
         raises it and bright white while it can catch."""
@@ -923,27 +906,22 @@ class Renderer:
                 surf.fill(colour, (x, y, 2, 4))
         blit_center(surf, outlined("CTRL+C", 8, colour), (rect.centerx, rect.top - 9))
 
-    def _blue_screen(self, f: Fighter, m, ox: int, oy: int) -> None:
-        """BLUE SCREEN: the crash rings out from his case to the edge of its reach, in the move's
-        colour (his green: the colour rule stays readable), white on its first frame."""
-        if f.phase != "active":
-            return
-        surf = self.surface
-        colour = ERROR_COLOUR[basis.error_for(m.colour, f.attack_basis)]
-        age = f.frame - f.startup
-        k = (age + 1) / m.active
-        reach, tall = m.hitbox.w / 2, m.hitbox.h
-        cx, cy = round(f.x) + ox, round(FLOOR_Y - f.y - tall / 2) + oy
-        for lag, width in ((0.0, 3), (0.35, 2)):
-            kk = max(0.0, k - lag) / (1 - lag)
-            if kk <= 0:
-                continue
-            rx = round(24 + (reach - 24) * kk)
-            rect = pygame.Rect(0, 0, 2 * rx, round(tall * (0.4 + 0.6 * kk)))
-            rect.center = (cx, cy)
-            ring = P.WHITE if age == 0 else P.lighten(colour, 0.35) if lag == 0 else colour
-            pygame.draw.ellipse(surf, P.INK, rect.inflate(4, 4), width + 2)
-            pygame.draw.ellipse(surf, ring, rect, width)
+    def _mouse(self, s, cx: float, cy: float, color, ox: int, oy: int) -> None:
+        """MOUSE CABLE: the mouse sliding along the floor in the attack's colour, its cable
+        back to DOS's front, low, where his arm flung it from."""
+        owner = self._fight.fighters[s.owner] if self._fight is not None else None
+        if owner is not None:
+            start = (owner.x + ox + s.facing * 26, FLOOR_Y + oy - owner.y - 34)
+            end = (cx - s.facing * 9, cy)
+            pygame.draw.line(self.surface, P.INK, _pt(start), _pt(end), 4)
+            pygame.draw.line(self.surface, P.shade(color, 0.7), _pt(start), _pt(end), 2)
+        body = pygame.Rect(0, 0, 18, 12)
+        body.center = _pt((cx, cy))
+        pygame.draw.ellipse(self.surface, P.INK, body.inflate(4, 4))
+        pygame.draw.ellipse(self.surface, color, body)
+        pygame.draw.line(self.surface, P.INK, (body.centerx + s.facing * 2, body.top + 1),
+                         (body.centerx + s.facing * 2, body.top + 5), 1)                 # the buttons' split
+        self.surface.fill(P.lighten(color, 0.6), (body.x + 4, body.y + 2, 4, 2))
 
     def _crt_drop(self, f: Fighter, ox: int, oy: int) -> None:
         """CRT DROP: speed lines streaming up off the case as it stomps straight down."""
@@ -1047,6 +1025,12 @@ class Renderer:
         color = ERROR_COLOUR[basis.error_for(s.move.colour, s.basis)]
         if s.move.name == "FLOPPY":         # a spinning disk (one pasted back too)
             draw_floppy(self.surface, (cx, cy), -(self.t * 12 % 360) * s.facing, color, s.facing)
+            return
+        if s.move.name == "BOX DROP":       # a little cardboard box in his colour, tumbling a little
+            draw_little_box(self.surface, (cx, cy), color, (s.move.projectile.lifetime - s.life) // 4 % 2)
+            return
+        if s.move.name == "MOUSE CABLE":    # his mouse, on its cable back to him
+            self._mouse(s, cx, cy, color, ox, oy)
             return
         if s.move.projectile.vy:            # a LASER: a beam from where it left her hand to its head (a pasted one flies level)
             n = math.hypot(s.vx, s.vy) or 1.0

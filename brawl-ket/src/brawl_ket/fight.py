@@ -25,13 +25,14 @@ from .config import (
     FLOOR_Y,
     HITSTOP,
     HITSTOP_KNOCKDOWN,
+    PASTE_SPEED,
     ROUND_FRAMES,
     STAGE_LEFT,
     STAGE_RIGHT,
     START_X,
     THROW_SLACK,
 )
-from .fighter import IDLE, Fighter, FighterInput
+from .fighter import IDLE, STUN_DECAY, Fighter, FighterInput
 from .moves import HIGH, LOW, Box, Character, Move
 
 SHOT_SPAWN_OFFSET = 24      # a shot appears this far in front of its owner, px
@@ -178,7 +179,7 @@ class Fight:
         self._step_fighters(inputs, events)
         self._push_apart()
         self._move_shots(events)
-        self._catch_shots(events)
+        self._catch(events)
         self._resolve_hits(events)
         self.frames_left -= 1
         self._check_end(events)
@@ -198,13 +199,15 @@ class Fight:
                     move = data["move"]
                     proj = move.projectile
                     assert proj is not None
+                    speed = proj.speed
                     if data.get("paste"):   # PASTE: level, from his drive slot, in the colour it was fired in
                         y, vy, shot_basis = f.y + DRIVE_SLOT_Y - proj.box.y, 0.0, data["basis"]
+                        speed = max(speed, PASTE_SPEED)     # a pasted BOX DROP flies too
                     else:
                         y, vy, shot_basis = f.y, proj.vy, f.attack_basis
                     self.shots.append(Shot(
                         key, move, f.x + f.facing * SHOT_SPAWN_OFFSET, y,
-                        proj.speed * f.facing, proj.lifetime, shot_basis, vy,
+                        speed * f.facing, proj.lifetime, shot_basis, vy,
                     ))
                     events.append(Event("projectile", key))
                 else:
@@ -241,7 +244,7 @@ class Fight:
             s.x += s.vx
             s.y += s.vy
             s.life -= 1
-            if s.vy < 0 and s.y + s.move.projectile.box.y <= 0:     # a LASER reaches the floor
+            if s.vy < 0 and s.y + s.move.projectile.box.y <= 0:     # a LASER or a BOX DROP reaches the floor
                 s.life = 0
                 left, _, w, _ = s.box
                 events.append(Event("fizzle", s.owner, None, left + w / 2, FLOOR_Y))
@@ -262,9 +265,10 @@ class Fight:
         left, _, w, _ = s.box
         return left + w < STAGE_LEFT or left > STAGE_RIGHT
 
-    def _catch_shots(self, events: list[Event]) -> None:
+    def _catch(self, events: list[Event]) -> None:
         """COPY: a rival's shot that meets the catch window while it is open is caught, before
-        it can hit him: gone from the stage and into his clipboard."""
+        it can hit him: gone from the stage and into his clipboard. So is a rival's crackling
+        field (CHARGE NOISE): it stops, and he has it."""
         for key, f in self.fighters.items():
             m = f.move
             if f.action != "attack" or m is None or m.catch is None or f.phase != "active":
@@ -277,6 +281,16 @@ class Fight:
                     f.caught(s.move, s.basis)
                     events.append(Event("copy", key, None, *where))
                     break
+            else:
+                rival = self.fighters[_other(key)]
+                rm = rival.move
+                if rival.action == "attack" and rm is not None and rm.hit_every and rm.hitbox is not None \
+                        and rival.phase == "active":
+                    where = _overlap(rival.world_box(rm.hitbox), window)
+                    if where is not None:
+                        f.caught(rm, rival.attack_basis)
+                        rival.frame = rival.startup + rm.active     # its field is gone: into its recovery
+                        events.append(Event("copy", key, None, *where))
 
     # --- hits ---------------------------------------------------------------------------
 
@@ -336,10 +350,10 @@ class Fight:
 
     def _measure(self, strikes: list[_Strike], events: list[Event]) -> list[_Strike]:
         """THE BOX: the first strike that touches a box (a hit, a shot, a throw, a field, a
-        shockwave) measures her, 50/50. An attack touching one box: she is in it (it lands on
-        her as normal, the colour rule included) or in the other one (it finds nothing: a shot
-        flies on). An attack touching both boxes always finds her, whichever she is in. Either way she is free at once, with no swipe. A repeating move's shock that found
-        nothing is still spent (CHARGE NOISE: later shocks hit her body)."""
+        shockwave) measures him, 50/50. An attack touching one box: he is in it (it lands on
+        him as normal, the colour rule included) or in the other one (it finds nothing: a shot
+        flies on). An attack touching both boxes always finds him, whichever he is in. Either way he is free at once, with no swipe. A repeating move's shock that found
+        nothing is still spent (CHARGE NOISE: later shocks hit his body)."""
         kept: list[_Strike] = []
         real: dict[str, int] = {}
         for st in strikes:
@@ -373,7 +387,13 @@ class Fight:
         # shot keeps the colour it was fired in, a shockwave its slam's.
         attack_basis = st.shot.basis if st.shot is not None else owner.attack_basis
         error = basis.error_for(m.colour, attack_basis)
-        if defender.take_hit(m, error, st.from_facing) == "block":
+        result = defender.take_hit(m, error, st.from_facing)
+        if defender.char.copy_paste:        # DOS hit: his mouse's cable is cut
+            self.shots = [s for s in self.shots if not (s.owner == st.defender and s.move.pull)]
+        if m.pull and st.shot is not None:  # MOUSE CABLE: reeled in to just in front of him, hit or not
+            to = _clamp(owner.x + owner.facing * self.body_width)
+            defender.vx = (to - defender.x) * (1 - STUN_DECAY) / STUN_DECAY   # the stun's slow-down carries it there
+        if result == "block":
             events.append(Event("block", st.defender, error, x, y))
             self.hitstop = max(self.hitstop, BLOCK_HITSTOP)
             return
@@ -413,10 +433,7 @@ class Fight:
         touch = self._touch(f.world_box(m.hitbox), rival)
         if touch is not None:
             where, box = touch
-            facing = f.facing
-            if m.push_out:      # BLUE SCREEN: away from him, whichever side the rival is on
-                facing = 1 if where[0] >= f.x else -1
-            strikes.append(_Strike(key, key, rival_key, m, facing, where, box=box))
+            strikes.append(_Strike(key, key, rival_key, m, f.facing, where, box=box))
 
     def _landing_strike(
         self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],

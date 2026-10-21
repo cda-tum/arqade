@@ -3,6 +3,7 @@ import importlib.util
 import pytest
 
 from brawl_ket import config
+from brawl_ket.fight import SHOT_SPAWN_OFFSET
 from brawl_ket.basis import BOTH, OPPOSITE, OWN, Z_BASIS
 from brawl_ket.moves import HIGH, LOW, MID
 from brawl_ket.moves import CHARACTERS, DOS, ERWIN, NORMALS, PHOEBE, ROBERT, SLOTS, Box
@@ -88,9 +89,10 @@ DAMAGE = {"A": 4, "B": 8, "X": 10, "throw": 10}     # spec section 1; MEASURE 12
 
 
 # by name: the specials whose damage isn't a special's 10 (MEASURE 12; TUNNEL only moves her; LASER a
-# little less; CHARGE NOISE a shock; THE BOX itself nothing, its swipe 8; SCRATCH a claw)
-SPECIAL_DAMAGE = {"MEASURE": 12, "TUNNEL": 0, "LASER": 8, "CHARGE NOISE": 3, "THE BOX": 0, "SCRATCH": 4,
-                  "FLOPPY": 9, "BLUE SCREEN": 6, "CRT DROP": 12}
+# little less; CHARGE NOISE a shock; THE BOX itself nothing, its swipe 8; BOX DROP a light box;
+# MOUSE CABLE a tap: its pull is the point)
+SPECIAL_DAMAGE = {"MEASURE": 12, "TUNNEL": 0, "LASER": 8, "CHARGE NOISE": 3, "THE BOX": 0, "BOX DROP": 8,
+                  "FLOPPY": 9, "MOUSE CABLE": 6, "CRT DROP": 12}
 
 
 def test_the_damage():
@@ -248,12 +250,12 @@ SPECIALS = {   # (character, slot): (colour rule, height, twists): every special
     ("PHOEBE", "air.X"): (OWN, MID, ("hover",)),
     ("ERWIN", "stand.X"): (OWN, MID, ("superpose",)),
     ("ERWIN", "crouch.X"): (OWN, MID, ("leap",)),
-    ("ERWIN", "air.X"): (OWN, MID, ("hit_every", "hover")),
+    ("ERWIN", "air.X"): (OWN, MID, ()),
     ("DOS", "stand.X"): (OWN, HIGH, ()),
-    ("DOS", "crouch.X"): (OWN, MID, ("push_out",)),
+    ("DOS", "crouch.X"): (OWN, LOW, ("pull",)),
     ("DOS", "air.X"): (OWN, MID, ()),
 }
-TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover", "superpose", "leap", "push_out")
+TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover", "superpose", "leap", "pull")
 
 
 def test_the_specials_colours_and_twists():
@@ -265,8 +267,8 @@ def test_the_specials_colours_and_twists():
     assert names == {"ROBERT": ["PHOTON", "PHASE SLIDE", "HADAMARD DIVE"],
                      "BOHR": ["MEASURE", "CHARGE NOISE", "COLLAPSE"],
                      "PHOEBE": ["LIGHT PILLAR", "TUNNEL", "LASER"],
-                     "ERWIN": ["THE BOX", "POUNCE", "SCRATCH"],
-                     "DOS": ["FLOPPY", "BLUE SCREEN", "CRT DROP"]}
+                     "ERWIN": ["THE BOX", "POUNCE", "BOX DROP"],
+                     "DOS": ["FLOPPY", "MOUSE CABLE", "CRT DROP"]}
 
 
 def test_only_specials_have_twists():
@@ -320,7 +322,7 @@ def test_erwin_stats():
 
 
 def test_erwin_specials():
-    box, pounce, scratch = (ERWIN.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+    box, pounce, drop = (ERWIN.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
     assert box.superpose and box.hitbox is None and box.cooldown == config.frames(3.0)
     swipe = box.pop_out
     assert (swipe.damage, swipe.height, swipe.colour, swipe.kind) == (8, MID, OWN, "special")
@@ -328,8 +330,9 @@ def test_erwin_specials():
     assert pounce.leap is not None and (pounce.damage, pounce.height, pounce.knockdown) == (10, MID, True)
     assert pounce.cooldown == config.frames(2.0) and 18 <= pounce.recovery <= 22
     assert pounce.active > 2 * pounce.leap[1] / ERWIN.gravity    # it always lands in its active frames
-    assert scratch.hover and scratch.once_per_jump and (scratch.damage, scratch.height) == (4, MID)
-    assert -(-scratch.active // scratch.hit_every) == 3          # three claws
+    # BOX DROP: a box falling (not him), once per jump, his colour
+    assert drop.kind == "projectile" and drop.once_per_jump and not drop.hover and drop.hitbox is None
+    assert drop.projectile.vy < 0 and abs(drop.projectile.speed) < 1 and (drop.damage, drop.height) == (8, MID)
 
 # --- DOS -------------------------------------------------------------------------------------
 
@@ -344,14 +347,15 @@ def test_dos_stats():
 
 
 def test_dos_specials():
-    floppy, screen, drop = (DOS.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+    floppy, mouse, drop = (DOS.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
     assert (floppy.damage, floppy.kind, floppy.cooldown) == (9, "projectile", config.frames(2.5))
     assert floppy.projectile.speed == 3.0 < ROBERT.moves["stand.X"].projectile.speed
-    assert (screen.damage, screen.height, screen.hitstun, screen.cooldown) == (6, MID, config.frames(0.6),
-                                                                              config.frames(3.0))
-    half = DOS.hurt_stand.w / 2
-    assert screen.push_out and screen.hitbox.x == -(half + 50) and screen.hitbox.x + screen.hitbox.w == half + 50
+    # MOUSE CABLE: a LOW shot that reels in, reaching about 180 px; he stays planted until it's back
+    reach = SHOT_SPAWN_OFFSET + mouse.projectile.speed * mouse.projectile.lifetime
+    assert mouse.pull and mouse.kind == "projectile" and mouse.height == LOW and 160 <= reach <= 200
+    assert mouse.cooldown == config.frames(3.0) and mouse.active + mouse.recovery > mouse.projectile.lifetime
     assert (drop.damage, drop.height, drop.knockdown, drop.dive[0]) == (12, MID, True, 0.0)
+    assert drop.hitbox.w >= 80 and drop.hitbox.h >= 60            # wider than his case: easy to land
     assert drop.landing is None and 18 <= drop.recovery <= 22
 
 

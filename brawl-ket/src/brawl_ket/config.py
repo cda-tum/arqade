@@ -33,9 +33,11 @@ STAGE_NAMES = {"lab": "SERVER RACK", "cryo": "SUPERCONDUCTOR", "optics": "OPTICA
 TUNNEL_PAST = 50         # TUNNEL: PHOEBE re-forms this far past the rival's x
 TUNNEL_EXPOSED = 4       # ... and can still be hit for this many frames of her dissolve
 BOX_SPLIT = 120          # THE BOX: ERWIN's second box stands this far towards the rival (on the stage)
-BOX_FRAMES = frames(1.5)  # ... and she collapses herself after this long in the boxes at the latest
+BOX_FRAMES = frames(1.5)  # ... and he collapses himself after this long in the boxes at the latest
 DRIVE_SLOT_Y = 80        # DOS: FLOPPY and a PASTE leave his drive slot this high above his feet, px
 COPY_CAUGHT_RECOVERY = 6  # ... and a COPY that catches a shot recovers in this many frames (a miss: all 18)
+PASTE_SPEED = 4.0        # ... and a PASTE flies at least this fast, px per frame (a falling BOX DROP has
+                         # next to no speed of its own across)
 ROUNDS_TO_WIN = 2
 HITSTOP = 5
 HITSTOP_KNOCKDOWN = 10   # a hit that knocks down freezes the fight a little longer

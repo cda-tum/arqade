@@ -10,10 +10,11 @@ Colour must match to hurt, so it strikes with A when the rival is in its own bas
 and with B when not, sometimes switches (Y) to dodge an attack that would hurt it,
 and throws a rival who keeps switching (a throw hurts either colour).
 
-ERWIN boxes against a shot or a heavy that would hurt her and pops out when the rival comes
-near a box, pounces on crouchers and scratches jumpers; DOS COPYs incoming shots, PASTEs at
-once, FLOPPYs at range, BLUE SCREENs a rival who is close and CRT DROPs on one under him. DOS
-never switches, so he never uses Y to dodge or feint.
+ERWIN boxes against a shot or a heavy that would hurt him and pops out when the rival comes
+near a box, pounces on crouchers and drops a box on rivals below him; DOS COPYs incoming shots
+and BOHR's crackling field, PASTEs (a field only up close), FLOPPYs at range, reels in rivals
+out of reach with MOUSE CABLE and CRT DROPs on one under him. DOS never switches, so he never
+uses Y to dodge or feint.
 """
 
 from __future__ import annotations
@@ -35,11 +36,13 @@ PRESS_GAP = 4           # frames between two presses, so every press is a fresh 
 LONG_CROUCH = 40        # a rival crouched this long gets thrown
 SWITCH_MEMORY = 180     # frames over which the rival's switches are counted
 SWITCHER = 2            # a rival who switched this often in SWITCH_MEMORY gets thrown
-BOX_DANGER = 60         # ERWIN boxes against a shot or a heavy this close (90 made her win 65% against DOS)
+BOX_DANGER = 60         # ERWIN boxes against a shot or a heavy this close (90 made him win 65% against DOS)
 BOX_POP = 50            # ... and pops out once the rival is this close to either box
 POUNCE_RANGE = (60, 170)    # ERWIN pounces on a crouching rival this far away
 COPY_REACH = (30, 110)  # a rival's shot this far from DOS, coming, is worth a COPY
-SCREEN_RANGE = 80       # DOS's BLUE SCREEN reaches a rival this close (50 px past his case)
+MOUSE_RANGE = (70, 180)     # DOS flings his mouse at a rival on the ground this far away
+FIELD_PASTE = 70        # ... and pastes a copied field only with the rival this close
+MOUSE_FOLLOW = 60       # ... and strikes a rival its mouse reeled in, this many frames after the fling
 DROP_RANGE = 30         # DOS stomps on a rival this close under him
 
 _BUSY = ("hitstun", "knockdown")
@@ -65,6 +68,7 @@ class Bot:
         self.t = 0
         self.air_pressed = False
         self.box_hold = 0               # THE BOX: how long this bot stays in the boxes
+        self.mouse_t = -1000            # DOS: when it last flung the mouse (to follow up a pull)
 
     def input(self, fight: Fight) -> FighterInput:
         me, rival = fight.fighters[self.player], fight.fighters[self.rival]
@@ -191,10 +195,12 @@ class Bot:
             # it meets a standing body about y + 50 px ahead, give or take its height: fire
             self.air_pressed = True
             return self._press("x", toward)
-        if air.hover and air.hit_every and ready and dist <= 60 and abs(me.y - rival.y) <= 50 \
-                and self.would_hurt(me, air, rival):
+        if air.projectile is not None and not air.hover and air.projectile.vy and ready and me.y > 30 \
+                and abs((rival.x - me.x) * me.facing - (17 + me.y / 14)) <= 26 and self.would_hurt(me, air, rival):
+            # BOX DROP: the box falls from about 17 px in front of him, drifting half a px a frame
+            # for every 7 it falls: it lands about 17 + y / 14 px ahead
             self.air_pressed = True
-            return self._press("x", toward)                     # SCRATCH a rival beside her
+            return self._press("x", 0)
         if air.dive is not None and air.dive[0] == 0 and ready and abs(rival.x - me.x) <= DROP_RANGE \
                 and me.y > rival.y + 30:
             self.air_pressed = True
@@ -216,8 +222,8 @@ class Bot:
         return FighterInput()
 
     def _erwin(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
-        """ERWIN on the ground: THE BOX against a shot or a heavy that would hurt her, POUNCE on a
-        crouching rival, and a jump to SCRATCH a rival in the air."""
+        """ERWIN on the ground: THE BOX against a shot or a heavy that would hurt him, POUNCE on a
+        crouching rival, and now and then a jump at the rival, to drop a box on them."""
         box, pounce = me.char.moves["stand.X"], me.char.moves["crouch.X"]
         if not box.superpose or me.action not in ("idle", "walk", "crouch") or self.gap > 0:
             return None
@@ -237,29 +243,42 @@ class Bot:
             press = self._press("x", 0)                         # POUNCE, from a crouch ...
             self.down = False                                   # ... and up again: no sitting there
             return press
-        if rival.y > 30 and dist <= 110 and self.rng.random() < 0.04:
+        if 30 <= dist <= 110 and rival.y == 0 and self.rng.random() < 0.02:
             self.down = False
-            return FighterInput(up=True, dx=toward)             # up after a jumper, to scratch
+            return FighterInput(up=True, dx=toward)             # a jump at them, to drop a box
         return None
 
     def _dos(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
-        """DOS: PASTE at once, COPY a rival's shot that is about to arrive, BLUE SCREEN a rival
-        who is close, and now and then a hop to CRT DROP on them."""
+        """DOS: PASTE (a shot at once, a field once the rival is close), COPY a rival's shot that
+        is about to arrive or a field crackling at him, MOUSE CABLE at a rival out of reach, and
+        now and then a hop to CRT DROP on them."""
         if not me.char.copy_paste or me.action not in ("idle", "walk", "crouch") or self.gap > 0:
             return None
         if me.clipboard is not None:
-            self.down = False
-            return self._press("y", 0)                          # PASTE
+            if me.clipboard[0].projectile is not None or dist <= FIELD_PASTE:
+                self.down = False
+                return self._press("y", 0)                      # PASTE
+            return FighterInput(dx=toward)                      # in close first, with the noise
         coming = any(s.owner == self.rival and (s.x - me.x) * s.vx < 0
                      and COPY_REACH[0] <= abs(s.x - me.x) <= COPY_REACH[1] for s in fight.shots)
-        if coming and self.rng.random() < self.skill * 0.6:
+        m = rival.move
+        field = rival.action == "attack" and m is not None and m.hit_every and dist <= 100
+        if (coming or field) and self.rng.random() < self.skill * 0.8:
             self.down = False
             return self._press("y", 0)                          # COPY
-        screen = me.char.moves["crouch.X"]
-        if dist <= SCREEN_RANGE and me.cooldowns.get("crouch.X", 0) == 0 and self.would_hurt(me, screen, rival) \
-                and self.rng.random() < 0.05:
+        if rival.action == "hitstun" and dist <= STRIKE_RANGE and self.t - self.mouse_t <= MOUSE_FOLLOW \
+                and not self.chain:
+            self.mouse_t = -1000
+            button = self.matching(me, rival)               # reeled in by the mouse: punish at once
+            self.down = False
+            self.chain = [button, button] if button == "a" else [button]
+            return self._press(self.chain.pop(0), 0)
+        mouse = me.char.moves["crouch.X"]
+        if mouse.pull and MOUSE_RANGE[0] < dist <= MOUSE_RANGE[1] and rival.y == 0 \
+                and me.cooldowns.get("crouch.X", 0) == 0 and self.rng.random() < 0.12:
             self.down = True
-            press = self._press("x", 0)                         # BLUE SCREEN, from a crouch ...
+            self.mouse_t = self.t
+            press = self._press("x", 0)                         # MOUSE CABLE, from a crouch ...
             self.down = False                                   # ... and up again (a crouching DOS invites POUNCE)
             return press
         if dist <= 60 and rival.y == 0 and self.rng.random() < 0.01:

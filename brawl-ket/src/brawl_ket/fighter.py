@@ -4,7 +4,7 @@ Pure logic, no pygame. The fight (fight.py) runs two of these: it feeds each one
 a FighterInput per frame, resolves hitboxes, works out each hit's error from the
 attack's colour rule (basis.py) and calls take_hit, which hurts only if the error
 changes the fighter's basis state. Everything is counted in integer frames at 60 Hz.
-THE BOX (ERWIN) is the "boxed" action: superposed in two boxes, with no body; the fight measures her.
+THE BOX (ERWIN) is the "boxed" action: superposed in two boxes, with no body; the fight measures him.
 
 Coordinates: x is in screen px; y is the height above the floor (>= 0), and
 vy > 0 means moving up. world_box() turns a Box (relative to the feet) into
@@ -103,8 +103,8 @@ class Fighter:
         self.air_used: set[str] = set()     # once-per-jump moves used in this jump (LASER)
         self.rng = random.Random(0)     # the fight gives every fighter its own seeded source
         self.stick = (0, False, False)  # last frame's stick (dx, up, down): THE BOX waits for a new one
-        self.boxes: tuple[float, float] = (self.x, self.x)  # THE BOX: where she stood, the far box
-        self.box_real = 0               # ... the box a collapse found her in (0 or 1)
+        self.boxes: tuple[float, float] = (self.x, self.x)  # THE BOX: where he stood, the far box
+        self.box_real = 0               # ... the box a collapse found him in (0 or 1)
         self.box_t = 0                  # ... frames superposed
         self.rival_boxes: tuple[float, float] | None = None   # the rival's two boxes while it is boxed
 
@@ -156,7 +156,7 @@ class Fighter:
 
     @property
     def boxed(self) -> bool:
-        """THE BOX: superposed in two boxes, with no body (the fight measures her)."""
+        """THE BOX: superposed in two boxes, with no body (the fight measures him)."""
         return self.action == "boxed"
 
     def box_rects(self) -> list[tuple[float, float, int, int]]:
@@ -166,7 +166,7 @@ class Fighter:
 
     @property
     def hurtbox(self) -> tuple[float, float, int, int]:
-        if self.boxed:              # for whoever asks for one box: box 1, where she stood
+        if self.boxed:              # for whoever asks for one box: box 1, where he stood
             return self.box_rects()[0]
         m = self.move
         if self.action == "attack" and m is not None and m.hurt_active is not None \
@@ -335,8 +335,8 @@ class Fighter:
             self.vx = push * away
 
     def collapse(self, k: int, swipe: bool, events: list) -> None:
-        """THE BOX collapses: she turns out to be in box k (0: where she stood, 1: the far one)
-        and is free at once, facing the rival. `swipe`: she collapsed it herself and pops out
+        """THE BOX collapses: he turns out to be in box k (0: where he stood, 1: the far one)
+        and is free at once, facing the rival. `swipe`: he collapsed it himself and pops out
         with the move's swipe. The cooldown runs from now."""
         box = self.char.moves["stand.X"]
         self.box_real = k
@@ -495,8 +495,21 @@ class Fighter:
             cancel = not free
             if cancel and not self.can_cancel(slot):
                 continue
+            if slot == "paste" and self.clipboard is not None and self.clipboard[0].projectile is None:
+                self._paste_field(events)
+                return
             self._start_move(slot, move, cancel, events)
             return
+
+    def _paste_field(self, events: list) -> None:
+        """PASTE with a field in the clipboard (CHARGE NOISE): he does the move himself, in the
+        colour it was copied in, and the clipboard is empty again."""
+        field, field_basis = self.clipboard
+        self.clipboard = None
+        self._start_move("paste", field, False, events)
+        self.attack_basis = field_basis     # its colour, not his: a classical copy of the noise
+        self.cooldowns.pop("paste", None)   # the field's own cooldown isn't his
+        events.append(("paste", {}))
 
     def _start_move(self, slot: str, move: Move, cancel: bool, events: list) -> None:
         self.move = move
@@ -534,8 +547,8 @@ class Fighter:
         return min(max(self.rival_x - side * past, STAGE_LEFT), STAGE_RIGHT)
 
     def _split(self, events: list) -> None:
-        """THE BOX splits: box 1 where she stands, box 2 BOX_SPLIT px towards the rival (kept on
-        the stage, so it can land behind a rival who is close). She has no body until it collapses."""
+        """THE BOX splits: box 1 where he stands, box 2 BOX_SPLIT px towards the rival (kept on
+        the stage, so it can land behind a rival who is close). He has no body until it collapses."""
         side = 1 if self.rival_x > self.x else -1 if self.rival_x < self.x else self.facing
         far = min(max(self.x + side * BOX_SPLIT, STAGE_LEFT), STAGE_RIGHT)
         if far == self.x:           # a wall in the way: the second box goes the other side
@@ -555,7 +568,7 @@ class Fighter:
 
     def _boxed(self, inp: FighterInput, events: list) -> None:
         """Superposed: any button (A, B or X; Y only switches) or a new stick direction collapses
-        it, or BOX_FRAMES at the latest. She lands in a random box, 50/50, with a swipe."""
+        it, or BOX_FRAMES at the latest. He lands in a random box, 50/50, with a swipe."""
         stick = (inp.dx, inp.up, inp.down)
         fresh = stick != self.stick and stick != (0, False, False)
         if fresh or self.buffer or self.box_t >= BOX_FRAMES:

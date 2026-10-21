@@ -1,7 +1,7 @@
 """ERWIN (docs/superpowers/specs/2026-10-21-brawl-ket-erwin-dos-design.md, section 2): THE BOX
-splits her into two boxes and any attack that touches one measures her, 50/50; she collapses
-herself with a press, a new stick direction or after 1.5 s, popping out with a swipe; POUNCE
-leaps and knocks down; SCRATCH hangs in the air and claws three times. And the fight's seeded
+splits him into two boxes and any attack that touches one measures him, 50/50; he collapses
+himself with a press, a new stick direction or after 1.5 s, popping out with a swipe; POUNCE
+leaps and knocks down; BOX DROP lets a little box fall from the air. And the fight's seeded
 random source, which the 50/50s come from."""
 
 import random
@@ -20,14 +20,14 @@ X = FighterInput(x=True)
 A = FighterInput(a=True)
 DOWN_X = FighterInput(down=True, x=True)
 UP = FighterInput(up=True)
-BOX, POUNCE, SCRATCH = (ERWIN.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+BOX, POUNCE, DROP = (ERWIN.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
 SWIPE = BOX.pop_out
 PHOTON = ROBERT.moves["stand.X"]
 
 
 def heads_seed(heads: bool) -> int:
     """A fight seed whose first 50/50 comes up heads (random() < 0.5) or tails. Heads: a
-    measured box is the one she is in; her own collapse picks box 1 (where she stood)."""
+    measured box is the one he is in; his own collapse picks box 1 (where he stood)."""
     return next(s for s in range(100) if (random.Random(s).random() < 0.5) == heads)
 
 
@@ -50,7 +50,7 @@ def hits_on(events, player):
 
 
 def boxed(gap=300, seed=0, rival=ROBERT):
-    """ERWIN (p1) presses X `gap` px from the rival and is stepped until she splits."""
+    """ERWIN (p1) presses X `gap` px from the rival and is stepped until he splits."""
     fight = versus(ERWIN, rival, gap, seed)
     me = fight.fighters["p1"]
     events = step(fight, X)
@@ -127,11 +127,11 @@ def test_a_strike_on_a_box_measures_her(k, heads):
     for i in range(12):
         events += step(fight, IDLE, FighterInput(a=i == 0))
     where = k if heads else 1 - k
-    (collapse,) = [e for e in events if e.kind == "box_collapse"]    # once, where she turned out to be
+    (collapse,) = [e for e in events if e.kind == "box_collapse"]    # once, where he turned out to be
     assert not me.boxed and me.box_real == where and collapse.x == me.boxes[where]
-    if heads:       # she is in that box: the jab resolves against her as normal
+    if heads:       # he is in that box: the jab resolves against him as normal
         assert kinds(hits_on(events, "p1")) == ["hit"] and me.health == ERWIN.health - 4
-    else:           # she is in the other one: it finds nothing
+    else:           # he is in the other one: it finds nothing
         assert hits_on(events, "p1") == [] and me.health == ERWIN.health
 
 
@@ -143,7 +143,7 @@ def test_measured_into_the_other_box_she_is_free_at_once():
         events = step(fight, IDLE, FighterInput(a=i == 0))
         if "box_collapse" in kinds(events):
             break
-    assert me.action == "idle" and me.move is None      # no swipe: she just appears
+    assert me.action == "idle" and me.move is None      # no swipe: he just appears
 
 
 def test_a_wrong_colour_strike_on_the_box_she_is_in_bounces():
@@ -175,7 +175,7 @@ def test_a_shot_into_a_box_measures_her_and_flies_on_if_she_is_not_there(heads):
 def test_a_throw_in_reach_of_a_box_measures_her(heads, k):
     fight, me, _ = boxed(seed=heads_seed(heads))
     rival = fight.fighters["p2"]
-    rival.x = me.boxes[k] + 46              # in throw range of box k (box 2 too, not just her x)
+    rival.x = me.boxes[k] + 46              # in throw range of box k (box 2 too, not just his x)
     events = []
     for i in range(10):
         events += step(fight, IDLE, FighterInput(dx=-1, b=True) if i == 0 else IDLE)
@@ -226,7 +226,7 @@ def test_tunnel_past_a_superposed_erwin_goes_past_box_1():
     assert phoebe.x == erwin.boxes[0] - TUNNEL_PAST
 
 
-# --- THE BOX: collapsed by herself ------------------------------------------------------------
+# --- THE BOX: collapsed by himself ------------------------------------------------------------
 
 
 @pytest.mark.parametrize("heads", [True, False])
@@ -260,7 +260,7 @@ def test_she_pops_out_by_herself_after_1_5_s():
 
 
 def test_the_swipe_hits_a_rival_beside_her_box_for_8():
-    fight, me, _ = boxed(seed=heads_seed(True))         # heads: she pops out of box 1
+    fight, me, _ = boxed(seed=heads_seed(True))         # heads: he pops out of box 1
     rival = fight.fighters["p2"]
     rival.x = me.boxes[0] + 50
     events = step(fight, A)
@@ -289,7 +289,7 @@ def test_y_switches_her_basis_while_superposed_and_does_not_collapse_her():
     assert me.boxed and me.basis == X_BASIS and "switch" in kinds(events)
 
 
-# --- POUNCE and SCRATCH ------------------------------------------------------------------------
+# --- POUNCE and BOX DROP -----------------------------------------------------------------------
 
 
 def test_pounce_leaps_low_and_knocks_down_a_crouching_rival():
@@ -322,23 +322,31 @@ def test_a_missed_pounce_lands_into_a_long_recovery():
     assert POUNCE.recovery - 1 <= stuck <= POUNCE.recovery
 
 
-def test_scratch_hangs_in_the_air_and_claws_three_times():
-    fight = versus(ERWIN, ROBERT, 44)
-    me, rival = fight.fighters["p1"], fight.fighters["p2"]
-    events = step(fight, UP) + step(fight, X)
-    height = me.y
-    for _ in range(60):
+def test_box_drop_falls_on_a_rival_below_him():
+    fight = versus(ERWIN, ROBERT, 30)
+    rival = fight.fighters["p2"]
+    events = step(fight, UP)
+    for _ in range(14):
         events += step(fight)
-        if me.hovering:
-            assert me.y == height and me.vx == 0
-    assert kinds(hits_on(events, "p2")) == ["hit"] * 3
-    assert rival.health == ROBERT.health - 3 * SCRATCH.damage and me.y == 0
+    events += step(fight, X)
+    box = None
+    for _ in range(40):
+        events += step(fight)
+        box = box or next((s for s in fight.shots if s.owner == "p1"), None)
+    assert box is not None and box.vy < 0 and box.move is DROP          # a box, falling
+    assert "box_drop" in kinds(events) and kinds(hits_on(events, "p2")) == ["hit"]
+    assert rival.health == ROBERT.health - DROP.damage
 
 
-def test_scratch_is_once_per_jump():
-    fight = versus(ERWIN, ROBERT, 300)
+def test_box_drop_lands_on_the_floor_and_is_once_per_jump():
+    fight = versus(ERWIN, ROBERT, 400)
     me = fight.fighters["p1"]
-    events = step(fight, UP) + step(fight, X)
+    events = step(fight, UP)
+    for _ in range(10):
+        events += step(fight)
     while me.y > 0:
-        events += step(fight, X)            # mashing X in the air: no second scratch
-    assert kinds(events).count("scratch") == 1
+        events += step(fight, X)            # mashing X in the air: one box only
+    for _ in range(40):
+        events += step(fight)
+    assert kinds(events).count("box_drop") == 1 and kinds(events).count("fizzle") == 1
+    assert not fight.shots
