@@ -18,6 +18,8 @@ Writes:
 - bohr_measure.png: MEASURE connecting on a purple ROBERT, 3 frames on (the collapse into green);
 - moves_cat.png, erwin_*.png: ERWIN's moves; THE BOX superposed (green, then purple after a Y),
   the collapse (0 and 3 frames on) and the swipe; a PHOTON measuring her; POUNCE and SCRATCH;
+- moves_dos.png, dos_*.png: DOS's moves; FLOPPY in flight; COPY's CTRL+C frame catching a PHOTON
+  and the clipboard after it; PASTE; BLUE SCREEN; CRT DROP;
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
 - screen_*.png: the match flow: the title (and with QUIT picked), the attract demo, select (and
@@ -48,7 +50,7 @@ from brawl_ket import palette as P
 from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
-from brawl_ket.moves import BOHR, ERWIN, ROBERT
+from brawl_ket.moves import BOHR, DOS, ERWIN, ROBERT
 from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
 from brawl_ket.render import Renderer, draw_puppet, outlined
 
@@ -361,6 +363,48 @@ def erwin_frames(out_dir: str) -> None:
             break
 
 
+def dos_frames(out_dir: str) -> None:
+    """DOS against a ROBERT: FLOPPY, COPY and PASTE, BLUE SCREEN and CRT DROP."""
+    from brawl_ket.fighter import IDLE, FighterInput
+
+    surface = pygame.Surface((W, H))
+
+    def scene(name, presses, frames, rival_x=None, rival=IDLE, setup=None):
+        fight, r = Fight({"p1": DOS, "p2": ROBERT}), Renderer(surface)
+        if rival_x is not None:
+            fight.fighters["p2"].x = rival_x
+        if setup is not None:
+            setup(fight)
+        for i in range(frames):
+            r.draw_fight(fight, fight.step({"p1": presses(i, fight), "p2": rival}), {"p1": 0, "p2": 0})
+        save(surface, out_dir, f"{name}.png")
+        return fight
+
+    scene("dos_floppy", lambda i, f: FighterInput(x=i == 0), DOS.moves["stand.X"].startup + 30)
+    # COPY against ROBERT's PHOTON: the frame up as the shot arrives, then the catch and the
+    # clipboard on the HUD
+    fight, r = Fight({"p1": DOS, "p2": ROBERT}), Renderer(surface)
+    dos = fight.fighters["p1"]
+    for i in range(90):
+        near = bool(fight.shots) and abs(fight.shots[0].x - dos.x) < 80 and dos.move is None
+        events = fight.step({"p1": FighterInput(y=near), "p2": FighterInput(x=i == 0)})
+        r.draw_fight(fight, events, {"p1": 0, "p2": 0})
+        if dos.move is not None and dos.move.catch is not None and fight.shots:
+            save(surface, out_dir, "dos_copy.png")
+        if any(e.kind == "copy" for e in events):
+            for _ in range(4):
+                r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
+            save(surface, out_dir, "dos_copied.png")
+            break
+    # PASTE: a purple PHOTON fired back
+    scene("dos_paste", lambda i, f: FighterInput(y=i == 0), DOS.extra["paste"].startup + 12,
+          setup=lambda f: setattr(f.fighters["p1"], "clipboard", (ROBERT.moves["stand.X"], "X")))
+    scene("dos_blue_screen", lambda i, f: FighterInput(down=True, x=i == 0), DOS.moves["crouch.X"].startup + 2,
+          rival_x=config.START_X["p1"] + 64)
+    scene("dos_crt_drop", lambda i, f: FighterInput(up=True) if i == 0 else FighterInput(x=i == 9), 16,
+          rival_x=config.START_X["p1"] + 30)
+
+
 def main(argv: list[str]) -> None:
     if len(argv) != 1:
         sys.exit(__doc__)
@@ -373,6 +417,8 @@ def main(argv: list[str]) -> None:
     save(move_sheet(BOHR), out_dir, "moves_heavy.png")
     save(move_sheet(ERWIN), out_dir, "moves_cat.png")
     erwin_frames(out_dir)
+    save(move_sheet(DOS), out_dir, "moves_dos.png")
+    dos_frames(out_dir)
     bohr_frames(out_dir)
     scripted_frames(out_dir)
     close_frame(out_dir)

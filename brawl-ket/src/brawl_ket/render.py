@@ -27,6 +27,7 @@ from . import palette as P
 from . import basis
 from .config import (
     CARD_FRAMES,
+    DRIVE_SLOT_Y,
     FLOOR_Y,
     FPS,
     INTERNAL_HEIGHT,
@@ -37,6 +38,7 @@ from .config import (
     STAGE_NAMES,
     STAGES,
 )
+from .dos import BEIGE, CLIP_W, clip_icon, draw_dos, draw_floppy
 from .erwin import EYE, FADE_STEPS, draw_collapse, draw_erwin, draw_holo_box, draw_superposed
 from .fight import Fight
 from .fighter import Fighter
@@ -44,15 +46,15 @@ from .fonts import load_font
 from .ink import _ball, _block, _boot, _poly, _pt, _towards, limb
 from .moves import Character
 from .stages import MARGIN, make_stage
-from .poses import BASE_BONES, HEAD_R, LIMB_W, POSES, SCALE, Pose, joints, pose_for
+from .poses import BASE_BONES, HEAD_R, LIMB_W, POSES, SCALE, Pose, drawn_joints, joints, pose_for
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 PLAYERS = ("p1", "p2")
-ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL, "ERWIN": EYE}
+ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL, "ERWIN": EYE, "DOS": BEIGE}
 
 # how each build is drawn (the skeleton's proportions are in poses.py)
-TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5, "dos": 8}   # the lean torso is this much thicker than a limb
-PLATES = {"lean": False, "heavy": True, "toy": False, "dos": True}   # armour: the heavy's wedge torso, plates, helm
+TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5}   # the lean torso is this much thicker than a limb
+PLATES = {"lean": False, "heavy": True, "toy": False}   # armour: the heavy's wedge torso, plates, helm
 # PHOEBE (the "toy" build): a scientist, not a puppet. Her neutral colours; the coat, the lining
 # and her trousers are shades of her basis colour (docs/.../2026-10-09-brawl-ket-phoebe-design.md)
 SKIN = (232, 176, 128)
@@ -74,7 +76,7 @@ ERROR_COLOUR = {basis.X: GREEN, basis.Z: PURPLE, basis.Y: P.WHITE}
 BADGE = {basis.Z_BASIS: "0/1", basis.X_BASIS: "+/-"}     # the basis's states, on the health bar
 # the striking limb's joints, from the shoulder or hip out to the hand or foot that lands
 STRIKE_LIMB = {"hand_f": ("shoulder_f", "elbow_f", "hand_f"), "foot_f": ("hip", "knee_f", "foot_f")}
-SELF_LIT = ("cat",)   # builds that draw their own lit limb: the striker adds only its trail and tip
+SELF_LIT = ("cat", "dos")   # builds that draw their own lit limb: the striker adds only its trail and tip
 TRAIL_LEN = 5               # a live strike's hand or foot leaves this many fading echoes
 LEGEND_CHIP = 14            # the A / B colour chips under each health bar, px
 LEGEND_W = 2 * LEGEND_CHIP + 4
@@ -86,10 +88,13 @@ STRIKER = {
     "MEASURE": "hand_f", "COLLAPSE": "foot_f",
     "LIGHT PILLAR": "hand_f", "LASER": "hand_f",
     "BOX SWIPE": "hand_f", "POUNCE": "hand_f", "SCRATCH": "hand_f",
+    "CRT DROP": "foot_f",
 }
 
 # effect lengths, in frames
 SPARK_FRAMES = 10
+COPY_FLASH_FRAMES = 10      # COPY: a white selection box closing on the shot it caught
+TAG_FRAMES = 30          # a small rising label (PASTE's CTRL+V)
 POPUP_FRAMES = 40
 PING_FRAMES = 16            # a wrong-colour hit: a ring bouncing off
 SHAKE_FRAMES = 20
@@ -185,6 +190,10 @@ def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body,
     """One fighter, back limbs first. Returns the joints (screen px). `flare` (px) blows a
     coat's hem out behind (PHOEBE's); `strike` = (joint, colour) is the lit limb, for a build
     that draws its own (SELF_LIT); `mood`, `led` and `eject` are DOS's screen (dos.py)."""
+    if build == "dos":
+        j = drawn_joints(pose, build, feet, facing)
+        draw_dos(surf, j, facing, body, strike, led, mood, eject)
+        return j
     j = joints(pose, build, feet, facing)
     if build == "cat":
         draw_erwin(surf, j, facing, body, strike)
@@ -417,6 +426,21 @@ def strike_of(f: Fighter) -> tuple[str, tuple] | None:
     return joint, GREEN if error == basis.Y else ERROR_COLOUR[error]
 
 
+def dos_screen(f: Fighter) -> tuple[str, bool, bool]:
+    """DOS's screen this frame: (mood, his drive's busy light, a disk's edge in the slot).
+    Calm, angry while he attacks or reels, blue through BLUE SCREEN; the disk shows as FLOPPY
+    or PASTE fires."""
+    m = f.move
+    if f.action in ("hitstun", "knockdown"):
+        return "angry", False, False
+    if f.action != "attack" or m is None:
+        return "calm", False, False
+    if m.name == "BLUE SCREEN":
+        return "blue", True, False
+    fires = m.kind == "projectile" or m.paste
+    return "angry", True, fires and f.startup - 2 <= f.frame < f.startup + m.active + 4
+
+
 # --- static art ----------------------------------------------------------------------------------
 
 
@@ -497,6 +521,7 @@ class Renderer:
         self.body_flash: dict[str, tuple[tuple | None, int]] = {p: (None, 0) for p in PLAYERS}
         self.trails: dict[str, list[tuple[tuple[int, int], tuple]]] = {p: [] for p in PLAYERS}
         self.legend_rects: dict[str, dict[str, pygame.Rect]] = {p: {} for p in PLAYERS}
+        self.clip_rects: dict[str, pygame.Rect] = {}
         self.effects.clear()
         self.shake = 0
 
@@ -568,6 +593,12 @@ class Renderer:
                                            facing=f.facing))
                 self.effects.append(Effect("box_fade", other, FLOOR_Y, BOX_FADE_FRAMES, BOX_FADE_FRAMES, fur,
                                            facing=f.facing))
+            elif e.kind == "copy":
+                self.effects.append(Effect("copy", e.x, e.y, COPY_FLASH_FRAMES, COPY_FLASH_FRAMES, P.WHITE))
+            elif e.kind == "paste" and e.player and self._fight is not None:
+                f = self._fight.fighters[e.player]
+                self.effects.append(Effect("tag", f.x + f.facing * 36, FLOOR_Y - f.y - DRIVE_SLOT_Y - 16,
+                                           TAG_FRAMES, TAG_FRAMES, P.WHITE, "CTRL+V"))
             elif e.kind == "fizzle":          # a LASER reaching the floor
                 self.effects.append(Effect("spark", e.x, e.y - 3, SPARK_FRAMES // 2, SPARK_FRAMES // 2, P.WHITE))
             elif e.kind == "shockwave":
@@ -628,6 +659,17 @@ class Renderer:
             elif world and fx.kind == "box_fade":    # the other one dissolving in a dither
                 step = 1 + min(FADE_STEPS - 2, age * (FADE_STEPS - 1) // fx.life)
                 draw_holo_box(surf, fx.x + ox, fx.y + oy, fx.facing, fx.color, 0, step)
+            elif world and fx.kind == "copy":       # COPY: a selection box closing on the caught shot
+                k = age / fx.life
+                half = round(18 * (1 - k)) + 4
+                rect = pygame.Rect(0, 0, 2 * half, 2 * half)
+                rect.center = _pt((fx.x + ox, fx.y + oy))
+                pygame.draw.rect(surf, P.INK, rect.inflate(2, 2), 3)
+                pygame.draw.rect(surf, fx.color, rect, 1)
+            elif world and fx.kind == "tag":        # a small label, rising (PASTE's CTRL+V)
+                if fx.left < 8 and fx.left % 4 < 2:
+                    continue
+                blit_center(surf, outlined(fx.text, 8, fx.color), (fx.x + ox, fx.y + oy - min(age, 10)))
             elif world and fx.kind == "popup":
                 if fx.left < 10 and fx.left % 4 < 2:
                     continue
@@ -710,10 +752,19 @@ class Renderer:
             if seen < 1:
                 j = self._dissolved(pose, f, feet, body, accent, flare, seen)
                 return j["head"][0] - ox, j["head"][1] - oy
-        j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare, strike=strike_of(f))
+        mood, led, eject = dos_screen(f) if f.char.build == "dos" else ("calm", False, False)
+        j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare,
+                        strike=strike_of(f), mood=mood, led=led, eject=eject)
         self._striker(key, f, j)
         if f.action == "attack" and m is not None and m.name == "SCRATCH" and f.phase == "active":
             self._claws(f, j)
+        if f.action == "attack" and m is not None:
+            if m.catch is not None:
+                self._copy_window(f, m, ox, oy)
+            elif m.name == "BLUE SCREEN":
+                self._blue_screen(f, m, ox, oy)
+            elif m.name == "CRT DROP":
+                self._crt_drop(f, ox, oy)
         if f.action == "attack" and m is not None and m.name == "LIGHT PILLAR":
             self._pillar(f, m, j, ox, oy)
         if f.action == "attack" and m is not None and m.projectile is not None and m.projectile.vy \
@@ -824,6 +875,56 @@ class Renderer:
             pygame.draw.line(self.surface, P.INK, _pt(a), _pt(b), 4)
             pygame.draw.line(self.surface, P.WHITE, _pt(a), _pt(b), 2)
 
+    def _copy_window(self, f: Fighter, m, ox: int, oy: int) -> None:
+        """COPY: a dashed CTRL+C frame round the catch window in front of him, pale while he
+        raises it and bright white while it can catch."""
+        if f.phase not in ("startup", "active"):
+            return
+        surf = self.surface
+        rect = pygame.Rect(f.world_box(m.catch)).move(ox, oy)
+        colour = P.WHITE if f.phase == "active" else P.MIST
+        for x in range(rect.left, rect.right - 2, 7):
+            for y in (rect.top, rect.bottom - 2):
+                surf.fill(P.INK, (x - 1, y - 1, 6, 4))
+                surf.fill(colour, (x, y, 4, 2))
+        for y in range(rect.top, rect.bottom - 2, 7):
+            for x in (rect.left, rect.right - 2):
+                surf.fill(P.INK, (x - 1, y - 1, 4, 6))
+                surf.fill(colour, (x, y, 2, 4))
+        blit_center(surf, outlined("CTRL+C", 8, colour), (rect.centerx, rect.top - 9))
+
+    def _blue_screen(self, f: Fighter, m, ox: int, oy: int) -> None:
+        """BLUE SCREEN: the crash rings out from his case to the edge of its reach, in the move's
+        colour (his green: the colour rule stays readable), white on its first frame."""
+        if f.phase != "active":
+            return
+        surf = self.surface
+        colour = ERROR_COLOUR[basis.error_for(m.colour, f.attack_basis)]
+        age = f.frame - f.startup
+        k = (age + 1) / m.active
+        reach, tall = m.hitbox.w / 2, m.hitbox.h
+        cx, cy = round(f.x) + ox, round(FLOOR_Y - f.y - tall / 2) + oy
+        for lag, width in ((0.0, 3), (0.35, 2)):
+            kk = max(0.0, k - lag) / (1 - lag)
+            if kk <= 0:
+                continue
+            rx = round(24 + (reach - 24) * kk)
+            rect = pygame.Rect(0, 0, 2 * rx, round(tall * (0.4 + 0.6 * kk)))
+            rect.center = (cx, cy)
+            ring = P.WHITE if age == 0 else P.lighten(colour, 0.35) if lag == 0 else colour
+            pygame.draw.ellipse(surf, P.INK, rect.inflate(4, 4), width + 2)
+            pygame.draw.ellipse(surf, ring, rect, width)
+
+    def _crt_drop(self, f: Fighter, ox: int, oy: int) -> None:
+        """CRT DROP: speed lines streaming up off the case as it stomps straight down."""
+        if f.phase != "active" or f.y <= 0:
+            return
+        top = round(FLOOR_Y - f.y - 150) + oy
+        for dx, ln in ((-18, 22), (0, 30), (18, 22)):
+            x = round(f.x) + dx + ox
+            pygame.draw.line(self.surface, P.INK, (x, top - ln), (x, top), 4)
+            pygame.draw.line(self.surface, P.WHITE, (x, top - ln), (x, top), 2)
+
     def _striker(self, key: str, f: Fighter, j: dict) -> None:
         """The whole arm or leg an attack lands with is drawn in the attack's colour, from its
         wind-up to the end of its active frames, so a player sees before contact whether it
@@ -914,7 +1015,10 @@ class Renderer:
         left, top, w, h = s.box
         cx, cy = left + w / 2 + ox, top + h / 2 + oy
         color = ERROR_COLOUR[basis.error_for(s.move.colour, s.basis)]
-        if s.vy:            # a LASER: a beam from where it left her hand to its head
+        if s.move.name == "FLOPPY":         # a spinning disk (one pasted back too)
+            draw_floppy(self.surface, (cx, cy), -(self.t * 12 % 360) * s.facing, color, s.facing)
+            return
+        if s.move.projectile.vy:            # a LASER: a beam from where it left her hand to its head (a pasted one flies level)
             n = math.hypot(s.vx, s.vy) or 1.0
             dx, dy = s.vx / n, -s.vy / n
             flown = (s.move.projectile.lifetime - s.life) * n
@@ -989,6 +1093,8 @@ class Renderer:
             else:
                 lx = rect.right - name.get_width() - tag.get_width() - 20 - LEGEND_W
             self._legend(key, f, lx, y)
+            if f.char.copy_paste:           # DOS's clipboard, beside his A / B chips
+                self._clipboard(key, f, lx + LEGEND_W + 4 if side < 0 else lx - CLIP_W - 4, y - 3)
         # the clock and the round pips
         cx = W // 2
         box = pygame.Rect(0, 0, 44, 30)
@@ -1019,6 +1125,16 @@ class Renderer:
             blit_center(self.surface, label, box.center)
             rects[button] = box
         self.legend_rects[key] = rects
+
+    def _clipboard(self, key: str, f: Fighter, x: int, y: int) -> None:
+        """DOS's clipboard: empty, or the caught shot's tiny sprite in the colour it was fired in."""
+        kind = colour = None
+        if f.clipboard is not None:
+            move, shot_basis = f.clipboard
+            kind, colour = move.name, ERROR_COLOUR[basis.error_for(move.colour, shot_basis)]
+        icon = clip_icon(kind, colour)
+        self.surface.blit(icon, (x, y))
+        self.clip_rects[key] = pygame.Rect(x, y, *icon.get_size())
 
     def _badge(self, f: Fighter, x: int, cy: int, side: int) -> None:
         """The basis on the health bar: 0/1 on green or +/- on purple, at the bar's inner end."""

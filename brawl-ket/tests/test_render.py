@@ -534,3 +534,123 @@ def test_erwins_kicking_leg_is_lit_in_the_attacks_colour(surface):
     j = joints(r.pose_last["p1"], "cat", (f.x, FLOOR_Y - f.y), f.facing)
     knee, hock = cat_leg_points(j, "f", f.facing)
     assert PURPLE in limb_colours(surface, r, f, {"knee": knee, "hock": hock}, "knee", "hock")
+
+
+@pytest.mark.parametrize("name,strike,led,mood,eject", [
+    ("idle", None, False, "calm", False),
+    ("heavy_hit", ("hand_f", PURPLE), False, "calm", False),
+    ("sweep_hit", ("foot_f", PURPLE), True, "angry", False),
+    ("crouch", None, False, "calm", False),
+    ("jump", None, False, "calm", False),
+    ("eject", None, True, "angry", True),
+])
+@pytest.mark.parametrize("facing", [1, -1])
+def test_dos_matches_his_approved_look(look, name, strike, led, mood, eject, facing):
+    from brawl_ket.dos import draw_dos
+    from brawl_ket.poses import POSES, drawn_joints
+    ref = look("2026-10-21-brawl-ket-dos-look.py")
+    pygame.init()
+    a, b = pygame.Surface((240, 240)), pygame.Surface((240, 240))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    feet = (120.0, 220.0)
+    ref.draw_dos(a, POSES[name], feet, facing, GREEN, strike, led, mood, eject)
+    draw_dos(b, drawn_joints(POSES[name], "dos", feet, facing), facing, GREEN, strike, led, mood, eject)
+    assert same_pixels(a, b)
+
+
+def test_the_floppy_matches_the_approved_look(look):
+    from brawl_ket.dos import floppy_sprite
+    ref = look("2026-10-21-brawl-ket-dos-look.py")
+    pygame.init()
+    for colour in (GREEN, PURPLE):
+        for size in (18, 22):
+            assert same_pixels(ref.floppy_sprite(colour, size), floppy_sprite(colour, size), "RGBA")
+
+
+def test_dos_is_always_drawn_green(surface):
+    from brawl_ket.moves import DOS
+    r = Renderer(surface)
+    fight = Fight({"p1": ROBERT, "p2": DOS})
+    r.draw_fight(fight, [])
+    seen = body_pixels(surface, r, fight, "p2")
+    assert GREEN in seen and PURPLE not in seen
+
+
+def dos_frames(r, presses, frames, rival_x=600):
+    """DOS (p1) against a far ROBERT, pressing `presses` on the first frame, drawn every frame."""
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import DOS
+    fight = Fight({"p1": DOS, "p2": ROBERT})
+    fight.fighters["p2"].x = rival_x
+    for i in range(frames):
+        r.draw_fight(fight, fight.step({"p1": FighterInput(**presses) if i == 0 else FighterInput(
+            down=presses.get("down", False))}))
+    return fight
+
+
+def test_blue_screen_turns_his_face_blue_and_rings_out_green(surface):
+    from brawl_ket.dos import BSOD
+    from brawl_ket.moves import DOS
+    r = Renderer(surface)
+    fight = dos_frames(r, {"down": True, "x": True}, DOS.moves["crouch.X"].startup + 2)
+    dos = fight.fighters["p1"]
+    assert dos.phase == "active"
+    x = round(dos.x)
+    face = {tuple(surface.get_at((i, j)))[:3] for i in range(x - 30, x + 31, 2) for j in range(FLOOR_Y - 150, FLOOR_Y - 60)}
+    assert BSOD in face
+    ring = {tuple(surface.get_at((i, FLOOR_Y - 55)))[:3] for i in range(x + 30, x + 80)}
+    assert ring & {GREEN, P.lighten(GREEN, 0.35), P.WHITE}
+
+
+def test_copy_holds_up_a_ctrl_c_frame(surface):
+    from brawl_ket.moves import DOS
+    copy = DOS.extra["copy"]
+    r = Renderer(surface)
+    fight = dos_frames(r, {"y": True}, copy.startup + 2)
+    dos = fight.fighters["p1"]
+    assert dos.move is copy and dos.phase == "active"
+    left, top, w, _h = dos.world_box(copy.catch)
+    assert P.WHITE in {tuple(surface.get_at((i, round(top))))[:3] for i in range(round(left), round(left + w))}
+
+
+def test_a_floppy_in_flight_is_drawn_from_cached_turns(surface):
+    from brawl_ket.dos import ANGLE_STEP, _turned
+    from brawl_ket.moves import DOS
+    _turned.cache_clear()
+    r = Renderer(surface)
+    fight = dos_frames(r, {"x": True}, DOS.moves["stand.X"].startup + 60)
+    (shot,) = fight.shots
+    assert _turned.cache_info().currsize <= 360 // ANGLE_STEP
+    left, top, w, h = shot.box
+    cx, cy = round(left + w / 2), round(top + h / 2)
+    assert GREEN in {tuple(surface.get_at((i, j)))[:3] for i in range(cx - 12, cx + 13) for j in range(cy - 12, cy + 13)}
+
+
+def test_the_hud_shows_doss_clipboard(surface):
+    from brawl_ket.basis import X_BASIS
+    from brawl_ket.moves import DOS
+    r = Renderer(surface)
+    fight = Fight({"p1": DOS, "p2": ROBERT})
+    r.draw_fight(fight, [])
+    assert set(r.clip_rects) == {"p1"}                      # only DOS has one
+
+    def icon():
+        rect = r.clip_rects["p1"]
+        return {tuple(surface.get_at((i, j)))[:3] for i in range(rect.left, rect.right) for j in range(rect.top, rect.bottom)}
+
+    assert not icon() & {GREEN, PURPLE}                     # empty
+    fight.fighters["p1"].clipboard = (ROBERT.moves["stand.X"], X_BASIS)
+    r.draw_fight(fight, [])
+    assert PURPLE in icon()                                 # a purple PHOTON in it
+
+
+def test_doss_screen_faces_are_drawn_once_and_blitted(surface):
+    from brawl_ket.dos import screen_sprite
+    from brawl_ket.moves import DOS
+    screen_sprite.cache_clear()
+    r = Renderer(surface)
+    for fight, events in bot_frames(600, chars=(DOS, ROBERT)):
+        r.draw_fight(fight, events)
+    info = screen_sprite.cache_info()
+    assert info.hits > 2 * info.misses
