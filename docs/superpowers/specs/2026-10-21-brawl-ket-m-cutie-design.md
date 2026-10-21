@@ -21,19 +21,43 @@ learning the controls is the biggest hurdle).
 
 ## 1. The look
 
-Not prototyped yet: the user chose to write the specs first. The direction is agreed:
+Approved on 2026-10-21: variant **B, the cage**, with B's own face. The reference is
+`2026-10-21-brawl-ket-m-cutie-look.py`, beside this spec (run it from `brawl-ket/`). Its sheet
+also draws variant A, kept for the record. Porting her into `render.py` should reproduce B.
 
-- **A cute android in a "chandelier" dress.** The gold tiers of a dilution refrigerator, the
-  chandelier on the SUPERCONDUCTOR stage, are her skirt. Coax cables are her pigtails, and
-  glowing trapped ions are her hair clips.
-- **Her basis colour must read at a glance,** as on every fighter: her body, and the glow in
-  her skirt, are green or purple; the gold tiers are trim.
-- **An attack's limb lights up in its colour,** as on everyone.
-- **Rejected directions:** an engineer girl in a lab (too close to PHOEBE, a second human
-  scientist) and a qubit-chip mascot (too far from the human skeleton, as ERWIN's legs were).
-
-As for PHOEBE, the look is settled with prototypes the user approves before it is built: a
-look script beside this spec, ported pixel for pixel.
+- **Build:** a cute android on the shared human skeleton, in a new `"cutie"` build. She is a
+  little shorter than PHOEBE in the body and legs, with head radius 15 and 12 px limbs.
+- **Body:** her basis colour, so she reads green or purple at a glance, with pale ball joints
+  at the elbows and knees (doll joints). She has puffed sleeves, gold wrist cuffs and dark
+  shoes with a gold strap.
+- **The chandelier skirt is an open hoop cage:**
+  - three gold hoops, drawn as ellipses, on gold rods at the sides, with coax lines between
+    them and a short coax fringe with gold tips at the hem;
+  - her colour fills the cage, brightest down the middle like the fridge's chamber light;
+  - her legs are drawn between the back and front halves of the hoops, so crouch, jump and
+    kicks show through it;
+  - it hangs straight down from the waist, shifting a little towards the knees, so it never
+    tips with the body.
+- **Head:**
+  - coiled-coax buns, each with an ion-trap clip (two gold prongs and a glowing ion, which
+    reads as a bow) and a gold plug hanging from it, as twin tails;
+  - a shell head with a dark glass face, soft glowing LED eyes and blush lights.
+- **An attack's limb lights up in its colour,** as on everyone. The heavy hit lights the
+  whole front arm, sleeve included.
+- **Her specials, as drawn on the sheet:**
+  - **AMPLITUDE AMPLIFICATION:** while charging, a halo of her colour round her outline,
+    glowing hands, and one lit diamond pip per step above her head. The wave is a microwave
+    drive pulse (a Gaussian envelope with the carrier swinging inside), standing on the floor
+    with a pool of light and speed lines, as tall as its step.
+  - **ION TRAP:** a dark chip base, two gold electrodes and the ion between them. Arming is
+    dim (shaded electrodes, a dark ion); armed lights the ion, the electrode tips and the
+    field arcs round it.
+  - **SPIN:** the front leg straight out, the skirt flattened and widened, whirl rings behind
+    and in front of her, and faint copies of the leg sweeping behind.
+- **Rejected:**
+  - Variant A, a skirt of three solid gold plates: at game scale it read as a lampshade.
+  - An engineer girl in a lab: too close to PHOEBE, a second human scientist.
+  - A qubit-chip mascot: too far from the human skeleton, as ERWIN's first legs were.
 
 ## 2. The fighter
 
