@@ -1,7 +1,8 @@
 """One round between two fighters: hits, projectiles, hitstop, the clock.
 
-Pure logic, no pygame, no randomness: the same inputs always give the same
-round. The fight drives two Fighters (fighter.py), spawns and moves the shots,
+Pure logic, no pygame. Its only randomness is THE BOX's 50/50s, drawn from the fight's own
+random.Random(seed): the same inputs and the same seed always give the same round. The
+fight drives two Fighters (fighter.py), spawns and moves the shots,
 resolves hitboxes against hurtboxes, turns each attack's colour rule into an error
 using its attacker's basis at the moment of the hit (basis.py), lets the defender's
 basis decide between damage and a block, applies the specials' twists, and reports
@@ -13,6 +14,7 @@ y pointing down for boxes (see Fighter.world_box).
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, replace
 
 from . import basis
@@ -91,6 +93,7 @@ class _Strike:
     from_facing: int
     where: tuple[float, float]
     shot: Shot | None = None
+    box: int | None = None      # THE BOX: which of the defender's boxes it touched
 
 
 def _world_box(x: float, y: float, facing: int, box: Box) -> Rect:
@@ -137,7 +140,9 @@ def can_reach(height: int, target: Fighter) -> bool:
 
 
 class Fight:
-    def __init__(self, chars: dict[str, Character]) -> None:
+    def __init__(self, chars: dict[str, Character], seed: int = 0) -> None:
+        self.seed = seed
+        self.rng = random.Random(seed)      # THE BOX's 50/50s
         self.fighters: dict[str, Fighter] = {
             "p1": Fighter(chars["p1"], START_X["p1"], 1),
             "p2": Fighter(chars["p2"], START_X["p2"], -1),
@@ -146,6 +151,7 @@ class Fight:
         for f in self.fighters.values():   # a throw reaches a little past the push box
             f.throw_range = self.body_width + THROW_SLACK
             f.body_width = self.body_width
+            f.rng = self.rng
         self.shots: list[Shot] = []
         self.frames_left = ROUND_FRAMES
         self.hitstop = 0
@@ -205,7 +211,8 @@ class Fight:
         """The bodies are solid: two grounded fighters never stand closer than body_width."""
         a, b = self.fighters["p1"], self.fighters["p2"]
         width = self.body_width
-        if a.y > 0 or b.y > 0 or a.intangible or b.intangible or abs(b.x - a.x) >= width:
+        if a.y > 0 or b.y > 0 or a.intangible or b.intangible or a.boxed or b.boxed \
+                or abs(b.x - a.x) >= width:
             return
         side = 1 if b.x > a.x else -1 if b.x < a.x else a.facing   # b is on this side of a
         half = (width - abs(b.x - a.x)) / 2
@@ -263,9 +270,11 @@ class Fight:
                 continue        # downed, getting up or tunnelling: shots fly over or through
             if not can_reach(s.move.height, target):
                 continue
-            where = _overlap(s.box, target.hurtbox)
-            if where is not None:
-                strikes.append(_Strike(None, s.owner, rival_key, s.move, s.facing, where, s))
+            touch = self._touch(s.box, target)
+            if touch is not None:
+                strikes.append(_Strike(None, s.owner, rival_key, s.move, s.facing, touch[0], s, box=touch[1]))
+
+        strikes = self._measure(strikes, events)
 
         # Every strike was found against the state at the start of the resolution,
         # so a trade (both fighters connecting on the same frame) applies both.
@@ -287,6 +296,44 @@ class Fight:
                 landed_shots.add(id(st.shot))
             self._apply_strike(st, events, downed)
         self.shots = [s for s in self.shots if id(s) not in landed_shots]
+
+    @staticmethod
+    def _touch(rect: Rect, target: Fighter) -> tuple[tuple[float, float], int | None] | None:
+        """Where an attack's rect meets the target: its body, or (THE BOX) the first box it
+        touches and which one."""
+        if target.boxed:
+            for k, box in enumerate(target.box_rects()):
+                where = _overlap(rect, box)
+                if where is not None:
+                    return where, k
+            return None
+        where = _overlap(rect, target.hurtbox)
+        return None if where is None else (where, None)
+
+    def _measure(self, strikes: list[_Strike], events: list[Event]) -> list[_Strike]:
+        """THE BOX: the first strike that touches a box (a hit, a shot, a throw, a field, a
+        shockwave) measures her, 50/50. She is in that box (the strikes on it land on her as
+        normal, the colour rule included) or in the other one (they find nothing: a shot flies
+        on). Either way she is free at once, with no swipe. A repeating move's shock that found
+        nothing is still spent (CHARGE NOISE: later shocks hit her body)."""
+        kept: list[_Strike] = []
+        real: dict[str, int] = {}
+        for st in strikes:
+            if st.box is None:
+                kept.append(st)
+                continue
+            d = self.fighters[st.defender]
+            if st.defender not in real:
+                k = st.box if self.rng.random() < 0.5 else 1 - st.box
+                real[st.defender] = k
+                d.collapse(k, False, [])
+                events.append(Event("box_collapse", st.defender, None, d.x, FLOOR_Y))
+            if st.box == real[st.defender]:
+                kept.append(st)
+            elif st.attacker is not None and st.move.hit_every:
+                a = self.fighters[st.attacker]
+                a.move_hit, a.hit_frame = True, a.frame
+        return kept
 
     def _apply_strike(self, st: _Strike, events: list[Event], downed: set[str]) -> None:
         defender = self.fighters[st.defender]
@@ -336,9 +383,9 @@ class Fight:
         # a hit. A throw is MID, so it catches a jumping rival as well as a crouching one.
         if m.kind == "throw" and rival.action in _STUNNED:
             return
-        where = _overlap(f.world_box(m.hitbox), rival.hurtbox)
-        if where is not None:
-            strikes.append(_Strike(key, key, rival_key, m, f.facing, where))
+        touch = self._touch(f.world_box(m.hitbox), rival)
+        if touch is not None:
+            strikes.append(_Strike(key, key, rival_key, m, f.facing, touch[0], box=touch[1]))
 
     def _landing_strike(
         self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],
@@ -356,12 +403,12 @@ class Fight:
         # clears it.
         if not win.hit and rival.action != "knockdown" and not rival.wakeup and not rival.intangible \
                 and can_reach(move.landing_height, rival):
-            where = _overlap(f.world_box(move.landing), rival.hurtbox)
-            if where is not None:
+            touch = self._touch(f.world_box(move.landing), rival)
+            if touch is not None:
                 win.hit = True
                 strikes.append(_Strike(
                     None, key, rival_key, replace(move, colour=move.landing_colour, height=move.landing_height),
-                    f.facing, where,
+                    f.facing, touch[0], box=touch[1],
                 ))
         win.left -= 1
         if win.left <= 0:

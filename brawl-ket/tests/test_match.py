@@ -564,6 +564,27 @@ def test_the_demo_starts_a_new_fight_when_one_ends() -> None:
     assert m.attract is not None and m.attract is not first and m.state == TITLE
 
 
+def test_each_round_gets_its_seed_from_the_matchs_rng() -> None:
+    seeds = []
+    for _ in range(2):
+        m = Match(random.Random(4))
+        to_fight(m)
+        seeds.append(m.fight.seed)
+    assert seeds[0] == seeds[1]
+    m = Match(random.Random(4))
+    to_fight(m)
+    first = m.fight.seed
+    ko(m, "p2")                             # round 2: a fresh fight, a fresh seed
+    assert m.state == ROUND_INTRO and m.fight.seed != first
+
+
+def test_the_demo_fight_is_seeded_from_the_matchs_rng() -> None:
+    a, b = Match(random.Random(9)), Match(random.Random(9))
+    for m in (a, b):
+        run(m, config.ATTRACT_DELAY + 1)
+    assert a.attract is not None and a.attract.seed == b.attract.seed
+
+
 # --- the K.O. slow-down --------------------------------------------------------------------
 
 

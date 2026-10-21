@@ -32,6 +32,8 @@ STAGE_NAMES = {"lab": "SERVER RACK", "cryo": "SUPERCONDUCTOR", "optics": "OPTICA
                "office": "QUANTUM SPACE", "toronto": "QUANTUM WEEK"}   # as CHOOSE YOUR STAGE shows them
 TUNNEL_PAST = 50         # TUNNEL: PHOEBE re-forms this far past the rival's x
 TUNNEL_EXPOSED = 4       # ... and can still be hit for this many frames of her dissolve
+BOX_SPLIT = 120          # THE BOX: ERWIN's second box stands this far towards the rival (on the stage)
+BOX_FRAMES = frames(1.5)  # ... and she collapses herself after this long in the boxes at the latest
 ROUNDS_TO_WIN = 2
 HITSTOP = 5
 HITSTOP_KNOCKDOWN = 10   # a hit that knocks down freezes the fight a little longer

@@ -79,12 +79,15 @@ class Move:
     hover: bool = False                 # the fall stops through startup and active (LASER)
     once_per_jump: bool = False         # usable once per jump (LASER)
     cue: str | None = None              # a sound event fired on the first active frame
+    superpose: bool = False             # THE BOX: she splits into two boxes (fighter.py) until a collapse
+    pop_out: Move | None = None         # ... and the swipe she pops out with when she collapses herself
+    leap: tuple[float, float] | None = None   # (vx, vy) on the first active frame: an arc (POUNCE)
 
 
 @dataclass(frozen=True)
 class Character:
     name: str
-    build: str                          # "lean" / "heavy" / "toy" (poses scale)
+    build: str                          # "lean" / "heavy" / "toy" / "cat" (poses scale)
     health: int
     walk: float
     jump_vy: float
@@ -342,4 +345,57 @@ PHOEBE = Character(
     }),
 )
 
-CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE}
+NORMALS = ("stand.A", "stand.B", "crouch.A", "crouch.B", "air.A", "air.B", "throw")
+
+# THE BOX's two boxes, each around its own x: the drawn box (70 px wide, 48 tall) and her ears
+# over its rim. Every standing normal, PHOTON and FLOPPY touch it.
+BOX_HURT = Box(-36, 0, 72, 86)
+
+# The quick swipe ERWIN pops out of THE BOX with when she collapses it herself: MID, her colour,
+# a short reach (60 px ahead, about a jab's).
+BOX_SWIPE = Move(
+    "BOX SWIPE", 3, 4, 14, Box(14, 50, 46, 36), OWN, MID,
+    damage=8, hitstun=16, knockback=2.5, kind="special",
+    poses=("crouch", "swipe", "jab_wind"),
+)
+
+ERWIN = Character(
+    name="ERWIN",
+    build="cat",
+    health=90,                          # the least: quick and slippery, and THE BOX is a gamble
+    walk=2.3,
+    jump_vy=12.5,
+    gravity=0.5,                        # an apex of about 156 px: the highest
+    hurt_stand=Box(-14, 0, 28, 120),    # ROBERT's height
+    hurt_crouch=Box(-16, 0, 32, 100),
+    moves=MappingProxyType({
+        **{slot: ROBERT.moves[slot] for slot in NORMALS},   # the shared normals, as ROBERT's
+        # One cat, two places: she ducks into a box (startup, hittable), and on the first active
+        # frame it splits into two (fighter.py, _split). Collapsed by her (a press, a new stick
+        # direction, or BOX_FRAMES) she pops out with BOX_SWIPE; by the rival, it's a measurement
+        # (fight.py, _measure). The cooldown runs from the collapse.
+        "stand.X": Move(
+            "THE BOX", 8, 1, 4, None, OWN, MID,
+            damage=0, hitstun=1, knockback=0.0,
+            kind="special", superpose=True, pop_out=BOX_SWIPE, cooldown=config.frames(3.0),
+            poses=("box_duck", "box_duck", "box_duck"),
+        ),
+        # A long, low leap along an arc, which hits on the way. MID: a crouch doesn't save the
+        # rival. The active frames outlast the 28-frame arc, so it always lands into its recovery.
+        "crouch.X": Move(
+            "POUNCE", 8, 30, 20, Box(10, 10, 70, 44), OWN, MID,
+            damage=10, hitstun=20, knockback=4.0, knockdown=True,
+            kind="special", leap=(6.0, 7.0), cooldown=config.frames(2.0), cue="pounce",
+            poses=("crouch", "pounce", "crouch"),
+        ),
+        # She hangs in the air (like LASER) and claws three times: on active frames 0, 8 and 16.
+        "air.X": Move(
+            "SCRATCH", 4, 24, 8, Box(12, 40, 46, 36), OWN, MID,
+            damage=4, hitstun=10, knockback=1.0, hit_every=8,
+            kind="special", hover=True, once_per_jump=True, cue="scratch",
+            poses=("jump", "scratch", "jump"),
+        ),
+    }),
+)
+
+CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE, "ERWIN": ERWIN}

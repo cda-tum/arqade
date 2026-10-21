@@ -103,6 +103,14 @@ POSES: dict[str, Pose] = {
     "tunnel": Pose(6, 20, -6, -20, -12, 70, 165, 60, 175),
     # PHOEBE's air.X LASER: hanging in the air, the front arm pointing down and forward at 45
     "laser": Pose(14, 100, 15, 40, -50, 45, 45, -40, 60),
+    # ERWIN's stand.X THE BOX: ducking down into the box, paws tucked in
+    "box_duck": Pose(24, 95, -4, 30, -86, 60, 170, 40, 160),
+    # ... and the swipe she pops out of it with: a paw raking low and forward
+    "swipe": Pose(18, 70, 10, -20, -50, 80, 75, 30, 150),
+    # ERWIN's crouch.X POUNCE: stretched out along the leap, paws first, hind legs trailing
+    "pounce": Pose(40, 140, 90, -70, -110, 100, 95, 85, 95),
+    # ERWIN's air.X SCRATCH: hanging in the air, a paw raking forward
+    "scratch": Pose(14, 100, 15, 40, -50, 60, 70, 30, 150),
 }
 POSE_NAMES = tuple(POSES)
 
@@ -110,10 +118,13 @@ BASE_BONES = {"torso": 26, "neck": 9, "shoulder": 22, "upper_arm": 13, "forearm"
 BUILD_BONES = {
     "heavy": {"neck": 6},                   # the heavy's helmet sits down between its shoulders
     "toy": {"thigh": 18, "shin": 18, "forearm": 13, "upper_arm": 13, "neck": 8},   # PHOEBE: long limbs
+    # ERWIN: ROBERT's height, a big head on a short neck; the long shin holds two cat-leg
+    # segments (the lower leg and the long foot, up to the hock: erwin.py draws the hock)
+    "cat": {"torso": 24, "neck": 7, "thigh": 15, "shin": 18, "upper_arm": 12, "forearm": 12},
 }
-SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1}     # the mockup's proportions: about 130 px tall
-HEAD_R = {"lean": 13, "heavy": 15, "toy": 14}
-LIMB_W = {"lean": 12, "heavy": 16, "toy": 12}
+SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1, "cat": 2.1}     # the mockup's proportions: about 130 px tall
+HEAD_R = {"lean": 13, "heavy": 15, "toy": 14, "cat": 17}
+LIMB_W = {"lean": 12, "heavy": 16, "toy": 12, "cat": 13}
 
 
 def lerp(a: Pose, b: Pose, k: float) -> Pose:

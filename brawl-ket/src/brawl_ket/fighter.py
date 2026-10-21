@@ -4,6 +4,7 @@ Pure logic, no pygame. The fight (fight.py) runs two of these: it feeds each one
 a FighterInput per frame, resolves hitboxes, works out each hit's error from the
 attack's colour rule (basis.py) and calls take_hit, which hurts only if the error
 changes the fighter's basis state. Everything is counted in integer frames at 60 Hz.
+THE BOX (ERWIN) is the "boxed" action: superposed in two boxes, with no body; the fight measures her.
 
 Coordinates: x is in screen px; y is the height above the floor (>= 0), and
 vy > 0 means moving up. world_box() turns a Box (relative to the feet) into
@@ -12,12 +13,15 @@ screen px, where y points down.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import NamedTuple
 
 from . import basis
 from .config import (
     BLOCK_PUSH,
+    BOX_FRAMES,
+    BOX_SPLIT,
     BUFFER_FRAMES,
     CHAIN_MAX,
     FLOOR_Y,
@@ -28,7 +32,7 @@ from .config import (
     TUNNEL_EXPOSED,
     TUNNEL_PAST,
 )
-from .moves import Box, Character, Move
+from .moves import BOX_HURT, Box, Character, Move
 
 KNOCKDOWN_FRAMES = 40
 # GAME RULE: a fighter getting up can't be hit for this long, so a knockdown can't be repeated on
@@ -77,7 +81,7 @@ class Fighter:
         self.wakeup = 0                 # frames left of the invulnerability after getting up
         self.attack_basis = self.basis  # the basis the move in progress started in (its colour)
         self.crouching = False
-        self.action = "idle"        # idle walk crouch jump attack hitstun knockdown
+        self.action = "idle"        # idle walk crouch jump attack hitstun knockdown boxed
         self.frame = 0              # frames into the action (0 on its first frame)
         self.move: Move | None = None
         self.slot: str | None = None
@@ -95,6 +99,11 @@ class Fighter:
         self.tunnel_from = self.x       # TUNNEL: where she dissolved, and where she re-forms
         self.tunnel_to = self.x
         self.air_used: set[str] = set()     # once-per-jump moves used in this jump (LASER)
+        self.rng = random.Random(0)     # the fight gives every fighter its own seeded source
+        self.stick = (0, False, False)  # last frame's stick (dx, up, down): THE BOX waits for a new one
+        self.boxes: tuple[float, float] = (self.x, self.x)  # THE BOX: where she stood, the far box
+        self.box_real = 0               # ... the box a collapse found her in (0 or 1)
+        self.box_t = 0                  # ... frames superposed
 
     # --- derived state ----------------------------------------------------------------
 
@@ -143,7 +152,19 @@ class Fighter:
         return self.action == "attack" and m is not None and m.hover and self.phase in ("startup", "active")
 
     @property
+    def boxed(self) -> bool:
+        """THE BOX: superposed in two boxes, with no body (the fight measures her)."""
+        return self.action == "boxed"
+
+    def box_rects(self) -> list[tuple[float, float, int, int]]:
+        """THE BOX: each box as a hurtbox (left, top, w, h) in screen px, box 1 first."""
+        b = BOX_HURT
+        return [(x + b.x, FLOOR_Y - (b.y + b.h), b.w, b.h) for x in self.boxes]
+
+    @property
     def hurtbox(self) -> tuple[float, float, int, int]:
+        if self.boxed:              # for whoever asks for one box: box 1, where she stood
+            return self.box_rects()[0]
         m = self.move
         if self.action == "attack" and m is not None and m.hurt_active is not None \
                 and self.phase == "active":
@@ -204,6 +225,7 @@ class Fighter:
             self._act(inp, rival_x, events)
         self._physics(events)
 
+        self.stick = (inp.dx, inp.up, inp.down)
         self.buffer = [
             Press(p.button, p.age + 1) for p in self.buffer if p.age + 1 < BUFFER_FRAMES
         ]
@@ -289,6 +311,24 @@ class Fighter:
         if self.vx * away < push:
             self.vx = push * away
 
+    def collapse(self, k: int, swipe: bool, events: list) -> None:
+        """THE BOX collapses: she turns out to be in box k (0: where she stood, 1: the far one)
+        and is free at once, facing the rival. `swipe`: she collapsed it herself and pops out
+        with the move's swipe. The cooldown runs from now."""
+        box = self.char.moves["stand.X"]
+        self.box_real = k
+        self.x = float(self.boxes[k])
+        self.box_t = 0
+        self.cooldowns["stand.X"] = box.cooldown
+        if self.rival_x != self.x:
+            self.facing = 1 if self.rival_x > self.x else -1
+        self.action = "idle"
+        self.frame = 0
+        events.append(("box_collapse", {}))
+        if swipe:
+            assert box.pop_out is not None
+            self._start_move("stand.X", box.pop_out, False, events)
+
     # --- internals --------------------------------------------------------------------
 
     def _set_action(self, action: str) -> None:
@@ -333,6 +373,8 @@ class Fighter:
                 self._end_move()
             else:
                 self._move_effects(m, events)
+        elif self.action == "boxed":
+            self.box_t += 1
 
     def _end_move(self) -> None:
         self.move = None
@@ -347,6 +389,11 @@ class Fighter:
     def _move_effects(self, m: Move, events: list) -> None:
         if self.phase == "active":
             if self.frame == self.startup:
+                if m.superpose:         # THE BOX: one cat, two boxes
+                    self._split(events)
+                    return
+                if m.leap is not None:  # POUNCE: off along an arc; gravity does the rest
+                    self.vx, self.vy = m.leap[0] * self.facing, m.leap[1]
                 if m.kind == "projectile":
                     events.append(("projectile", {"move": m}))
                 if m.cue is not None:
@@ -375,6 +422,9 @@ class Fighter:
         return f"{prefix}.{btn.upper()}"
 
     def _act(self, inp: FighterInput, rival_x: float, events: list) -> None:
+        if self.boxed:
+            self._boxed(inp, events)
+            return
         on_ground_free = self.action in _GROUND_FREE
         if on_ground_free and rival_x != self.x:
             self.facing = 1 if rival_x > self.x else -1
@@ -421,7 +471,7 @@ class Fighter:
         self.bounced = False
         self.buffer = []            # an older press must not fire a cancel nobody made
         self.chain = self.chain + 1 if cancel else 1
-        if move.cooldown > 0:
+        if move.cooldown > 0 and not move.superpose:     # THE BOX's runs from its collapse
             self.cooldowns[slot] = move.cooldown
         if move.once_per_jump:
             self.air_used.add(slot)
@@ -442,6 +492,32 @@ class Fighter:
         if (far - self.rival_x) * side >= self.body_width:
             return far
         return min(max(self.rival_x - side * TUNNEL_PAST, STAGE_LEFT), STAGE_RIGHT)
+
+    def _split(self, events: list) -> None:
+        """THE BOX splits: box 1 where she stands, box 2 BOX_SPLIT px towards the rival (kept on
+        the stage, so it can land behind a rival who is close). She has no body until it collapses."""
+        side = 1 if self.rival_x > self.x else -1 if self.rival_x < self.x else self.facing
+        far = min(max(self.x + side * BOX_SPLIT, STAGE_LEFT), STAGE_RIGHT)
+        self.boxes = (self.x, far)
+        self.move = None
+        self.slot = None
+        self.chained = False
+        self.move_hit = False
+        self.crouching = False
+        self.buffer = []            # a press from the ducking-in mustn't collapse it at once
+        self.vx = 0.0
+        self.action = "boxed"
+        self.frame = 0
+        self.box_t = 0
+        events.append(("box_split", {}))
+
+    def _boxed(self, inp: FighterInput, events: list) -> None:
+        """Superposed: any button (A, B or X; Y only switches) or a new stick direction collapses
+        it, or BOX_FRAMES at the latest. She lands in a random box, 50/50, with a swipe."""
+        stick = (inp.dx, inp.up, inp.down)
+        fresh = stick != self.stick and stick != (0, False, False)
+        if fresh or self.buffer or self.box_t >= BOX_FRAMES:
+            self.collapse(0 if self.rng.random() < 0.5 else 1, True, events)
 
     def _physics(self, events: list) -> None:
         landed = False
@@ -467,8 +543,8 @@ class Fighter:
         m = self.move
         if self.action == "attack" and m is not None:
             self.vx = 0.0
-            if m.dive is not None:
-                # a dive that reaches the floor skips to its recovery
+            if m.dive is not None or m.leap is not None:
+                # a dive or a leap that reaches the floor skips to its recovery
                 self.frame = max(self.frame, self.startup + m.active)
             else:
                 self._end_move()    # any other air move is land-cancelled

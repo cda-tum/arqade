@@ -20,7 +20,7 @@ from brawl_ket.poses import (
 
 BUILDS = tuple(SCALE)
 FEET = (320.0, float(FLOOR_Y))
-ACTIONS = ("idle", "walk", "crouch", "jump", "attack", "hitstun", "knockdown")
+ACTIONS = ("idle", "walk", "crouch", "jump", "attack", "hitstun", "knockdown", "boxed")
 KEYS = {"hip", "neck", "head", "shoulder_f", "elbow_f", "hand_f", "shoulder_b", "elbow_b",
         "hand_b", "knee_f", "foot_f", "knee_b", "foot_b"}
 
@@ -230,6 +230,7 @@ STRIKER = {
     "PHASE SLIDE": "foot_f", "HADAMARD DIVE": "foot_f",
     "MEASURE": "hand_f", "CHARGE NOISE": "hand_f", "COLLAPSE": "foot_f",
     "LIGHT PILLAR": "hand_f",
+    "POUNCE": "hand_f", "SCRATCH": "hand_f",
 }
 REACH = 12      # px: a joint is drawn with a fist/foot about this big around it
 
@@ -265,6 +266,15 @@ def test_photon_leaves_from_the_hand():
     box = move.projectile.box
     spawn = (FEET[0] + SHOT_SPAWN_OFFSET + box.x, FEET[1] - (box.y + box.h), box.w, box.h)
     assert distance_to_box(j["hand_f"], spawn) <= REACH
+
+
+def test_the_box_swipe_reaches_its_hitbox():
+    from brawl_ket.moves import ERWIN
+    swipe = ERWIN.moves["stand.X"].pop_out
+    f = Fighter(ERWIN, FEET[0], 1)
+    f.action, f.move, f.slot, f.frame = "attack", swipe, "stand.X", swipe.startup
+    j = joints(pose_for(f), ERWIN.build, FEET, 1)
+    assert distance_to_box(j["hand_f"], screen_box(swipe)) <= REACH
 
 
 # --- the wind-up of a heavy: shorter in a chain ---------------------------------------------

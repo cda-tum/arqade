@@ -5,7 +5,7 @@ import pytest
 from brawl_ket import config
 from brawl_ket.basis import BOTH, OPPOSITE, OWN
 from brawl_ket.moves import HIGH, LOW, MID
-from brawl_ket.moves import BOHR, CHARACTERS, PHOEBE, ROBERT, SLOTS, Box
+from brawl_ket.moves import CHARACTERS, ERWIN, NORMALS, PHOEBE, ROBERT, SLOTS, Box
 
 
 def all_moves():
@@ -46,6 +46,7 @@ STARTUPS = {   # spec section 3: (A, B on its own, B cancelled from a hit A)
     "ROBERT": (4, 10, 7),
     "BOHR": (6, 13, 9),
     "PHOEBE": (5, 11, 8),
+    "ERWIN": (4, 10, 7),
 }
 
 
@@ -85,23 +86,23 @@ def test_every_kind_is_known():
 DAMAGE = {"A": 4, "B": 8, "X": 10, "throw": 10}     # spec section 1; MEASURE 12, CHARGE NOISE 3 a shock
 
 
+# by name: the specials whose damage isn't a special's 10 (MEASURE 12; TUNNEL only moves her; LASER a
+# little less; CHARGE NOISE a shock; THE BOX itself nothing, its swipe 8; SCRATCH a claw)
+SPECIAL_DAMAGE = {"MEASURE": 12, "TUNNEL": 0, "LASER": 8, "CHARGE NOISE": 3, "THE BOX": 0, "SCRATCH": 4}
+
+
 def test_the_damage():
     for c, slot, m in all_moves():
-        if m.measure_rival:
-            assert m.damage == 12, (c.name, slot)
-        elif m.tunnel:
-            assert m.damage == 0, (c.name, slot)        # TUNNEL only moves her
-        elif m.hover:
-            assert m.damage == 8, (c.name, slot)        # LASER: a little less than a special
-        elif m.hit_every:
-            assert m.damage == 3, (c.name, slot)
+        if m.name in SPECIAL_DAMAGE:
+            assert m.damage == SPECIAL_DAMAGE[m.name], (c.name, slot)
         else:
             key = "throw" if slot == "throw" else slot.split(".")[1]
             assert m.damage == DAMAGE[key], (c.name, slot)
 
 
 def test_health():
-    assert (ROBERT.health, BOHR.health, PHOEBE.health) == (100, 115, 95)
+    assert {c.name: c.health for c in CHARACTERS.values()} == {
+        "ROBERT": 100, "BOHR": 115, "PHOEBE": 95, "ERWIN": 90}
 
 
 def test_photon_has_a_cooldown():
@@ -130,7 +131,7 @@ def test_a_projectile_move_and_only_one_has_a_projectile():
 def test_only_a_projectile_has_no_hitbox():
     for c, slot, m in all_moves():
         if m.hitbox is None:
-            assert m.kind == "projectile" or m.tunnel, (c.name, slot)
+            assert m.kind == "projectile" or m.tunnel or m.superpose, (c.name, slot)
 
 
 def test_a_dive_is_only_ever_an_air_move():
@@ -233,29 +234,33 @@ def test_a_is_your_colour_b_the_other_and_throws_both():
             assert (m.colour, m.height) == (want, height), (c.name, slot)
 
 
-SPECIALS = {   # (character, slot): (colour rule, height, twist): every special is your colour
-    ("ROBERT", "stand.X"): (OWN, HIGH, None),
-    ("ROBERT", "crouch.X"): (OWN, LOW, None),
-    ("ROBERT", "air.X"): (OWN, MID, "switch_self_on_hit"),
-    ("BOHR", "stand.X"): (BOTH, MID, "measure_rival"),     # a throw: both, like every throw
-    ("BOHR", "crouch.X"): (OWN, MID, "hit_every"),
-    ("BOHR", "air.X"): (OWN, MID, None),
-    ("PHOEBE", "stand.X"): (OWN, MID, None),
-    ("PHOEBE", "crouch.X"): (OWN, MID, "tunnel"),
-    ("PHOEBE", "air.X"): (OWN, MID, "hover"),
+SPECIALS = {   # (character, slot): (colour rule, height, twists): every special is your colour
+    ("ROBERT", "stand.X"): (OWN, HIGH, ()),
+    ("ROBERT", "crouch.X"): (OWN, LOW, ()),
+    ("ROBERT", "air.X"): (OWN, MID, ("switch_self_on_hit",)),
+    ("BOHR", "stand.X"): (BOTH, MID, ("measure_rival",)),     # a throw: both, like every throw
+    ("BOHR", "crouch.X"): (OWN, MID, ("hit_every",)),
+    ("BOHR", "air.X"): (OWN, MID, ()),
+    ("PHOEBE", "stand.X"): (OWN, MID, ()),
+    ("PHOEBE", "crouch.X"): (OWN, MID, ("tunnel",)),
+    ("PHOEBE", "air.X"): (OWN, MID, ("hover",)),
+    ("ERWIN", "stand.X"): (OWN, MID, ("superpose",)),
+    ("ERWIN", "crouch.X"): (OWN, MID, ("leap",)),
+    ("ERWIN", "air.X"): (OWN, MID, ("hit_every", "hover")),
 }
-TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover")
+TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover", "superpose", "leap")
 
 
 def test_the_specials_colours_and_twists():
-    for (name, slot), (colour, height, twist) in SPECIALS.items():
+    for (name, slot), (colour, height, twists) in SPECIALS.items():
         m = CHARACTERS[name].moves[slot]
         assert (m.colour, m.height) == (colour, height), (name, slot)
-        assert [t for t in TWISTS if getattr(m, t)] == ([twist] if twist else []), (name, slot)
+        assert tuple(t for t in TWISTS if getattr(m, t)) == twists, (name, slot)
     names = {n: [CHARACTERS[n].moves[s].name for s in ("stand.X", "crouch.X", "air.X")] for n in CHARACTERS}
     assert names == {"ROBERT": ["PHOTON", "PHASE SLIDE", "HADAMARD DIVE"],
                      "BOHR": ["MEASURE", "CHARGE NOISE", "COLLAPSE"],
-                     "PHOEBE": ["LIGHT PILLAR", "TUNNEL", "LASER"]}
+                     "PHOEBE": ["LIGHT PILLAR", "TUNNEL", "LASER"],
+                     "ERWIN": ["THE BOX", "POUNCE", "SCRATCH"]}
 
 
 def test_only_specials_have_twists():
@@ -294,3 +299,28 @@ def test_tunnel_and_laser_numbers():
     assert tunnel.cooldown == config.frames(1.8)
     assert laser.startup == 5 and laser.once_per_jump and laser.hover
     assert laser.projectile.vy == -laser.projectile.speed        # 45 degrees, down
+
+
+# --- ERWIN -----------------------------------------------------------------------------------
+
+
+def test_erwin_stats():
+    e = CHARACTERS["ERWIN"]
+    assert (e.build, e.health, e.walk, e.jump_vy, e.gravity) == ("cat", 90, 2.3, 12.5, 0.5)
+    others = [c for c in CHARACTERS.values() if c is not e]
+    assert apex(e) > max(apex(c) for c in others) and e.health < min(c.health for c in others)
+    for slot in NORMALS:
+        assert e.moves[slot] is ROBERT.moves[slot], slot
+
+
+def test_erwin_specials():
+    box, pounce, scratch = (ERWIN.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+    assert box.superpose and box.hitbox is None and box.cooldown == config.frames(3.0)
+    swipe = box.pop_out
+    assert (swipe.damage, swipe.height, swipe.colour, swipe.kind) == (8, MID, OWN, "special")
+    assert swipe.hitbox.x + swipe.hitbox.w <= 64                 # short range
+    assert pounce.leap is not None and (pounce.damage, pounce.height, pounce.knockdown) == (10, MID, True)
+    assert pounce.cooldown == config.frames(2.0) and 18 <= pounce.recovery <= 22
+    assert pounce.active > 2 * pounce.leap[1] / ERWIN.gravity    # it always lands in its active frames
+    assert scratch.hover and scratch.once_per_jump and (scratch.damage, scratch.height) == (4, MID)
+    assert -(-scratch.active // scratch.hit_every) == 3          # three claws

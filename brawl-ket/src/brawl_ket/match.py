@@ -27,7 +27,7 @@ from .moves import CHARACTERS
 from .tutorial import Lesson
 
 PLAYERS = ("p1", "p2")
-ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOHR
+ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOHR, PHOEBE, ERWIN, DOS
 
 TITLE = "title"
 SELECT = "select"
@@ -298,10 +298,10 @@ class Match:
     def _start_attract(self) -> None:
         self.title_index = 0    # whoever stops the demo finds PLAY, never QUIT, under A
         chars = {p: self.rng.choice(ROSTER) for p in PLAYERS}
-        self.attract = Fight(chars)
         self.stage = self.rng.choice(config.STAGES)
         self._title_phase = 0
         seed = self.rng.randrange(1 << 30)
+        self.attract = Fight(chars, seed)       # the demo fight and its bots, seeded from the match
         self.bots = {p: Bot(p, seed + i) for i, p in enumerate(PLAYERS)}
         self._attract_over = 0
 
@@ -350,7 +350,7 @@ class Match:
         self._start_round(events)
 
     def _start_round(self, events: list) -> None:
-        self.fight = Fight({p: ROSTER[self.picks[p]] for p in PLAYERS})
+        self.fight = Fight({p: ROSTER[self.picks[p]] for p in PLAYERS}, self.rng.randrange(1 << 30))
         self.round_winner = None
         self.perfect = False
         self.ko = False
