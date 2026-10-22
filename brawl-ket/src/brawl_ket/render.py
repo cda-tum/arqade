@@ -253,14 +253,14 @@ def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
 
 def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body, accent,
                 flare: float = 0.0, strike: tuple[str, tuple] | None = None, mood: str = "calm",
-                led: bool = False, eject: bool = False) -> dict:
+                led: bool = False, eject: bool = False, floor: float | None = None) -> dict:
     """One fighter, back limbs first. Returns the joints (screen px). `flare` (px) blows a
     coat's hem out behind (PHOEBE's) or M-CUTIE's hair back; `strike` = (joint, colour) is the
     lit limb, for a build that draws its own (SELF_LIT); `mood`, `led` and `eject` are DOS's
-    screen (dos.py)."""
+    screen (dos.py); `floor` is the floor line's y, which M-CUTIE's skirt stays out of."""
     if build == "cutie":
         j = joints(pose, build, feet, facing)
-        draw_cutie(surf, j, pose.lean, facing, body, strike, swing=flare)
+        draw_cutie(surf, j, pose.lean, facing, body, strike, swing=flare, floor=floor)
         return j
     if build == "dos":
         j = drawn_joints(pose, build, feet, facing)
@@ -850,12 +850,12 @@ class Renderer:
                 return j["head"][0] - ox, j["head"][1] - oy
         mood, led, eject = dos_screen(f) if f.char.build == "dos" else ("calm", False, False)
         if f.action == "charging":          # AMPLITUDE AMPLIFICATION: her halo and the steps so far
-            j = draw_charging(self.surface, pose, feet, f.facing, body, f.charge)
+            j = draw_charging(self.surface, pose, feet, f.facing, body, f.charge, floor=FLOOR_Y + oy)
         elif f.action == "attack" and m is not None and m.name == "SPIN" and f.phase == "active":
-            j = draw_spin(self.surface, pose, feet, f.facing, body, strike_of(f))
+            j = draw_spin(self.surface, pose, feet, f.facing, body, strike_of(f), floor=FLOOR_Y + oy)
         else:
             j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare,
-                            strike=strike_of(f), mood=mood, led=led, eject=eject)
+                            strike=strike_of(f), mood=mood, led=led, eject=eject, floor=FLOOR_Y + oy)
         self._striker(key, f, j)
         if f.action == "attack" and m is not None:
             if m.catch is not None:

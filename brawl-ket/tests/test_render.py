@@ -805,6 +805,79 @@ def test_spin_matches_the_look(look, facing, feet):
     assert same_pixels(a, b)
 
 
+def _skirt_bottom(pose_name: str, feet, facing: int, floor) -> int:
+    """The lowest row M-CUTIE's skirt (both halves of the cage, and its fringe) paints."""
+    from brawl_ket.cutie import skirt_cage_back, skirt_cage_front
+    from brawl_ket.ink import frame
+    from brawl_ket.poses import POSES, joints
+    j = joints(POSES[pose_name], "cutie", feet, facing)
+    at = frame(j, facing)
+    s = pygame.Surface((INTERNAL_WIDTH, INTERNAL_HEIGHT), pygame.SRCALPHA)
+    skirt_cage_back(s, j, at, GREEN, floor=floor)
+    skirt_cage_front(s, j, at, GREEN, facing, 2, floor=floor)
+    return s.get_bounding_rect().bottom - 1
+
+
+def test_her_skirt_sinks_into_the_floor_without_a_floor_line():
+    """The look hangs the cage straight down from the hip: lying down it went through the floor."""
+    pygame.init()
+    for name in ("knockdown", "slide", "pounce"):
+        assert _skirt_bottom(name, (300.0, FLOOR_Y), 1, None) > FLOOR_Y + 20
+
+
+@pytest.mark.parametrize("facing", [1, -1])
+@pytest.mark.parametrize("feet_x", [300.0, 300.5, 301.0])
+def test_her_skirt_never_sinks_into_the_floor(facing, feet_x):
+    """Given the floor line, the hem's bottom stays on or above it in every pose (the knockdown,
+    the slide and the pounce lie lowest)."""
+    from brawl_ket.poses import POSES
+    pygame.init()
+    for name in POSES:
+        assert _skirt_bottom(name, (feet_x, FLOOR_Y), facing, FLOOR_Y) <= FLOOR_Y, name
+
+
+@pytest.mark.parametrize("name", ["idle", "crouch", "jump", "walk1", "heavy_hit", "sweep_hit", "charge"])
+@pytest.mark.parametrize("facing", [1, -1])
+def test_the_floor_line_leaves_the_looks_poses_alone(look, name, facing):
+    """Standing, crouching or jumping her skirt never reaches the floor: with the floor line at
+    her feet she is still the look, pixel for pixel."""
+    from brawl_ket.cutie import draw_cutie
+    from brawl_ket.poses import POSES, joints
+    ref = look(CUTIE_LOOK)
+    pygame.init()
+    feet = (120.5, 220.0)
+    a, b = pygame.Surface((240, 240)), pygame.Surface((240, 240))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    pose = POSES[name]
+    ref.draw_cutie(a, pose, feet, facing, GREEN, "B")
+    draw_cutie(b, joints(pose, "cutie", feet, facing), pose.lean, facing, GREEN, floor=feet[1])
+    assert same_pixels(a, b)
+
+
+def test_a_knocked_out_m_cutie_lies_on_the_floor(monkeypatch):
+    """The KO pose stays on screen through ROUND_END: her skirt is drawn on the stage's floor."""
+    from brawl_ket.moves import M_CUTIE
+    pygame.init()
+    surface = pygame.Surface((INTERNAL_WIDTH, INTERNAL_HEIGHT))
+    renderer = Renderer(surface)
+    fight = Fight({"p1": ROBERT, "p2": M_CUTIE})
+    cutie = fight.fighters["p2"]
+    cutie.knock_out(1, 0)
+    for _ in range(40):
+        fight.step({})
+    assert cutie.action == "knockdown" and cutie.y == 0
+    import brawl_ket.render as R
+    drawn, real = [], R.draw_cutie
+
+    def spy(*args, **kwargs):
+        drawn.append(kwargs.get("floor"))
+        return real(*args, **kwargs)
+    monkeypatch.setattr(R, "draw_cutie", spy)
+    renderer.draw_fight(fight, [])
+    assert drawn and all(f is not None and abs(f - FLOOR_Y) <= 8 for f in drawn)
+
+
 @pytest.mark.parametrize("steps", range(1, 7))
 @pytest.mark.parametrize("colour", [GREEN, PURPLE], ids=["green", "purple"])
 @pytest.mark.parametrize("facing", [1, -1])

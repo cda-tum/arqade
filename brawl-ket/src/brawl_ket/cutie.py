@@ -208,15 +208,34 @@ def waist(j, at):
     return (wx, wy), 0.3 * (knees - j["hip"][0])
 
 
-def cage_hoops(j, at, spread=1.0, squash=1.0):
+HOOPS = ((0, 26, 6), (13, 44, 9), (26, 60, 12))   # (drop below the waist, width, height) px
+HEM = 10            # the fringe's tails and plugs below the last hoop's bottom (and a px spare)
+MIN_FIT = 0.3       # the flattest the cage gets; lower than that it is lifted instead
+
+
+def cage_hoops(j, at, spread=1.0, squash=1.0, floor=None):
+    """The skirt's three hoops (x, y, w, h), hanging from the waist. Given the floor line, a cage
+    that would sink into it (lying down, sliding, a pounce) is squashed flat onto it instead:
+    the hoops' drops and heights shrink together until the hem's fringe rests on the floor, and
+    a cage already as flat as it gets is lifted. Standing, crouching or in the air it never
+    touches the floor, so it hangs exactly as the look draws it."""
     (wx, wy), shift = waist(j, at)
-    return [(wx + shift * u / 26, wy + u * squash, w * spread, hh)
-            for u, w, hh in ((0, 26, 6), (13, 44, 9), (26, 60, 12))]
+    fit, lift = None, 0.0
+    if floor is not None:
+        drop, h = HOOPS[-1][0], HOOPS[-1][2]
+        room = floor - HEM - wy
+        if drop * squash + h / 2 > room:
+            fit = max(MIN_FIT, room / (drop + h / 2))
+            lift = min(0.0, room - fit * (drop + h / 2))
+    if fit is None:
+        return [(wx + shift * u / 26, wy + u * squash, w * spread, hh) for u, w, hh in HOOPS]
+    return [(wx + shift * u / 26, wy + lift + u * fit, w * spread, max(2, math.floor(hh * fit)))
+            for u, w, hh in HOOPS]
 
 
-def skirt_cage_back(surf, j, at, base, bright=0.0, spread=1.0, squash=1.0):
+def skirt_cage_back(surf, j, at, base, bright=0.0, spread=1.0, squash=1.0, floor=None):
     """The hoop skirt, behind the legs: the glow filling the bell, the far halves of the hoops."""
-    hoops = cage_hoops(j, at, spread, squash)
+    hoops = cage_hoops(j, at, spread, squash, floor)
     lit = P.lighten(base, 0.28 + 0.3 * bright)
     bell = ([(x - w / 2, y) for x, y, w, h in hoops] + [(x + w / 2, y) for x, y, w, h in reversed(hoops)])
     x, y, w, h = hoops[-1]
@@ -237,10 +256,10 @@ def skirt_cage_back(surf, j, at, base, bright=0.0, spread=1.0, squash=1.0):
         pygame.draw.arc(surf, P.shade(GOLD_PLATE, 0.7), r, 0, math.pi, 2)
 
 
-def skirt_cage_front(surf, j, at, base, facing, sway=0.0, spread=1.0, squash=1.0):
+def skirt_cage_front(surf, j, at, base, facing, sway=0.0, spread=1.0, squash=1.0, floor=None):
     """...and in front of the legs: the rods and coax lines between the hoops, the near halves
     of the hoops, and a coax fringe with gold plugs hanging from the hem."""
-    hoops = cage_hoops(j, at, spread, squash)
+    hoops = cage_hoops(j, at, spread, squash, floor)
 
     def rim(hp, k):
         x, y, w, h = hp
@@ -349,20 +368,22 @@ def draw_head(surf, j, base, facing, swing, part) -> None:
 # --- M-CUTIE -------------------------------------------------------------------------------------
 
 
-def draw_cutie(surf, j, lean, facing, base, strike=None, bright=0.0, swing=0.0, spread=1.0, squash=1.0):
+def draw_cutie(surf, j, lean, facing, base, strike=None, bright=0.0, swing=0.0, spread=1.0, squash=1.0,
+               floor=None):
     """M-CUTIE at the joints `j` (poses.joints, build "cutie") of a pose leaning `lean`, in her
     basis colour `base`. `strike` = (joint, colour) lights an attack's arm or leg; `bright`
     (0..1) is the charge's glow in the skirt; `swing` blows the hair back; `spread`/`squash`
-    flare the skirt (SPIN). Returns j."""
+    flare the skirt (SPIN); `floor` (the floor line's y, if any) keeps the skirt out of the
+    floor (cage_hoops). Returns j."""
     at = frame(j, facing)
     w = LIMB_W["cutie"]
     swing += max(-4.0, min(8.0, lean * 0.3))
     draw_head(surf, j, base, facing, swing, "back")
     limbs_back(surf, j, base, facing, w)
-    skirt_cage_back(surf, j, at, base, bright, spread, squash)
+    skirt_cage_back(surf, j, at, base, bright, spread, squash, floor)
     leg_front(surf, j, base, facing, w, strike)
     bodice(surf, at, j, base)
-    skirt_cage_front(surf, j, at, base, facing, 2 + swing * 0.3, spread, squash)
+    skirt_cage_front(surf, j, at, base, facing, 2 + swing * 0.3, spread, squash, floor)
     draw_head(surf, j, base, facing, swing, "front")
     arm_front(surf, j, base, w, strike)
     return j
@@ -476,14 +497,14 @@ def halo(color, facing: int, steps: int) -> tuple[pygame.Surface, tuple[int, int
     return out.subsurface(box).copy(), box.topleft
 
 
-def draw_charging(surf, pose, feet, facing, base, steps) -> dict:
+def draw_charging(surf, pose, feet, facing, base, steps, floor=None) -> dict:
     """Charging: the halo, her body (in `pose`) glowing `steps` steps bright, her front hand
     alight, and a pip per step above her head (the look's row of specials). Returns the joints."""
     bright, _k = charge_look(steps)
     fx, fy = round(feet[0]), round(feet[1])
     layer, (lx, ly) = halo(base, facing, steps)
     surf.blit(layer, (fx - CHARGE_AT[0] + lx, fy - CHARGE_AT[1] + ly))
-    j = draw_cutie(surf, joints(pose, "cutie", feet, facing), pose.lean, facing, base, bright=bright)
+    j = draw_cutie(surf, joints(pose, "cutie", feet, facing), pose.lean, facing, base, bright=bright, floor=floor)
     glow(surf, j["hand_f"], 9, P.lighten(base, 0.6), 160)
     pips(surf, (j["head"][0], j["head"][1] - 30), steps, base)
     return j
@@ -582,12 +603,13 @@ def leg_ghosts(surf, pose, feet, facing, base):
         surf.blit(s, (ox, oy))
 
 
-def draw_spin(surf, pose, feet, facing, base, strike=None) -> dict:
+def draw_spin(surf, pose, feet, facing, base, strike=None, floor=None) -> dict:
     """SPIN as the look draws it: the leg's ghosts and the far whirl behind her, her skirt
     flattened and widened, the near whirl in front. Returns the joints."""
     leg_ghosts(surf, pose, feet, facing, base)
     j = joints(pose, "cutie", feet, facing)
     spin_whirl(surf, j, base, "back")
-    draw_cutie(surf, j, pose.lean, facing, base, strike, swing=SPIN_SWING, spread=SPIN_SPREAD, squash=SPIN_SQUASH)
+    draw_cutie(surf, j, pose.lean, facing, base, strike, swing=SPIN_SWING, spread=SPIN_SPREAD, squash=SPIN_SQUASH,
+               floor=floor)
     spin_whirl(surf, j, base, "front")
     return j
