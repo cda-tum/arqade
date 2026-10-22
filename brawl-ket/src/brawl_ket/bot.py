@@ -62,6 +62,19 @@ GRAB_SPIN = 70          # ... this close, to SPIN them out of it before it dashe
 _BUSY = ("hitstun", "knockdown")
 
 
+def keep_clear_of(move) -> bool:
+    """Moves a bot on the ground backs away from while they would hurt it: a field round the
+    body (CHARGE NOISE), and M-CUTIE's SPIN, which sweeps 96 px forward hitting every 8 frames.
+    SPIN is no field (COPY can't catch it), but walking out of its path is still the bot's
+    answer to it; without that BOHR's bot beats hers 62/38 (tools/balance.py)."""
+    return move.field or is_spin(move)
+
+
+def is_spin(move) -> bool:
+    """SPIN: a move that hits again and again, sweeping forward from a hover, but is no field."""
+    return bool(move.hit_every) and not move.field and move.hover and bool(move.lunge)
+
+
 class Bot:
     def __init__(self, player: str, seed: int, skill: float = 0.8) -> None:
         self.player = player
@@ -107,10 +120,10 @@ class Bot:
         toward = 1 if rival.x > me.x else -1
         dist = abs(rival.x - me.x)
         m = rival.move
-        if m is not None and m.field and rival.action == "attack" and dist <= FIELD_RANGE + 20 \
+        if m is not None and keep_clear_of(m) and rival.action == "attack" and dist <= FIELD_RANGE + 20 \
                 and self.would_hurt(rival, m, me) and me.action in ("idle", "walk", "crouch"):
             self.down = False
-            return FighterInput(dx=-toward)                     # back out of a field that hurts
+            return FighterInput(dx=-toward)                     # back out of a field (or a SPIN) that hurts
         if me.stance == "air":
             return self._in_air(me, rival, toward, dist)
         self.spin_jump = False

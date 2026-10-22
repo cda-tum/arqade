@@ -284,15 +284,16 @@ def _in_charge_noise(rival_name: str, gap: float):
     return fight
 
 
-def test_a_spin_is_no_field_to_back_out_of():
-    """SPIN hits every 8 frames, as CHARGE NOISE does every 12, but only CHARGE NOISE is a
-    field round the body that a bot walks out of."""
-    bot = Bot("p1", seed=1, skill=1.0)
-    fight = _in_charge_noise("ROBERT", 88)
-    assert bot.input(fight).dx == -1
-    bot = Bot("p1", seed=1, skill=1.0)
-    fight = _in_a_spin("ROBERT", 88)
-    assert all(bot.input(fight).dx != -1 for _ in range(8))
+def test_bots_back_away_from_a_spin_as_from_a_field():
+    """SPIN is no field (COPY can't catch it), but a bot on the ground still walks out of an
+    active SPIN that would hurt it, as it does out of CHARGE NOISE."""
+    from brawl_ket.bot import is_spin, keep_clear_of
+    spin, noise = CHARACTERS["M-CUTIE"].moves["air.X"], CHARACTERS["BOHR"].moves["crouch.X"]
+    assert is_spin(spin) and not spin.field and keep_clear_of(spin) and keep_clear_of(noise)
+    assert not any(keep_clear_of(m) for c in CHARACTERS.values() for m in c.moves.values() if m not in (spin, noise))
+    for fight in (_in_charge_noise("ROBERT", 88), _in_a_spin("ROBERT", 88)):
+        bot = Bot("p1", seed=1, skill=1.0)
+        assert bot.input(fight).dx == -1
 
 
 def test_dos_never_copies_a_spin_but_copies_charge_noise():
