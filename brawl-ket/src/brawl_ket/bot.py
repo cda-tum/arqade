@@ -107,7 +107,7 @@ class Bot:
         toward = 1 if rival.x > me.x else -1
         dist = abs(rival.x - me.x)
         m = rival.move
-        if m is not None and m.hit_every and rival.action == "attack" and dist <= FIELD_RANGE + 20 \
+        if m is not None and m.field and rival.action == "attack" and dist <= FIELD_RANGE + 20 \
                 and self.would_hurt(rival, m, me) and me.action in ("idle", "walk", "crouch"):
             self.down = False
             return FighterInput(dx=-toward)                     # back out of a field that hurts
@@ -292,8 +292,11 @@ class Bot:
         coming = any(s.owner == self.rival and (s.x - me.x) * s.vx < 0
                      and COPY_REACH[0] <= abs(s.x - me.x) <= COPY_REACH[1] for s in fight.shots)
         m = rival.move
-        field = rival.action == "attack" and m is not None and m.hit_every and dist <= 100
-        if (coming or field) and self.rng.random() < self.skill * 0.8:
+        near = rival.action == "attack" and m is not None and m.hit_every and dist <= 100
+        field = near and m.field
+        # (a repeating move in reach that is no field, SPIN, still takes its roll, so the bot's
+        # random draws stay where they were; COPY can't catch it)
+        if (coming or near) and self.rng.random() < self.skill * 0.8 and (coming or field):
             self.down = False
             return self._press("y", 0)                          # COPY
         if rival.action == "hitstun" and dist <= STRIKE_RANGE and self.t - self.mouse_t <= MOUSE_FOLLOW \
@@ -374,7 +377,7 @@ class Bot:
         switcher = len(self.switches) >= SWITCHER
         if dist <= me.throw_range and ready and (switcher or self.rival_crouched > LONG_CROUCH) and roll < 0.1:
             return self._press("b", toward)                     # a throw hurts either colour
-        if field.hit_every and dist <= FIELD_RANGE and self.would_hurt(me, field, rival) and ready \
+        if field.field and dist <= FIELD_RANGE and self.would_hurt(me, field, rival) and ready \
                 and me.cooldowns.get("crouch.X", 0) == 0 and roll < 0.05:
             self.down = True                                    # CHARGE NOISE on a rival it hurts
             return self._press("x", 0)

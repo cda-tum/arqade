@@ -77,7 +77,8 @@ class Move:
     # The specials' twists (fight.py applies them when the move lands):
     switch_self_on_hit: bool = False    # HADAMARD DIVE: H on the attacker
     measure_rival: bool = False         # MEASURE: the rival collapses into the attacker's basis
-    hit_every: int = 0                  # > 0: hits again this many frames after each hit (CHARGE NOISE)
+    hit_every: int = 0                  # > 0: hits again this many frames after each hit (CHARGE NOISE, SPIN)
+    field: bool = False                 # a field round the body (CHARGE NOISE): COPY catches it, bots back off
     tunnel: bool = False                # TUNNEL: vanish, re-form past the rival (fighter.py)
     hover: bool = False                 # the fall stops through startup and active (LASER)
     once_per_jump: bool = False         # usable once per jump (LASER)
@@ -263,7 +264,7 @@ BOHR = Character(
         # next) or being the other colour.
         "crouch.X": Move(
             "CHARGE NOISE", 8, 60, 16, Box(-60, 0, 120, 120), OWN, MID,
-            damage=3, hitstun=8, knockback=2.0, hit_every=12,
+            damage=3, hitstun=8, knockback=2.0, hit_every=12, field=True,
             kind="special", cooldown=config.frames(3.0),
             poses=("crouch", "brace", "crouch"),
         ),

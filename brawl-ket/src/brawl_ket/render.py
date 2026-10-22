@@ -1017,7 +1017,7 @@ class Renderer:
         if f.action != "attack" or m is None or f.phase not in ("startup", "active"):
             trail.clear()
             return
-        if m.name == "CHARGE NOISE":
+        if m.field:                     # CHARGE NOISE
             trail.clear()
             self._charge_noise(f, m, j)
             return

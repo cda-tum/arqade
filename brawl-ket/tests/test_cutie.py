@@ -13,7 +13,7 @@ from brawl_ket.basis import X_BASIS, Z_BASIS
 from brawl_ket.config import CHARGE_CAP, CHARGE_WAIT, STAGE_RIGHT, TRAP_ARM, TRAP_GRACE, TRAP_LIFE, TRAP_MAX, TRAP_REACH
 from brawl_ket.fight import Fight, Shot, Trap
 from brawl_ket.fighter import IDLE, FighterInput
-from brawl_ket.moves import AMP_STEPS, AMP_WAVES, BOHR, DOS, ERWIN, M_CUTIE, PHOEBE, ROBERT, TRAP_HOLD
+from brawl_ket.moves import AMP_STEPS, AMP_WAVES, BOHR, CHARACTERS, DOS, ERWIN, M_CUTIE, PHOEBE, ROBERT, TRAP_HOLD
 
 X = FighterInput(x=True)
 DOWN_X = FighterInput(down=True, x=True)
@@ -245,6 +245,27 @@ def test_copy_catches_even_the_smallest_wave():
     for i in range(20):
         step(fight, FighterInput(y=i == 0))
     assert dos.clipboard == (wave, Z_BASIS)
+
+
+
+def test_copy_never_catches_a_spin():
+    """SPIN hits every 8 frames, as CHARGE NOISE crackles every 12, but it is no field: a COPY
+    whose window meets it catches nothing, and DOS has nothing to PASTE."""
+    from brawl_ket.fight import _overlap
+    fight = versus(DOS, M_CUTIE, 160)
+    dos, cutie = fight.fighters["p1"], fight.fighters["p2"]
+    events, met = [], False
+    for t in range(60):
+        events += step(fight, FighterInput(y=t == 12), UP if t == 0 else FighterInput(x=t == 6, dx=-1))
+        if dos.move is COPY and dos.phase == "active" and cutie.move is SPIN and cutie.phase == "active":
+            met = met or _overlap(cutie.world_box(SPIN.hitbox), dos.world_box(COPY.catch)) is not None
+    assert met and "copy" not in kinds(events) and dos.clipboard is None and "paste" not in dos.air_used
+
+
+def test_only_charge_noise_is_a_field():
+    """(COPY still catches CHARGE NOISE: tests/test_dos.py, test_copy_takes_bohrs_electricity_...)"""
+    fields = {m.name for c in CHARACTERS.values() for m in [*c.moves.values(), *c.extra.values()] if m.field}
+    assert fields == {"CHARGE NOISE"} and SPIN.hit_every and not SPIN.field
 
 
 # --- ION TRAP -----------------------------------------------------------------------------------

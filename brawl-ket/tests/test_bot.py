@@ -254,3 +254,51 @@ def test_m_cutie_spins_only_in_a_jump_made_for_it():
     assert not bot.input(fight).x                        # an ordinary jump: no SPIN
     bot.spin_jump, bot.air_pressed, bot.gap = True, False, 0
     assert me.y > 0 and bot.input(fight).x               # one made for it: SPIN
+
+
+def _in_a_spin(rival_name: str, gap: float):
+    """`rival_name` (p1, a bot's) idle on the floor, M-CUTIE (p2) mid-SPIN `gap` px from them."""
+    fight = Fight({"p1": CHARACTERS[rival_name], "p2": CHARACTERS["M-CUTIE"]})
+    me, cutie = fight.fighters["p1"], fight.fighters["p2"]
+    cutie.x = me.x + 300
+    fight.step({"p2": FighterInput(up=True)})
+    for _ in range(7):
+        fight.step({})
+    fight.step({"p2": FighterInput(x=True)})
+    while cutie.phase != "active":
+        fight.step({})
+    cutie.x = me.x + gap
+    assert cutie.move.name == "SPIN" and me.action == "idle" and Bot.would_hurt(cutie, cutie.move, me)
+    return fight
+
+
+def _in_charge_noise(rival_name: str, gap: float):
+    """...and BOHR (p2) crackling with CHARGE NOISE `gap` px away instead."""
+    fight = Fight({"p1": CHARACTERS[rival_name], "p2": CHARACTERS["BOHR"]})
+    me, bohr = fight.fighters["p1"], fight.fighters["p2"]
+    bohr.x = me.x + gap
+    fight.step({"p2": FighterInput(down=True, x=True)})
+    while bohr.phase != "active":
+        fight.step({"p2": FighterInput(down=True)})
+    assert bohr.move.name == "CHARGE NOISE" and me.action == "idle" and Bot.would_hurt(bohr, bohr.move, me)
+    return fight
+
+
+def test_a_spin_is_no_field_to_back_out_of():
+    """SPIN hits every 8 frames, as CHARGE NOISE does every 12, but only CHARGE NOISE is a
+    field round the body that a bot walks out of."""
+    bot = Bot("p1", seed=1, skill=1.0)
+    fight = _in_charge_noise("ROBERT", 88)
+    assert bot.input(fight).dx == -1
+    bot = Bot("p1", seed=1, skill=1.0)
+    fight = _in_a_spin("ROBERT", 88)
+    assert all(bot.input(fight).dx != -1 for _ in range(8))
+
+
+def test_dos_never_copies_a_spin_but_copies_charge_noise():
+    bot = Bot("p1", seed=1, skill=1.0)
+    fight = _in_a_spin("DOS", 95)
+    assert not any(bot.input(fight).y for _ in range(20))
+    bot = Bot("p1", seed=1, skill=1.0)
+    fight = _in_charge_noise("DOS", 95)
+    assert any(bot.input(fight).y for _ in range(20))

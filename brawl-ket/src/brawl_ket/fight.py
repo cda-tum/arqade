@@ -359,7 +359,7 @@ class Fight:
             else:
                 rival = self.fighters[_other(key)]
                 rm = rival.move
-                if rival.action == "attack" and rm is not None and rm.hit_every and rm.hitbox is not None \
+                if rival.action == "attack" and rm is not None and rm.field and rm.hitbox is not None \
                         and rival.phase == "active":
                     where = _overlap(rival.world_box(rm.hitbox), window)
                     if where is not None:
