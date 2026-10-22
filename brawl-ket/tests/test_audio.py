@@ -119,5 +119,5 @@ def test_her_wave_replaces_the_photons_sound() -> None:
 
 def test_the_super_has_its_sounds() -> None:
     sfx = audio.build_sfx()
-    for kind in ("super_half", "super_full"):
+    for kind in ("super_half", "super_full", "super"):
         assert audio.EVENT_SOUNDS.get(kind) in sfx, kind

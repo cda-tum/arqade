@@ -183,6 +183,9 @@ def build_sfx() -> dict[str, list[int]]:
         "super_half": concat(tone(c("E5"), 0.05, 0.14, "triangle", decay=10), tone(c("A5"), 0.08, 0.14, "triangle", decay=8)),
         "super_full": concat(tone(c("C5"), 0.05, 0.16, "triangle", decay=8), tone(c("E5"), 0.05, 0.16, "triangle", decay=8),
                              tone(c("G5"), 0.05, 0.16, "triangle", decay=8), tone(c("C6"), 0.2, 0.18, "triangle", decay=4)),
+        # the call's hit: a low boom and a high shimmer
+        "super": mix(tone(70, 0.6, 0.3, "square", decay=4, slide=0.6),
+                     tone(1200, 0.5, 0.08, "triangle", decay=5, slide=1.5)),
     }
 
 
@@ -202,7 +205,7 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 # toss and a TELEPORT; a toss taken out in flight sizzles as a LASER on the floor
                 "pass": None, "swap": None, "toss": "toss", "catch": "catch", "key_shot": "key_shot",
                 "intercept": "sizzle", "teleport": "teleport", "anchor": "anchor", "bell_dive": "bell_dive",
-                "super_half": "super_half", "super_full": "super_full",
+                "super_half": "super_half", "super_full": "super_full", "super": "super",
                 "decohere": "decohere", "recohere": "recohere",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw

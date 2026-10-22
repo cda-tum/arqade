@@ -107,3 +107,133 @@ def test_a_fight_can_be_handed_its_meters():
     meters["p1"].fill[Z] = 12
     fight = Fight({"p1": ROBERT, "p2": ROBERT}, seed=1, meters=meters)
     assert fight.meters is meters and fight.meters["p1"].fill[Z] == 12
+
+
+# --- firing ------------------------------------------------------------------------------------
+
+from types import MappingProxyType  # noqa: E402
+
+from brawl_ket.basis import BOTH  # noqa: E402
+from brawl_ket.config import SUPER_FREEZE  # noqa: E402
+from brawl_ket.moves import ALICE_BOB, MID, Box, Move  # noqa: E402
+
+AB = FighterInput(a=True, b=True)
+# a plain test super: a big strike in front, both colours
+TEST_SUPER = Move("TEST SUPER", 4, 4, 10, Box(14, 40, 60, 60), BOTH, MID,
+                  damage=25, hitstun=30, knockback=3.0, knockdown=True, kind="super")
+SUPER_ROBERT = replace(ROBERT, extra=MappingProxyType({"super": TEST_SUPER}))
+
+
+def full(fight: Fight, key: str = "p1") -> None:
+    fight.meters[key].fill = {Z: FULL, X: FULL}
+
+
+def kinds(events: list) -> list[str]:
+    return [e.kind for e in events]
+
+
+def test_a_and_b_together_with_a_full_bar_fire_it_and_empty_the_bar():
+    fight = fight_of(SUPER_ROBERT)
+    full(fight)
+    events = fight.step({"p1": AB})
+    assert "super" in kinds(events) and fight.fighters["p1"].slot == "super"
+    assert not fight.meters["p1"].full and fight.meters["p1"].fill == {Z: 0, X: 0}
+    assert fight.freeze == SUPER_FREEZE and fight.supers == ["p1"]
+
+
+def test_the_freeze_stops_everything_for_its_call():
+    fight = fight_of(SUPER_ROBERT)
+    full(fight)
+    fight.fighters["p2"].vx = 2.0
+    fight.step({"p1": AB})
+    clock, frame, x = fight.frames_left, fight.fighters["p1"].frame, fight.fighters["p2"].x
+    for _ in range(SUPER_FREEZE - 1):
+        assert fight.step({"p2": FighterInput(dx=1)}) == []
+    assert (fight.frames_left, fight.fighters["p1"].frame, fight.fighters["p2"].x) == (clock, frame, x)
+    fight.step({})                                  # the last frame of the call
+    assert fight.freeze == 0 and fight.supers == []
+    fight.step({})
+    assert fight.fighters["p1"].frame == frame + 1  # and on it goes
+
+
+def test_a_then_b_two_frames_later_still_fires_but_three_is_a_jab():
+    fight = fight_of(SUPER_ROBERT)
+    full(fight)
+    fight.step({"p1": A})
+    fight.step({})
+    assert "super" in kinds(fight.step({"p1": B}))
+    fight = fight_of(SUPER_ROBERT)
+    full(fight)
+    fight.step({"p1": A})
+    fight.step({})
+    events = fight.step({})                         # a lone A waited 2 frames: now it's a jab
+    assert fight.fighters["p1"].slot == "stand.A" and "super" not in kinds(events)
+
+
+def test_without_a_full_bar_a_and_b_are_as_ever():
+    fight = fight_of(SUPER_ROBERT)
+    fight.step({"p1": A})
+    assert fight.fighters["p1"].slot == "stand.A"   # at once, no waiting
+    fight = fight_of(SUPER_ROBERT)
+    events = fight.step({"p1": AB})
+    assert "super" not in kinds(events) and fight.fighters["p1"].slot != "super"
+
+
+def test_a_fighter_with_no_super_never_waits():
+    fight = fight_of()
+    full(fight)
+    fight.step({"p1": A})
+    assert fight.fighters["p1"].slot == "stand.A"
+
+
+def test_not_from_the_air():
+    fight = fight_of(SUPER_ROBERT)
+    full(fight)
+    fight.step({"p1": FighterInput(up=True)})
+    events = fight.step({"p1": AB})
+    assert "super" not in kinds(events) and fight.meters["p1"].full
+
+
+def test_it_hurts_either_colour_and_fills_no_bar():
+    for rival_basis in (Z, X):
+        fight = fight_of(SUPER_ROBERT)
+        full(fight)
+        fight.fighters["p2"].basis = rival_basis
+        until(fight, "hit", {"p1": AB}, frames=SUPER_FREEZE + 20)
+        assert fight.fighters["p2"].health == ROBERT.health - 25
+        assert fight.meters["p1"].fill == {Z: 0, X: 0} and fight.meters["p2"].fill == {Z: 0, X: 0}
+
+
+def test_a_ko_by_a_super_is_marked():
+    fight = fight_of(SUPER_ROBERT)
+    full(fight)
+    fight.fighters["p2"].health = 20
+    until(fight, "ko", {"p1": AB}, frames=SUPER_FREEZE + 20)
+    assert fight.over and fight.super_ko
+
+
+def test_both_on_the_same_frame_freeze_one_after_the_other():
+    fight = fight_of(SUPER_ROBERT, SUPER_ROBERT, gap=200.0)
+    full(fight, "p1")
+    full(fight, "p2")
+    fight.step({"p1": AB, "p2": AB})
+    assert fight.supers == ["p1", "p2"]
+    for _ in range(SUPER_FREEZE):
+        fight.step({})
+    assert fight.supers == ["p2"] and fight.freeze == SUPER_FREEZE
+    for _ in range(SUPER_FREEZE):
+        fight.step({})
+    assert fight.supers == [] and fight.freeze == 0
+
+
+def test_bob_never_echoes_a_supers_a_and_b():
+    pair = replace(ALICE_BOB, extra=MappingProxyType({**ALICE_BOB.extra, "super": TEST_SUPER}))
+    fight = fight_of(pair, ROBERT, gap=300.0)
+    full(fight)
+    fight.step({"p1": A})
+    fight.step({"p1": B})                           # A, then B a frame later
+    assert fight.fighters["p1"].slot == "super"
+    bob = fight.echoes["p1"]
+    for _ in range(SUPER_FREEZE + 30):
+        fight.step({})
+        assert bob.action != "attack"

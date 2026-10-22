@@ -356,7 +356,8 @@ class Match:
 
     def _on_round_end(self, inp: FrameInput, events: list) -> None:
         # the bodies play out: in slow motion for the first moments of a K.O.
-        slow = self.ko and self.t <= config.KO_SLOW_FRAMES
+        # a K.O. by a super plays out twice as long
+        slow = self.ko and self.t <= config.KO_SLOW_FRAMES * (2 if self.fight.super_ko else 1)
         if not slow or self.t % config.KO_SLOW_RATE == 0:
             self.fight.step({p: IDLE for p in PLAYERS})
         if self.t < config.ROUND_END_FRAMES:

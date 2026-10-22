@@ -1032,3 +1032,14 @@ def test_the_bars_carry_over_from_round_to_round_and_reset_for_a_new_match() -> 
     run(m, config.MATCH_RESULT_LOCK)
     m.update(press("confirm"))                  # a rematch is a new match
     assert m.meters["p1"].fill[Z_BASIS] == 0 and m.fight.meters is m.meters
+
+
+def test_a_ko_by_a_super_plays_out_twice_as_long_in_slow_motion() -> None:
+    m = Match(random.Random(1))
+    to_fight(m)
+    m.fight.fighters["p2"].health = 0
+    m.fight.super_ko = True
+    m.update(idle())
+    assert m.state == ROUND_END and m.ko
+    slow = steps_of(m, 2 * config.KO_SLOW_FRAMES)
+    assert slow == 2 * config.KO_SLOW_FRAMES // config.KO_SLOW_RATE

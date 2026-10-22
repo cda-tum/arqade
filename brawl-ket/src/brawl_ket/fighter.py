@@ -32,6 +32,7 @@ from .config import (
     FLOOR_Y,
     STAGE_LEFT,
     STAGE_RIGHT,
+    SUPER_WINDOW,
     SWITCH_RECOVERY,
     THROW_RANGE,
     TUNNEL_EXPOSED,
@@ -114,6 +115,7 @@ class Fighter:
         self.charge = 0                 # AMPLITUDE AMPLIFICATION: steps charged (0: not charging)
         self.charge_wait = 0            # ... frames since the last step's press
         self.paired = False             # ALICE & BOB: Bob is here (the fight sets it every frame)
+        self.super_ready = False        # SUPERposition: the bar is full (the fight sets it every frame)
 
     # --- derived state ----------------------------------------------------------------
 
@@ -507,6 +509,8 @@ class Fighter:
             self.facing = 1 if rival_x > self.x else -1
 
     def _try_buffer(self, dx: int, rival_x: float, free: bool, events: list) -> None:
+        if self.super_ready and self.action in _GROUND_FREE and self._try_super(events):
+            return
         for entry in reversed(self.buffer):
             if entry.button == "y":     # DOS: COPY, or PASTE with a shot in the clipboard; free, on the ground
                 if not free or self.y > 0:
@@ -533,6 +537,20 @@ class Fighter:
                 return
             self._start_move(slot, move, cancel, events)
             return
+
+    def _try_super(self, events: list) -> bool:
+        """SUPERposition: with the bar full, A and B pressed within SUPER_WINDOW frames of each
+        other fire the super. A lone A or B waits up to SUPER_WINDOW - 1 frames for its partner
+        (True: nothing else may start meanwhile), then comes out as ever."""
+        move = self.char.extra.get("super")
+        if move is None:
+            return False
+        ages = {p.button: p.age for p in self.buffer if p.button in ("a", "b")}
+        if len(ages) == 2 and abs(ages["a"] - ages["b"]) < SUPER_WINDOW:
+            self._start_move("super", move, False, events)
+            events.append(("super", {}))
+            return True
+        return bool(ages) and max(ages.values()) < SUPER_WINDOW - 1
 
     def _paste_field(self, events: list) -> None:
         """PASTE with a field in the clipboard (CHARGE NOISE): he does the move himself, in the

@@ -30,6 +30,7 @@ from .config import (
     STAGE_LEFT,
     STAGE_RIGHT,
     START_X,
+    SUPER_FREEZE,
     THROW_SLACK,
     TRAP_ARM,
     TRAP_GRACE,
@@ -233,6 +234,10 @@ class Fight:
         self.trap_grace: dict[Fighter, int] = {}    # a body just let go of a hold: frames no trap can catch it
         self.frames_left = ROUND_FRAMES
         self.hitstop = 0
+        self.freeze = 0                     # SUPERposition: frames of the call left (nothing moves)
+        self.supers: list[str] = []         # ... whose call it is, and who fired on the same frame after them
+        self.super_ko = False               # the round ended on a super
+        self._fired: set[str] = set()       # who fired this frame (Bob forgets those presses)
         self.over = False
         self.winner: str | None = None      # None with over: a draw round
         self._landings: dict[str, _Landing] = {}
@@ -248,6 +253,13 @@ class Fight:
     def step(self, inputs: dict[str, FighterInput]) -> list[Event]:
         if self.over:
             self._settle()
+            return []
+        if self.freeze > 0:                 # a super's call: nothing moves, the clock included
+            self.freeze -= 1
+            if self.freeze == 0:
+                self.supers.pop(0)
+                if self.supers:             # another super fired on the same frame: its call
+                    self.freeze = SUPER_FREEZE
             return []
         if self.hitstop > 0:
             self.hitstop -= 1
@@ -284,11 +296,15 @@ class Fight:
         start_x = {key: f.x for key, f in self.fighters.items()}
         for key, echo in self.echoes.items():
             self.fighters[key].paired = echo.here     # her X and TELEPORT need Bob
+        self._fired = set()
         for key, f in self.fighters.items():
             f.rival_boxes = self._reach(_other(key))
+            f.super_ready = self.meters[key].full
             self._fighter_events(key, f, f.step(inputs.get(key, IDLE), start_x[_other(key)]), events)
         for key, echo in self.echoes.items():     # Bob after Alice: he faces as she now does
             late = echo.replay(inputs.get(key, IDLE))
+            if key in self._fired:
+                echo.forget_presses()
             echo.rival_boxes = self._reach(_other(key))
             self._fighter_events(key, echo, echo.step(late, start_x[_other(key)]), events)
 
@@ -325,6 +341,8 @@ class Fight:
             elif kind == "pass":        # KEY EXCHANGE: the toss leaves her hand
                 x0, y0 = f.x + f.facing * TOSS_FROM[0], f.y + TOSS_FROM[1]
                 self.tosses.append(Toss(key, data["move"].toss, f.attack_basis, x0, y0, x=x0, y=y0))
+            elif kind == "super":
+                self._fire(key, events)
             elif kind == "swap":
                 self._teleport(key, events)
             else:
@@ -334,6 +352,15 @@ class Fight:
                     self._landings[key] = _Landing(f.move)
                     error = basis.error_for(f.move.landing_colour, f.attack_basis)
                     events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
+
+    def _fire(self, key: str, events: list[Event]) -> None:
+        """SUPERposition: the bar empties and the fight freezes SUPER_FREEZE frames for the call
+        (a second super fired on the same frame plays its call after this one)."""
+        self.meters[key].empty()
+        self.supers.append(key)
+        self.freeze = SUPER_FREEZE
+        self._fired.add(key)
+        events.append(Event("super", key))
 
     def _teleport(self, key: str, events: list[Event]) -> None:
         """Down + X, in two steps. With Bob following, it ANCHORS him: he stays where he stands
@@ -678,6 +705,8 @@ class Fight:
         if before > defender.health and m.kind != "super":
             self._fill(st.owner, owner, st.defender, defender, before - defender.health, events)
         knocked = defender.action == "knockdown"
+        if m.kind == "super" and defender.health <= 0:
+            self.super_ko = True
         if knocked:
             downed.add(defender)
             if isinstance(defender, Echo):  # Bob knocked down decoheres: gone for a while

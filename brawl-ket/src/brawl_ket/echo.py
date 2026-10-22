@@ -87,6 +87,11 @@ class Echo(Fighter):
         self.queue.append(inp)
         return self.queue.popleft()
 
+    def forget_presses(self) -> None:
+        """Alice fired her super: the A and B that fired it must not come out of Bob as normals
+        (a super is one move for both)."""
+        self.queue = deque(replace(q, a=False, b=False) for q in self.queue)
+
     def step(self, inp: FighterInput, rival_x: float) -> list[tuple[str, dict]]:
         """One frame of Bob on Alice's delayed input. Her Y switched the pair already: Bob only
         gets the switch's lock, as she did. Decohered, he only counts the frames until he is back."""
