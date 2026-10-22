@@ -97,6 +97,7 @@ class Trap:
     age: int = 0        # frames since it was set
     closed: int = 0     # > 0: closed, this many frames still shown
     held: str | None = None     # ... on whom (None: on an empty box)
+    body: Fighter | None = None     # ... and which of their bodies (ALICE & BOB: Alice or Bob)
 
     @property
     def armed(self) -> bool:
@@ -197,7 +198,7 @@ class Fight:
             f.rng = self.rng
         self.shots: list[Shot] = []
         self.traps: list[Trap] = []         # M-CUTIE's, oldest first
-        self.trap_grace: dict[str, int] = {}    # a rival just let go of a hold: frames no trap can catch them
+        self.trap_grace: dict[Fighter, int] = {}    # a body just let go of a hold: frames no trap can catch it
         self.frames_left = ROUND_FRAMES
         self.hitstop = 0
         self.over = False
@@ -247,14 +248,21 @@ class Fight:
         # p2 are treated alike (p1 stepping first must not change what p2 sees).
         start_x = {key: f.x for key, f in self.fighters.items()}
         for key, f in self.fighters.items():
-            rival = self.fighters[_other(key)]
-            f.rival_boxes = rival.boxes if rival.boxed else None
+            f.rival_boxes = self._reach(_other(key))
             self._fighter_events(key, f, f.step(inputs.get(key, IDLE), start_x[_other(key)]), events)
         for key, echo in self.echoes.items():     # Bob after Alice: he faces as she now does
             late = echo.replay(inputs.get(key, IDLE))
-            rival = self.fighters[_other(key)]
-            echo.rival_boxes = rival.boxes if rival.boxed else None
+            echo.rival_boxes = self._reach(_other(key))
             self._fighter_events(key, echo, echo.step(late, start_x[_other(key)]), events)
+
+    def _reach(self, key: str) -> tuple[float, ...] | None:
+        """Where a throw can reach this player's fighter: either of THE BOX's boxes, or any of
+        their bodies (ALICE & BOB); None when it is just their x."""
+        f = self.fighters[key]
+        if f.boxed:
+            return f.boxes
+        bodies = self.bodies(key)
+        return tuple(b.x for b in bodies) if len(bodies) > 1 else None
 
     def _fighter_events(self, key: str, f: Fighter, local: list[tuple[str, dict]], events: list[Event]) -> None:
         """A body's own events this frame, turned into the fight's: shots, traps and the rest."""
@@ -340,7 +348,7 @@ class Fight:
     def _step_traps(self) -> None:
         """Traps age; a closed one shows for its hold, then goes; all of a knocked-down owner's
         go at once, and an open one after TRAP_LIFE frames."""
-        self.trap_grace = {k: n - 1 for k, n in self.trap_grace.items() if n > 1}
+        self.trap_grace = {b: n - 1 for b, n in self.trap_grace.items() if n > 1}
         kept = []
         for t in self.traps:
             if self.fighters[t.owner].action == "knockdown":
@@ -349,16 +357,16 @@ class Fight:
             if t.closed:
                 t.closed -= 1
                 if t.closed == 0:
-                    if t.held is not None:      # let go: a moment to get away before any trap can close
-                        self.trap_grace[t.held] = TRAP_GRACE
+                    if t.body is not None:      # let go: a moment to get away before any trap can close
+                        self.trap_grace[t.body] = TRAP_GRACE
                     continue
             elif t.age >= TRAP_LIFE:
                 continue
             kept.append(t)
         self.traps = kept
 
-    def _close(self, trap: Trap, held: str | None, events: list[Event]) -> None:
-        trap.closed, trap.held = trap.move.hitstun, held
+    def _close(self, trap: Trap, held: str | None, events: list[Event], body: Fighter | None = None) -> None:
+        trap.closed, trap.held, trap.body = trap.move.hitstun, held, body
         events.append(Event("trap_close", held, None, trap.x, FLOOR_Y))
 
     @staticmethod
@@ -383,28 +391,30 @@ class Fight:
                     events.append(Event("copy", key, None, *where))
                     break
             else:
-                rival = self.fighters[_other(key)]
-                rm = rival.move
-                if rival.action == "attack" and rm is not None and rm.field and rm.hitbox is not None \
-                        and rival.phase == "active":
-                    where = _overlap(rival.world_box(rm.hitbox), window)
-                    if where is not None:
-                        f.caught(rm, rival.attack_basis)
-                        rival.frame = rival.startup + rm.active     # its field is gone: into its recovery
-                        events.append(Event("copy", key, None, *where))
+                for rival in self.bodies(_other(key)):
+                    rm = rival.move
+                    if rival.action == "attack" and rm is not None and rm.field and rm.hitbox is not None \
+                            and rival.phase == "active":
+                        where = _overlap(rival.world_box(rm.hitbox), window)
+                        if where is not None:
+                            f.caught(rm, rival.attack_basis)
+                            rival.frame = rival.startup + rm.active     # its field is gone: into its recovery
+                            events.append(Event("copy", key, None, *where))
+                            break
 
     # --- hits ---------------------------------------------------------------------------
 
     def _resolve_hits(self, events: list[Event]) -> None:
-        # Every body of a player strikes at every body of the rival's (ALICE & BOB have two): a
-        # move or a shot lands on the first body it touches, Alice before Bob.
+        # Every body of a player strikes at every body of the rival's (ALICE & BOB have two):
+        # a move, a shot or a trap lands on the first body it touches, Alice before Bob; a field
+        # (CHARGE NOISE) on every body inside it, each its own target.
         strikes: list[_Strike] = []
-        for key, f in self.fighters.items():
+        for key in self.fighters:
             rival_key = _other(key)
             targets = self.bodies(rival_key)
-            for body in self.bodies(key):
-                self._move_strike(key, body, rival_key, targets, strikes)
-            self._landing_strike(key, f, rival_key, self.fighters[rival_key], strikes)
+            for f in self.bodies(key):
+                self._move_strike(key, f, rival_key, targets, strikes)
+            self._landing_strike(key, self.fighters[key], rival_key, targets, strikes)
         for s in self.shots:
             rival_key = _other(s.owner)
             for target in self.bodies(rival_key):
@@ -418,21 +428,22 @@ class Fight:
                                            target=target))
                     break
 
-        caught: set[str] = set()
+        caught: set[Fighter] = set()
         for t in self.traps:
             rival_key = _other(t.owner)
-            target = self.fighters[rival_key]
-            # a rival on the ground and free to move (one reeling across it is caught once they
-            # come to rest in it); not one tunnelling, getting up or knocked down
-            if not t.armed or rival_key in caught or target.y > 0 or target.action in _STUNNED \
-                    or target.wakeup or target.intangible or self.trap_grace.get(rival_key):
-                continue
-            touch = self._touch(t.box, target)
-            if touch is not None:
-                caught.add(rival_key)
-                side = 1 if target.x >= t.x else -1
-                strikes.append(_Strike(None, t.owner, rival_key, t.move, side, touch[0], box=touch[1], trap=t,
-                                       target=target))
+            for target in self.bodies(rival_key):
+                # a rival on the ground and free to move (one reeling across it is caught once they
+                # come to rest in it); not one tunnelling, getting up or knocked down
+                if not t.armed or target in caught or target.y > 0 or target.action in _STUNNED \
+                        or target.wakeup or target.intangible or self.trap_grace.get(target):
+                    continue
+                touch = self._touch(t.box, target)
+                if touch is not None:
+                    caught.add(target)
+                    side = 1 if target.x >= t.x else -1
+                    strikes.append(_Strike(None, t.owner, rival_key, t.move, side, touch[0], box=touch[1], trap=t,
+                                           target=target))
+                    break
 
         traps = [st.trap for st in strikes if st.trap is not None]
         strikes = self._measure(strikes, events)
@@ -516,7 +527,7 @@ class Fight:
         error = basis.error_for(m.colour, attack_basis)
         result = defender.take_hit(m, error, st.from_facing)
         if st.trap is not None:             # ION TRAP: it closes round them, hurt or not
-            self._close(st.trap, st.defender, events)
+            self._close(st.trap, st.defender, events, defender)
         if defender.char.copy_paste:        # DOS hit: his mouse's cable is cut
             self.shots = [s for s in self.shots if not (s.owner == st.defender and s.move.pull)]
         if m.pull and st.shot is not None:  # MOUSE CABLE: reeled in to just in front of him, hit or not
@@ -568,10 +579,11 @@ class Fight:
             if touch is not None:
                 where, box = touch
                 strikes.append(_Strike(key, key, rival_key, m, f.facing, where, box=box, target=rival, body=f))
-                return
+                if not m.field:     # a field hits every body inside it
+                    return
 
     def _landing_strike(
-        self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],
+        self, key: str, f: Fighter, rival_key: str, targets: list[Fighter], strikes: list[_Strike],
     ) -> None:
         win = self._landings.get(key)
         if win is None:
@@ -584,15 +596,16 @@ class Fight:
         # the shockwave hits any rival still on its feet, one reeling from the slam itself
         # too (slam and shockwave are opposite colours: a standing rival takes one). A jump
         # clears it.
-        if not win.hit and rival.action != "knockdown" and not rival.wakeup and not rival.intangible \
-                and can_reach(move.landing_height, rival):
-            touch = self._touch(f.world_box(move.landing), rival)
-            if touch is not None:
-                win.hit = True
-                strikes.append(_Strike(
-                    None, key, rival_key, replace(move, colour=move.landing_colour, height=move.landing_height),
-                    f.facing, touch[0], box=touch[1], target=rival,
-                ))
+        for rival in targets:
+            if not win.hit and rival.action != "knockdown" and not rival.wakeup and not rival.intangible \
+                    and can_reach(move.landing_height, rival):
+                touch = self._touch(f.world_box(move.landing), rival)
+                if touch is not None:
+                    win.hit = True
+                    strikes.append(_Strike(
+                        None, key, rival_key, replace(move, colour=move.landing_colour, height=move.landing_height),
+                        f.facing, touch[0], box=touch[1], target=rival,
+                    ))
         win.left -= 1
         if win.left <= 0:
             del self._landings[key]

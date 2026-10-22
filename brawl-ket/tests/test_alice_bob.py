@@ -5,6 +5,7 @@ knockdown decoheres Bob for 3 s; the round ends when the bar is empty."""
 
 import pytest
 
+from brawl_ket import basis
 from brawl_ket.basis import X_BASIS, Z_BASIS
 from brawl_ket.config import (
     DECOHERE_FRAMES,
@@ -285,3 +286,121 @@ def test_a_decohered_bob_is_drawn_standing():
     sweep_bob(fight, bob, other)
     assert bob.action == "decohered" and bob.y == 0
     assert pose_for(bob).lean == pytest.approx(POSES["idle"].lean, abs=1)
+
+
+# --- every interaction with a pair (spec section 7) -----------------------------------------------
+
+
+def test_a_throw_on_bob_costs_the_bar_and_decoheres_him():
+    fight, alice, bob, other = pair_fight()
+    bob_caught(fight, alice, bob, other)      # Bob in a throw's reach (Alice is far out of it)
+    assert fight._reach("p1") == (alice.x, bob.x)
+    events = run(fight, 15, p2=lambda i: FighterInput(dx=1, b=i == 0) if i < 2 else IDLE)
+    hits = [e for e in events if e.kind == "hit" and e.player == "p1"]
+    assert hits and hits[0].error == basis.Y and not bob.here
+    assert alice.health == 100 - ROBERT.moves["throw"].damage
+
+
+def test_bohrs_measure_on_bob_collapses_both():
+    fight, alice, bob, other = pair_fight(rival=BOHR)
+    bob_caught(fight, alice, bob, other)
+    other.basis = X_BASIS                       # BOHR purple, the pair green
+    events = run(fight, 40, p2=once(FighterInput(x=True)))
+    assert [e.kind for e in events if e.player == "p1" and e.kind in ("hit", "measure")] == ["hit", "measure"]
+    assert alice.basis == bob.basis == X_BASIS and not bob.here
+
+
+def test_charge_noise_hits_each_body_inside_it():
+    fight, alice, bob, other = pair_fight(rival=BOHR)
+    alice.x, bob.x, other.x = 300.0, 232.0, 262.0   # BOHR between them, both kids in his field
+    alice.facing = bob.facing = -1
+    first = []
+    for i in range(30):
+        events = fight.step({"p1": FighterInput(down=True), "p2": FighterInput(down=True, x=i == 0)})
+        first = [e for e in events if e.kind == "hit" and e.player == "p1"]
+        if first:
+            break
+    assert len(first) == 2                       # one shock, two targets ...
+    assert alice.health == 100 - 2 * BOHR.moves["crouch.X"].damage     # ... both on the one bar
+
+
+def test_an_ion_trap_under_bob_catches_him_and_leaves_alice_free():
+    from brawl_ket.config import TRAP_ARM, TRAP_GRACE
+    from brawl_ket.fight import Trap
+    from brawl_ket.moves import M_CUTIE, TRAP_HOLD
+    fight, alice, bob, other = pair_fight(rival=M_CUTIE, rival_x=500.0)
+    trap = Trap("p2", TRAP_HOLD, bob.x, Z_BASIS, age=TRAP_ARM)
+    fight.traps.append(trap)
+    events = run(fight, 1, FighterInput(down=True))
+    assert trap.state == "closed" and trap.held == "p1" and trap.body is bob
+    assert bob.action == "hitstun" and alice.action == "crouch"
+    assert [e.kind for e in events if e.kind == "trap_close"] == ["trap_close"]
+    graced = set()
+    for _ in range(TRAP_HOLD.hitstun + 20):         # (the hit's hitstop freeze included)
+        run(fight, 1, FighterInput(down=True))
+        graced |= set(fight.trap_grace)
+    assert graced == {bob} and TRAP_GRACE > 0         # the moment to get away is Bob's, not Alice's
+
+
+def test_the_mouse_cable_reels_in_whichever_body_it_hooks():
+    from brawl_ket.moves import DOS
+    fight, alice, bob, other = pair_fight(rival=DOS)
+    bob_caught(fight, alice, bob, other)
+    other.x = 120.0                             # the mouse reels its catch in to just in front of DOS
+    start = bob.x
+    events = run(fight, 30, FighterInput(down=True), once(FighterInput(down=True, x=True)))
+    assert [e.player for e in events if e.kind == "hit"] == ["p1"]
+    assert bob.x < start - 30 and alice.x == 300.0      # Bob reeled in towards DOS; Alice untouched
+
+
+def test_bobs_attack_measures_the_box_as_any_attack():
+    from brawl_ket.moves import ERWIN
+    fight, alice, bob, other = pair_fight(rival=ERWIN)
+    bob_caught(fight, alice, bob, other)
+    run(fight, 1, A)                            # Bob's echo of this jab comes 12 frames on ...
+    other.action, other.boxes, other.box_t = "boxed", (200.0, 80.0), 0     # ... into box 1
+    events = run(fight, 20)
+    assert [e.kind for e in events if e.kind == "box_collapse"] == ["box_collapse"] and not other.boxed
+
+
+def test_tunnel_re_forms_past_alice_the_pairs_x():
+    from brawl_ket.config import TUNNEL_PAST
+    from brawl_ket.moves import PHOEBE
+    fight, alice, bob, other = pair_fight(rival=PHOEBE, alice_x=300.0, rival_x=420.0)
+    run(fight, 1, p2=FighterInput(down=True, x=True))
+    assert other.tunnel_to == alice.x - TUNNEL_PAST     # Bob, 40 px behind Alice, is no part of it
+
+
+def test_a_shot_lands_on_one_body_alice_first():
+    fight, alice, bob, other = pair_fight(rival_x=420.0)
+    bob.x = alice.x                             # both in the photon's way
+    events = run(fight, 60, p2=once(FighterInput(x=True)))
+    assert [e.kind for e in events if e.player == "p1" and e.kind == "hit"] == ["hit"]
+    assert alice.health == 100 - ROBERT.moves["stand.X"].damage
+
+
+def pair_script(fight, key):
+    """A stand-in for the pair's bot (their own comes with their specials): walk in, jab or sweep
+    up close, now and then switch."""
+    me, rival = fight.fighters[key], fight.fighters["p2" if key == "p1" else "p1"]
+    t = fight.frames_left
+    toward = 1 if rival.x > me.x else -1
+    if abs(rival.x - me.x) > 50:
+        return FighterInput(dx=toward, y=t % 97 == 0)
+    return FighterInput(a=t % 20 == 0, b=t % 20 == 10, down=t % 60 < 20)
+
+
+@pytest.mark.parametrize("name", ["ROBERT", "BOHR", "PHOEBE", "ERWIN", "DOS", "M-CUTIE"])
+@pytest.mark.parametrize("side", ["p1", "p2"])
+def test_every_bot_plays_a_round_against_a_pair(name, side):
+    from brawl_ket.bot import Bot
+    from brawl_ket.config import ROUND_FRAMES
+    from brawl_ket.moves import CHARACTERS
+    pair_key = "p2" if side == "p1" else "p1"
+    fight = Fight({side: CHARACTERS[name], pair_key: ALICE_BOB}, seed=3)
+    bot = Bot(side, 3)
+    for _ in range(ROUND_FRAMES + 10):
+        if fight.over:
+            break
+        fight.step({side: bot.input(fight), pair_key: pair_script(fight, pair_key)})
+    assert fight.over
