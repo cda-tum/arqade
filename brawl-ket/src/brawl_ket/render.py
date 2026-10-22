@@ -58,7 +58,7 @@ from .erwin import (
     holo_sprite,
 )
 from .fight import Fight
-from .kids import dive_streaks, draw_decohered, draw_kid, flash, lob, photon, swap_arc
+from .kids import BOB_ICON, bob_icon, dive_streaks, draw_decohered, draw_kid, draw_pair, flash, lob, photon, swap_arc
 from .fighter import Fighter
 from .fonts import load_font
 from .ink import _ball, _block, _boot, _poly, _pt, _towards, limb
@@ -152,7 +152,9 @@ LIST_GAP = 10               # ... and the lines' spacing
 MOVE_LABELS = {"AMPLITUDE AMPLIFICATION": "AMP. AMPLIFICATION"}    # names too long for that list
 # the select screen: what each fighter is, in a line, and how its X moves are entered
 TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY", "PHOEBE": "TALL AND TRICKY",
-          "ERWIN": "QUICK AND SLIPPERY", "DOS": "SLOW AND CLASSICAL", "M-CUTIE": "PATIENT AND TECHNICAL"}
+          "ERWIN": "QUICK AND SLIPPERY", "DOS": "SLOW AND CLASSICAL", "M-CUTIE": "PATIENT AND TECHNICAL",
+          "ALICE & BOB": "TWO AS ONE"}
+PORTRAIT_PAIR_GAP = 18      # ALICE & BOB's portrait: Bob this far behind Alice, his face over her shoulder
 X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
 RULE_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR")
 # DOS can't switch: his Y copies a shot and then pastes it, and he is always green
@@ -222,8 +224,12 @@ def portrait(name: str) -> pygame.Surface:
     from .moves import CHARACTERS
     char = CHARACTERS[name]
     big = pygame.Surface((200, 220), pygame.SRCALPHA)
-    j = draw_puppet(big, POSES["idle"], char.build, (100, 210), 1, GREEN, ACCENT.get(char.name, P.CREAM))
-    hx = round(j["head"][0])
+    if char.pair is not None:           # both, Alice in front: framed between their faces
+        j, _jb = draw_pair(big, POSES["idle"], (108, 210), 1, GREEN, PORTRAIT_PAIR_GAP)
+        hx = round(j["head"][0]) - PORTRAIT_PAIR_GAP // 2
+    else:
+        j = draw_puppet(big, POSES["idle"], char.build, (100, 210), 1, GREEN, ACCENT.get(char.name, P.CREAM))
+        hx = round(j["head"][0])
     # framed from just above the top of the head (ears and antennae included), whatever the build
     column = pygame.mask.from_surface(big)
     top = next(y for y in range(big.get_height()) if any(column.get_at((x, y)) for x in range(hx - 14, hx + 15)))
@@ -232,6 +238,16 @@ def portrait(name: str) -> pygame.Surface:
     out = pygame.Surface((PORTRAIT, PORTRAIT), pygame.SRCALPHA)
     out.blit(big, (0, 0), crop)
     return out
+
+
+def draw_character(surf: pygame.Surface, char: Character, pose, feet, facing: int, body) -> dict:
+    """A fighter as the screens show one (the title, CHOOSE YOUR FIGHTER): ALICE & BOB as the
+    pair, centred on `feet` with Bob behind Alice; anyone else as their puppet. Returns the
+    (front) fighter's joints."""
+    if char.pair is not None:
+        ja, _jb = draw_pair(surf, pose, (feet[0] + facing * 20, feet[1]), facing, body)
+        return ja
+    return draw_puppet(surf, pose, char.build, feet, facing, body, ACCENT.get(char.name, P.CREAM))
 
 
 def panel_lines(char: Character) -> tuple[tuple[str, tuple], ...]:
@@ -1286,6 +1302,9 @@ class Renderer:
             self._legend(key, f, lx, y)
             if f.char.copy_paste:           # DOS's clipboard, beside his A / B chips
                 self._clipboard(key, f, lx + LEGEND_W + 4 if side < 0 else lx - CLIP_W - 4, y - 3)
+            if key in fight.echoes:         # ALICE & BOB's Bob, grey while he is decohered
+                icon = bob_icon(BASIS_BODY[f.basis], not fight.echoes[key].here)
+                self.surface.blit(icon, (lx + LEGEND_W + 4 if side < 0 else lx - BOB_ICON - 4, y - 6))
         # the clock and the round pips
         cx = W // 2
         box = pygame.Rect(0, 0, 44, 30)
@@ -1427,15 +1446,14 @@ class Renderer:
     def _title(self, match: M.Match) -> None:
         self._backdrop(dim=False)
         surf = self.surface
-        # ROBERT green and the last fighter who can switch (M-CUTIE) purple: the title shows both colours
+        # ROBERT green and the last fighter who can switch (ALICE & BOB) purple: the title shows both colours
         rival = next(c for c in reversed(M.ROSTER) if c.fixed_basis is None)
         for char, key, x, facing in ((M.ROSTER[0], "p1", 180, 1), (rival, "p2", 460, -1)):
             rect = pygame.Rect(0, 0, 52, 8)
             rect.center = (x, FLOOR_Y + 2)
             pygame.draw.ellipse(surf, SHADOW, rect)
             body = GREEN if key == "p1" else PURPLE
-            draw_puppet(surf, POSES["idle"], char.build, (x, FLOOR_Y), facing, body,
-                        ACCENT.get(char.name, P.CREAM))
+            draw_character(surf, char, POSES["idle"], (x, FLOOR_Y), facing, body)
         self._band(32, 132)
         self._logo(72)
         blit_center(surf, outlined("COLOUR MUST MATCH TO HURT", 8, P.MIST), (W / 2, 114))
@@ -1485,8 +1503,7 @@ class Renderer:
         rect.center = (round(cx), floor + 2)
         pygame.draw.ellipse(surf, SHADOW, rect)
         pygame.draw.ellipse(surf, color, rect, 2)
-        draw_puppet(surf, POSES["jab_hit" if ready else "idle"], char.build, (cx, floor), -side, GREEN,
-                    ACCENT.get(char.name, P.CREAM))
+        draw_character(surf, char, POSES["jab_hit" if ready else "idle"], (cx, floor), -side, GREEN)
         blit_center(surf, outlined(char.name, 16, color, thick=2), (cx, floor + 18))
         blit_center(surf, outlined(TRAITS.get(char.name, ""), 8, P.MIST), (cx, floor + 34))
         if char.copy_paste:                 # DOS: what his Y does, and his one colour, on one line

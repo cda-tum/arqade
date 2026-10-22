@@ -11,9 +11,9 @@ replaces the repetition-code v1 and the Shor-code v2, which playtests found
 too hard to read).
 
 **Status:**
-- **The game:** six fighters (ROBERT, BOHR, PHOEBE, ERWIN, DOS and M-CUTIE), versus only, best
-  of 3 rounds of 60 s.
-- **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat; ERWIN, Schrodinger's cat; DOS, a walking all-in-one computer; M-CUTIE, an android in a chandelier dress) at 640x360 (x3 on the cabinet), the
+- **The game:** seven fighters (ROBERT, BOHR, PHOEBE, ERWIN, DOS, M-CUTIE and ALICE & BOB, two
+  played as one), versus only, best of 3 rounds of 60 s.
+- **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat; ERWIN, Schrodinger's cat; DOS, a walking all-in-one computer; M-CUTIE, an android in a chandelier dress; ALICE & BOB, two kid couriers in matching hoodies) at 640x360 (x3 on the cabinet), the
   title (PLAY / QUIT) with a bot demo, a portrait-grid fighter select, stage select, a HOW TO PLAY card,
   round calls and pause.
 - **Stages:** five backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
@@ -58,10 +58,10 @@ changes, so the rule a player reads is: **colour must match to hurt.**
   normals LOW (a jump clears them), air normals and throws MID.
 - **Damage:** light 4, heavy 8, special 10, throw 10, MEASURE 12, CHARGE NOISE
   3 a shock, LASER 8, POUNCE 10, BOX DROP 8, THE BOX's swipe 8, FLOPPY 9, MOUSE CABLE 6, CRT DROP 12,
-  AMPLITUDE AMPLIFICATION 7 to 15 by its steps (7, 8, 10, 11, 13, 15), ION TRAP 4, SPIN 4 a hit. Health: ROBERT 100, BOHR 115, PHOEBE 95, ERWIN 90, DOS 125, M-CUTIE 105. Lights stun briefly enough that mashing
+  AMPLITUDE AMPLIFICATION 7 to 15 by its steps (7, 8, 10, 11, 13, 15), ION TRAP 4, SPIN 4 a hit, KEY EXCHANGE 12 (6 alone), BELL DIVE 8. Health: ROBERT 100, BOHR 115, PHOEBE 95, ERWIN 90, DOS 125, M-CUTIE 105, ALICE & BOB 100 between them. Lights stun briefly enough that mashing
   can't loop, and getting up from a knockdown is invulnerable for 8 frames.
 
-On screen: P1 has a blue ring under their feet and P2 a red one; each health
+On screen: P1 has a blue ring under their feet and P2 a red one (Bob a thinner one); each health
 bar has a basis badge (`0/1` green, `+/-` purple) and A / B chips in the colours
 that player's buttons hit right now; an attack's whole arm or leg is drawn in its
 colour from the wind-up on, so you see before contact whether it will match. A wrong-colour hit pings, a switch flashes white with an `H`.
@@ -72,7 +72,7 @@ Title (PLAY / QUIT) -> CHOOSE YOUR FIGHTER -> CHOOSE YOUR STAGE -> **HOW TO PLAY
 ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
 
 - **CHOOSE YOUR FIGHTER** is Street Fighter style: a grid of portraits along the
-  bottom (five to a row, so M-CUTIE starts the second; up and down move a row), one cursor
+  bottom (five to a row, so M-CUTIE and ALICE & BOB make the second; up and down move a row), one cursor
   per player (P1 blue, P2 red, both on one portrait if they pick the same fighter),
   blinking until that player presses A. Each player's pick stands big on their side,
   facing the middle, with what it is and its three specials. B un-readies, or goes
@@ -111,12 +111,27 @@ in on the ground (BOHR's game) is how you beat her. Design:
 
 ERWIN's weakness is the least health, and THE BOX is a gamble; DOS's is that his rival only ever needs green attacks against him. Design: ../docs/superpowers/specs/2026-10-21-brawl-ket-erwin-dos-design.md.
 
+**ALICE & BOB** are two small fighters played as one, like the Ice Climbers: the player controls
+Alice, and Bob, 40 px behind her, does what she did 0.2 s later (every attack comes twice). They
+share one health bar of 100 and one colour (Y, MEASURE, anything that changes one changes both),
+and are a little faster and lighter than ROBERT. Bob has no push box: the rival can walk between
+them. A knockdown on Bob decoheres him: he fades, and is gone for 3 s while Alice fights alone.
+
+| | ALICE & BOB |
+|---|---|
+| X | KEY EXCHANGE: Alice tosses a photon back to Bob along a short arc, and he fires it forward as one strong shot (12, ducked or jumped as a PHOTON; 2.5 s cooldown). A rival's body, attack or shot touching the toss in flight takes it out, and DOS's COPY catches it. While Bob is gone, Alice fires a small photon herself (6) |
+| Down + X | TELEPORT: they swap places at once, a flash at both ends: with the rival between them it crosses them up, otherwise it is a quick step back (2 s cooldown; not while Bob is gone) |
+| Air X | BELL DIVE: a steep diving kick (MID, 8), once per jump; Bob's echo dives a beat later |
+| Y | switches the pair's colour |
+
+Design: `../docs/superpowers/specs/2026-10-21-brawl-ket-alice-bob-design.md`.
+
 M-CUTIE traps the floor so you have to jump, then catches you in the air with SPIN or a big
 wave; her weakness is that setting up takes time, so rushing her before she is ready wins.
 Her wave cancels any rival shot it meets. Design:
 `../docs/superpowers/specs/2026-10-21-brawl-ket-m-cutie-design.md`.
 
-All six share the normals: A is a jab (standing, crouching, in the air), B a
+All seven share the normals (ALICE & BOB's fitted to their size): A is a jab (standing, crouching, in the air), B a
 heavy, a sweep (knockdown) or a jump-in, and B up close while pushing towards
 the rival is a throw. A chains A, A, B.
 
@@ -156,14 +171,16 @@ uv run python tools/balance.py                      # bot-against-bot win rates 
 | Module | Role |
 |---|---|
 | `basis.py` | The two bases, which errors change which, H, and each attack's error from its colour rule. Pure, exact, tested against 2x2 matrices. |
-| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR, PHOEBE, ERWIN, DOS and M-CUTIE (her six waves, one per step). |
-| `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). THE BOX's 50/50s come from the fight's own seeded random.Random: the same seed and inputs give the same round. M-CUTIE's charge is the fighter's "charging" state, her traps the fight's `Trap`s. Pure. |
+| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR, PHOEBE, ERWIN, DOS, M-CUTIE (her six waves, one per step) and ALICE & BOB (with BOB, the second body). |
+| `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). THE BOX's 50/50s come from the fight's own seeded random.Random: the same seed and inputs give the same round. M-CUTIE's charge is the fighter's "charging" state, her traps the fight's `Trap`s. ALICE & BOB's Bob is a second body (`Fight.echoes`, `Fight.bodies`); KEY EXCHANGE's photon in flight is a `Toss`. Pure. |
+| `echo.py` | Bob, ALICE & BOB's second body: a Fighter that replays Alice's inputs 12 frames later and shares her health and basis; his walk back behind her, decoherence and return. Pure. |
 | `match.py` | Title (PLAY / QUIT), select, stage select, HOW TO PLAY, rounds, the result, pause, idle and the attract demo. Pure. |
 | `tutorial.py` | The HOW TO PLAY card's scene: a real Fight played from a script, looping. Pure. |
 | `stages.py` | The backdrops, each drawn once (with its blinking lights); no green or purple in a large area, so the fighters stay readable. |
 | `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens (HOW TO PLAY draws its scene with a second, off-screen renderer). |
 | `ink.py`, `erwin.py`, `dos.py` | The drawing primitives; ERWIN's cat and THE BOX; DOS's case, screen faces, floppy and clipboard icon (both checked pixel for pixel against their approved look scripts, and cached so the cabinet keeps its frame budget). |
 | `cutie.py` | M-CUTIE's android, her wave, her trap, SPIN and the charge's halo (checked pixel for pixel against her approved look script; her head, wave and trap baked once into cached layers). |
+| `kids.py` | ALICE & BOB's couriers, KEY EXCHANGE's toss and big photon, TELEPORT's flash, BELL DIVE's streaks, a decohered Bob and his HUD icon (checked pixel for pixel against their approved look script). |
 | `bot.py` | The CPU for the attract demo and the tests. |
 | `audio.py` | Chiptune effects, adapted from Planck Time's. No music. |
 | `input.py`, `config.py` | Pads and the dev keyboard; every tuning number and button. |

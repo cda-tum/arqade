@@ -671,4 +671,4 @@ ALICE_BOB = Character(
 )
 
 CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE, "ERWIN": ERWIN, "DOS": DOS,
-                                    "M-CUTIE": M_CUTIE}
+                                    "M-CUTIE": M_CUTIE, "ALICE & BOB": ALICE_BOB}

@@ -232,7 +232,7 @@ STRIKER = {
     "MEASURE": "hand_f", "CHARGE NOISE": "hand_f", "COLLAPSE": "foot_f",
     "LIGHT PILLAR": "hand_f",
     "POUNCE": "hand_f", "CRT DROP": "foot_f",
-    "SPIN": "foot_f",
+    "SPIN": "foot_f", "BELL DIVE": "foot_f",
 }
 REACH = 12      # px: a joint is drawn with a fist/foot about this big around it
 

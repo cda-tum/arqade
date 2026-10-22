@@ -30,6 +30,8 @@ Writes:
   waiting) and coming back;
 - screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
 - screen_select_cutie.png: CHOOSE YOUR FIGHTER on M-CUTIE (P1, ready: the second row) and DOS (P2);
+- screen_select_kids.png: CHOOSE YOUR FIGHTER on ALICE & BOB (P1, ready) and M-CUTIE (P2), and
+  kids_hud.png, their shared bar with Bob's icon, greyed while he is decohered;
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
 - screen_*.png: the match flow: the title (and with QUIT picked), the attract demo, select (and
@@ -268,13 +270,14 @@ def find_frames(out_dir: str, chars=(ROBERT, ROBERT), prefix: str = "fight") -> 
 
 
 def select_frame(out_dir: str) -> None:
-    """CHOOSE YOUR FIGHTER with ERWIN and DOS picked (their traits, DOS's Y and ALWAYS GREEN), and
-    with M-CUTIE (P1, in the second row) against DOS, ready."""
+    """CHOOSE YOUR FIGHTER with ERWIN and DOS picked (their traits, DOS's Y and ALWAYS GREEN), with
+    M-CUTIE (P1, in the second row) against DOS, ready, and with ALICE & BOB against M-CUTIE."""
     from brawl_ket import match as M
 
     surface = pygame.Surface((W, H))
     for picks, ready, name in (({"p1": 3, "p2": 4}, False, "screen_select_erwin_dos.png"),
-                               ({"p1": 5, "p2": 4}, True, "screen_select_cutie.png")):
+                               ({"p1": 5, "p2": 4}, True, "screen_select_cutie.png"),
+                               ({"p1": 6, "p2": 5}, True, "screen_select_kids.png")):
         r, m = Renderer(surface), M.Match(random.Random(3))
         m.state, m.picks = M.SELECT, picks
         m.ready = {"p1": ready, "p2": False}
@@ -510,6 +513,10 @@ def kids_frames(out_dir: str) -> None:
     scene("kids_decohered", lambda i: IDLE, 6, setup=lambda f: f.echoes["p1"].decohere())
     scene("kids_gone", lambda i: IDLE, 60, setup=lambda f: f.echoes["p1"].decohere())
     scene("kids_back", lambda i: IDLE, config.DECOHERE_FRAMES + 4, setup=lambda f: f.echoes["p1"].decohere())
+    fight, r = Fight({"p1": ROBERT, "p2": ALICE_BOB}), Renderer(surface)       # their bar on P2's side
+    fight.echoes["p2"].decohere()
+    r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 1})
+    save(surface, out_dir, "kids_hud.png")
 
 
 def main(argv: list[str]) -> None:

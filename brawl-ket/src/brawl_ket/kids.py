@@ -478,3 +478,21 @@ def draw_decohered(surf, feet, facing, base, t=0) -> dict:
         q.set_alpha(round(255 * k))
         surf.blit(q, (round(x), round(y)))
     return j
+
+
+# --- the shared bar's Bob ------------------------------------------------------------------------
+
+BOB_ICON = 20                    # px square, by the pair's A / B chips
+
+
+@lru_cache(maxsize=8)
+def bob_icon(base, gone: bool) -> pygame.Surface:
+    """Bob's head (cap and headphones, in the pair's colour `base`) for the HUD, BOB_ICON px;
+    greyed and faint while he is decohered."""
+    big = pygame.Surface((48, 48), pygame.SRCALPHA)
+    head_bob(big, {"head": (24, 27)}, base, 1, "front")
+    icon = pygame.transform.scale(big, (BOB_ICON, BOB_ICON))
+    if gone:
+        icon = pygame.transform.grayscale(icon)
+        icon.fill((255, 255, 255, 110), special_flags=pygame.BLEND_RGBA_MULT)
+    return icon

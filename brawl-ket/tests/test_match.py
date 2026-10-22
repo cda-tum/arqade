@@ -760,9 +760,9 @@ def test_dos_starts_every_round_with_an_empty_clipboard() -> None:
     assert m.state == ROUND_INTRO and m.fight.fighters["p1"].clipboard is None
 
 
-def test_choose_your_fighter_cycles_through_all_six_in_order() -> None:
+def test_choose_your_fighter_cycles_through_all_seven_in_order() -> None:
     from brawl_ket.match import ROSTER
-    order = ["ROBERT", "BOHR", "PHOEBE", "ERWIN", "DOS", "M-CUTIE"]
+    order = ["ROBERT", "BOHR", "PHOEBE", "ERWIN", "DOS", "M-CUTIE", "ALICE & BOB"]
     assert [c.name for c in ROSTER] == order
     m = Match(random.Random(1))
     m.update(press("confirm"))
@@ -773,14 +773,14 @@ def test_choose_your_fighter_cycles_through_all_six_in_order() -> None:
     assert seen == order and m.picks["p1"] == 0         # and round again
 
 
-def test_the_demo_picks_its_fighters_from_all_six() -> None:
+def test_the_demo_picks_its_fighters_from_all_seven() -> None:
     from brawl_ket.match import ROSTER
     m = Match(random.Random(3))
     seen = set()
     for _ in range(40):
         m._start_attract()
         seen |= {f.char.name for f in m.attract.fighters.values()}
-    assert len(ROSTER) == 6 and seen == {c.name for c in ROSTER}
+    assert len(ROSTER) == 7 and seen == {c.name for c in ROSTER}
 
 
 def test_the_fighter_cursor_goes_round_the_row_and_stops_at_the_grids_edge() -> None:
@@ -816,5 +816,24 @@ def test_m_cutie_starts_every_round_with_no_traps() -> None:
 def test_m_cutie_is_down_a_row_from_robert_and_back_up() -> None:
     from brawl_ket.match import ROSTER, grid_move
     assert ROSTER[5].name == "M-CUTIE"
-    assert grid_move(0, 0, 1) == 5 and grid_move(5, 0, -1) == 0 and grid_move(1, 0, 1) == 1
-    assert grid_move(5, 1, 0) == 0 and grid_move(0, -1, 0) == 5       # and round the roster
+    assert grid_move(0, 0, 1) == 5 and grid_move(5, 0, -1) == 0 and grid_move(2, 0, 1) == 2
+    assert grid_move(5, 1, 0) == 6 and grid_move(6, 1, 0) == 0 and grid_move(0, -1, 0) == 6   # and round the roster
+
+
+def test_alice_and_bob_are_down_a_row_from_bohr() -> None:
+    from brawl_ket.match import ROSTER, grid_move
+    assert ROSTER[6].name == "ALICE & BOB"
+    assert grid_move(1, 0, 1) == 6 and grid_move(6, 0, -1) == 1 and grid_move(2, 0, 1) == 2
+
+
+def test_a_pair_starts_every_round_together() -> None:
+    from brawl_ket.config import ECHO_GAP
+    from brawl_ket.match import ROSTER
+    assert len(ROSTER) == 7                     # (to_fight would never reach a seventh pick)
+    m = Match(random.Random(1))
+    to_fight(m, p1=6)
+    alice, bob = m.fight.fighters["p1"], m.fight.echoes["p1"]
+    bob.decohere()
+    ko(m, "p2")
+    alice, bob = m.fight.fighters["p1"], m.fight.echoes["p1"]
+    assert m.state == ROUND_INTRO and bob.here and bob.x == alice.x - ECHO_GAP

@@ -165,6 +165,18 @@ def build_sfx() -> dict[str, list[int]]:
         "trap_close": mix(tone(c("A6"), 0.04, 0.2, "square", decay=40, slide=0.5),
                           noise_wave(0.05, 0.25, decay=60, hold=1, seed=47)),
         "spin": mix(tone(240, 0.3, 0.14, "saw", decay=3, slide=1.6), noise_wave(0.3, 0.08, decay=4, hold=3, seed=49)),
+        # ALICE & BOB: KEY EXCHANGE's toss blip and catch click, then its big shot; TELEPORT's
+        # shimmer, down at one end and up at the other; BELL DIVE's swoosh (twice: Bob's echo);
+        # Bob decohering, a fizzle of static, and the chime as he comes back
+        "toss": tone(c("G5"), 0.04, 0.16, "pulse", decay=14),
+        "catch": concat(noise_wave(0.02, 0.18, decay=60, hold=1, seed=51), tone(c("C6"), 0.03, 0.16, "square", decay=30)),
+        "key_shot": mix(tone(520, 0.22, 0.24, "pulse", decay=7, slide=2.4), noise_wave(0.12, 0.1, decay=20, hold=2, seed=53)),
+        "teleport": concat(tone(1300, 0.1, 0.14, "triangle", decay=5, slide=0.45),
+                           tone(600, 0.1, 0.14, "triangle", decay=5, slide=2.2)),
+        "bell_dive": mix(tone(520, 0.12, 0.12, "triangle", decay=10, slide=0.4),
+                         noise_wave(0.12, 0.12, decay=18, hold=2, seed=55)),
+        "decohere": mix(noise_wave(0.45, 0.16, decay=5, hold=3, seed=57), tone(700, 0.45, 0.08, "saw", decay=5, slide=0.3)),
+        "recohere": concat(tone(c("E6"), 0.05, 0.16, "triangle", decay=8), tone(c("B6"), 0.12, 0.16, "triangle", decay=8)),
     }
 
 
@@ -180,16 +192,18 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 # M-CUTIE; "trap" is the fighter's own, which the fight turns into a trap on the floor
                 **{f"charge{n}": f"charge{n}" for n in range(1, 7)}, **{f"wave{n}": f"wave{n}" for n in range(1, 7)},
                 "trap": None, "trap_set": "trap_set", "trap_close": "trap_close", "spin": "spin",
-                # ALICE & BOB (stand-ins until their own sounds)
-                "decohere": None, "recohere": None, "pass": None, "swap": None,     # "pass", "swap": the fight's
-                "toss": "blip", "catch": "blip", "key_shot": "photon", "intercept": "sizzle", "teleport": "tunnel",
-                "bell_dive": "swing",
+                # ALICE & BOB; "pass" and "swap" are the fighter's own, which the fight turns into a
+                # toss and a TELEPORT; a toss taken out in flight sizzles as a LASER on the floor
+                "pass": None, "swap": None, "toss": "toss", "catch": "catch", "key_shot": "key_shot",
+                "intercept": "sizzle", "teleport": "teleport", "bell_dive": "bell_dive",
+                "decohere": "decohere", "recohere": "recohere",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw
               "laser": "photon",    # a LASER is a projectile too: its zap, not the photon's
               "floppy": "photon",   # ... and so are a FLOPPY
               "paste": "photon",    # ... and a PASTE
-              **{f"wave{n}": "photon" for n in range(1, 7)}}    # ... and M-CUTIE's wave
+              **{f"wave{n}": "photon" for n in range(1, 7)},    # ... and M-CUTIE's wave
+              "key_shot": "photon"}     # ... and Bob's KEY EXCHANGE shot
 
 
 def sounds_for(events: list) -> list[str]:

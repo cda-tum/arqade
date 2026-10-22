@@ -50,6 +50,7 @@ STARTUPS = {   # spec section 3: (A, B on its own, B cancelled from a hit A)
     "ERWIN": (4, 10, 7),
     "DOS": (8, 13, 9),
     "M-CUTIE": (4, 10, 7),
+    "ALICE & BOB": (4, 10, 7),
 }
 
 
@@ -95,7 +96,7 @@ DAMAGE = {"A": 4, "B": 8, "X": 10, "throw": 10}     # spec section 1; MEASURE 12
 # step); ION TRAP sets a trap, which holds for 4; SPIN 4 a hit)
 SPECIAL_DAMAGE = {"MEASURE": 12, "TUNNEL": 0, "LASER": 8, "CHARGE NOISE": 3, "THE BOX": 0, "BOX DROP": 8,
                   "FLOPPY": 9, "MOUSE CABLE": 6, "CRT DROP": 12, "AMPLITUDE AMPLIFICATION": 7, "ION TRAP": 0,
-                  "SPIN": 4}
+                  "SPIN": 4, "KEY EXCHANGE": 12, "TELEPORT": 0, "BELL DIVE": 8}
 
 
 def test_the_damage():
@@ -109,7 +110,7 @@ def test_the_damage():
 
 def test_health():
     assert {c.name: c.health for c in CHARACTERS.values()} == {
-        "ROBERT": 100, "BOHR": 115, "PHOEBE": 95, "ERWIN": 90, "DOS": 125, "M-CUTIE": 105}
+        "ROBERT": 100, "BOHR": 115, "PHOEBE": 95, "ERWIN": 90, "DOS": 125, "M-CUTIE": 105, "ALICE & BOB": 100}
 
 
 def test_photon_has_a_cooldown():
@@ -138,7 +139,8 @@ def test_a_projectile_move_and_only_one_has_a_projectile():
 def test_only_a_projectile_has_no_hitbox():
     for c, slot, m in all_moves():
         if m.hitbox is None:
-            assert m.kind == "projectile" or m.tunnel or m.superpose or m.trap is not None, (c.name, slot)
+            assert m.kind == "projectile" or m.tunnel or m.superpose or m.trap is not None \
+                or m.toss is not None or m.swap, (c.name, slot)
 
 
 def test_a_dive_is_only_ever_an_air_move():
@@ -260,9 +262,12 @@ SPECIALS = {   # (character, slot): (colour rule, height, twists): every special
     ("M-CUTIE", "stand.X"): (OWN, MID, ("charge",)),
     ("M-CUTIE", "crouch.X"): (OWN, LOW, ("trap",)),
     ("M-CUTIE", "air.X"): (OWN, MID, ("hit_every", "hover", "floor_recovery")),
+    ("ALICE & BOB", "stand.X"): (OWN, HIGH, ("toss",)),
+    ("ALICE & BOB", "crouch.X"): (OWN, MID, ("swap",)),
+    ("ALICE & BOB", "air.X"): (OWN, MID, ()),
 }
 TWISTS = ("switch_self_on_hit", "measure_rival", "hit_every", "tunnel", "hover", "superpose", "leap", "pull",
-          "charge", "trap", "floor_recovery")
+          "charge", "trap", "floor_recovery", "toss", "swap")
 
 
 def test_the_specials_colours_and_twists():
@@ -276,7 +281,8 @@ def test_the_specials_colours_and_twists():
                      "PHOEBE": ["LIGHT PILLAR", "TUNNEL", "LASER"],
                      "ERWIN": ["THE BOX", "POUNCE", "BOX DROP"],
                      "DOS": ["FLOPPY", "MOUSE CABLE", "CRT DROP"],
-                     "M-CUTIE": ["AMPLITUDE AMPLIFICATION", "ION TRAP", "SPIN"]}
+                     "M-CUTIE": ["AMPLITUDE AMPLIFICATION", "ION TRAP", "SPIN"],
+                     "ALICE & BOB": ["KEY EXCHANGE", "TELEPORT", "BELL DIVE"]}
 
 
 def test_only_specials_have_twists():

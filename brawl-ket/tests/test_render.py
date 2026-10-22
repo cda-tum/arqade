@@ -704,7 +704,8 @@ def test_the_select_panels_say_what_each_fighter_is():
                            "ALWAYS GREEN"]
     assert panel_lines(CHARACTERS["DOS"])[-1][1] == GREEN
     assert text["M-CUTIE"][0] == "PATIENT AND TECHNICAL"
-    for name in ("ROBERT", "BOHR", "PHOEBE", "M-CUTIE"):
+    assert text["ALICE & BOB"][0] == "TWO AS ONE"
+    for name in ("ROBERT", "BOHR", "PHOEBE", "M-CUTIE", "ALICE & BOB"):
         assert text[name][1:] == ["A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR"], name
 
 
@@ -727,7 +728,7 @@ def test_the_title_still_shows_both_colours(surface):
     r = Renderer(surface)
     r.draw(M.Match(random.Random(1)), [])
     seen = {tuple(surface.get_at((x, y)))[:3] for x in range(440, 481, 2) for y in range(FLOOR_Y - 110, FLOOR_Y - 40, 2)}
-    assert PURPLE in seen               # M-CUTIE on the right, the last fighter who can switch
+    assert PURPLE in seen               # ALICE & BOB on the right, the last fighter who can switch
 
 
 def test_every_fighter_has_a_portrait_framed_on_its_head():
@@ -1049,7 +1050,7 @@ def test_the_lists_of_specials_clear_the_two_rows_of_portraits():
     from brawl_ket import match as M
     from brawl_ket.render import LIST_GAP, LIST_W, PORTRAIT, PORTRAIT_GAP, PORTRAIT_Y, SIDE_X, list_top
     rows = -(-len(M.ROSTER) // M.ROSTER_COLS)
-    assert (len(M.ROSTER), M.ROSTER_COLS, rows) == (6, 5, 2)                 # M-CUTIE starts the second row
+    assert (len(M.ROSTER), M.ROSTER_COLS, rows) == (7, 5, 2)                 # M-CUTIE starts the second row
     grid_top = PORTRAIT_Y - (rows - 1) * (PORTRAIT + PORTRAIT_GAP) - 4      # its tiles' ink and the cursors
     for c in CHARACTERS.values():
         assert list_top(c) + 2 * LIST_GAP + 8 < grid_top, c.name
@@ -1280,3 +1281,32 @@ def test_every_pair_frame_draws(surface):
                 fight.echoes[side].decohere()
             r.draw_fight(fight, fight.step({side: presses.get(i, FighterInput())}))
         assert fight.echoes[side].here
+
+
+def test_their_portrait_shows_both_alice_in_front():
+    from brawl_ket.kids import BLONDE, SKIN_A, SKIN_B
+    from brawl_ket.render import portrait
+    img = portrait("ALICE & BOB")
+    seen = {tuple(img.get_at((x, y)))[:3] for x in range(img.get_width()) for y in range(img.get_height())
+            if img.get_at((x, y))[3]}
+    assert {BLONDE, SKIN_A, SKIN_B} <= seen
+
+
+def test_the_shared_bar_has_a_bob_icon_that_greys_while_he_is_gone(surface):
+    from brawl_ket.kids import BOB_ICON, PHONES, bob_icon
+    from brawl_ket.moves import ALICE_BOB
+    r = Renderer(surface)
+    fight = Fight({"p1": ALICE_BOB, "p2": ROBERT})
+    r.draw_fight(fight, fight.step({}))
+    here = bob_icon(GREEN, False)
+    assert here.get_size() == (BOB_ICON, BOB_ICON)
+    assert any(tuple(here.get_at((x, y)))[:3] == PHONES for x in range(BOB_ICON) for y in range(BOB_ICON))
+    hud = {tuple(surface.get_at((x, y)))[:3] for x in range(0, 320) for y in range(20, 50)}
+    assert PHONES in hud
+    fight.echoes["p1"].decohere()
+    r.draw_fight(fight, fight.step({}))
+    gone = bob_icon(GREEN, True)
+    assert all(abs(c[0] - c[1]) <= 8 and abs(c[1] - c[2]) <= 8 for c in
+               (tuple(gone.get_at((x, y))) for x in range(BOB_ICON) for y in range(BOB_ICON)) if c[3])
+    hud = {tuple(surface.get_at((x, y)))[:3] for x in range(0, 320) for y in range(20, 50)}
+    assert PHONES not in hud

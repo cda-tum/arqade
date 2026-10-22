@@ -90,5 +90,28 @@ def test_each_charge_step_blips_higher_and_a_bigger_wave_whooshes_deeper() -> No
     assert whoosh == sorted(whoosh, reverse=True)
 
 
+KIDS_SOUNDS = ("toss", "catch", "key_shot", "teleport", "bell_dive", "decohere", "recohere")
+
+
+def test_alice_and_bob_have_their_sounds() -> None:
+    sfx = audio.build_sfx()
+    for kind in KIDS_SOUNDS:
+        assert audio.EVENT_SOUNDS.get(kind) == kind and kind in sfx, kind
+    assert audio.EVENT_SOUNDS["pass"] is None and audio.EVENT_SOUNDS["swap"] is None     # the fighter's own
+    assert audio.EVENT_SOUNDS["intercept"] == "sizzle"
+
+
+def test_bobs_shot_replaces_the_photons_sound() -> None:
+    assert audio.sounds_for([Event("projectile", "p1"), Event("key_shot", "p1")]) == ["key_shot"]
+
+
+def test_teleport_shimmers_at_both_ends() -> None:
+    """Down at one end and up at the other: its first half falls, its second rises."""
+    sfx = audio.build_sfx()["teleport"]
+    half = len(sfx) // 2
+    a, b = sfx[:half], sfx[half:]
+    assert crossings(a[: half // 3]) > crossings(a[-half // 3:]) and crossings(b[: half // 3]) < crossings(b[-half // 3:])
+
+
 def test_her_wave_replaces_the_photons_sound() -> None:
     assert audio.sounds_for([Event("projectile", "p1"), Event("wave3", "p1")]) == ["wave3"]
