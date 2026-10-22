@@ -603,7 +603,9 @@ class Fighter:
     def _charging(self, events: list) -> None:
         """Charging: every X press (buffered, so one in a hitstop freeze counts too) grows the
         wave a step; A and B do nothing. It fires CHARGE_WAIT frames after the last press, or
-        at once on reaching CHARGE_CAP, as the step's own wave move (its colour fixed now)."""
+        at once on reaching CHARGE_CAP, as the step's own wave move (its colour fixed now),
+        towards the rival wherever they are by then. Not in a switch's lock, as no attack is:
+        it fires as the lock runs out."""
         pressed = any(p.button == "x" for p in self.buffer)
         self.buffer = []
         if pressed and self.charge < CHARGE_CAP:
@@ -612,7 +614,9 @@ class Fighter:
             events.append((f"charge{self.charge}", {}))
         else:
             self.charge_wait += 1
-        if self.charge >= CHARGE_CAP or self.charge_wait >= CHARGE_WAIT:
+        if (self.charge >= CHARGE_CAP or self.charge_wait >= CHARGE_WAIT) and self.switch_lock == 0:
+            if self.rival_x != self.x:      # a rival who crossed over her meanwhile: she turns
+                self.facing = 1 if self.rival_x > self.x else -1
             wave = self.char.moves["stand.X"].charge[self.charge - 1]
             self.charge = self.charge_wait = 0
             self._start_move("stand.X", wave, False, events)

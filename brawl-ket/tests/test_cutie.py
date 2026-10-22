@@ -10,7 +10,8 @@ import pytest
 
 from brawl_ket import basis
 from brawl_ket.basis import X_BASIS, Z_BASIS
-from brawl_ket.config import CHARGE_CAP, CHARGE_WAIT, STAGE_RIGHT, TRAP_ARM, TRAP_GRACE, TRAP_LIFE, TRAP_MAX, TRAP_REACH
+from brawl_ket.config import (CHARGE_CAP, CHARGE_WAIT, STAGE_RIGHT, SWITCH_RECOVERY, TRAP_ARM, TRAP_GRACE, TRAP_LIFE,
+                              TRAP_MAX, TRAP_REACH)
 from brawl_ket.fight import Fight, Shot, Trap
 from brawl_ket.fighter import IDLE, FighterInput
 from brawl_ket.moves import AMP_STEPS, AMP_WAVES, BOHR, CHARACTERS, DOS, ERWIN, M_CUTIE, PHOEBE, ROBERT, TRAP_HOLD
@@ -180,6 +181,32 @@ def test_its_colour_is_fixed_when_it_fires():
     assert me.basis == X_BASIS and shot.basis == X_BASIS
     step(fight, FighterInput(y=True))          # a switch after it fired changes nothing
     assert shot.basis == X_BASIS
+
+
+def test_she_turns_to_a_rival_who_crossed_over_her_while_she_charged():
+    fight = versus(M_CUTIE, ROBERT, 120)
+    me, rival = fight.fighters["p1"], fight.fighters["p2"]
+    step(fight, X)
+    assert me.action == "charging" and me.facing == 1
+    rival.x = me.x - 120                       # over her head and down behind her
+    for _ in range(CHARGE_WAIT + FIRE + 2):
+        step(fight)
+    (shot,) = fight.shots
+    assert me.facing == -1 and shot.facing == -1 and shot.vx < 0
+
+
+def test_a_switch_holds_the_wave_until_its_lock_runs_out():
+    fight = versus(M_CUTIE, ROBERT, 400)
+    me = fight.fighters["p1"]
+    step(fight, X)
+    for _ in range(CHARGE_WAIT - 3):
+        step(fight)
+    step(fight, FighterInput(y=True))          # 2 frames before it would fire: the lock is on
+    assert me.switch_lock == SWITCH_RECOVERY
+    while me.switch_lock > 0:
+        assert me.action == "charging" and me.charge == 1
+        step(fight)
+    assert me.action == "attack" and me.move is AMP_WAVES[0] and me.attack_basis == X_BASIS
 
 
 def test_a_crouch_never_ducks_it():
@@ -569,9 +596,11 @@ def test_the_grace_ends_with_the_hold_plus_0_3_s_and_lets_them_walk_out():
     first = set_trap(fight)
     fight.traps.append(Trap("p1", TRAP_HOLD, first.x, first.basis, age=TRAP_ARM))
     rival.x = first.x
-    while first in fight.traps:
+    for _ in range(TRAP_HOLD.hitstun + 30):    # (a cap: a regression fails instead of hanging)
+        if first not in fight.traps:
+            break
         step(fight)
-    assert rival.action in ("hitstun", "idle")
+    assert first not in fight.traps and rival.action in ("hitstun", "idle")
     for _ in range(TRAP_GRACE - 2):
         events = step(fight, IDLE, FighterInput(dx=1))
         assert "trap_close" not in kinds(events)
