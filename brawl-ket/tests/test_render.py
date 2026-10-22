@@ -1068,3 +1068,215 @@ def test_choose_your_fighter_shows_m_cutie_in_the_second_row(surface):
     r.draw(m, [])
     ring = {tuple(surface.get_at((x, PORTRAIT_Y + PORTRAIT // 2)))[:3] for x in range(150, 230)}
     assert PLAYER_COLORS["p1"] in ring or P.lighten(PLAYER_COLORS["p1"], 0.6) in ring
+
+
+# --- ALICE & BOB: their approved look (variant A, COURIERS), their specials, a decohered Bob ---------
+
+KIDS_LOOK = "2026-10-22-brawl-ket-alice-bob-look.py"
+
+
+@pytest.mark.parametrize("name,strike", [
+    ("idle", None), ("crouch", None), ("jump", None), ("walk1", None), ("knockdown", None),
+    ("heavy_wind", ("hand_f", PURPLE, False)), ("heavy_hit", ("hand_f", PURPLE, True)),
+    ("sweep_hit", ("foot_f", PURPLE, True)), ("dive", ("foot_f", GREEN, True)),
+    ("toss", None), ("catch", None), ("fire", ("hand_f", GREEN, True)),
+])
+@pytest.mark.parametrize("who", ["alice", "bob"])
+@pytest.mark.parametrize("facing", [1, -1])
+@pytest.mark.parametrize("base", [GREEN, PURPLE], ids=["green", "purple"])
+@pytest.mark.parametrize("feet", [(120.0, 220.0), (121.0, 221.0), (120.5, 220.0)], ids=["even", "odd", "half"])
+def test_alice_and_bob_match_their_approved_look(look, name, strike, who, facing, base, feet):
+    from brawl_ket.kids import draw_kid
+    from brawl_ket.poses import POSES, joints
+    ref = look(KIDS_LOOK)
+    pygame.init()
+    a, b = pygame.Surface((240, 240)), pygame.Surface((240, 240))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    pose = POSES[name]
+    ref.draw_kid(a, pose, feet, facing, base, who, "A", strike)
+    draw_kid(b, joints(pose, who, feet, facing), facing, base, who, strike)
+    assert same_pixels(a, b)
+
+
+def test_their_builds_and_poses_are_the_looks(look):
+    from brawl_ket import poses as PS
+    ours = {b: (PS.SCALE[b], dict(PS.BUILD_BONES[b]), PS.HEAD_R[b], PS.LIMB_W[b]) for b in ("alice", "bob")}
+    ref = look(KIDS_LOOK)                       # (it writes its builds into the tables)
+    assert ours == {b: (PS.SCALE[b], PS.BUILD_BONES[b], PS.HEAD_R[b], PS.LIMB_W[b]) for b in ("alice", "bob")}
+    assert PS.HEAD_R["kid"] == PS.HEAD_R["alice"] and PS.LIMB_W["kid"] == PS.LIMB_W["alice"]
+    assert (PS.POSES["toss"], PS.POSES["catch"], PS.POSES["fire"]) == (ref.TOSS_A, ref.CATCH, ref.FIRE)
+    assert ref.GAP == 40
+
+
+def test_the_pair_drawn_together_is_the_looks_pair(look):
+    from brawl_ket.kids import draw_pair
+    from brawl_ket.poses import POSES
+    ref = look(KIDS_LOOK)
+    pygame.init()
+    for facing in (1, -1):
+        a, b = pygame.Surface((320, 240)), pygame.Surface((320, 240))
+        a.fill(BLANK)
+        b.fill(BLANK)
+        ref.pair(a, 160, facing, GREEN, "A", "p1", rings=False)       # (on the look's FLOOR_Y)
+        draw_pair(b, POSES["idle"], (160, FLOOR_Y), facing, GREEN)
+        assert same_pixels(a, b)
+
+
+@pytest.mark.parametrize("big", [False, True])
+@pytest.mark.parametrize("facing", [1, -1])
+def test_the_photons_are_the_looks(look, big, facing):
+    from brawl_ket.kids import photon
+    ref = look(KIDS_LOOK)
+    pygame.init()
+    a, b = pygame.Surface((200, 120)), pygame.Surface((200, 120))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    ref.photon(a, (100.5, 60.0), GREEN, facing, big)
+    photon(b, (100.5, 60.0), GREEN, facing, big)
+    assert same_pixels(a, b)
+
+
+def test_key_exchange_teleport_and_bell_dive_art_is_the_looks(look):
+    from brawl_ket.kids import dive_streaks, flash, lob, swap_arc
+    from brawl_ket.poses import POSES, joints
+    ref = look(KIDS_LOOK)
+    pygame.init()
+    for draw_ref, draw_ours in (
+        (lambda s: ref.lob(s, (90, 222), (50, 180), GREEN, k_at=0.55, height=40),
+         lambda s: lob(s, (90, 222), (50, 180), GREEN, k_at=0.55, height=40)),
+        (lambda s: ref.flash(s, 276, PURPLE), lambda s: flash(s, 276, PURPLE)),
+        (lambda s: ref.swap_arc(s, 276, 400, FLOOR_Y - 150, GREEN), lambda s: swap_arc(s, 276, 400, FLOOR_Y - 150, GREEN)),
+        (lambda s: ref.streaks(s, (450, FLOOR_Y - 164), joints(POSES["dive"], "bob", (484, FLOOR_Y - 108), 1)["hip"],
+                               GREEN),
+         lambda s: dive_streaks(s, joints(POSES["dive"], "bob", (484, FLOOR_Y - 108), 1), (484, FLOOR_Y - 108), 1,
+                                GREEN)),
+    ):
+        a, b = pygame.Surface((640, 360)), pygame.Surface((640, 360))
+        a.fill(BLANK)
+        b.fill(BLANK)
+        draw_ref(a)
+        draw_ours(b)
+        assert same_pixels(a, b)
+
+
+@pytest.mark.parametrize("t", [0, 1, 5])
+@pytest.mark.parametrize("facing", [1, -1])
+@pytest.mark.parametrize("feet", [(588.0, float(FLOOR_Y)), (300.5, float(FLOOR_Y + 1))], ids=["look", "odd"])
+def test_a_decohered_bob_is_the_looks(look, t, facing, feet):
+    from brawl_ket.kids import draw_decohered
+    ref = look(KIDS_LOOK)
+    pygame.init()
+    a, b = pygame.Surface((640, 360)), pygame.Surface((640, 360))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    ref.decohered(a, feet, facing, GREEN, "A", t)
+    draw_decohered(b, feet, facing, GREEN, t)
+    assert same_pixels(a, b)
+
+
+def pair_frames(surface, steps, rival=ROBERT, setup=None, rival_x=500.0):
+    """Draw a fight of ALICE & BOB (p1) against `rival`, `steps` = [p1 inputs]; returns (r, fight)."""
+    from brawl_ket.fighter import IDLE
+    from brawl_ket.moves import ALICE_BOB
+    r = Renderer(surface)
+    fight = Fight({"p1": ALICE_BOB, "p2": rival})
+    fight.fighters["p2"].x = rival_x
+    if setup is not None:
+        setup(fight)
+    for inp in steps:
+        r.draw_fight(fight, fight.step({"p1": inp or IDLE}))
+    return r, fight
+
+
+def test_bob_is_drawn_behind_alice_on_the_thinner_ring(surface):
+    from brawl_ket.config import PLAYER_COLORS
+    r, fight = pair_frames(surface, [None] * 3)
+    alice, bob = fight.fighters["p1"], fight.echoes["p1"]
+    ring_rows = range(FLOOR_Y - 4, FLOOR_Y + 9)
+
+    def ring_px(x):
+        return sum(1 for i in range(round(x) - 28, round(x) + 29) for j in ring_rows
+                   if tuple(surface.get_at((i, j)))[:3] == PLAYER_COLORS["p1"])
+    assert 0 < ring_px(bob.x - 30) < ring_px(alice.x + 30)       # (their outer halves: the rings overlap)
+    # Alice is drawn over Bob: where they overlap (her back, his front), her satchel strap and
+    # hoodie show, not his arm: her body's pixels win at her hip
+    from brawl_ket.kids import draw_kid
+    from brawl_ket.poses import joints
+    alone = pygame.Surface(surface.get_size())
+    alone.blit(surface, (0, 0))
+    j = joints(r.pose_last["p1"], "alice", (alice.x, FLOOR_Y), 1)
+    draw_kid(alone, j, 1, GREEN, "alice")
+    hip = (round(j["hip"][0]), round(j["hip"][1]) - 10)
+    assert surface.get_at(hip) == alone.get_at(hip)
+
+
+def test_a_decohering_bob_fades_and_his_ring_waits_dimmed_behind_her(surface):
+    from brawl_ket.config import DECOHERE_FADE, PLAYER_COLORS
+    from brawl_ket.stages import MARGIN
+
+    def setup(f):
+        f.fighters["p1"].x = 320.0                          # Alice well clear of where Bob decoheres
+        f.echoes["p1"].decohere()
+    r, fight = pair_frames(surface, [None] * 2, setup=setup)
+    bob = fight.echoes["p1"]
+    x = round(bob.x)
+
+    def changed():                                          # (the racks' blinking lights aside)
+        return sum(1 for i in range(x - 20, x + 21, 2) for j in range(FLOOR_Y - 110, FLOOR_Y - 10, 2)
+                   if surface.get_at((i, j)) != r.stage.get_at((i + MARGIN, j + MARGIN))
+                   and not any(rect.collidepoint(i, j) for rect, _c in r.lights))
+    assert changed() > 100                                  # standing there, see-through
+    for _ in range(DECOHERE_FADE + 2):
+        r.draw_fight(fight, fight.step({}))
+    assert changed() == 0                                   # gone
+    dim = P.shade(PLAYER_COLORS["p1"], 0.5)
+    assert any(tuple(surface.get_at((i, j)))[:3] == dim for i in range(round(bob.spot) - 26, round(bob.spot) + 27)
+               for j in range(FLOOR_Y - 4, FLOOR_Y + 9))
+
+
+def test_the_toss_is_drawn_on_its_arc_and_bobs_shot_is_the_big_photon(surface):
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.render import ERROR_COLOUR
+    r, fight = pair_frames(surface, [FighterInput(x=True)] + [None] * 16)
+    assert fight.tosses
+    t = fight.tosses[0]
+    centre = (round(t.x), round(FLOOR_Y - t.y))
+    near = {tuple(surface.get_at((centre[0] + dx, centre[1] + dy)))[:3] for dx in range(-3, 4) for dy in range(-3, 4)}
+    assert ERROR_COLOUR[basis.X] in near
+    for _ in range(14):
+        r.draw_fight(fight, fight.step({}))
+    (shot,) = fight.shots
+    left, top, w, h = shot.box
+    cx, cy = round(left + w / 2), round(top + h / 2)
+    big = sum(1 for i in range(cx - 12, cx + 13) for j in range(cy - 12, cy + 13)
+              if tuple(surface.get_at((i, j)))[:3] == GREEN)
+    assert big > 150                                        # radius 10 of green, not a PHOTON's 6
+
+
+def test_teleport_flashes_at_both_ends_and_both_re_form(surface):
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.render import TELEPORT_FRAMES
+    r, fight = pair_frames(surface, [FighterInput(down=True, x=True)] + [None] * 7)
+    assert "p1" in r.teleported
+    for _ in range(TELEPORT_FRAMES):
+        r.draw_fight(fight, fight.step({}))
+    assert "p1" not in r.teleported
+
+
+def test_every_pair_frame_draws(surface):
+    """Bot-free smoke: every special of theirs, a decoherence and a return, on both sides."""
+    from brawl_ket.config import DECOHERE_FRAMES
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import ALICE_BOB
+    for side in ("p1", "p2"):
+        other = "p2" if side == "p1" else "p1"
+        r = Renderer(surface)
+        fight = Fight({side: ALICE_BOB, other: ROBERT})
+        presses = {0: FighterInput(x=True), 60: FighterInput(down=True, x=True), 90: FighterInput(up=True),
+                   100: FighterInput(x=True), 130: FighterInput(y=True)}
+        for i in range(160 + DECOHERE_FRAMES):
+            if i == 140:
+                fight.echoes[side].decohere()
+            r.draw_fight(fight, fight.step({side: presses.get(i, FighterInput())}))
+        assert fight.echoes[side].here

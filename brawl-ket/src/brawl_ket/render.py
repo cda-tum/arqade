@@ -28,6 +28,7 @@ from . import basis
 from .config import (
     CARD_FRAMES,
     CHARGE_CAP,
+    DECOHERE_FADE,
     DRIVE_SLOT_Y,
     FLOOR_Y,
     FPS,
@@ -36,8 +37,12 @@ from .config import (
     MATCH_RESULT_LOCK,
     PLAYER_COLORS,
     ROUNDS_TO_WIN,
+    REFORM_FRAMES,
     STAGE_NAMES,
     STAGES,
+    TOSS_ARC,
+    TOSS_FRAMES,
+    TOSS_TO,
 )
 from .cutie import JUMP_SWING, GOLD_PLATE, draw_charging, draw_cutie, draw_spin, draw_trap, draw_wave, halo
 from .dos import BEIGE, CLIP_W, clip_icon, draw_dos, draw_floppy
@@ -53,6 +58,7 @@ from .erwin import (
     holo_sprite,
 )
 from .fight import Fight
+from .kids import dive_streaks, draw_decohered, draw_kid, flash, lob, photon, swap_arc
 from .fighter import Fighter
 from .fonts import load_font
 from .ink import _ball, _block, _boot, _poly, _pt, _towards, limb
@@ -62,11 +68,13 @@ from .poses import BASE_BONES, HEAD_R, LIMB_W, POSES, SCALE, Pose, drawn_joints,
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 PLAYERS = ("p1", "p2")
+BODIES = ("p1", "p2", "p1/bob", "p2/bob")   # what the renderer keeps per body: a player's, and their Bob
 ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL, "ERWIN": EYE, "DOS": BEIGE, "M-CUTIE": GOLD_PLATE}
 
 # how each build is drawn (the skeleton's proportions are in poses.py)
-TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5, "alice": 5, "bob": 5}   # the lean torso is this much thicker than a limb
-PLATES = {"lean": False, "heavy": True, "toy": False, "alice": False, "bob": False}   # armour: the heavy's wedge torso, plates, helm
+TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5}   # the lean torso is this much thicker than a limb
+PLATES = {"lean": False, "heavy": True, "toy": False}   # armour: the heavy's wedge torso, plates, helm
+KIDS = ("alice", "bob")     # ALICE & BOB's builds (kids.py)
 # PHOEBE (the "toy" build): a scientist, not a puppet. Her neutral colours; the coat, the lining
 # and her trousers are shades of her basis colour (docs/.../2026-10-09-brawl-ket-phoebe-design.md)
 SKIN = (232, 176, 128)
@@ -88,7 +96,7 @@ ERROR_COLOUR = {basis.X: GREEN, basis.Z: PURPLE, basis.Y: P.WHITE}
 BADGE = {basis.Z_BASIS: "0/1", basis.X_BASIS: "+/-"}     # the basis's states, on the health bar
 # the striking limb's joints, from the shoulder or hip out to the hand or foot that lands
 STRIKE_LIMB = {"hand_f": ("shoulder_f", "elbow_f", "hand_f"), "foot_f": ("hip", "knee_f", "foot_f")}
-SELF_LIT = ("cat", "dos", "cutie")     # builds that draw their own lit limb: the striker adds only its trail and tip
+SELF_LIT = ("cat", "dos", "cutie", *KIDS)     # builds that draw their own lit limb: the striker adds only its trail and tip
 TRAIL_LEN = 5               # a live strike's hand or foot leaves this many fading echoes
 LEGEND_CHIP = 14            # the A / B colour chips under each health bar, px
 LEGEND_W = 2 * LEGEND_CHIP + 4
@@ -102,6 +110,7 @@ STRIKER = {
     "BOX SWIPE": "hand_f", "POUNCE": "hand_f", "BOX DROP": "hand_f",
     "MOUSE CABLE": "hand_f", "CRT DROP": "foot_f",
     "AMPLITUDE AMPLIFICATION": "hand_f", "ION TRAP": "hand_f", "SPIN": "foot_f",
+    "KEY EXCHANGE": "hand_f", "BELL DIVE": "foot_f",     # (Alice's toss lights nothing: strike_of)
 }
 
 # effect lengths, in frames
@@ -122,6 +131,8 @@ COLLAPSE_FRAMES = 14        # ... with a ring closing in on it
 BOX_POP_FRAMES = 14         # THE BOX: the real cardboard box shows this long after a collapse
 BOX_FADE_FRAMES = 16        # ... and the other one dissolves over this long
 SNAP_FRAMES = 12            # ION TRAP: a ring snapping shut on whoever it caught
+TELEPORT_FRAMES = 12        # TELEPORT: the flashes at both ends fade, and both re-form, over this long
+KID_RING = {"alice": 40, "bob": 38}     # ALICE & BOB's shadows' widths, px (Bob's ring the thinner)
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
 PREVIEW_W, PREVIEW_H = 320, 180     # CHOOSE YOUR STAGE's preview: the stage at half size
@@ -262,6 +273,8 @@ def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body,
         j = joints(pose, build, feet, facing)
         draw_cutie(surf, j, pose.lean, facing, body, strike, swing=flare, floor=floor)
         return j
+    if build in KIDS:
+        return draw_kid(surf, joints(pose, build, feet, facing), facing, body, build, strike)
     if build == "dos":
         j = drawn_joints(pose, build, feet, facing)
         draw_dos(surf, j, facing, body, strike, led, mood, eject)
@@ -489,7 +502,7 @@ def strike_of(f: Fighter) -> tuple[str, tuple] | None:
     """The joint an attack lands with and the colour its whole limb is lit in, from its
     wind-up to the end of its active frames (a throw, both colours, is lit green), or None."""
     m = f.move
-    if f.action != "attack" or m is None or f.phase not in ("startup", "active"):
+    if f.action != "attack" or m is None or f.phase not in ("startup", "active") or m.toss is not None:
         return None
     joint = STRIKER.get(m.name)
     if joint is None:
@@ -584,11 +597,12 @@ class Renderer:
         self.trail = {p: 0.0 for p in PLAYERS}          # the damage trail on each bar
         self.trail_wait = {p: 0 for p in PLAYERS}
         self.last_health = {p: 0.0 for p in PLAYERS}
-        self.pose_seen: dict[str, tuple] = {p: (None, 0) for p in PLAYERS}
-        self.pose_start: dict[str, Pose | None] = {p: None for p in PLAYERS}
-        self.pose_last: dict[str, Pose | None] = {p: None for p in PLAYERS}
-        self.body_flash: dict[str, tuple[tuple | None, int]] = {p: (None, 0) for p in PLAYERS}
-        self.trails: dict[str, list[tuple[tuple[int, int], tuple]]] = {p: [] for p in PLAYERS}
+        self.pose_seen: dict[str, tuple] = {p: (None, 0) for p in BODIES}
+        self.pose_start: dict[str, Pose | None] = {p: None for p in BODIES}
+        self.pose_last: dict[str, Pose | None] = {p: None for p in BODIES}
+        self.body_flash: dict[str, tuple[tuple | None, int]] = {p: (None, 0) for p in BODIES}
+        self.trails: dict[str, list[tuple[tuple[int, int], tuple]]] = {p: [] for p in BODIES}
+        self.teleported: dict[str, int] = {}    # TELEPORT: frames since each player's last swap
         self.legend_rects: dict[str, dict[str, pygame.Rect]] = {p: {} for p in PLAYERS}
         self.clip_rects: dict[str, pygame.Rect] = {}
         self.effects.clear()
@@ -628,10 +642,22 @@ class Renderer:
             colour = ERROR_COLOUR[basis.error_for(t.move.colour, t.basis)]
             draw_trap(surf, round(t.x) + ox, FLOOR_Y + oy, colour, t.state != "arming")
         for p in PLAYERS:
+            if p in fight.echoes:
+                self._echo_shadow(p, fight.echoes[p], ox, oy)
             self._shadow(p, fight.fighters[p], ox, oy)
+        for p, age in self.teleported.items():  # TELEPORT's columns of light, behind the two
+            self._teleport_flash(fight, p, age, ox, oy)
         heads = {}
         for p in order:
+            if p in fight.echoes:               # Bob first: he stands behind her
+                self._echo(p, fight.echoes[p], ox, oy)
             heads[p] = self._fighter(p, fight.fighters[p], ox, oy)
+        for t in fight.tosses:
+            self._toss(fight, t, ox, oy)
+        for p in self.teleported:               # ... and the swap's arc over them
+            if p in fight.echoes:
+                swap_arc(self.surface, fight.echoes[p].x + ox, fight.fighters[p].x + ox, FLOOR_Y - 150 + oy,
+                         BASIS_BODY[fight.fighters[p].basis])
         for s in fight.shots:
             self._shot(s, ox, oy)
         if self.show_boxes:
@@ -659,7 +685,8 @@ class Renderer:
                 color = ERROR_COLOUR.get(e.error or basis.X, P.WHITE)
                 self.effects.append(Effect("ping", e.x, e.y, PING_FRAMES, PING_FRAMES, color))
             elif e.kind == "switch" and e.player:
-                self.body_flash[e.player] = (P.WHITE, SWITCH_FLASH_FRAMES)
+                for body in (e.player, f"{e.player}/bob"):      # the pair's colour is one
+                    self.body_flash[body] = (P.WHITE, SWITCH_FLASH_FRAMES)
                 if self._fight is not None:
                     f = self._fight.fighters[e.player]
                     self.effects.append(Effect("popup", f.x, FLOOR_Y - f.y - 150, POPUP_FRAMES, POPUP_FRAMES,
@@ -667,7 +694,8 @@ class Renderer:
             elif e.kind == "measure" and e.player and self._fight is not None:
                 f = self._fight.fighters[e.player]
                 colour = P.lighten(BASIS_BODY[f.basis], 0.5)
-                self.body_flash[e.player] = (colour, MEASURE_FLASH_FRAMES)
+                for body in (e.player, f"{e.player}/bob"):
+                    self.body_flash[body] = (colour, MEASURE_FLASH_FRAMES)
                 self.effects.append(Effect("collapse", f.x, FLOOR_Y - f.y - 60, COLLAPSE_FRAMES,
                                            COLLAPSE_FRAMES, BASIS_BODY[f.basis]))
             elif e.kind == "box_collapse" and e.player and self._fight is not None:
@@ -686,6 +714,10 @@ class Renderer:
                 f = self._fight.fighters[e.player]
                 self.effects.append(Effect("tag", f.x + f.facing * 36, FLOOR_Y - f.y - DRIVE_SLOT_Y - 16,
                                            TAG_FRAMES, TAG_FRAMES, P.WHITE, "CTRL+V"))
+            elif e.kind == "teleport" and e.player:
+                self.teleported[e.player] = 0
+            elif e.kind == "intercept":       # a KEY EXCHANGE toss taken out in flight
+                self.effects.append(Effect("spark", e.x, e.y, SPARK_FRAMES, SPARK_FRAMES, P.WHITE))
             elif e.kind == "fizzle":          # a LASER reaching the floor
                 self.effects.append(Effect("spark", e.x, e.y - 3, SPARK_FRAMES // 2, SPARK_FRAMES // 2, P.WHITE))
             elif e.kind == "shockwave":
@@ -698,9 +730,10 @@ class Renderer:
             fx.left -= 1
         self.effects = [fx for fx in self.effects if fx.left > 0]
         self.shake = max(0, self.shake - 1)
-        for p in PLAYERS:
+        for p in BODIES:
             colour, left = self.body_flash[p]
             self.body_flash[p] = (colour, left - 1) if left > 1 else (None, 0)
+        self.teleported = {p: n + 1 for p, n in self.teleported.items() if n + 1 < TELEPORT_FRAMES}
 
     def _shake_offset(self) -> tuple[int, int]:
         if self.shake <= 0:
@@ -815,14 +848,66 @@ class Renderer:
             return
         if f.action == "attack" and f.move is not None and f.move.tunnel and tunnel_visibility(f) <= 0:
             return
-        w = max(18, 52 - f.y * 0.2)
+        w = max(18, KID_RING.get(f.char.build, 52) - f.y * 0.2)
         rect = pygame.Rect(0, 0, round(w) + 8, 12)
         rect.center = (round(f.x) + ox, FLOOR_Y + 2 + oy)
         pygame.draw.ellipse(self.surface, SHADOW, rect)
         pygame.draw.ellipse(self.surface, P.INK, rect.inflate(2, 2), 3)
-        pygame.draw.ellipse(self.surface, PLAYER_COLORS[key], rect, 2)
+        pygame.draw.ellipse(self.surface, PLAYER_COLORS[key], rect, 1 if f.char.build == "bob" else 2)
+
+    def _echo_shadow(self, key: str, bob, ox: int, oy: int) -> None:
+        """Bob's ring, the thinner one; while he is gone, dimmed and dashed on his spot behind
+        Alice, so the player knows he comes back (the look's)."""
+        if bob.here:
+            self._shadow(key, bob, ox, oy)
+            return
+        x = bob.x if bob.decohered <= DECOHERE_FADE else bob.spot
+        rect = pygame.Rect(0, 0, KID_RING["bob"] + 8, 12)
+        rect.center = (round(x) + ox, FLOOR_Y + 2 + oy)
+        pygame.draw.ellipse(self.surface, SHADOW, rect)
+        pygame.draw.ellipse(self.surface, P.INK, rect.inflate(2, 2), 3)
+        c = P.shade(PLAYER_COLORS[key], 0.5)
+        for i, a in enumerate(range(0, 360, 30)):
+            if i % 2 == 0:
+                pygame.draw.arc(self.surface, c, rect, math.radians(a), math.radians(a + 20), 1)
+
+    def _echo(self, key: str, bob, ox: int, oy: int) -> None:
+        """Bob: as any fighter while he is here (re-forming in scanlines as he comes back); while
+        he decoheres, standing see-through and breaking up, blinking out over the fade's last third."""
+        if bob.here:
+            if bob.reform > 0 and key not in self.teleported:
+                pose = self._pose(f"{key}/bob", bob)
+                feet = (bob.x + ox, FLOOR_Y - bob.y + oy)
+                self._dissolved(pose, bob, feet, BASIS_BODY[bob.basis], P.CREAM, 0.0, 1 - bob.reform / REFORM_FRAMES)
+                return
+            self._fighter(f"{key}/bob", bob, ox, oy)
+            return
+        self.trails[f"{key}/bob"].clear()
+        age = bob.decohered
+        if age > DECOHERE_FADE or (age > DECOHERE_FADE * 2 // 3 and age % 2):
+            return
+        draw_decohered(self.surface, (bob.x + ox, FLOOR_Y + oy), bob.facing, BASIS_BODY[bob.basis], age // 3)
+
+    def _teleport_flash(self, fight: Fight, key: str, age: int, ox: int, oy: int) -> None:
+        """TELEPORT: a column of light and a ring on the floor where each of them now stands,
+        fading out."""
+        if key not in fight.echoes:
+            return
+        colour = BASIS_BODY[fight.fighters[key].basis]
+        k = 1 - age / TELEPORT_FRAMES
+        for f in (fight.fighters[key], fight.echoes[key]):
+            flash(self.surface, f.x + ox, colour, round(k, 2), FLOOR_Y + oy)
+
+    def _toss(self, fight: Fight, t, ox: int, oy: int) -> None:
+        """KEY EXCHANGE in flight: the dotted arc from Alice's hand to Bob's, the photon on it."""
+        bob = fight.echoes[t.owner]
+        colour = ERROR_COLOUR[basis.error_for(basis.OWN, t.basis)]
+        a = (t.x0 + ox, FLOOR_Y - t.y0 + oy)
+        b = (bob.x + bob.facing * TOSS_TO[0] + ox, FLOOR_Y - bob.y - TOSS_TO[1] + oy)
+        lob(self.surface, a, b, colour, k_at=min(1.0, t.age / TOSS_FRAMES), height=TOSS_ARC)
 
     def _fighter(self, key: str, f: Fighter, ox: int, oy: int) -> tuple[float, float]:
+        """One body (`key`: its player's, or "p1/bob" for p1's Bob): pose, colours, its moves' art."""
         body = BASIS_BODY[f.basis]
         accent = ACCENT.get(f.char.name, P.CREAM)
         flash, left = self.body_flash[key]
@@ -842,6 +927,14 @@ class Renderer:
         if f.char.build == "cutie":
             flare = JUMP_SWING if f.y > 0 else 0.0
         m = f.move
+        player = key.split("/")[0]
+        if f.char.build in KIDS and player in self.teleported:     # TELEPORT: both re-form, TUNNEL-style
+            seen = (self.teleported[player] + 1) / TELEPORT_FRAMES
+            j = self._dissolved(pose, f, feet, body, accent, flare, seen)
+            return j["head"][0] - ox, j["head"][1] - oy
+        if f.action == "attack" and m is not None and m.dive is not None and f.char.build in KIDS \
+                and f.phase == "active" and f.y > 0:                # BELL DIVE's streaks, behind the diver
+            dive_streaks(self.surface, joints(pose, f.char.build, feet, f.facing), feet, f.facing, body)
         if f.action == "attack" and m is not None and m.tunnel:
             self._tunnel_line(f, ox, oy)
             seen = tunnel_visibility(f)
@@ -854,8 +947,11 @@ class Renderer:
         elif f.action == "attack" and m is not None and m.name == "SPIN" and f.phase == "active":
             j = draw_spin(self.surface, pose, feet, f.facing, body, strike_of(f), floor=FLOOR_Y + oy)
         else:
+            strike = strike_of(f)
+            if strike is not None and f.char.build in KIDS:
+                strike = (*strike, f.phase == "active")
             j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare,
-                            strike=strike_of(f), mood=mood, led=led, eject=eject, floor=FLOOR_Y + oy)
+                            strike=strike, mood=mood, led=led, eject=eject, floor=FLOOR_Y + oy)
         self._striker(key, f, j)
         if f.action == "attack" and m is not None:
             if m.catch is not None:
@@ -1099,6 +1195,9 @@ class Renderer:
         if s.move.projectile.floor:         # M-CUTIE's wave, standing on the floor as tall as its step
             draw_wave(self.surface, round(cx), FLOOR_Y + oy, s.move.projectile.box.h, color, s.facing)
             return
+        if s.move.name == "KEY EXCHANGE":   # Bob's strong shot (one pasted back too)
+            photon(self.surface, (cx, cy), color, s.facing, big=True)
+            return
         if s.move.name == "FLOPPY":         # a spinning disk (one pasted back too)
             draw_floppy(self.surface, (cx, cy), -(self.t * 12 % 360) * s.facing, color, s.facing)
             return
@@ -1134,7 +1233,7 @@ class Renderer:
         self.surface.fill(P.WHITE, (round(cx) - 2 - s.facing, round(cy) - 3, 2, 2))
 
     def _boxes(self, fight: Fight, ox: int, oy: int) -> None:
-        for f in fight.fighters.values():
+        for f in (*fight.fighters.values(), *(e for e in fight.echoes.values() if e.here)):
             for rect in (f.box_rects() if f.boxed else (f.hurtbox,)):
                 pygame.draw.rect(self.surface, P.GOOD, pygame.Rect(rect).move(ox, oy), 1)
             m = f.move

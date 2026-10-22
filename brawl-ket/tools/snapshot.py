@@ -24,6 +24,10 @@ Writes:
 - moves_cutie.png, cutie_*.png: M-CUTIE's moves; AMPLITUDE AMPLIFICATION charging (1, 4 and 6
   steps), its wave in flight (2 and 6 steps) and DOS pasting one back; ION TRAP arming, armed and
   closed on a ROBERT; SPIN into a ROBERT;
+- moves_alice.png, kids_*.png: ALICE & BOB's moves (Alice's skeleton); the pair facing a ROBERT,
+  Bob's echo of a jab, KEY EXCHANGE's toss in the air and Bob's shot, TELEPORT's flash (a swap
+  past a ROBERT between them), BELL DIVE twice, Bob decohered (just hit, and later his ring
+  waiting) and coming back;
 - screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
 - screen_select_cutie.png: CHOOSE YOUR FIGHTER on M-CUTIE (P1, ready: the second row) and DOS (P2);
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
@@ -56,7 +60,7 @@ from brawl_ket import palette as P
 from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
-from brawl_ket.moves import AMP_WAVES, BOHR, DOS, ERWIN, M_CUTIE, ROBERT
+from brawl_ket.moves import ALICE_BOB, AMP_WAVES, BOHR, DOS, ERWIN, M_CUTIE, ROBERT
 from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
 from brawl_ket.render import Renderer, draw_puppet, outlined
 
@@ -479,6 +483,35 @@ def cutie_frames(out_dir: str) -> None:
           setup=lambda f: setattr(f.fighters["p2"], "clipboard", (AMP_WAVES[3], "Z")))
 
 
+def kids_frames(out_dir: str) -> None:
+    """ALICE & BOB (P1) against a ROBERT: the echo, KEY EXCHANGE, TELEPORT, BELL DIVE, decoherence."""
+    from brawl_ket.fighter import IDLE, FighterInput
+
+    surface = pygame.Surface((W, H))
+
+    def scene(name, presses, frames, rival_x=430.0, setup=None, each=None):
+        fight, r = Fight({"p1": ALICE_BOB, "p2": ROBERT}), Renderer(surface)
+        fight.fighters["p2"].x = rival_x
+        if setup is not None:
+            setup(fight)
+        for i in range(frames):
+            if each is not None:
+                each(i, fight)
+            r.draw_fight(fight, fight.step({"p1": presses(i), "p2": IDLE}), {"p1": 0, "p2": 0})
+        save(surface, out_dir, f"{name}.png")
+
+    scene("kids_idle", lambda i: IDLE, 4)
+    scene("kids_echo", lambda i: FighterInput(a=i == 0), 13)          # Alice recovering, Bob winding up
+    scene("kids_toss", lambda i: FighterInput(x=i == 0), ALICE_BOB.moves["stand.X"].startup + 9)
+    scene("kids_shot", lambda i: FighterInput(x=i == 0), ALICE_BOB.moves["stand.X"].startup + 16 + 12)
+    scene("kids_teleport", lambda i: FighterInput(down=True, x=i == 0), ALICE_BOB.moves["crouch.X"].startup + 3,
+          each=lambda i, f: setattr(f.fighters["p2"], "x", f.fighters["p1"].x - 20.0) if i == 2 else None)
+    scene("kids_bell_dive", lambda i: FighterInput(up=True) if i == 0 else FighterInput(x=i == 14), 30)
+    scene("kids_decohered", lambda i: IDLE, 6, setup=lambda f: f.echoes["p1"].decohere())
+    scene("kids_gone", lambda i: IDLE, 60, setup=lambda f: f.echoes["p1"].decohere())
+    scene("kids_back", lambda i: IDLE, config.DECOHERE_FRAMES + 4, setup=lambda f: f.echoes["p1"].decohere())
+
+
 def main(argv: list[str]) -> None:
     if len(argv) != 1:
         sys.exit(__doc__)
@@ -495,6 +528,8 @@ def main(argv: list[str]) -> None:
     dos_frames(out_dir)
     save(move_sheet(M_CUTIE), out_dir, "moves_cutie.png")
     cutie_frames(out_dir)
+    save(move_sheet(ALICE_BOB), out_dir, "moves_alice.png")
+    kids_frames(out_dir)
     bohr_frames(out_dir)
     scripted_frames(out_dir)
     close_frame(out_dir)
