@@ -113,6 +113,7 @@ class Fighter:
         self.rival_boxes: tuple[float, float] | None = None   # the rival's two boxes while it is boxed
         self.charge = 0                 # AMPLITUDE AMPLIFICATION: steps charged (0: not charging)
         self.charge_wait = 0            # ... frames since the last step's press
+        self.paired = False             # ALICE & BOB: Bob is here (the fight sets it every frame)
 
     # --- derived state ----------------------------------------------------------------
 
@@ -431,6 +432,10 @@ class Fighter:
                     events.append(("projectile", {"move": m}))
                 if m.trap is not None:  # ION TRAP: the fight sets it on the floor
                     events.append(("trap", {"move": m}))
+                if m.toss is not None:  # KEY EXCHANGE: the fight tosses the photon to Bob
+                    events.append(("pass", {"move": m}))
+                if m.swap:              # TELEPORT: the fight swaps the two
+                    events.append(("swap", {}))
                 if m.paste and self.clipboard is not None:
                     shot, shot_basis = self.clipboard
                     self.clipboard = None
@@ -511,6 +516,10 @@ class Fighter:
             else:
                 slot = self._slot_for(entry.button, dx, rival_x)
                 move = self.char.moves.get(slot)
+            if move is not None and not self.paired:    # ALICE & BOB with Bob decohered:
+                if move.swap:
+                    continue                            # no TELEPORT ...
+                move = move.alone or move               # ... and X fires her own photon
             if move is None or self.cooldowns.get(slot, 0) > 0 or slot in self.air_used:
                 continue
             cancel = not free

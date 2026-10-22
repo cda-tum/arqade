@@ -31,7 +31,7 @@ from .config import (
     SWITCH_RECOVERY,
 )
 from .fighter import IDLE, Fighter, FighterInput
-from .moves import Character
+from .moves import Character, Move
 
 
 class Echo(Fighter):
@@ -134,6 +134,14 @@ class Echo(Fighter):
             self.x = spot if was <= 0 else before
         elif moved < 0 and was > 0 and ahead < 0:
             self.x = spot
+
+    def receive(self, move: Move, shot_basis: str, events: list) -> None:
+        """KEY EXCHANGE: he catches Alice's toss and fires `move` at once, whatever he was doing
+        (the fight hands it over only while he is here and not reeling), in the colour it was
+        tossed in."""
+        self.crouching = False
+        self._start_move("catch", move, False, events)
+        self.attack_basis = shot_basis
 
     # --- decoherence ---------------------------------------------------------------------------
 

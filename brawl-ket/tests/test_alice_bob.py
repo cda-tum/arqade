@@ -17,7 +17,7 @@ from brawl_ket.config import (
 from brawl_ket.echo import Echo
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import IDLE, FighterInput
-from brawl_ket.moves import ALICE_BOB, BOB, BOHR, KID_NORMALS, NORMALS, ROBERT
+from brawl_ket.moves import ALICE_BOB, BOB, BOHR, KID_NORMALS, MID, NORMALS, ROBERT
 
 A = FighterInput(a=True)
 B = FighterInput(b=True)
@@ -404,3 +404,196 @@ def test_every_bot_plays_a_round_against_a_pair(name, side):
             break
         fight.step({side: bot.input(fight), pair_key: pair_script(fight, pair_key)})
     assert fight.over
+
+
+# --- their specials (spec section 3) ---------------------------------------------------------------
+
+X = FighterInput(x=True)
+DOWN_X = FighterInput(down=True, x=True)
+
+
+def test_their_specials():
+    from brawl_ket.moves import BELL_DIVE, KEY_SHOT, SOLO_PHOTON
+    toss, teleport, dive = (ALICE_BOB.moves[s] for s in ("stand.X", "crouch.X", "air.X"))
+    assert (toss.name, teleport.name, dive.name) == ("KEY EXCHANGE", "TELEPORT", "BELL DIVE")
+    assert toss.toss is KEY_SHOT and toss.alone is SOLO_PHOTON and toss.cooldown == 150
+    assert teleport.swap and teleport.cooldown == 120 and teleport.damage == 0
+    assert dive is BELL_DIVE and BOB.moves["air.X"] is BELL_DIVE and dive.once_per_jump
+    assert (dive.damage, dive.height, dive.colour) == (8, MID, basis.OWN)
+    assert (KEY_SHOT.damage, KEY_SHOT.kind, SOLO_PHOTON.damage, SOLO_PHOTON.kind) == (12, "projectile", 6, "projectile")
+    for c in (toss, teleport, dive, KEY_SHOT, SOLO_PHOTON):
+        assert c.colour == basis.OWN                        # every special in their own colour
+    assert "stand.X" not in BOB.moves and "crouch.X" not in BOB.moves     # Bob echoes neither
+    for shot in (KEY_SHOT, SOLO_PHOTON):                    # too slow to fly through anyone
+        assert shot.projectile.speed * 2 < shot.projectile.box.w + 16
+
+
+def key_exchange(rival=ROBERT, rival_x=520.0, frames=60, p1=None, p2=IDLE):
+    """Alice presses X once, facing right, the rival far off; returns (fight, events by frame)."""
+    fight, alice, bob, other = pair_fight(rival=rival, rival_x=rival_x)
+    log = []
+    for i in range(frames):
+        log.append(fight.step({"p1": (p1(i) if p1 else (X if i == 0 else IDLE)),
+                               "p2": p2(i) if callable(p2) else p2}))
+    return fight, log
+
+
+def first(log, kind, player="p1"):
+    return next((i for i, events in enumerate(log) for e in events if e.kind == kind and e.player == player), None)
+
+
+def test_key_exchange_tosses_to_bob_who_fires_one_strong_shot():
+    from brawl_ket.config import TOSS_FRAMES
+    from brawl_ket.moves import KEY_SHOT
+    fight, log = key_exchange(frames=140)
+    toss_at, caught_at, fired_at = first(log, "toss"), first(log, "catch"), first(log, "key_shot")
+    assert toss_at == ALICE_BOB.moves["stand.X"].startup
+    assert caught_at == toss_at + TOSS_FRAMES
+    assert fired_at == caught_at + KEY_SHOT.startup
+    assert sum(1 for events in log for e in events if e.kind == "projectile") == 1     # Bob doesn't echo it
+    hit = first(log, "hit", "p2")
+    assert hit is not None and fight.fighters["p2"].health == ROBERT.health - KEY_SHOT.damage
+
+
+def test_the_toss_flies_from_her_back_hand_to_his_raised_one():
+    from brawl_ket.config import TOSS_FRAMES, TOSS_FROM, TOSS_TO
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    seen = []
+    for i in range(40):
+        fight.step({"p1": X if i == 0 else IDLE})
+        seen += [(t.age, t.x, t.y) for t in fight.tosses]
+    assert seen[0][1:] == pytest.approx((alice.x + TOSS_FROM[0], TOSS_FROM[1]), abs=8)
+    last_age, x, y = seen[-1]
+    assert last_age == TOSS_FRAMES - 1
+    assert (x, y) == pytest.approx((bob.x + TOSS_TO[0], TOSS_TO[1]), abs=8)
+    assert max(y for _a, _x, y in seen) > TOSS_TO[1]               # along an arc, over the line
+
+
+def test_bobs_shot_keeps_the_colour_it_was_tossed_in():
+    fight, log = key_exchange(frames=40, p1=lambda i: X if i == 0 else Y if i == 12 else IDLE)
+    alice = fight.fighters["p1"]
+    assert alice.basis == X_BASIS
+    (shot,) = fight.shots
+    assert shot.owner == "p1" and shot.basis == Z_BASIS
+
+
+def tossed(fight, x, y):
+    """A KEY EXCHANGE photon of p1's in flight at (x, height y), half way to Bob. (Each test then
+    runs the one check it is about, Fight._intercept or Fight._catch, on it where it is.)"""
+    from brawl_ket.config import TOSS_FRAMES
+    from brawl_ket.fight import Toss
+    from brawl_ket.moves import KEY_SHOT
+    t = Toss("p1", KEY_SHOT, Z_BASIS, x, y, age=TOSS_FRAMES // 2, x=x, y=y)
+    fight.tosses.append(t)
+    return t
+
+
+def test_a_rival_body_in_its_way_takes_it_out():
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    tossed(fight, other.x, 60.0)
+    events = []
+    fight._intercept(events)
+    assert fight.tosses == [] and [e.kind for e in events] == ["intercept"]
+    run(fight, 30)
+    assert fight.shots == [] and bob.action != "attack"         # nothing fires
+
+
+def test_a_rival_shot_takes_it_out_and_is_gone_too():
+    from brawl_ket.fight import Shot
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    photon = ROBERT.moves["stand.X"]
+    t = tossed(fight, 400.0, 100.0)
+    fight.shots.append(Shot("p2", photon, t.x, t.y - 63, 0.0, 30))
+    events = []
+    fight._intercept(events)
+    assert fight.tosses == [] and fight.shots == [] and [e.kind for e in events] == ["intercept"]
+
+
+def test_an_attack_in_its_way_takes_it_out():
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    other.facing = -1
+    run(fight, 5, p2=once(A))                   # ROBERT's jab, live
+    assert other.phase == "active"
+    left, top, w, h = other.world_box(other.move.hitbox)
+    tossed(fight, left + w / 2, FLOOR_Y - (top + h / 2))
+    fight._intercept([])
+    assert fight.tosses == []
+
+
+def test_copy_catches_the_toss_in_flight():
+    from brawl_ket.moves import DOS, KEY_SHOT
+    fight, alice, bob, other = pair_fight(rival=DOS, rival_x=520.0)
+    run(fight, 4, p2=once(FighterInput(y=True)))
+    assert other.move.catch is not None and other.phase == "active"
+    left, top, w, h = other.world_box(other.move.catch)
+    tossed(fight, left + w / 2, FLOOR_Y - (top + h / 2))
+    events = []
+    fight._catch(events)
+    assert fight.tosses == [] and other.clipboard == (KEY_SHOT, Z_BASIS)
+    assert [e.kind for e in events if e.kind == "copy"] == ["copy"]
+
+
+def test_copy_catches_bobs_shot():
+    from brawl_ket.moves import DOS, KEY_SHOT
+    fight, log = key_exchange(rival=DOS, rival_x=420.0, frames=80,
+                              p2=lambda i: FighterInput(y=True) if i == 36 else IDLE)
+    assert fight.fighters["p2"].clipboard == (KEY_SHOT, Z_BASIS) and first(log, "copy", "p2") is not None
+
+
+def test_the_toss_fizzles_when_bob_is_hit_or_gone():
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    tossed(fight, 280.0, 100.0)
+    bob.decohere()
+    events = run(fight, 1)
+    assert fight.tosses == [] and "fizzle" in [e.kind for e in events]
+
+
+def test_while_bob_is_gone_x_is_her_own_small_photon():
+    from brawl_ket.moves import SOLO_PHOTON
+    fight, alice, bob, other = pair_fight(rival_x=420.0)
+    bob.decohere()
+    events = run(fight, 90, once(X))
+    assert fight.tosses == [] and alice.cooldowns["stand.X"] > 0
+    assert [e.kind for e in events if e.player == "p1" and e.kind == "projectile"] == ["projectile"]
+    assert other.health == ROBERT.health - SOLO_PHOTON.damage
+
+
+def test_teleport_swaps_them_at_once_with_a_flash_at_both_ends():
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    a0, b0 = alice.x, bob.x
+    log = [fight.step({"p1": DOWN_X if i == 0 else IDLE}) for i in range(10)]
+    at = first(log, "teleport")
+    assert at == ALICE_BOB.moves["crouch.X"].startup
+    assert (alice.x, bob.x) == (b0, a0) and alice.facing == bob.facing == 1     # a step back out of trouble
+    assert other.health == ROBERT.health
+
+
+def test_teleport_crosses_up_a_rival_standing_between_them():
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    run(fight, 1, DOWN_X)
+    other.x = alice.x - 20.0                # the rival steps in between them, in the startup
+    run(fight, ALICE_BOB.moves["crouch.X"].startup)
+    assert alice.x < other.x < bob.x        # Alice is suddenly on the far side ...
+    assert alice.facing == 1 and bob.facing == 1        # ... facing the rival, and Bob as ever as she does
+
+
+def test_no_teleport_while_bob_is_gone_and_he_never_echoes_it():
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    bob.decohere()
+    events = run(fight, 20, once(DOWN_X))
+    assert "teleport" not in [e.kind for e in events] and "crouch.X" not in alice.cooldowns
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    events = run(fight, 40, once(DOWN_X))
+    assert [e.kind for e in events].count("teleport") == 1      # one swap for both
+
+
+def test_bell_dive_comes_twice_once_per_jump_each():
+    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    starts = []
+    for i in range(80):
+        inp = FighterInput(up=True) if i == 0 else X if i in (10, 14) else IDLE
+        fight.step({"p1": inp})
+        for name, f in (("alice", alice), ("bob", bob)):
+            if f.action == "attack" and f.frame == 0 and f.move.name == "BELL DIVE":
+                starts.append((name, i))
+    assert starts == [("alice", 10), ("bob", 22)]           # the second press: once per jump

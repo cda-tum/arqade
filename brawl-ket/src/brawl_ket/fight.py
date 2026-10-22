@@ -36,6 +36,11 @@ from .config import (
     TRAP_LIFE,
     TRAP_MAX,
     TRAP_REACH,
+    TOSS_ARC,
+    TOSS_FRAMES,
+    TOSS_FROM,
+    TOSS_SIZE,
+    TOSS_TO,
 )
 from .echo import Echo
 from .fighter import IDLE, STUN_DECAY, Fighter, FighterInput
@@ -111,6 +116,28 @@ class Trap:
     def box(self) -> Rect:
         assert self.move.hitbox is not None
         return _world_box(self.x, 0.0, 1, self.move.hitbox)
+
+
+@dataclass
+class Toss:
+    """ALICE & BOB's KEY EXCHANGE in flight: the photon Alice tossed back, flying from her hand to
+    Bob's raised one along an arc for TOSS_FRAMES, in the colour she tossed it in. Then he fires
+    `shot` (Echo.receive). A rival's body or attack touching it takes it out, as does a rival's
+    shot; COPY catches it."""
+
+    owner: str
+    shot: Move          # what Bob fires once he has it (KEY_SHOT)
+    basis: str
+    x0: float           # where it left her hand: x, and height above the floor
+    y0: float
+    age: int = 0        # frames in the air
+    x: float = 0.0      # where its middle is now: x, and height above the floor
+    y: float = 0.0
+
+    @property
+    def box(self) -> Rect:
+        half = TOSS_SIZE / 2
+        return (self.x - half, FLOOR_Y - self.y - half, TOSS_SIZE, TOSS_SIZE)
 
 
 @dataclass
@@ -198,6 +225,7 @@ class Fight:
             f.rng = self.rng
         self.shots: list[Shot] = []
         self.traps: list[Trap] = []         # M-CUTIE's, oldest first
+        self.tosses: list[Toss] = []        # ALICE & BOB's KEY EXCHANGE photons in flight
         self.trap_grace: dict[Fighter, int] = {}    # a body just let go of a hold: frames no trap can catch it
         self.frames_left = ROUND_FRAMES
         self.hitstop = 0
@@ -231,10 +259,13 @@ class Fight:
             return []
 
         events: list[Event] = []
+        self._move_tosses(events)       # first: a toss thrown this frame shows in her hand
         self._step_fighters(inputs, events)
         self._push_apart()
         self._move_shots(events)
         self._catch(events)
+        self._intercept(events)
+        self._deliver(events)
         self._resolve_hits(events)
         self._step_traps()
         self.frames_left -= 1
@@ -247,6 +278,8 @@ class Fight:
         # Both fighters see where the rival stood at the START of the frame, so p1 and
         # p2 are treated alike (p1 stepping first must not change what p2 sees).
         start_x = {key: f.x for key, f in self.fighters.items()}
+        for key, echo in self.echoes.items():
+            self.fighters[key].paired = echo.here     # her X and TELEPORT need Bob
         for key, f in self.fighters.items():
             f.rival_boxes = self._reach(_other(key))
             self._fighter_events(key, f, f.step(inputs.get(key, IDLE), start_x[_other(key)]), events)
@@ -285,6 +318,11 @@ class Fight:
                 events.append(Event("projectile", key))
             elif kind == "trap":
                 self._set_trap(key, f, data["move"])
+            elif kind == "pass":        # KEY EXCHANGE: the toss leaves her hand
+                x0, y0 = f.x + f.facing * TOSS_FROM[0], f.y + TOSS_FROM[1]
+                self.tosses.append(Toss(key, data["move"].toss, f.attack_basis, x0, y0, x=x0, y=y0))
+            elif kind == "swap":
+                self._teleport(key, events)
             else:
                 events.append(Event(kind, key))
                 if kind == "land" and data["dive"] and f.move is not None \
@@ -292,6 +330,19 @@ class Fight:
                     self._landings[key] = _Landing(f.move)
                     error = basis.error_for(f.move.landing_colour, f.attack_basis)
                     events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
+
+    def _teleport(self, key: str, events: list[Event]) -> None:
+        """TELEPORT: Alice and Bob swap places at once, and she turns to face the rival (Bob, as
+        ever, faces as she does). Nothing happens if Bob decohered in its startup."""
+        echo = self.echoes.get(key)
+        if echo is None or not echo.here:
+            return
+        f, rival = self.fighters[key], self.fighters[_other(key)]
+        (f.x, f.y), (echo.x, echo.y) = (echo.x, echo.y), (f.x, f.y)
+        if rival.x != f.x:
+            f.facing = 1 if rival.x > f.x else -1
+        echo.facing = f.facing
+        events.append(Event("teleport", key, None, f.x, FLOOR_Y))
 
     def _push_apart(self) -> None:
         """The bodies are solid: two grounded fighters never stand closer than body_width."""
@@ -335,6 +386,65 @@ class Fight:
             s for i, s in enumerate(self.shots)
             if i not in dead and s.life > 0 and not self._off_stage(s)
         ]
+
+    def _move_tosses(self, events: list[Event]) -> None:
+        """KEY EXCHANGE photons fly on towards Bob's raised hand, wherever he is now; one whose
+        catcher is gone (decohered) or reeling from a hit fizzles."""
+        kept = []
+        for t in self.tosses:
+            bob = self.echoes[t.owner]
+            if not bob.here or bob.action in _STUNNED:
+                events.append(Event("fizzle", t.owner, None, t.x, FLOOR_Y - t.y))
+                continue
+            t.age += 1
+            k = min(1.0, t.age / TOSS_FRAMES)
+            ex, ey = bob.x + bob.facing * TOSS_TO[0], bob.y + TOSS_TO[1]
+            t.x = t.x0 + (ex - t.x0) * k
+            t.y = t.y0 + (ey - t.y0) * k + TOSS_ARC * 4 * k * (1 - k)
+            kept.append(t)
+        self.tosses = kept
+
+    def _intercept(self, events: list[Event]) -> None:
+        """Eve listens in: a toss that touches a rival's body (not one downed, getting up or
+        tunnelling), a rival's live hitbox or a rival's shot is taken out (the shot with it), and
+        nothing fires."""
+        kept = []
+        for t in self.tosses:
+            rival_key = _other(t.owner)
+            box = t.box
+            hit = None
+            for body in self.bodies(rival_key):
+                if body.action == "knockdown" or body.wakeup or body.intangible:
+                    continue
+                rects = body.box_rects() if body.boxed else [body.hurtbox]
+                m = body.move
+                if m is not None and m.hitbox is not None and body.phase == "active":
+                    rects.append(body.world_box(m.hitbox))
+                if any(_overlap(box, r) is not None for r in rects):
+                    hit = body
+                    break
+            shot = next((s for s in self.shots if s.owner == rival_key and _overlap(box, s.box) is not None), None)
+            if hit is None and shot is None:
+                kept.append(t)
+                continue
+            if shot is not None and hit is None:
+                self.shots.remove(shot)
+            events.append(Event("intercept", t.owner, None, t.x, FLOOR_Y - t.y))
+        self.tosses = kept
+
+    def _deliver(self, events: list[Event]) -> None:
+        """A toss that reached Bob's hand: he fires its shot (Echo.receive)."""
+        kept = []
+        for t in self.tosses:
+            if t.age < TOSS_FRAMES:
+                kept.append(t)
+                continue
+            bob = self.echoes[t.owner]
+            local: list[tuple[str, dict]] = []
+            bob.receive(t.shot, t.basis, local)
+            events.append(Event("catch", t.owner, None, t.x, FLOOR_Y - t.y))
+            self._fighter_events(t.owner, bob, local, events)
+        self.tosses = kept
 
     def _set_trap(self, key: str, f: Fighter, move: Move) -> None:
         """ION TRAP: a trap on the floor TRAP_REACH px in front of her, in her colour; a third
@@ -391,16 +501,28 @@ class Fight:
                     events.append(Event("copy", key, None, *where))
                     break
             else:
-                for rival in self.bodies(_other(key)):
-                    rm = rival.move
-                    if rival.action == "attack" and rm is not None and rm.field and rm.hitbox is not None \
-                            and rival.phase == "active":
-                        where = _overlap(rival.world_box(rm.hitbox), window)
-                        if where is not None:
-                            f.caught(rm, rival.attack_basis)
-                            rival.frame = rival.startup + rm.active     # its field is gone: into its recovery
-                            events.append(Event("copy", key, None, *where))
-                            break
+                for t in self.tosses:       # KEY EXCHANGE's toss, in flight: the shot it would become
+                    where = _overlap(t.box, window) if t.owner != key else None
+                    if where is not None:
+                        self.tosses.remove(t)
+                        f.caught(t.shot, t.basis)
+                        events.append(Event("copy", key, None, *where))
+                        break
+                else:
+                    self._catch_field(key, f, window, events)
+
+    def _catch_field(self, key: str, f: Fighter, window: Rect, events: list[Event]) -> None:
+        """COPY taking a rival's crackling field (CHARGE NOISE)."""
+        for rival in self.bodies(_other(key)):
+            rm = rival.move
+            if rival.action == "attack" and rm is not None and rm.field and rm.hitbox is not None \
+                    and rival.phase == "active":
+                where = _overlap(rival.world_box(rm.hitbox), window)
+                if where is not None:
+                    f.caught(rm, rival.attack_basis)
+                    rival.frame = rival.startup + rm.active     # its field is gone: into its recovery
+                    events.append(Event("copy", key, None, *where))
+                    break
 
     # --- hits ---------------------------------------------------------------------------
 
@@ -633,6 +755,7 @@ class Fight:
             events.append(Event("ko"))
             self.winner = None if h1 <= 0 and h2 <= 0 else ("p2" if h1 <= 0 else "p1")
             self.shots.clear()
+            self.tosses.clear()
             for key, f in self.fighters.items():
                 if f.health <= 0:
                     rival = self.fighters[_other(key)]

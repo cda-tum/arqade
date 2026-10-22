@@ -127,6 +127,12 @@ POSES: dict[str, Pose] = {
     "place": Pose(28, 95, -4, 30, -86, 40, 15, 30, 155),
     # M-CUTIE's air.X SPIN: in the air, the front leg straight out, arms flung wide (the look's SPIN)
     "spin": Pose(-4, 92, 92, 24, -60, 60, 150, 30, 150),
+    # ALICE & BOB's KEY EXCHANGE (their look's TOSS_A, CATCH and FIRE): Alice flicks the photon
+    # back underhand from her satchel side, the back hand behind her hip; Bob's hand raised to
+    # receive it; then his big stepping throw, the arm straight out
+    "toss": Pose(4, 26, -4, -24, -12, 40, 150, -70, -110),
+    "catch": Pose(-6, 26, -4, -24, -12, 150, 175, 30, 140),
+    "fire": Pose(14, 48, 8, -40, -26, 82, 84, -40, -70),
 }
 POSE_NAMES = tuple(POSES)
 

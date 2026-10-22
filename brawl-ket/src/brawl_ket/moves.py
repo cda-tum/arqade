@@ -95,6 +95,10 @@ class Move:
     trap: Move | None = None            # ION TRAP: sets a trap (fight.py, Trap) that closes with this move
     hold: bool = False                  # a trap's hold: hitstun with no push at all, hurt or not
     floor_recovery: bool = False        # SPIN: its recovery waits for the floor (a miss lands into it)
+    # ALICE & BOB (fight.py, Toss; echo.py):
+    toss: Move | None = None            # KEY EXCHANGE: a photon tossed back to Bob, who fires this move
+    alone: Move | None = None           # ... and the move a press makes instead while Bob is decohered
+    swap: bool = False                  # TELEPORT: Alice and Bob swap places (not while he is gone)
 
 
 @dataclass(frozen=True)
@@ -587,8 +591,37 @@ KID_BOXES = {
 }
 KID_NORMALS = MappingProxyType({slot: replace(ROBERT.moves[slot], hitbox=box) for slot, box in KID_BOXES.items()})
 
+# KEY EXCHANGE's shot, as Bob fires it once he has caught Alice's toss (fight.py, Toss): one strong
+# photon, a little faster than PHOTON and bigger, from his throwing hand, in the colour it was
+# tossed in. HIGH, as PHOTON: a crouch ducks it and a jump clears it; DOS can COPY it.
+KEY_SHOT = Move(
+    "KEY EXCHANGE", 6, 1, 16, None, OWN, HIGH,
+    damage=12, hitstun=20, knockback=4.0,
+    kind="projectile", cue="key_shot",
+    projectile=Projectile(4.5, Box(0, 60, 22, 22), 160),
+    poses=("catch", "fire", "fire"),
+)
+
+# X while Bob is decohered: Alice fires a plain small photon herself, so X is never dead.
+SOLO_PHOTON = Move(
+    "PHOTON", 12, 1, 18, None, OWN, HIGH,
+    damage=6, hitstun=16, knockback=2.5,
+    kind="projectile", cooldown=config.frames(2.5),
+    projectile=Projectile(4.0, Box(0, 48, 14, 14), 180),
+    poses=("cast_wind", "cast", "cast"),
+)
+
+# A steep diving kick, once per jump; Bob's echo of it comes a beat later, so the dive comes twice.
+BELL_DIVE = Move(
+    "BELL DIVE", 4, 40, 10, Box(6, 0, 24, 18), OWN, MID,
+    damage=8, hitstun=18, knockback=3.0,
+    kind="special", dive=(3.5, 11.0), once_per_jump=True, cue="bell_dive",
+    poses=("jump", "dive", "crouch"),
+)
+
 # Bob, the receiver: the second body of ALICE & BOB, never picked on his own. He has the kids'
-# normals (his echo of Alice's), and none of her ground specials.
+# normals and BELL DIVE (his echo of Alice's); not her ground specials: he receives KEY EXCHANGE
+# (KEY_SHOT) and TELEPORT moves them both.
 BOB = Character(
     name="BOB",
     build="bob",
@@ -598,7 +631,8 @@ BOB = Character(
     gravity=0.5,
     hurt_stand=Box(-13, 0, 26, 93),     # to about his drawn head's centre (104 px up), as ROBERT's
     hurt_crouch=Box(-15, 0, 30, 77),
-    moves=KID_NORMALS,
+    moves=MappingProxyType({**KID_NORMALS, "air.X": BELL_DIVE}),
+    extra=MappingProxyType({"catch": KEY_SHOT}),
 )
 
 ALICE_BOB = Character(
@@ -610,7 +644,29 @@ ALICE_BOB = Character(
     gravity=0.5,                        # (ROBERT's 144) and 44 frames in the air (his 48)
     hurt_stand=Box(-13, 0, 26, 86),     # to about her drawn head's centre (97 px up), as ROBERT's
     hurt_crouch=Box(-15, 0, 30, 70),
-    moves=KID_NORMALS,
+    moves=MappingProxyType({
+        **KID_NORMALS,
+        # Alice flicks a photon back underhand from her satchel side, along a short arc, into
+        # Bob's raised hand (fight.py, Toss: TOSS_FRAMES in the air); he fires KEY_SHOT. A rival's
+        # body or attack touching it in flight takes it out; DOS's COPY catches it. Its numbers
+        # are the shot's: the toss itself hurts nobody.
+        "stand.X": Move(
+            "KEY EXCHANGE", 8, 1, 18, None, OWN, HIGH,
+            damage=12, hitstun=20, knockback=4.0,
+            kind="special", toss=KEY_SHOT, alone=SOLO_PHOTON, cooldown=config.frames(2.5), cue="toss",
+            poses=("idle", "toss", "toss"),
+        ),
+        # Alice and Bob swap places at once, a flash at both ends (fight.py). With the rival
+        # between them it crosses them up; away from the rival, a quick step back.
+        "crouch.X": Move(
+            "TELEPORT", 6, 1, 14, None, OWN, MID,
+            damage=0, hitstun=1, knockback=0.0,
+            kind="special", swap=True, cooldown=config.frames(2.0),
+            poses=("crouch", "idle", "idle"),
+        ),
+        "air.X": BELL_DIVE,
+    }),
+    extra=MappingProxyType({"catch": KEY_SHOT, "alone": SOLO_PHOTON}),
     pair=BOB,
 )
 
