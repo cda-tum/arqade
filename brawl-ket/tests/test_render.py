@@ -1389,6 +1389,7 @@ def test_cpu_vs_cpu_names_both_sides_cpu(surface):
     title = M.FrameInput(activity=True)
     title.nav["p1"] = (0, 1)
     r.draw(m, m.update(title))
+    r.draw(m, m.update(title))                  # (the third row: CPU VS CPU)
     r.draw(m, m.update(M.FrameInput(activity=True, confirms={"p1": True, "p2": False})))
     assert m.state == M.SELECT and tags_of(m) == {"p1": "CPU1", "p2": "CPU2"}
     r.draw(m, [])
@@ -1583,3 +1584,17 @@ def test_the_fridge_lands_gold_on_the_locked_spot(surface):
         r.draw_fight(fight, fight.step({}))
     area = {tuple(surface.get_at((x, y)))[:3] for x in range(380, 520, 2) for y in range(FLOOR_Y - 200, FLOOR_Y, 2)}
     assert GOLD_PLATE in area
+
+
+def test_the_title_shows_the_cpus_level_in_its_colour(surface):
+    import random
+    from brawl_ket import match as M
+    from brawl_ket.render import LEVEL_COLOURS
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    seen = {}
+    for level in range(3):
+        m.level = level
+        r.draw(m, [])
+        seen[level] = {tuple(surface.get_at((x, y)))[:3] for x in range(200, 440, 2) for y in range(200, 290, 2)}
+    assert LEVEL_COLOURS["EASY"] in seen[0] and LEVEL_COLOURS["BRUTAL"] in seen[2]

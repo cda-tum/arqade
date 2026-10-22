@@ -65,6 +65,7 @@ from .fight import Fight
 from .kids import (BOB_ICON, bob_icon, dive_streaks, draw_decohered, draw_kid, draw_pair, flash, key_shot, key_sprite,
                    lob, swap_arc, tossed_key)
 from . import superart as SA
+from .bot import LEVELS
 from .fighter import Fighter
 from .fonts import load_font
 from .ink import _ball, _block, _boot, _poly, _pt, _towards, limb
@@ -97,7 +98,8 @@ SUPER_BAR_Y = 46
 SUPER_HALF_W = 56
 SUPER_BAR_H = 5
 SUPER_LABEL = "SUPER"
-SUPER_CALL = "SUPERposition!"       # only SUPER in capitals (the font has real lower case)
+SUPER_CALL = "SUPERposition!"
+LEVEL_COLOURS = {"EASY": P.GOOD, "TOUGH": P.GOLD, "BRUTAL": P.BAD}     # the CPU's levels on the title       # only SUPER in capitals (the font has real lower case)
 
 # The bases' colours: a body is drawn in its basis's, an attack in the colour of the basis it
 # changes (an X is green, a Z purple; a Y, a throw, both).
@@ -1744,21 +1746,44 @@ class Renderer:
         self._band(32, 132)
         self._logo(72)
         blit_center(surf, outlined("COLOUR MUST MATCH TO HURT", 8, P.MIST), (W / 2, 114))
-        # PLAY / CPU VS CPU / QUIT, in a box between the two fighters
-        box = pygame.Rect(0, 0, 200, 100)
-        box.center = (W // 2, 222)
+        # PLAY / VS CPU / CPU VS CPU / LEVEL / QUIT, in a box between the two fighters
+        box = pygame.Rect(0, 0, 244, 136)
+        box.center = (W // 2, 210)
         pygame.draw.rect(surf, P.INK, box.inflate(4, 4), border_radius=8)
         pygame.draw.rect(surf, P.NIGHT, box, border_radius=7)
         pygame.draw.rect(surf, P.MIST, box, 2, border_radius=7)
         for i, item in enumerate(M.TITLE_ITEMS):
             on = i == match.title_index
-            y = box.y + 22 + 28 * i
-            img = outlined(item, 16, P.GOLD if on else P.MIST, thick=2)
+            y = box.y + 20 + 24 * i
+            if item == M.LEVEL:             # LEVEL: the CPU's, in its colour, with arrows when picked
+                img = self._level_row(match, on)
+            else:
+                img = outlined(item, 16, P.GOLD if on else P.MIST, thick=2)
             blit_center(surf, img, (W / 2, y))
             if on:
                 nudge = 2 if (self.t // 15) % 2 else 0
                 left = W / 2 - img.get_width() / 2
                 blit_center(surf, outlined(">", 16, P.GOLD, thick=2), (left - 14 - nudge, y))
+
+    def _level_row(self, match: M.Match, on: bool) -> pygame.Surface:
+        """The title's LEVEL row: LEVEL and the CPU's level in its colour (EASY green, TOUGH gold,
+        BRUTAL red), between < and > while the row is picked."""
+        level = LEVELS[match.level]
+        parts = [outlined("LEVEL ", 16, P.GOLD if on else P.MIST, thick=2)]
+        value = outlined(level, 16, LEVEL_COLOURS[level], thick=2)
+        if on:
+            arrow = outlined("<", 8, P.GOLD)
+            parts += [arrow, outlined(" ", 8, P.GOLD), value, outlined(" ", 8, P.GOLD), outlined(">", 8, P.GOLD)]
+        else:
+            parts.append(value)
+        width = sum(p.get_width() for p in parts)
+        height = max(p.get_height() for p in parts)
+        row = pygame.Surface((width, height), pygame.SRCALPHA)
+        x = 0
+        for part in parts:
+            row.blit(part, (x, (height - part.get_height()) // 2))
+            x += part.get_width()
+        return row
 
     def _attract_overlay(self) -> None:
         self._band(H - 58, H)
@@ -1781,7 +1806,7 @@ class Renderer:
         blit_center(surf, outlined("VS", 32, P.GOLD, thick=2), (W / 2, 104))
         self._portraits(match)
         hint = "STICK: CHOOSE   A: READY   B: BACK"
-        if match.watching and match.picking:
+        if any(match.cpu.values()) and match.picking:
             hint = f"STICK: CHOOSE {self.tags[match.picking]}'S FIGHTER   A: READY   B: BACK"
         blit_center(surf, outlined(hint, 8, P.MIST), (W / 2, H - 5))
 
@@ -1864,7 +1889,7 @@ class Renderer:
                 surf.blit(portrait(M.ROSTER[i].name), tile)
         blink = (self.t // 8) % 2
         for key, inset, tag_side in (("p1", 0, -1), ("p2", 3, 1)):
-            if match.watching and match.picking not in (None, key) and not match.ready[key]:
+            if any(match.cpu.values()) and match.picking not in (None, key) and not match.ready[key]:
                 continue            # CPU VS CPU: the right CPU's cursor turns up once the left is READY
             tile = tiles[match.picks[key]]
             colour = PLAYER_COLORS[key]

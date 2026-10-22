@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import random
 from collections import deque
+from dataclasses import dataclass
 
 from . import basis
 from .config import CRASH_REACH, TRAP_MAX
@@ -95,16 +96,36 @@ def keep_clear_of(move) -> bool:
     return move.field or is_spin(move)
 
 
+@dataclass(frozen=True)
+class Skill:
+    """One CPU level (EASY, TOUGH, BRUTAL: the cabinet's AI precedent, ../AGENTS.md): a handful
+    of numbers, and the one Bot for all three."""
+
+    react: float        # 0..1: how soon and how often it reads and answers the rival (heights, switches)
+    strike: float       # times the odds of starting a string in reach
+    dodge: float        # times the odds a frame of getting out of a rival's super
+
+
+# EASY: a first-time visitor can beat it; TOUGH: the bot as it always was (the title demo's, the
+# balance's); BRUTAL: as close to perfect as it gets (tests/test_bot.py holds the ladder)
+SKILLS = {"EASY": Skill(0.35, 0.5, 0.3), "TOUGH": Skill(0.8, 1.0, 1.0), "BRUTAL": Skill(1.0, 1.6, 3.0)}
+LEVELS = tuple(SKILLS)
+
+
 def is_spin(move) -> bool:
     """SPIN: a move that hits again and again, sweeping forward from a hover, but is no field."""
     return bool(move.hit_every) and not move.field and move.hover and bool(move.lunge)
 
 
 class Bot:
-    def __init__(self, player: str, seed: int, skill: float = 0.8) -> None:
+    def __init__(self, player: str, seed: int, skill: float = 0.8, level: str | None = None) -> None:
         self.player = player
         self.rival = "p2" if player == "p1" else "p1"
+        level_skill = SKILLS[level] if level is not None else Skill(skill, 1.0, 1.0)
+        skill = level_skill.react
         self.skill = skill
+        self.strike = level_skill.strike
+        self.dodge = level_skill.dodge
         self.rng = random.Random(seed)
         # Reaction memory: the rival's stance as it was `delay` frames ago.
         self.delay = round(12 / skill)
@@ -268,7 +289,7 @@ class Bot:
         NINE LIVES and ONE-TIME PAD winding up."""
         m = rival.move
         if rival.action != "attack" or m is None or m.kind != "super" or me.action not in ("idle", "walk", "crouch") \
-                or self.rng.random() >= SUPER_DODGE_ODDS:
+                or self.rng.random() >= SUPER_DODGE_ODDS * self.dodge:
             return None
         if m.crash is not None and rival.phase == "startup" and dist <= CRASH_REACH + 10:
             return FighterInput(up=True, dx=-toward)
@@ -516,7 +537,7 @@ class Bot:
                 and roll < 0.01:
             return self._press("x", 0)                          # MEASURE
         if dist <= STRIKE_RANGE:
-            if roll < (KIDS_STRIKE_ODDS if me.char.pair is not None else 0.02) and ready:
+            if roll < (KIDS_STRIKE_ODDS if me.char.pair is not None else 0.02) * self.strike and ready:
                 if self.rng.random() < 0.2:
                     self.down = not self.down   # strike at the other height
                 button = self.matching(me, rival)

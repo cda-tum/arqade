@@ -463,3 +463,42 @@ def test_a_bot_walks_off_a_locked_ring(monkeypatch):
     bohr.target_x = 300.0
     inp = Bot("p1", 1).input(fight)
     assert inp.dx != 0 and not inp.up
+
+
+# --- the CPU's levels ---------------------------------------------------------------------------------
+
+
+def level_share(a: str, b: str, names=("ROBERT", "BOHR", "M-CUTIE"), seeds=range(8)) -> float:
+    """Level a's share of the decided rounds against level b, mirrors, from both sides."""
+    from brawl_ket.config import ROUND_FRAMES
+    from brawl_ket.moves import CHARACTERS
+    won = played = 0
+    for name in names:
+        for seed in seeds:
+            for flip in (False, True):
+                c = CHARACTERS[name]
+                fight = Fight({"p1": c, "p2": c}, seed=seed)
+                la, lb = (b, a) if flip else (a, b)
+                bots = {"p1": Bot("p1", seed, level=la), "p2": Bot("p2", seed + 1000, level=lb)}
+                for _ in range(2 * ROUND_FRAMES):
+                    if fight.over:
+                        break
+                    fight.step({k: x.input(fight) for k, x in bots.items()})
+                if fight.winner is not None:
+                    played += 1
+                    won += (fight.winner == "p1") != flip
+    return won / played
+
+
+def test_the_levels_are_a_ladder():
+    """BRUTAL beats TOUGH and TOUGH beats EASY, clearly (over every fighter's mirror: about 81% and
+    90%, tools-measured on 2026-10-22)."""
+    assert level_share("TOUGH", "EASY") >= 0.7
+    assert level_share("BRUTAL", "TOUGH") >= 0.65
+
+
+def test_a_bot_without_a_level_is_tough():
+    from brawl_ket.bot import SKILLS
+    plain, tough = Bot("p1", 1), Bot("p1", 1, level="TOUGH")
+    assert (plain.skill, plain.strike, plain.dodge) == (tough.skill, tough.strike, tough.dodge)
+    assert SKILLS["TOUGH"].react == 0.8

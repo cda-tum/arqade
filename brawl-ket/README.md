@@ -14,7 +14,7 @@ too hard to read).
 - **The game:** seven fighters (ROBERT, BOHR, PHOEBE, ERWIN, DOS, M-CUTIE and ALICE & BOB, two
   played as one), versus only, best of 3 rounds of 60 s.
 - **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat; ERWIN, Schrodinger's cat; DOS, a walking all-in-one computer; M-CUTIE, an android in a chandelier dress; ALICE & BOB, two kid couriers in matching hoodies) at 640x360 (x3 on the cabinet), the
-  title (PLAY / CPU VS CPU / QUIT) with a bot demo, a portrait-grid fighter select, stage select, a HOW TO PLAY card,
+  title (PLAY / VS CPU / CPU VS CPU / LEVEL / QUIT) with a bot demo, a portrait-grid fighter select, stage select, a HOW TO PLAY card,
   round calls and pause.
 - **Stages:** five backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
   for each match; the title demo always rolls), kept for all its rounds. Visual only:
@@ -68,7 +68,7 @@ colour from the wind-up on, so you see before contact whether it will match. A w
 
 ## The flow
 
-Title (PLAY / CPU VS CPU / QUIT) -> CHOOSE YOUR FIGHTER -> CHOOSE YOUR STAGE -> **HOW TO PLAY** ->
+Title (PLAY / VS CPU / CPU VS CPU / LEVEL / QUIT) -> CHOOSE YOUR FIGHTER -> CHOOSE YOUR STAGE -> **HOW TO PLAY** ->
 ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
 
 - **CPU VS CPU** is a match to watch: the game's CPU (`bot.py`, the title demo's) fights both
@@ -76,8 +76,16 @@ ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
   CPU's fighter, A, then the right one's (B takes the last pick back). There is no HOW TO PLAY
   card, and the pads do nothing in the rounds but pause (Start). The idle timeout doesn't run
   during the rounds, so a whole match plays out untouched; it still runs while paused and on
-  the result. A rematch is CPU VS CPU again. There is one CPU level so far (EASY / TOUGH /
-  BRUTAL and playing against the CPU are for later).
+  the result. A rematch is CPU VS CPU again.
+- **VS CPU:** one person against the CPU. The pad that picks VS CPU plays its own side (P1's
+  pad the left, P2's the right) and picks its fighter, then the CPU's; then HOW TO PLAY and
+  the match, as ever, with the CPU called CPU1 or CPU2.
+- **LEVEL** (the title's fourth row; left and right, or A, change it): the CPU's level for VS
+  CPU and CPU VS CPU, **EASY**, **TOUGH** or **BRUTAL**, kept until the game restarts. One bot
+  for all three (`bot.py`'s `Skill`: how fast it reacts, how often it starts a string, how
+  often it dodges a super); TOUGH is the bot as it always was (the title demo's, the balance
+  tool's). Bot against bot, BRUTAL beats TOUGH about 81% of the time and TOUGH beats EASY about
+  90% (`tests/test_bot.py` holds the ladder).
 
 - **CHOOSE YOUR FIGHTER** is Street Fighter style: a grid of portraits along the
   bottom (four over four, the second row half a tile to the right: ROBERT, BOHR, PHOEBE, ERWIN,
@@ -211,7 +219,7 @@ uv run python tools/balance.py                      # bot-against-bot win rates 
 | `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR, PHOEBE, ERWIN, DOS, M-CUTIE (her six waves, one per step) and ALICE & BOB (with BOB, the second body). |
 | `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). THE BOX's 50/50s come from the fight's own seeded random.Random: the same seed and inputs give the same round. M-CUTIE's charge is the fighter's "charging" state, her traps the fight's `Trap`s. ALICE & BOB's Bob is a second body (`Fight.echoes`, `Fight.bodies`); KEY EXCHANGE's photon in flight is a `Toss`. Pure. |
 | `echo.py` | Bob, ALICE & BOB's second body: a Fighter that replays Alice's inputs 12 frames later and shares her health and basis; his walk back behind her, decoherence and return. Pure. |
-| `match.py` | Title (PLAY / CPU VS CPU / QUIT), select, stage select, HOW TO PLAY, rounds, the result, pause, idle and the attract demo. Pure. |
+| `match.py` | Title (PLAY / VS CPU / CPU VS CPU / LEVEL / QUIT), select, stage select, HOW TO PLAY, rounds, the result, pause, idle and the attract demo. Pure. |
 | `tutorial.py` | The HOW TO PLAY card's scene: a real Fight played from a script, looping. Pure. |
 | `stages.py` | The backdrops, each drawn once (with its blinking lights); no green or purple in a large area, so the fighters stay readable. |
 | `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens (HOW TO PLAY draws its scene with a second, off-screen renderer). |

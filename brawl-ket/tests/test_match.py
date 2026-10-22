@@ -118,12 +118,13 @@ def test_a_or_start_on_the_title_goes_to_select() -> None:
 
 
 def test_the_title_menu_ends_with_quit_and_the_stick_moves_through_it() -> None:
-    assert TITLE_ITEMS == ("PLAY", "CPU VS CPU", "QUIT")
+    assert TITLE_ITEMS == ("PLAY", "VS CPU", "CPU VS CPU", "LEVEL", "QUIT")
     m = Match(random.Random(1))
     assert "blip" in cues(m.update(press("down", "p2")))
-    assert TITLE_ITEMS[m.title_index] == "CPU VS CPU"
-    m.update(press("down"))
-    assert TITLE_ITEMS[m.title_index] == "QUIT"
+    assert TITLE_ITEMS[m.title_index] == "VS CPU"
+    for want in ("CPU VS CPU", "LEVEL", "QUIT"):
+        m.update(press("down"))
+        assert TITLE_ITEMS[m.title_index] == want
     m.update(press("down"))                 # round again
     assert TITLE_ITEMS[m.title_index] == "PLAY"
     m.update(press("up"))
@@ -903,6 +904,7 @@ def test_the_demo_plays_alice_and_bob_with_their_bot() -> None:
 
 def to_cpu_select(m: Match, kind: str = "confirm") -> None:
     m.update(press("down"))
+    m.update(press("down"))
     assert TITLE_ITEMS[m.title_index] == "CPU VS CPU"
     m.update(press(kind))
     assert m.state == SELECT and m.watching
@@ -1043,3 +1045,74 @@ def test_a_ko_by_a_super_plays_out_twice_as_long_in_slow_motion() -> None:
     assert m.state == ROUND_END and m.ko
     slow = steps_of(m, 2 * config.KO_SLOW_FRAMES)
     assert slow == 2 * config.KO_SLOW_FRAMES // config.KO_SLOW_RATE
+
+
+# --- VS CPU and the CPU's level ------------------------------------------------------------------
+
+
+def to_row(m: Match, item: str, player: str = "p1") -> None:
+    while TITLE_ITEMS[m.title_index] != item:
+        m.update(press("down", player))
+
+
+def test_the_level_row_cycles_easy_tough_brutal_and_is_kept():
+    from brawl_ket.bot import LEVELS
+    assert LEVELS == ("EASY", "TOUGH", "BRUTAL")
+    m = Match(random.Random(1))
+    assert LEVELS[m.level] == "TOUGH"
+    to_row(m, "LEVEL")
+    assert "blip" in cues(m.update(press("right")))
+    assert LEVELS[m.level] == "BRUTAL"
+    m.update(press("right"))
+    assert LEVELS[m.level] == "EASY"                # round again
+    m.update(press("left"))
+    assert LEVELS[m.level] == "BRUTAL"
+    m.update(press("confirm"))                      # A on LEVEL cycles too
+    m.update(press("confirm"))
+    assert LEVELS[m.level] == "TOUGH" and m.state == TITLE
+    m.update(press("start"))                        # Start still plays (two people)
+    assert m.state == SELECT and not any(m.cpu.values())
+    m._to_title()
+    assert LEVELS[m.level] == "TOUGH"
+
+
+@pytest.mark.parametrize("who", ["p1", "p2"])
+def test_vs_cpu_the_pad_that_picked_it_plays_and_picks_first(who):
+    m = Match(random.Random(1))
+    before = dict(m.picks)
+    to_row(m, "VS CPU", who)
+    m.update(press("confirm", who))
+    other = "p2" if who == "p1" else "p1"
+    assert m.state == SELECT and m.cpu == {who: False, other: True} and not m.watching
+    assert m.picking == who
+    m.update(press("right", who))
+    m.update(press("confirm", who))
+    assert m.picking == other
+    m.update(press("right", who))
+    m.update(press("right", who))
+    m.update(press("confirm", who))
+    assert m.state == STAGE_SELECT
+    assert m.picks[who] == before[who] + 1 and m.picks[other] == before[other] + 2
+
+
+def test_vs_cpu_shows_how_to_play_and_the_cpu_fights_its_side_at_the_level():
+    from brawl_ket.bot import LEVELS, SKILLS
+    m = Match(random.Random(1))
+    to_row(m, "LEVEL")
+    m.update(press("right"))                        # BRUTAL
+    to_row(m, "VS CPU")
+    m.update(press("confirm"))
+    m.update(press("confirm"))
+    m.update(press("confirm"))
+    run(m, STAGE_LOCK)
+    m.update(press("confirm"))
+    assert m.state == TUTORIAL                      # a person plays: the card
+    past_tutorial(m)
+    assert set(m.cpu_bots) == {"p2"} and m.cpu_bots["p2"].skill == SKILLS["BRUTAL"].react
+    assert LEVELS[m.level] == "BRUTAL"
+    run(m, config.ROUND_INTRO_FRAMES)
+    walk = FrameInput(activity=True)
+    walk.fighters["p1"] = FighterInput(dx=1)
+    x = m.fight.fighters["p1"].x
+    run(m, 10, walk)
+    assert m.fight.fighters["p1"].x > x             # the person's pad moves the person's fighter
