@@ -1491,3 +1491,42 @@ def test_choose_your_fighter_lists_the_super_as_a_fourth_row(surface):
 def test_how_to_play_lists_a_plus_b():
     from brawl_ket.render import BUTTON_JOBS
     assert ("A+B", "SUPER: FULL BAR") in BUTTON_JOBS
+
+
+def test_the_error_window_is_the_looks(surface):
+    from brawl_ket.dos import BSOD_BLUE, draw_error_window
+    surface.fill((0, 0, 0))
+    win = draw_error_window(surface, (320, 200), "ROBERT")
+    assert win.midbottom == (320, 200) and win.w >= 160
+    assert tuple(surface.get_at((win.x + 2, win.y + 2)))[:3] == P.MIST            # the title bar
+    assert tuple(surface.get_at((win.x + 3, win.centery)))[:3] == BSOD_BLUE         # the blue body
+    body = {tuple(surface.get_at((x, y)))[:3] for x in range(win.x, win.right) for y in range(win.y + 14, win.y + 40)}
+    assert P.WHITE in body                                                          # its white text
+
+
+def test_a_frozen_rival_glitches_under_its_window_and_the_landing_flashes_blue(surface):
+    from brawl_ket.config import SUPER_FREEZE
+    from brawl_ket.dos import BSOD_BLUE
+    from brawl_ket.fight import Fight
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import BLUE_SCREEN, CHARACTERS
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["DOS"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 250.0, 400.0
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}))
+    for _ in range(SUPER_FREEZE + BLUE_SCREEN.startup + 4):
+        r.draw_fight(fight, fight.step({}))
+    assert fight.fighters["p2"].glitch > 0 and "p1" in r.crashes
+    above = {tuple(surface.get_at((400 + dx, FLOOR_Y - 180 + dy)))[:3] for dx in range(-60, 60, 3) for dy in range(0, 60, 3)}
+    assert BSOD_BLUE in above                                   # the window over their head
+    flashed = False
+    for _ in range(60):
+        events = fight.step({})
+        r.draw_fight(fight, events)
+        if any(e.kind == "bsod_land" for e in events):
+            corner = tuple(surface.get_at((INTERNAL_WIDTH - 5, INTERNAL_HEIGHT - 5)))[:3]
+            flashed = corner == BSOD_BLUE
+            break
+    assert flashed                                              # the whole screen, for that frame

@@ -267,3 +267,44 @@ def draw_dos(surf, j, facing, case, strike=None, led=False, mood="calm", eject=F
     _block(surf, j["hand_f"], w // 2 + 2, BEIGE if arm is case else P.lighten(arm, 0.5))
     j["slot"] = at(neck, slot_y, 0)
     return j
+
+
+# --- BLUE SCREEN OF DEATH (SUPERposition; its look: docs/superpowers/specs/2026-10-22-brawl-ket-superposition-
+# bsod-look.py, variant B) -------------------------------------------------------------------------------------
+
+BSOD_BLUE = (0, 0, 168)
+WINDOW_W, WINDOW_H = 170, 62
+
+
+def draw_error_window(surf, midbottom, name: str):
+    """The classic error box over a frozen rival: a grey title bar FATAL EXCEPTION, then white on
+    blue "<NAME>.EXE has / stopped responding", and an OK button. Returns its rect."""
+    from .fonts import load_font
+    f8 = load_font(8)
+    win = pygame.Rect(0, 0, WINDOW_W, WINDOW_H)
+    win.midbottom = (round(midbottom[0]), round(midbottom[1]))
+    pygame.draw.rect(surf, P.INK, win.inflate(4, 4))
+    surf.fill(BSOD_BLUE, win)
+    surf.fill(P.MIST, (win.x, win.y, win.w, 11))
+    title = f8.render("FATAL EXCEPTION", False, BSOD_BLUE)
+    surf.blit(title, title.get_rect(center=(win.centerx, win.y + 6)))
+    surf.blit(f8.render(f"{name}.EXE has", False, P.WHITE), (win.x + 8, win.y + 18))
+    surf.blit(f8.render("stopped responding", False, P.WHITE), (win.x + 8, win.y + 30))
+    ok = pygame.Rect(0, 0, 32, 12)
+    ok.midbottom = (win.centerx, win.bottom - 4)
+    surf.fill(P.MIST, ok)
+    label = f8.render("OK", False, BSOD_BLUE)
+    surf.blit(label, label.get_rect(center=ok.center))
+    return win
+
+
+def glitch_layer(layer, rect, t: int):
+    """A frozen body, cut from its own layer (`rect`): tinted blue-white and sliced into rows of 6 px,
+    every third nudged sideways a few px, the nudges shifting with `t`."""
+    sub = layer.subsurface(rect).copy()
+    sub.fill((120, 150, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
+    out = pygame.Surface(sub.get_size(), pygame.SRCALPHA)
+    for y in range(0, sub.get_height(), 6):
+        dx = ((y * 7 + t) % 11) - 5 if (y // 6) % 3 == 0 else 0
+        out.blit(sub, (dx, y), (0, y, sub.get_width(), 6))
+    return out

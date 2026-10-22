@@ -28,6 +28,8 @@ from . import basis
 from .config import (
     CARD_FRAMES,
     CHARGE_CAP,
+    CRASH_HOLD,
+    CRASH_REACH,
     DECOHERE_FADE,
     DRIVE_SLOT_Y,
     FLOOR_Y,
@@ -46,7 +48,7 @@ from .config import (
     TOSS_TO,
 )
 from .cutie import JUMP_SWING, GOLD_PLATE, draw_charging, draw_cutie, draw_spin, draw_trap, draw_wave, halo
-from .dos import BEIGE, CLIP_W, clip_icon, draw_dos, draw_floppy
+from .dos import BEIGE, BSOD_BLUE, CLIP_W, clip_icon, draw_dos, draw_error_window, draw_floppy, glitch_layer
 from .erwin import (
     EYE,
     FADE_STEPS,
@@ -296,6 +298,13 @@ def list_top(char: Character) -> int:
 def move_label(move) -> str:
     """A special's name as CHOOSE YOUR FIGHTER's list shows it: in full where it fits."""
     return MOVE_LABELS.get(move.name, move.name)
+
+
+def exe_name(f) -> str:
+    """The name the BLUE SCREEN's error window gives a frozen body: ALICE or BOB for the pair."""
+    if f.char.pair is not None:
+        return "ALICE"
+    return "BOB" if f.char.name == "BOB" else f.char.name
 
 
 def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
@@ -642,6 +651,10 @@ class Renderer:
         return self._previews[name]
 
     def _reset(self) -> None:
+        self.crashes: dict[str, tuple[float, int]] = {}     # BLUE SCREEN OF DEATH: whose strip (DOS's x, age)
+        self.bsod_flash = 0                                 # ... and the landing's blue frame
+        self._glitch = pygame.Surface((W, H), pygame.SRCALPHA)
+        self._windows: list[tuple[float, float, str]] = []     # ... the frozen bodies' error windows, to draw
         self.trail = {p: 0.0 for p in PLAYERS}          # the damage trail on each bar
         self.trail_wait = {p: 0 for p in PLAYERS}
         self.last_health = {p: 0.0 for p in PLAYERS}
@@ -684,6 +697,14 @@ class Renderer:
         ox, oy = self._shake_offset()
         surf.blit(self.stage, (ox - MARGIN, oy - MARGIN))
         self._blink(ox, oy)
+        for key, (x, age) in list(self.crashes.items()):   # BLUE SCREEN OF DEATH: DOS's reach, on the floor
+            if age >= CRASH_HOLD:
+                del self.crashes[key]
+                continue
+            self.crashes[key] = (x, age + 1)
+            strip = pygame.Surface((2 * CRASH_REACH, 18), pygame.SRCALPHA)
+            strip.fill((*BSOD_BLUE, 140))
+            surf.blit(strip, (round(x) - CRASH_REACH + ox, FLOOR_Y - 9 + oy))
 
         order = sorted(PLAYERS, key=lambda p: fight.fighters[p].action == "attack")
         for t in fight.traps:                   # on the floor, under everyone
@@ -698,8 +719,11 @@ class Renderer:
         heads = {}
         for p in order:
             if p in fight.echoes:               # Bob first: he stands behind her
-                self._echo(p, fight.echoes[p], ox, oy)
-            heads[p] = self._fighter(p, fight.fighters[p], ox, oy)
+                self._frozen_or(fight.echoes[p], lambda: self._echo(p, fight.echoes[p], ox, oy))
+            heads[p] = self._frozen_or(fight.fighters[p], lambda: self._fighter(p, fight.fighters[p], ox, oy))
+        for x, y, name in self._windows:        # BLUE SCREEN OF DEATH: the error windows, over the bodies
+            draw_error_window(surf, (x + ox, y + oy), name)
+        self._windows = []
         for t in fight.tosses:
             self._toss(fight, t, ox, oy)
         for p in self.teleported:               # ... and the swap's arc over them
@@ -716,6 +740,9 @@ class Renderer:
             self._super_call(fight)
         self._draw_effects(0, 0, world=False)
         self._advance()
+        if self.bsod_flash:                     # the BLUE SCREEN's drop lands: one frame all blue
+            surf.fill(BSOD_BLUE)
+            self.bsod_flash = 0
 
     # --- effects ----------------------------------------------------------------------------
 
@@ -734,6 +761,15 @@ class Renderer:
             elif e.kind == "block":
                 color = ERROR_COLOUR.get(e.error or basis.X, P.WHITE)
                 self.effects.append(Effect("ping", e.x, e.y, PING_FRAMES, PING_FRAMES, color))
+            elif e.kind == "crash" and self._fight is not None:
+                dos = next((k for k, f in self._fight.fighters.items()
+                            if f.move is not None and f.move.crash is not None), None)
+                if dos is not None and dos not in self.crashes:
+                    self.crashes[dos] = (self._fight.fighters[dos].x, 0)
+            elif e.kind == "bsod_land":
+                self.bsod_flash = 1
+                self.effects.append(Effect("popup", e.x + 50, FLOOR_Y - 150, POPUP_FRAMES, POPUP_FRAMES,
+                                           P.WHITE, "CRASH!"))
             elif e.kind == "switch" and e.player:
                 for body in (e.player, f"{e.player}/bob"):      # the pair's colour is one
                     self.body_flash[body] = (P.WHITE, SWITCH_FLASH_FRAMES)
@@ -974,6 +1010,24 @@ class Renderer:
         b = (bob.x + bob.facing * TOSS_TO[0] + ox, FLOOR_Y - bob.y - TOSS_TO[1] + oy)
         c = lob(self.surface, a, b, colour, k_at=min(1.0, t.age / TOSS_FRAMES), height=TOSS_ARC, item=False)
         tossed_key(self.surface, c, colour, t.age)
+
+    def _frozen_or(self, f, draw):
+        """Draw a body with `draw`; one frozen by the BLUE SCREEN OF DEATH is drawn to a layer of
+        its own, glitched (dos.glitch_layer), and its error window pops up over its head."""
+        if f.glitch <= 0:
+            return draw()
+        real, self.surface = self.surface, self._glitch
+        self._glitch.fill((0, 0, 0, 0))
+        try:
+            out = draw()
+        finally:
+            self.surface = real
+        rect = pygame.Rect(0, 0, 170, 180)            # round the body and its reach, with room for the shake
+        rect.midbottom = (round(f.x), FLOOR_Y - round(f.y) + 8)
+        rect = rect.clip(self._glitch.get_rect())
+        self.surface.blit(glitch_layer(self._glitch, rect, self.t), rect)
+        self._windows.append((f.x, FLOOR_Y - f.y - 140, exe_name(f)))    # over everyone: drawn after the bodies
+        return out
 
     def _fighter(self, key: str, f: Fighter, ox: int, oy: int) -> tuple[float, float]:
         """One body (`key`: its player's, or "p1/bob" for p1's Bob): pose, colours, its moves' art."""

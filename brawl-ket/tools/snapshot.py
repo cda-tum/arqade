@@ -30,6 +30,8 @@ Writes:
   waiting) and coming back;
 - screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
 - screen_select_cutie.png: CHOOSE YOUR FIGHTER on M-CUTIE (P1, ready: the second row) and DOS (P2);
+- super_bar.png, super_call.png, super_bsod_freeze.png, super_bsod_flash.png, super_bsod_crash.png:
+  SUPERposition's bar (DOS full, ROBERT a third of purple), the call, and DOS's BLUE SCREEN OF DEATH;
 - screen_select_random.png: CHOOSE YOUR FIGHTER on RANDOM (P1, a silhouette under the "?") and
   ROBERT (P2);
 - screen_select_kids.png: CHOOSE YOUR FIGHTER on ALICE & BOB (P1, ready) and M-CUTIE (P2), and
@@ -287,6 +289,40 @@ def select_frame(out_dir: str) -> None:
         for _ in range(4):
             r.draw(m, [])
         save(surface, out_dir, name)
+
+
+def super_frames(out_dir: str) -> None:
+    """SUPERposition: the HUD bar half full and full, the call, and DOS's BLUE SCREEN OF DEATH
+    (the freeze, and the frame his drop lands)."""
+    from brawl_ket import basis
+    from brawl_ket.config import SUPER_FREEZE
+    from brawl_ket.fight import Fight
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import BLUE_SCREEN
+    from brawl_ket.superpos import FULL
+    surface = pygame.Surface((W, H))
+    r = Renderer(surface)
+    fight = Fight({"p1": DOS, "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 250.0, 400.0
+    fight.meters["p2"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL // 3}
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r.draw_fight(fight, [], {"p1": 0, "p2": 0})
+    save(surface, out_dir, "super_bar.png")
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}), {"p1": 0, "p2": 0})
+    for _ in range(12):
+        r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
+    save(surface, out_dir, "super_call.png")
+    for _ in range(SUPER_FREEZE - 12 + BLUE_SCREEN.startup + 6):
+        r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
+    save(surface, out_dir, "super_bsod_freeze.png")
+    for _ in range(60):
+        events = fight.step({})
+        r.draw_fight(fight, events, {"p1": 0, "p2": 0})
+        if any(e.kind == "bsod_land" for e in events):
+            save(surface, out_dir, "super_bsod_flash.png")
+            r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
+            save(surface, out_dir, "super_bsod_crash.png")
+            break
 
 
 def screen_frames(out_dir: str) -> None:
@@ -547,6 +583,7 @@ def main(argv: list[str]) -> None:
     find_frames(out_dir, (ROBERT, BOHR), "vs")
     screen_frames(out_dir)
     select_frame(out_dir)
+    super_frames(out_dir)
 
 
 if __name__ == "__main__":

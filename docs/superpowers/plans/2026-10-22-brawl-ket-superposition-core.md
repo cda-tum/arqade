@@ -1659,7 +1659,18 @@ with:
             heads[p] = self._frozen_or(fight.fighters[p], lambda: self._fighter(p, fight.fighters[p], ox, oy))
 ```
 
-and at the end of `draw_fight`, after `self._advance()`, add:
+then, right after that loop, draw the frozen bodies' error windows over everyone (in `draw_fight`,
+before `for t in fight.tosses:`):
+
+```python
+        for x, y, name in self._windows:        # BLUE SCREEN OF DEATH: the error windows, over the bodies
+            draw_error_window(surf, (x + ox, y + oy), name)
+        self._windows = []
+```
+
+and add `self._windows: list[tuple[float, float, str]] = []` to `_reset` with the three above.
+
+At the end of `draw_fight`, after `self._advance()`, add:
 
 ```python
         if self.bsod_flash:                     # the BLUE SCREEN's drop lands: one frame all blue
@@ -1681,11 +1692,11 @@ Add the method after `_echo`:
             out = draw()
         finally:
             self.surface = real
-        rect = pygame.Rect(0, 0, 120, 180)            # round the body, with room for the screen shake
+        rect = pygame.Rect(0, 0, 170, 180)            # round the body and its reach, with room for the shake
         rect.midbottom = (round(f.x), FLOOR_Y - round(f.y) + 8)
         rect = rect.clip(self._glitch.get_rect())
         self.surface.blit(glitch_layer(self._glitch, rect, self.t), rect)
-        draw_error_window(self.surface, (f.x, FLOOR_Y - f.y - 140), exe_name(f))
+        self._windows.append((f.x, FLOOR_Y - f.y - 140, exe_name(f)))    # over everyone: drawn after the bodies
         return out
 ```
 
