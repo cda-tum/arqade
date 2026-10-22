@@ -156,6 +156,15 @@ def build_sfx() -> dict[str, list[int]]:
         "crt_drop": mix(tone(90, 0.2, 0.35, "sine", decay=10, slide=0.5), noise_wave(0.15, 0.25, decay=18, hold=5, seed=35)),
         "copy": concat(tone(c("A5"), 0.03, 0.18, "pulse"), tone(0, 0.02, 0), tone(c("A5"), 0.03, 0.18, "pulse")),
         "paste": concat(tone(c("A5"), 0.03, 0.18, "pulse"), tone(0, 0.02, 0), tone(c("E6"), 0.07, 0.2, "pulse", decay=12)),
+        # M-CUTIE: a blip for each charge step, a whole tone higher each time; the wave's whoosh,
+        # deeper the bigger it is; ION TRAP's click and hum, and its snap; SPIN's whirr
+        **{f"charge{n}": tone(c("C5", 2 * (n - 1)), 0.05, 0.18, "pulse", decay=14) for n in range(1, 7)},
+        **{f"wave{n}": mix(tone(900 - 100 * n, 0.2, 0.16, "triangle", decay=7, slide=0.5),
+                           noise_wave(0.18, 0.08 + 0.02 * n, decay=12, hold=1 + n, seed=40 + n)) for n in range(1, 7)},
+        "trap_set": concat(tone(c("D6"), 0.02, 0.18, "pulse"), tone(110, 0.25, 0.12, "sine", decay=4)),
+        "trap_close": mix(tone(c("A6"), 0.04, 0.2, "square", decay=40, slide=0.5),
+                          noise_wave(0.05, 0.25, decay=60, hold=1, seed=47)),
+        "spin": mix(tone(240, 0.3, 0.14, "saw", decay=3, slide=1.6), noise_wave(0.3, 0.08, decay=4, hold=3, seed=49)),
     }
 
 
@@ -168,15 +177,15 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 "box_split": "box_split", "box_collapse": "box_collapse", "pounce": "pounce", "box_drop": "box_drop",
                 "floppy": "floppy", "mouse": "mouse", "crt_drop": "crt_drop", "copy": "copy",
                 "paste": "paste",
-                # M-CUTIE (stand-ins until her own sounds: Task 3); "trap" is the fighter's own,
-                # which the fight turns into a trap on the floor
-                **{f"charge{n}": None for n in range(1, 7)}, **{f"wave{n}": "photon" for n in range(1, 7)},
-                "trap": None, "trap_set": "blip", "trap_close": None, "spin": "swing",
+                # M-CUTIE; "trap" is the fighter's own, which the fight turns into a trap on the floor
+                **{f"charge{n}": f"charge{n}" for n in range(1, 7)}, **{f"wave{n}": f"wave{n}" for n in range(1, 7)},
+                "trap": None, "trap_set": "trap_set", "trap_close": "trap_close", "spin": "spin",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw
               "laser": "photon",    # a LASER is a projectile too: its zap, not the photon's
               "floppy": "photon",   # ... and so are a FLOPPY
-              "paste": "photon"}    # ... and a PASTE
+              "paste": "photon",    # ... and a PASTE
+              **{f"wave{n}": "photon" for n in range(1, 7)}}    # ... and M-CUTIE's wave
 
 
 def sounds_for(events: list) -> list[str]:

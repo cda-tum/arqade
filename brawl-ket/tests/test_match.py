@@ -811,3 +811,10 @@ def test_m_cutie_starts_every_round_with_no_traps() -> None:
     m.fight.traps.append(Trap("p1", TRAP_HOLD, 300.0, "Z"))
     ko(m, "p2")
     assert m.state == ROUND_INTRO and m.fight.traps == []
+
+
+def test_m_cutie_is_down_a_row_from_robert_and_back_up() -> None:
+    from brawl_ket.match import ROSTER, grid_move
+    assert ROSTER[5].name == "M-CUTIE"
+    assert grid_move(0, 0, 1) == 5 and grid_move(5, 0, -1) == 0 and grid_move(1, 0, 1) == 1
+    assert grid_move(5, 1, 0) == 0 and grid_move(0, -1, 0) == 5       # and round the roster

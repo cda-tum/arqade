@@ -315,9 +315,10 @@ def test_a_live_strike_leaves_a_trail(surface):
     assert len(r.trails["p1"]) >= 2
 def test_the_teaching_text_is_ascii_capitals():
     from brawl_ket.render import (ANY_BUTTON, BUTTON_JOBS, CARD_LINES, CLASSICAL_LINES, GOAL_LINES, HINT, LESSON_LINES,
-                                  RULE_LINES, TRAITS)
+                                  MOVE_LABELS, RULE_LINES, TRAITS)
     parts = (*CARD_LINES, *LESSON_LINES)
-    for text in (HINT, ANY_BUTTON, *RULE_LINES, *CLASSICAL_LINES, *TRAITS.values(), *GOAL_LINES, *(job for _b, job in BUTTON_JOBS),
+    for text in (HINT, ANY_BUTTON, *RULE_LINES, *CLASSICAL_LINES, *TRAITS.values(), *MOVE_LABELS.values(),
+                 *GOAL_LINES, *(job for _b, job in BUTTON_JOBS),
                  *("".join(t for t, _ in line) for line in parts)):
         assert text.isascii() and text == text.upper(), text
 
@@ -683,7 +684,8 @@ def test_the_select_panels_say_what_each_fighter_is():
     assert text["DOS"] == ["SLOW AND CLASSICAL", "A AND X: YOUR COLOUR, B: THE OTHER", "Y: COPY, THEN PASTE",
                            "ALWAYS GREEN"]
     assert panel_lines(CHARACTERS["DOS"])[-1][1] == GREEN
-    for name in ("ROBERT", "BOHR", "PHOEBE"):
+    assert text["M-CUTIE"][0] == "PATIENT AND TECHNICAL"
+    for name in ("ROBERT", "BOHR", "PHOEBE", "M-CUTIE"):
         assert text[name][1:] == ["A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR"], name
 
 
@@ -706,7 +708,7 @@ def test_the_title_still_shows_both_colours(surface):
     r = Renderer(surface)
     r.draw(M.Match(random.Random(1)), [])
     seen = {tuple(surface.get_at((x, y)))[:3] for x in range(440, 481, 2) for y in range(FLOOR_Y - 110, FLOOR_Y - 40, 2)}
-    assert PURPLE in seen               # ERWIN on the right: DOS, last in the roster, can't be purple
+    assert PURPLE in seen               # M-CUTIE on the right, the last fighter who can switch
 
 
 def test_every_fighter_has_a_portrait_framed_on_its_head():
@@ -936,3 +938,41 @@ def test_a_closing_trap_snaps_a_ring_shut(surface):
     for _ in range(20):
         r.draw_fight(fight, [])
     assert r.effects == []
+
+
+def test_her_specials_read_in_full_where_they_fit_and_shortened_on_the_select_screen():
+    from brawl_ket.moves import M_CUTIE
+    from brawl_ket.render import LIST_NAME_X, LIST_W, X_INPUTS, font, move_label
+    pygame.init()
+    assert [move_label(M_CUTIE.moves[s]) for s, _how in X_INPUTS] == ["AMP. AMPLIFICATION", "ION TRAP", "SPIN"]
+    assert M_CUTIE.moves["stand.X"].name == "AMPLITUDE AMPLIFICATION"     # the full name, everywhere else
+    chip = font(8).size("YOURS")[0] + 3
+    for c in CHARACTERS.values():
+        for slot, how in X_INPUTS:
+            assert font(8).size(how)[0] < LIST_NAME_X, how
+            assert LIST_NAME_X + font(8).size(move_label(c.moves[slot]))[0] + 4 <= LIST_W - chip, (c.name, slot)
+
+
+def test_the_lists_of_specials_clear_the_two_rows_of_portraits():
+    from brawl_ket import match as M
+    from brawl_ket.render import LIST_GAP, LIST_W, PORTRAIT, PORTRAIT_GAP, PORTRAIT_Y, SIDE_X, list_top
+    rows = -(-len(M.ROSTER) // M.ROSTER_COLS)
+    assert (len(M.ROSTER), M.ROSTER_COLS, rows) == (6, 5, 2)                 # M-CUTIE starts the second row
+    grid_top = PORTRAIT_Y - (rows - 1) * (PORTRAIT + PORTRAIT_GAP) - 4      # its tiles' ink and the cursors
+    for c in CHARACTERS.values():
+        assert list_top(c) + 2 * LIST_GAP + 8 < grid_top, c.name
+    assert PORTRAIT_Y + PORTRAIT + 5 <= INTERNAL_HEIGHT - 9                 # the bottom row clears the hint
+    assert INTERNAL_WIDTH / 2 + SIDE_X + LIST_W / 2 <= INTERNAL_WIDTH - 12      # and the lists the screen's edges
+
+
+def test_choose_your_fighter_shows_m_cutie_in_the_second_row(surface):
+    import random
+    from brawl_ket import match as M
+    from brawl_ket.config import PLAYER_COLORS
+    from brawl_ket.render import PORTRAIT, PORTRAIT_Y
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    m.state, m.picks = M.SELECT, {"p1": 5, "p2": 0}
+    r.draw(m, [])
+    ring = {tuple(surface.get_at((x, PORTRAIT_Y + PORTRAIT // 2)))[:3] for x in range(150, 230)}
+    assert PLAYER_COLORS["p1"] in ring or P.lighten(PLAYER_COLORS["p1"], 0.6) in ring

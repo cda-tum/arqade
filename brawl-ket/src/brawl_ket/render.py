@@ -128,15 +128,19 @@ PREVIEW_Y = 148                     # ... centred here
 CALL_Y = 150                # the round calls (ROUND 1, FIGHT!, K.O., ...) are centred here
 BLINK = 40                  # frames per on/off cycle of a "PRESS START" prompt
 
-# CHOOSE YOUR FIGHTER's layout: each player's pick big on their side, the portrait strip below
+# CHOOSE YOUR FIGHTER's layout: each player's pick big on their side, the portrait grid below
 SIDE_X = 176                # px from the middle to each side's fighter
-SIDE_FLOOR = 178            # ... whose feet stand here
-PORTRAIT = 56               # a portrait tile, px square
-PORTRAIT_GAP = 8
-PORTRAIT_Y = 284            # the (last) row of portraits' top
+SIDE_FLOOR = 168            # ... whose feet stand here
+PORTRAIT = 40               # a portrait tile, px square: two rows of them fit under the move lists
+PORTRAIT_GAP = 6
+PORTRAIT_Y = 306            # the (last) row of portraits' top
+LIST_W = 252                # a side's list of specials, px: the label, the name, the colour chip
+LIST_NAME_X = 56            # ... where in it the names start
+LIST_GAP = 10               # ... and the lines' spacing
+MOVE_LABELS = {"AMPLITUDE AMPLIFICATION": "AMP. AMPLIFICATION"}    # names too long for that list
 # the select screen: what each fighter is, in a line, and how its X moves are entered
 TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY", "PHOEBE": "TALL AND TRICKY",
-          "ERWIN": "QUICK AND SLIPPERY", "DOS": "SLOW AND CLASSICAL"}
+          "ERWIN": "QUICK AND SLIPPERY", "DOS": "SLOW AND CLASSICAL", "M-CUTIE": "PATIENT AND TECHNICAL"}
 X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
 RULE_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR")
 # DOS can't switch: his Y copies a shot and then pastes it, and he is always green
@@ -226,6 +230,17 @@ def panel_lines(char: Character) -> tuple[tuple[str, tuple], ...]:
     if char.fixed_basis is not None:
         lines[-1] = (lines[-1][0], BASIS_BODY[char.fixed_basis])
     return tuple(lines)
+
+
+def list_top(char: Character) -> int:
+    """The y of the first line of a fighter's specials on CHOOSE YOUR FIGHTER (DOS's one line
+    lower, under what his Y does)."""
+    return SIDE_FLOOR + 48 + (10 if char.copy_paste else 0)
+
+
+def move_label(move) -> str:
+    """A special's name as CHOOSE YOUR FIGHTER's list shows it: in full where it fits."""
+    return MOVE_LABELS.get(move.name, move.name)
 
 
 def blit_center(surf: pygame.Surface, img: pygame.Surface, center) -> None:
@@ -1307,7 +1322,7 @@ class Renderer:
     def _title(self, match: M.Match) -> None:
         self._backdrop(dim=False)
         surf = self.surface
-        # ROBERT green and the last fighter who can switch purple: the title shows both colours
+        # ROBERT green and the last fighter who can switch (M-CUTIE) purple: the title shows both colours
         rival = next(c for c in reversed(M.ROSTER) if c.fixed_basis is None)
         for char, key, x, facing in ((M.ROSTER[0], "p1", 180, 1), (rival, "p2", 460, -1)):
             rect = pygame.Rect(0, 0, 52, 8)
@@ -1351,7 +1366,7 @@ class Renderer:
             self._select_side(key, side, M.ROSTER[match.picks[key]], match.ready[key])
         blit_center(surf, outlined("VS", 32, P.GOLD, thick=2), (W / 2, 104))
         self._portraits(match)
-        blit_center(surf, outlined("STICK: CHOOSE   A: READY   B: BACK", 8, P.MIST), (W / 2, H - 10))
+        blit_center(surf, outlined("STICK: CHOOSE   A: READY   B: BACK", 8, P.MIST), (W / 2, H - 5))
 
     def _select_side(self, key: str, side: int, char: Character, ready: bool) -> None:
         """One player's half: the fighter big, facing the middle (flexing once ready), the name,
@@ -1369,20 +1384,19 @@ class Renderer:
                     ACCENT.get(char.name, P.CREAM))
         blit_center(surf, outlined(char.name, 16, color, thick=2), (cx, floor + 18))
         blit_center(surf, outlined(TRAITS.get(char.name, ""), 8, P.MIST), (cx, floor + 34))
-        top = floor + 48
         if char.copy_paste:                 # DOS: what his Y does, and his one colour, on one line
             self._parts(((CLASSICAL_LINES[1] + "  ", P.MIST), (CLASSICAL_LINES[-1], BASIS_BODY[char.fixed_basis])),
                         (cx, floor + 45))
-            top += 10
-        left = round(cx - 118)
+        top = list_top(char)
+        left = round(cx - LIST_W / 2)
         for i, (slot, how) in enumerate(X_INPUTS):
-            y = top + 11 * i
+            y = top + LIST_GAP * i
             move = char.moves[slot]
             surf.blit(outlined(how, 8, P.GOLD), (left, y))
-            surf.blit(outlined(move.name, 8, P.WHITE), (left + 62, y))
-            self._colour_chip(move, (left + 236, y + 4))
+            surf.blit(outlined(move_label(move), 8, P.WHITE), (left + LIST_NAME_X, y))
+            self._colour_chip(move, (left + LIST_W, y + 4))
         if ready:
-            self._stamp("READY!", (cx + side * 64, floor - 120), P.GOOD)
+            self._stamp("READY!", (cx + side * 64, floor - 110), P.GOOD)
 
     def _portraits(self, match: M.Match) -> None:
         """The roster as a strip (ROSTER_COLS to a row) of portraits, each fighter's head and
@@ -1412,8 +1426,8 @@ class Renderer:
             lit = colour if match.ready[key] or blink else P.lighten(colour, 0.6)     # blinks till ready
             pygame.draw.rect(surf, P.INK, ring.inflate(2, 2), 4, border_radius=5)
             pygame.draw.rect(surf, lit, ring, 3, border_radius=5)
-            tag = outlined(key[1] + "P", 8, colour)
-            surf.blit(tag, (ring.left - 2 if tag_side < 0 else ring.right - tag.get_width() + 2, ring.top - 11))
+            tag = outlined(key[1] + "P", 8, colour)     # in the tile's top corner: the rows sit close
+            surf.blit(tag, (tile.left + 1 if tag_side < 0 else tile.right - tag.get_width() - 1, tile.top + 1))
 
     def _stage_select(self, match: M.Match) -> None:
         """CHOOSE YOUR STAGE: a big preview of the backdrop, its name between arrows, and a

@@ -63,3 +63,31 @@ def test_every_moves_cue_has_a_sound() -> None:
 def test_a_floppy_and_a_paste_replace_the_photons_sound() -> None:
     assert audio.sounds_for([Event("projectile", "p1"), Event("floppy", "p1")]) == ["floppy"]
     assert audio.sounds_for([Event("projectile", "p1"), Event("paste", "p1")]) == ["paste"]
+
+
+CUTIE_SOUNDS = (*(f"charge{n}" for n in range(1, 7)), *(f"wave{n}" for n in range(1, 7)), "trap_set", "trap_close",
+                "spin")
+
+
+def test_m_cutie_has_her_sounds() -> None:
+    sfx = audio.build_sfx()
+    for kind in CUTIE_SOUNDS:
+        assert audio.EVENT_SOUNDS.get(kind) == kind and kind in sfx, kind
+    assert audio.EVENT_SOUNDS["trap"] is None          # the fighter's own: the fight makes it a trap
+
+
+def crossings(samples) -> int:
+    return sum(1 for a, b in zip(samples, samples[1:]) if (a < 0) != (b < 0))
+
+
+def test_each_charge_step_blips_higher_and_a_bigger_wave_whooshes_deeper() -> None:
+    sfx = audio.build_sfx()
+    blips = [crossings(sfx[f"charge{n}"]) for n in range(1, 7)]
+    assert blips == sorted(blips) and len(set(blips)) == 6
+    tones = [audio.tone(900 - 100 * n, 0.2, 0.16, "triangle", decay=7, slide=0.5) for n in range(1, 7)]
+    whoosh = [crossings(t) for t in tones]              # the whoosh's tone, without its noise
+    assert whoosh == sorted(whoosh, reverse=True)
+
+
+def test_her_wave_replaces_the_photons_sound() -> None:
+    assert audio.sounds_for([Event("projectile", "p1"), Event("wave3", "p1")]) == ["wave3"]

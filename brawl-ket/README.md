@@ -11,9 +11,9 @@ replaces the repetition-code v1 and the Shor-code v2, which playtests found
 too hard to read).
 
 **Status:**
-- **The game:** five fighters (ROBERT, BOHR, PHOEBE, ERWIN and DOS), versus only, best of 3
-  rounds of 60 s.
-- **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat; ERWIN, Schrodinger's cat; DOS, a walking all-in-one computer) at 640x360 (x3 on the cabinet), the
+- **The game:** six fighters (ROBERT, BOHR, PHOEBE, ERWIN, DOS and M-CUTIE), versus only, best
+  of 3 rounds of 60 s.
+- **Screens:** chunky GBA-style puppets (and PHOEBE, a scientist in a long coat; ERWIN, Schrodinger's cat; DOS, a walking all-in-one computer; M-CUTIE, an android in a chandelier dress) at 640x360 (x3 on the cabinet), the
   title (PLAY / QUIT) with a bot demo, a portrait-grid fighter select, stage select, a HOW TO PLAY card,
   round calls and pause.
 - **Stages:** five backdrops, picked on CHOOSE YOUR STAGE (RANDOM by default, which rolls one
@@ -57,7 +57,8 @@ changes, so the rule a player reads is: **colour must match to hurt.**
 - **Heights:** standing normals are HIGH (a crouch ducks them), crouching
   normals LOW (a jump clears them), air normals and throws MID.
 - **Damage:** light 4, heavy 8, special 10, throw 10, MEASURE 12, CHARGE NOISE
-  3 a shock, LASER 8, POUNCE 10, BOX DROP 8, THE BOX's swipe 8, FLOPPY 9, MOUSE CABLE 6, CRT DROP 12. Health: ROBERT 100, BOHR 115, PHOEBE 95, ERWIN 90, DOS 125. Lights stun briefly enough that mashing
+  3 a shock, LASER 8, POUNCE 10, BOX DROP 8, THE BOX's swipe 8, FLOPPY 9, MOUSE CABLE 6, CRT DROP 12,
+  AMPLITUDE AMPLIFICATION 7 to 15 by its steps (7, 8, 10, 11, 13, 15), ION TRAP 4, SPIN 4 a hit. Health: ROBERT 100, BOHR 115, PHOEBE 95, ERWIN 90, DOS 125, M-CUTIE 105. Lights stun briefly enough that mashing
   can't loop, and getting up from a knockdown is invulnerable for 8 frames.
 
 On screen: P1 has a blue ring under their feet and P2 a red one; each health
@@ -70,8 +71,8 @@ colour from the wind-up on, so you see before contact whether it will match. A w
 Title (PLAY / QUIT) -> CHOOSE YOUR FIGHTER -> CHOOSE YOUR STAGE -> **HOW TO PLAY** ->
 ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
 
-- **CHOOSE YOUR FIGHTER** is Street Fighter style: a strip of portraits along the
-  bottom (five to a row; up and down move a row once there are more), one cursor
+- **CHOOSE YOUR FIGHTER** is Street Fighter style: a grid of portraits along the
+  bottom (five to a row, so M-CUTIE starts the second; up and down move a row), one cursor
   per player (P1 blue, P2 red, both on one portrait if they pick the same fighter),
   blinking until that player presses A. Each player's pick stands big on their side,
   facing the middle, with what it is and its three specials. B un-readies, or goes
@@ -96,13 +97,13 @@ ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
 
 ## The fighters
 
-| | ROBERT | BOHR | PHOEBE | ERWIN | DOS |
-|---|---|---|---|---|---|
-| Build | lean and fast, high jump | heavy and slow, long reach, 115 health | tall and tricky, the longest pokes, 95 health; controls angles, not the ground | quick and slippery, the highest jump, 90 health | slow and classical, the lowest jump, 125 health; **always green** |
-| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis | LIGHT PILLAR: a thick laser beam straight up from her raised palms: an anti-air that only ever catches someone in the air, and knocks them down (1.5 s cooldown) | THE BOX: he splits into two holographic boxes, where he stood and 120 px towards the rival. Any press or new stick direction (or 1.5 s) collapses it into a random box, with a swipe; anything that touches a box measures him, 50/50: he is in that box and it lands, or in the other and it whiffs (3 s cooldown, from the collapse) | FLOPPY: a spinning disk from his drive slot, slower than PHOTON (2.5 s cooldown) |
-| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) | TUNNEL: she dissolves and re-forms 50 px past the rival, facing them; a dotted line on the floor shows where. Untouchable only while gone, open while she re-forms (1.8 s cooldown) | POUNCE: a long low leap that knocks down; MID, so a crouch doesn't save you; a long landing (2 s cooldown) | MOUSE CABLE: he flings his mouse out along the floor on its cable (LOW, so a jump clears it, about 180 px) and reels in whoever it touches, to just in front of him, hit or bounced (3 s cooldown) |
-| Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too | LASER: she hangs in the air, aims (a dotted line) and fires down and forward at 45 degrees, once per jump | BOX DROP: he lets a little box fall from the air, just in front of him (MID, his colour), once per jump | CRT DROP: a fast stomp straight down, about his case's width and then some, that knocks down; no shockwave, a long landing |
-| Y | switches your colour | switches your colour | switches your colour | switches his colour, even inside THE BOX | COPY: a CTRL+C frame catches a rival's shot (a PHOTON, a LASER, a box from BOX DROP) or BOHR's crackling CHARGE NOISE into his clipboard (the icon by his chips); then PASTE fires the shot straight ahead in the colour it was fired in, or crackles with the noise himself, in its colour. Only when he is free to act |
+| | ROBERT | BOHR | PHOEBE | ERWIN | DOS | M-CUTIE |
+|---|---|---|---|---|---|---|
+| Build | lean and fast, high jump | heavy and slow, long reach, 115 health | tall and tricky, the longest pokes, 95 health; controls angles, not the ground | quick and slippery, the highest jump, 90 health | slow and classical, the lowest jump, 125 health; **always green** | patient and technical, in the middle on health (105) and jump, a little slower than ROBERT |
+| X (standing) | PHOTON: a projectile; it keeps the colour it was fired in (2.5 s cooldown) | MEASURE: a dashing command throw (Y, hurts either colour) that collapses the rival into BOHR's basis | LIGHT PILLAR: a thick laser beam straight up from her raised palms: an anti-air that only ever catches someone in the air, and knocks them down (1.5 s cooldown) | THE BOX: he splits into two holographic boxes, where he stood and 120 px towards the rival. Any press or new stick direction (or 1.5 s) collapses it into a random box, with a swipe; anything that touches a box measures him, 50/50: he is in that box and it lands, or in the other and it whiffs (3 s cooldown, from the collapse) | FLOPPY: a spinning disk from his drive slot, slower than PHOTON (2.5 s cooldown) | AMPLITUDE AMPLIFICATION: every X press is a step, up to 6; she stands still while she charges, and the wave fires 0.25 s after her last press (at once at 6): a microwave pulse along the floor, taller and harder with every step (20 to 60 px, MID). Hit while charging, it is lost (2 s cooldown, from the fire) |
+| Down + X | PHASE SLIDE: a low slide; it slides under photons | CHARGE NOISE: for 1 s, electric shocks all round BOHR (~60 px, every 12 frames, can't be ducked or jumped; 3 s cooldown) | TUNNEL: she dissolves and re-forms 50 px past the rival, facing them; a dotted line on the floor shows where. Untouchable only while gone, open while she re-forms (1.8 s cooldown) | POUNCE: a long low leap that knocks down; MID, so a crouch doesn't save you; a long landing (2 s cooldown) | MOUSE CABLE: he flings his mouse out along the floor on its cable (LOW, so a jump clears it, about 180 px) and reels in whoever it touches, to just in front of him, hit or bounced (3 s cooldown) | ION TRAP: a trap on the floor 70 px in front of her, armed after 0.3 s; a rival on the ground who steps in is held for 0.5 s (hurt only if it is their colour), and can't be caught again for 0.3 s after. A jump clears it; two at most, gone after 10 s or when she is knocked down (1 s cooldown) |
+| Air X | HADAMARD DIVE: a steep dive; when it lands, you switch basis | COLLAPSE: a drifting body slam (MID) whose landing shockwave (LOW) hits too | LASER: she hangs in the air, aims (a dotted line) and fires down and forward at 45 degrees, once per jump | BOX DROP: he lets a little box fall from the air, just in front of him (MID, his colour), once per jump | CRT DROP: a fast stomp straight down, about his case's width and then some, that knocks down; no shockwave, a long landing | SPIN: she stops falling and spins forward about 100 px, one leg out, hitting up to three times (MID), once per jump; then she drops and lands into a short recovery |
+| Y | switches your colour | switches your colour | switches your colour | switches his colour, even inside THE BOX | COPY: a CTRL+C frame catches a rival's shot (a PHOTON, a LASER, a box from BOX DROP, M-CUTIE's wave at its size) or BOHR's crackling CHARGE NOISE into his clipboard (the icon by his chips); then PASTE fires the shot straight ahead in the colour it was fired in, or crackles with the noise himself, in its colour. Only when he is free to act | switches her colour |
 
 Her weakness: she has no ground projectile and the least health, so walking straight
 in on the ground (BOHR's game) is how you beat her. Design:
@@ -110,7 +111,12 @@ in on the ground (BOHR's game) is how you beat her. Design:
 
 ERWIN's weakness is the least health, and THE BOX is a gamble; DOS's is that his rival only ever needs green attacks against him. Design: ../docs/superpowers/specs/2026-10-21-brawl-ket-erwin-dos-design.md.
 
-All five share the normals: A is a jab (standing, crouching, in the air), B a
+M-CUTIE traps the floor so you have to jump, then catches you in the air with SPIN or a big
+wave; her weakness is that setting up takes time, so rushing her before she is ready wins.
+Her wave cancels any rival shot it meets. Design:
+`../docs/superpowers/specs/2026-10-21-brawl-ket-m-cutie-design.md`.
+
+All six share the normals: A is a jab (standing, crouching, in the air), B a
 heavy, a sweep (knockdown) or a jump-in, and B up close while pushing towards
 the rival is a throw. A chains A, A, B.
 
@@ -150,13 +156,14 @@ uv run python tools/balance.py                      # bot-against-bot win rates 
 | Module | Role |
 |---|---|
 | `basis.py` | The two bases, which errors change which, H, and each attack's error from its colour rule. Pure, exact, tested against 2x2 matrices. |
-| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR, PHOEBE, ERWIN and DOS. |
-| `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). THE BOX's 50/50s come from the fight's own seeded random.Random: the same seed and inputs give the same round. Pure. |
+| `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR, PHOEBE, ERWIN, DOS and M-CUTIE (her six waves, one per step). |
+| `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). THE BOX's 50/50s come from the fight's own seeded random.Random: the same seed and inputs give the same round. M-CUTIE's charge is the fighter's "charging" state, her traps the fight's `Trap`s. Pure. |
 | `match.py` | Title (PLAY / QUIT), select, stage select, HOW TO PLAY, rounds, the result, pause, idle and the attract demo. Pure. |
 | `tutorial.py` | The HOW TO PLAY card's scene: a real Fight played from a script, looping. Pure. |
 | `stages.py` | The backdrops, each drawn once (with its blinking lights); no green or purple in a large area, so the fighters stay readable. |
 | `poses.py`, `render.py` | The skeleton and keyframe poses; the basis-coloured puppets, stage, HUD and badges, effects, the rules card and the screens (HOW TO PLAY draws its scene with a second, off-screen renderer). |
 | `ink.py`, `erwin.py`, `dos.py` | The drawing primitives; ERWIN's cat and THE BOX; DOS's case, screen faces, floppy and clipboard icon (both checked pixel for pixel against their approved look scripts, and cached so the cabinet keeps its frame budget). |
+| `cutie.py` | M-CUTIE's android, her wave, her trap, SPIN and the charge's halo (checked pixel for pixel against her approved look script; her head, wave and trap baked once into cached layers). |
 | `bot.py` | The CPU for the attract demo and the tests. |
 | `audio.py` | Chiptune effects, adapted from Planck Time's. No music. |
 | `input.py`, `config.py` | Pads and the dev keyboard; every tuning number and button. |

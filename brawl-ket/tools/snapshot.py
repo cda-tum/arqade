@@ -25,6 +25,7 @@ Writes:
   steps), its wave in flight (2 and 6 steps) and DOS pasting one back; ION TRAP arming, armed and
   closed on a ROBERT; SPIN into a ROBERT;
 - screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
+- screen_select_cutie.png: CHOOSE YOUR FIGHTER on M-CUTIE (P1, ready: the second row) and DOS (P2);
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
 - screen_*.png: the match flow: the title (and with QUIT picked), the attract demo, select (and
@@ -262,16 +263,19 @@ def find_frames(out_dir: str, chars=(ROBERT, ROBERT), prefix: str = "fight") -> 
 
 
 def select_frame(out_dir: str) -> None:
-    """CHOOSE YOUR FIGHTER with ERWIN and DOS picked: their traits, DOS's Y and ALWAYS GREEN."""
+    """CHOOSE YOUR FIGHTER with ERWIN and DOS picked (their traits, DOS's Y and ALWAYS GREEN), and
+    with M-CUTIE (P1, in the second row) against DOS, ready."""
     from brawl_ket import match as M
 
     surface = pygame.Surface((W, H))
-    r, m = Renderer(surface), M.Match(random.Random(3))
-    m.state = M.SELECT
-    m.picks = {"p1": 3, "p2": 4}
-    for _ in range(4):
-        r.draw(m, [])
-    save(surface, out_dir, "screen_select_erwin_dos.png")
+    for picks, ready, name in (({"p1": 3, "p2": 4}, False, "screen_select_erwin_dos.png"),
+                               ({"p1": 5, "p2": 4}, True, "screen_select_cutie.png")):
+        r, m = Renderer(surface), M.Match(random.Random(3))
+        m.state, m.picks = M.SELECT, picks
+        m.ready = {"p1": ready, "p2": False}
+        for _ in range(4):
+            r.draw(m, [])
+        save(surface, out_dir, name)
 
 
 def screen_frames(out_dir: str) -> None:
