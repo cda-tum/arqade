@@ -92,6 +92,11 @@ class Echo(Fighter):
         (a super is one move for both)."""
         self.queue = deque(replace(q, a=False, b=False) for q in self.queue)
 
+    def recohere(self) -> None:
+        """Back at once (their super): as if his time away had run out."""
+        if not self.here:
+            self._come_back()
+
     def step(self, inp: FighterInput, rival_x: float) -> list[tuple[str, dict]]:
         """One frame of Bob on Alice's delayed input. Her Y switched the pair already: Bob only
         gets the switch's lock, as she did. Decohered, he only counts the frames until he is back."""

@@ -117,6 +117,8 @@ class Fighter:
         self.paired = False             # ALICE & BOB: Bob is here (the fight sets it every frame)
         self.super_ready = False        # SUPERposition: the bar is full (the fight sets it every frame)
         self.glitch = 0                 # BLUE SCREEN OF DEATH: frames left of the frozen, glitching look
+        self.target_x: float | None = None  # a super's lock: where the rival stood (None: none, or a miss)
+        self.hit_count = 0                  # times the move in progress has hit (the fight counts)
 
     # --- derived state ----------------------------------------------------------------
 
@@ -409,7 +411,10 @@ class Fighter:
             assert m is not None
             if self.y > 0 and (self.bounced or (m.floor_recovery and self.frame >= self.startup + m.active)):
                 self.frame = self.startup + m.active    # the recovery starts on the floor
-            if self.frame >= self.startup + m.active + m.recovery:
+            spent = m.hits and self.hit_count >= m.hits and self.phase == "active"
+            if m.follow is not None and (self.frame >= self.startup + m.active or spent):
+                self._follow(m.follow, events)
+            elif self.frame >= self.startup + m.active + m.recovery:
                 self._end_move()
             else:
                 self._move_effects(m, events)
@@ -427,6 +432,8 @@ class Fighter:
         self._neutral()
 
     def _move_effects(self, m: Move, events: list) -> None:
+        if m.lock >= 0 and self.frame == self.startup - m.lock:     # a super locks on: the fight decides
+            events.append(("lock", {"move": m}))
         if self.phase == "active":
             if self.frame == self.startup:
                 if m.superpose:         # THE BOX: one cat, two boxes
@@ -577,6 +584,8 @@ class Fighter:
         self.attack_basis = self.basis  # the move's colour is fixed now, whatever comes next
         self.chained = cancel       # a cancel uses the move's chain_startup, if it has one
         self.move_hit = False
+        self.hit_count = 0
+        self.target_x = None
         self.bounced = False
         self.buffer = []            # an older press must not fire a cancel nobody made
         self.chain = self.chain + 1 if cancel else 1
@@ -594,6 +603,16 @@ class Fighter:
         self.action = "attack"
         self.frame = 0
         events.append(("attack", {"slot": slot}))
+
+    def _follow(self, move: Move, events: list) -> None:
+        """A super's next part: it starts at once, keeping the target (a warp puts the fighter
+        `warp` px in front of it, facing it)."""
+        target = self.target_x
+        self._start_move(self.slot or "super", move, False, events)
+        self.target_x = target
+        if move.warp and target is not None:
+            self.x = min(max(target - self.facing * move.warp, STAGE_LEFT), STAGE_RIGHT)
+        self._move_effects(move, events)
 
     def _tunnel_target(self) -> float:
         """TUNNEL_PAST px past the rival (or the push box, if that is wider: DOS's case), on

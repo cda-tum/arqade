@@ -155,7 +155,7 @@ def test_a_follow_up_starts_when_the_hits_are_spent_and_keeps_the_target():
     first = replace(REMOTE, damage=4, hitstun=16, knockdown=False, active=40, hit_every=6, hits=4, follow=after)
     fight = fight_of(with_super(ROBERT, first), ROBERT, gap=200.0)
     fire(fight)
-    run(fight, first.startup + 40)
+    run(fight, first.startup + 40 + 6 * 10)        # (every hit's hitstop holds the frames back)
     assert fight.fighters["p2"].health == ROBERT.health - 4 * 4 - 9
     assert fight.fighters["p1"].move in (after, None)
 
@@ -163,16 +163,16 @@ def test_a_follow_up_starts_when_the_hits_are_spent_and_keeps_the_target():
 def test_a_warp_starts_the_follow_up_in_front_of_the_target():
     after = Move("WARPED", 2, 4, 10, Box(10, 20, 60, 90), BOTH, MID, damage=9, hitstun=30, knockback=0.0,
                  knockdown=True, kind="super", warp=40)
-    first = replace(REMOTE, damage=0, follow=after)
+    first = replace(REMOTE, remote=False, follow=after)     # (it hits nothing: no hitstop)
     fight = fight_of(with_super(ROBERT, first), ROBERT, gap=200.0)
     fire(fight)
     run(fight, first.startup + first.active)
-    assert fight.fighters["p1"].x == 460.0 and fight.fighters["p1"].move is after
+    assert abs(fight.fighters["p1"].x - 460.0) <= 3 and fight.fighters["p1"].move is after   # (the push box nudges)
 
 
 def test_a_lock_hold_holds_the_rival_and_a_flank_puts_the_pair_either_side():
     hold = Move("HELD", 0, 1, 1, None, BOTH, MID, damage=0, hitstun=70, knockback=0.0, hold=True)
-    pad = replace(REMOTE, lock=0, lock_range=100, lock_ground=True, lock_hold=hold, flank=50, damage=0)
+    pad = replace(REMOTE, lock=0, lock_range=100, lock_ground=True, lock_hold=hold, flank=50, remote=False)
     fight = fight_of(with_super(ALICE_BOB, pad), ROBERT, gap=90.0)
     fire(fight)
     run(fight, pad.startup)
@@ -537,7 +537,7 @@ def test_nine_lives_eight_pounces_then_the_swipe_from_right_in_front():
     fire(fight)
     run(fight, NINE_LIVES.startup + NINE_LIVES.active)
     assert fight.fighters["p1"].move is NINE_SWIPE
-    assert fight.fighters["p1"].x == 420.0 - NINE_SWIPE.warp
+    assert abs(fight.fighters["p1"].x - (420.0 - NINE_SWIPE.warp)) <= 4     # (the push box nudges)
 
 
 def test_nine_lives_misses_a_rival_out_of_its_reach():

@@ -346,6 +346,8 @@ class Fight:
                 self._fire(key, events)
             elif kind == "crash":
                 self._crash(key, f, data["move"], events)
+            elif kind == "lock":
+                self._lock(key, f, data["move"], events)
             elif kind == "swap":
                 self._teleport(key, events)
             else:
@@ -362,6 +364,10 @@ class Fight:
         """SUPERposition: the bar empties and the fight freezes SUPER_FREEZE frames for the call
         (a second super fired on the same frame plays its call after this one)."""
         self.meters[key].empty()
+        echo = self.echoes.get(key)
+        if echo is not None and not echo.here:      # their super brings a decohered Bob back at once
+            echo.recohere()
+            events.append(Event("recohere", key, None, echo.x, FLOOR_Y))
         self.supers.append(key)
         self.freeze = SUPER_FREEZE
         self._fired.add(key)
@@ -383,6 +389,33 @@ class Fight:
         if not frozen:
             f.vx = 0.0
             events.append(Event("crash", None, None, f.x, FLOOR_Y))
+
+    def _lock(self, key: str, f: Fighter, m: Move, events: list[Event]) -> None:
+        """A super locks on: its target is where the rival stands now, unless the rival is out of
+        reach of it (lock_range), in the air (lock_ground), down, getting up, tunnelling or in THE
+        BOX: then it misses (target None). A catch may hold the rival (lock_hold) and put the pair
+        either side of them (flank)."""
+        rival_key = _other(key)
+        rival = self.fighters[rival_key]
+        missed = rival.action == "knockdown" or rival.wakeup or rival.intangible or rival.boxed \
+            or (m.lock_range and abs(rival.x - f.x) > m.lock_range) or (m.lock_ground and rival.y > 0)
+        if missed:
+            f.target_x = None
+            events.append(Event("lock_miss", key, None, f.x, FLOOR_Y))
+            return
+        f.target_x = rival.x
+        events.append(Event("lock", key, None, rival.x, FLOOR_Y))
+        if m.lock_hold is not None:
+            for body in self.bodies(rival_key):
+                body.take_hit(m.lock_hold, basis.Y, f.facing)
+        echo = self.echoes.get(key)
+        if m.flank and echo is not None:
+            side = 1 if rival.x >= f.x else -1
+            f.x = _clamp(rival.x - side * m.flank)
+            echo.x, echo.y = _clamp(rival.x + side * m.flank), 0.0
+            f.facing, echo.facing = side, -side
+            echo.anchored = True
+            events.append(Event("teleport", key, None, f.x, FLOOR_Y))
 
     def _teleport(self, key: str, events: list[Event]) -> None:
         """Down + X, in two steps. With Bob following, it ANCHORS him: he stays where he stands
@@ -641,6 +674,7 @@ class Fight:
                 f = st.body
                 f.move_hit = True
                 f.hit_frame = f.frame       # a repeating move (CHARGE NOISE) counts from here
+                f.hit_count += 1
 
         # A strike on a fighter already knocked down this frame (by a sweep, say) is dropped
         # whole, as if the fighter had been down from the start: no event, no damage, and a
@@ -761,8 +795,13 @@ class Fight:
         m = f.move
         if m is None or m.hitbox is None or f.phase != "active":
             return
-        # a move hits once, except one that repeats (hit_every frames after its last hit)
+        # a move hits once, except one that repeats (hit_every frames after its last hit, at most
+        # `hits` times)
         if f.move_hit and not (m.hit_every and f.frame - f.hit_frame >= m.hit_every):
+            return
+        if m.hits and f.hit_count >= m.hits:
+            return
+        if m.remote and f.target_x is None:         # a super's lock that missed: nothing to hit
             return
         for rival in targets:
             if rival.action == "knockdown" or rival.wakeup or rival.intangible:   # downed, getting up, gone
@@ -773,7 +812,8 @@ class Fight:
             # a hit. A throw is MID, so it catches a jumping rival as well as a crouching one.
             if m.kind == "throw" and rival.action in _STUNNED:
                 continue
-            touch = self._touch(f.world_box(m.hitbox), rival)
+            box = _world_box(f.target_x, 0.0, f.facing, m.hitbox) if m.remote else f.world_box(m.hitbox)
+            touch = self._touch(box, rival)
             if touch is not None:
                 where, box = touch
                 strikes.append(_Strike(key, key, rival_key, m, f.facing, where, box=box, target=rival, body=f))

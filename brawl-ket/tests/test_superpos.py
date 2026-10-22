@@ -354,3 +354,113 @@ def test_the_glitch_runs_down_a_frame_at_a_time_and_a_hit_ends_it():
     rival.glitch = 30
     until(fight, "hit", {"p1": A})
     assert rival.glitch == 0
+
+
+# --- part 2: the twists (lock, remote, hits, follow, warp, flank) ----------------------------------
+
+from brawl_ket.moves import LOW  # noqa: E402
+
+
+def with_super(char, move):
+    return replace(char, extra=MappingProxyType({**char.extra, "super": move}))
+
+
+def fire(fight: Fight, key: str = "p1") -> None:
+    """Fill the bar, fire, and sit out the call."""
+    full(fight, key)
+    fight.step({key: AB})
+    for _ in range(SUPER_FREEZE):
+        fight.step({})
+
+
+# a remote strike that locks 4 frames before it lands
+REMOTE = Move("REMOTE", 10, 4, 10, Box(-30, 0, 60, 300), BOTH, MID, damage=25, hitstun=30, knockback=0.0,
+              knockdown=True, kind="super", lock=4, remote=True)
+
+
+def test_a_lock_fixes_the_target_where_the_rival_stood_then():
+    fight = fight_of(with_super(ROBERT, REMOTE), ROBERT, gap=200.0)
+    fire(fight)
+    events = run(fight, REMOTE.startup - REMOTE.lock)
+    assert fight.fighters["p1"].target_x == 500.0
+    assert [(e.kind, e.player, e.x) for e in events if e.kind == "lock"] == [("lock", "p1", 500.0)]
+
+
+def test_a_remote_hitbox_lands_on_the_target_not_round_the_fighter():
+    fight = fight_of(with_super(ROBERT, REMOTE), ROBERT, gap=200.0)
+    fire(fight)
+    run(fight, REMOTE.startup + 2)
+    assert fight.fighters["p2"].health == ROBERT.health - 25
+
+
+def test_who_moves_away_after_the_lock_is_missed():
+    fight = fight_of(with_super(ROBERT, REMOTE), ROBERT, gap=200.0)
+    fire(fight)
+    run(fight, REMOTE.startup - REMOTE.lock)
+    fight.fighters["p2"].x = 600.0
+    run(fight, REMOTE.lock + 4)
+    assert fight.fighters["p2"].health == ROBERT.health
+
+
+def test_a_lock_with_a_range_misses_one_too_far_or_in_the_air():
+    near = replace(REMOTE, lock=0, lock_range=100, lock_ground=True)
+    fight = fight_of(with_super(ROBERT, near), ROBERT, gap=150.0)
+    fire(fight)
+    events = run(fight, near.startup + 4)
+    assert fight.fighters["p1"].target_x is None and "lock_miss" in kinds(events)
+    assert fight.fighters["p2"].health == ROBERT.health
+    fight = fight_of(with_super(ROBERT, near), ROBERT, gap=80.0)
+    fire(fight)
+    fight.step({"p2": FighterInput(up=True)})
+    run(fight, near.startup + 4)
+    assert fight.fighters["p2"].health == ROBERT.health
+
+
+def test_hits_caps_a_repeating_move():
+    ROLL = Move("ROLL", 2, 60, 1, Box(-40, 0, 120, 120), BOTH, MID, damage=4, hitstun=16, knockback=0.0,
+                kind="super", hit_every=6, hits=3)
+    fight = fight_of(with_super(ROBERT, ROLL), ROBERT, gap=60.0)
+    fire(fight)
+    run(fight, 80)
+    assert fight.fighters["p2"].health == ROBERT.health - 12
+    assert fight.fighters["p1"].hit_count == 3 or fight.fighters["p1"].move is None
+
+
+def test_a_follow_up_starts_when_the_hits_are_spent_and_keeps_the_target():
+    after = Move("AFTER", 2, 4, 10, Box(-30, 0, 60, 300), BOTH, MID, damage=9, hitstun=30, knockback=0.0,
+                 knockdown=True, kind="super", remote=True)
+    first = replace(REMOTE, damage=4, hitstun=16, knockdown=False, active=40, hit_every=6, hits=4, follow=after)
+    fight = fight_of(with_super(ROBERT, first), ROBERT, gap=200.0)
+    fire(fight)
+    run(fight, first.startup + 40 + 6 * 10)        # (every hit's hitstop holds the frames back)
+    assert fight.fighters["p2"].health == ROBERT.health - 4 * 4 - 9
+    assert fight.fighters["p1"].move in (after, None)
+
+
+def test_a_warp_starts_the_follow_up_in_front_of_the_target():
+    after = Move("WARPED", 2, 4, 10, Box(10, 20, 60, 90), BOTH, MID, damage=9, hitstun=30, knockback=0.0,
+                 knockdown=True, kind="super", warp=40)
+    first = replace(REMOTE, remote=False, follow=after)     # (it hits nothing: no hitstop)
+    fight = fight_of(with_super(ROBERT, first), ROBERT, gap=200.0)
+    fire(fight)
+    run(fight, first.startup + first.active)
+    assert abs(fight.fighters["p1"].x - 460.0) <= 3 and fight.fighters["p1"].move is after   # (the push box nudges)
+
+
+def test_a_lock_hold_holds_the_rival_and_a_flank_puts_the_pair_either_side():
+    hold = Move("HELD", 0, 1, 1, None, BOTH, MID, damage=0, hitstun=70, knockback=0.0, hold=True)
+    pad = replace(REMOTE, lock=0, lock_range=100, lock_ground=True, lock_hold=hold, flank=50, remote=False)
+    fight = fight_of(with_super(ALICE_BOB, pad), ROBERT, gap=90.0)
+    fire(fight)
+    run(fight, pad.startup)
+    rival, alice, bob = fight.fighters["p2"], fight.fighters["p1"], fight.echoes["p1"]
+    assert rival.action == "hitstun" and rival.stun > 60
+    assert (alice.x, bob.x) == (390.0 - 50, 390.0 + 50) and bob.anchored
+
+
+def test_a_decohered_bob_comes_back_for_their_super():
+    fight = fight_of(with_super(ALICE_BOB, REMOTE), ROBERT, gap=200.0)
+    fight.echoes["p1"].decohere()
+    full(fight)
+    events = fight.step({"p1": AB})
+    assert fight.echoes["p1"].here and "recohere" in kinds(events)

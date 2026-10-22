@@ -105,6 +105,17 @@ class Move:
                                         # on the ground within CRASH_REACH is held by this move
     seek: int = 0                       # > 0: on its first active frame a leap that comes down on the
                                         # rival this many frames later
+    lock: int = -1                      # >= 0: this many frames before the active ones the fight fixes the
+                                        # target, the rival's x then (Fighter.target_x) ...
+    lock_range: int = 0                 # ... missing a rival further than this (0: any distance) ...
+    lock_ground: bool = False           # ... or one in the air (target_x None: a whiff)
+    lock_hold: Move | None = None       # a hold the lock puts on the rival it catches (ONE-TIME PAD)
+    flank: int = 0                      # ... and the pair re-forms this far either side of them
+    remote: bool = False                # the hitbox sits at target_x, not round the fighter
+    hits: int = 0                       # > 0: a repeating move (hit_every) hits at most this many times
+    follow: Move | None = None          # a move that starts as this one's active frames end (or its
+                                        # hits are spent), keeping the target
+    warp: int = 0                       # > 0: a follow-up starts this far in front of the target
 
 
 @dataclass(frozen=True)
