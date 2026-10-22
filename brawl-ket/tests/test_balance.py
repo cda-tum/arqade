@@ -70,6 +70,12 @@ OVER_THE_BAR.update({
     ("ROBERT", "ALICE & BOB"): "ALICE & BOB win about 59-66% against ROBERT: for the user to decide",
     ("BOHR", "ERWIN"): "BOHR wins about 65% against ERWIN: for the user to decide",
 })
+# ... and with SUPERposition's first super (2026-10-22, docs/superpowers/plans/2026-10-22-brawl-ket-
+# superposition-core.md, Task 6), over 200 rounds: DOS's BLUE SCREEN OF DEATH freezes Alice and Bob
+# both, and only DOS has a super so far (the others get theirs in part 2)
+OVER_THE_BAR.update({
+    ("DOS", "ALICE & BOB"): "DOS wins about 70% against ALICE & BOB: for the user to decide",
+})
 CASES = [pytest.param(p, id="-".join(p), marks=[pytest.mark.xfail(reason=OVER_THE_BAR[p], strict=False)]
                       if p in OVER_THE_BAR else []) for p in PAIRS]
 

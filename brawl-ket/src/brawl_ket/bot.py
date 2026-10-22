@@ -28,7 +28,7 @@ import random
 from collections import deque
 
 from . import basis
-from .config import TRAP_MAX
+from .config import CRASH_REACH, TRAP_MAX
 from .fight import Fight
 from .fighter import FighterInput
 
@@ -75,6 +75,11 @@ KIDS_GRAB_JUMP = 0.8    # ... and this often jumps a dashing grab (MEASURE) wind
 # ... and starts a string up close a little less often than anyone (0.02): every attack of theirs
 # comes twice, and at 0.02 they won 60-72% against all but BOHR (tools/balance.py)
 KIDS_STRIKE_ODDS = 0.017
+# SUPERposition: it fires a super as soon as its bar is full and the super would land; it jumps
+# away from a BLUE SCREEN OF DEATH winding up in reach, a chance a frame of its startup; and it
+# feints (switches at range) a little more often while one half is full and the other isn't
+SUPER_DODGE_ODDS = 0.1
+LOPSIDED_FEINT = 0.06
 
 _BUSY = ("hitstun", "knockdown")
 
@@ -138,6 +143,11 @@ class Bot:
             return FighterInput(down=self.down)
         toward = 1 if rival.x > me.x else -1
         dist = abs(rival.x - me.x)
+        if self._super(fight, me, rival, dist):
+            self.gap = PRESS_GAP
+            return FighterInput(a=True, b=True)
+        if self._dodge_super(me, rival, dist):
+            return FighterInput(up=True, dx=-toward)
         m = rival.move
         if m is not None and keep_clear_of(m) and rival.action == "attack" and dist <= FIELD_RANGE + 20 \
                 and self.would_hurt(rival, m, me) and me.action in ("idle", "walk", "crouch"):
@@ -156,7 +166,7 @@ class Bot:
             return self._continue_chain(me, toward)
         if self.chain and not me.buffer:
             self.chain.clear()      # the string ended (or whiffed): start afresh
-        return self._on_ground(me, rival, toward, dist)
+        return self._on_ground(fight, me, rival, toward, dist)
 
     # --- what the bot knows ---------------------------------------------------------------
 
@@ -237,6 +247,23 @@ class Bot:
     @staticmethod
     def would_hurt_shot(shot, target) -> bool:
         return basis.hurts(basis.error_for(shot.move.colour, shot.basis), target.basis)
+
+    def _super(self, fight: Fight, me, rival, dist: float) -> bool:
+        """Fire the super: the bar full, free on the ground, and the rival where it lands."""
+        move = me.char.extra.get("super")
+        if move is None or not fight.meters[self.player].full or self.gap \
+                or me.action not in ("idle", "walk", "crouch"):
+            return False
+        if move.crash is not None:      # BLUE SCREEN OF DEATH: a rival on the ground in reach
+            return rival.y == 0 and dist <= CRASH_REACH - 20 and not rival.boxed and not rival.intangible
+        return False
+
+    def _dodge_super(self, me, rival, dist: float) -> bool:
+        """Jump away from a BLUE SCREEN OF DEATH winding up in reach (in the air, it can't freeze you)."""
+        m = rival.move
+        return (rival.action == "attack" and m is not None and m.crash is not None and rival.phase == "startup"
+                and dist <= CRASH_REACH + 10 and me.action in ("idle", "walk", "crouch")
+                and self.rng.random() < SUPER_DODGE_ODDS)
 
     def _in_air(self, me, rival, toward: int, dist: float) -> FighterInput:
         air = me.char.moves["air.X"]
@@ -453,7 +480,7 @@ class Bot:
         self.down = False
         return press
 
-    def _on_ground(self, me, rival, toward: int, dist: float) -> FighterInput:
+    def _on_ground(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput:
         roll = self.rng.random()
         if self.chain:              # a buffered first press is about to come out
             return FighterInput(down=self.down)
@@ -485,7 +512,9 @@ class Bot:
         if roll < 0.03 and dist > 90 and ready and special.kind == "projectile" and not special.charge \
                 and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, special, rival):
             return self._press("x", 0)                          # a PHOTON that will hurt
-        if roll < 0.04 and ready and me.char.fixed_basis is None:
+        meter = fight.meters[self.player]
+        lopsided = max(meter.share(b) for b in meter.fill) >= 1.0 > min(meter.share(b) for b in meter.fill)
+        if roll < (LOPSIDED_FEINT if lopsided else 0.04) and ready and me.char.fixed_basis is None:
             self.gap = PRESS_GAP
             return FighterInput(dx=toward, y=True)              # a feint: switch colour at range
         return FighterInput(dx=toward)

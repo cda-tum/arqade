@@ -152,6 +152,15 @@ before, so a mashed or blocked jab can be punished. Everyone walks about 10% fas
 jump carries further than a walk: every forward jump goes at least 135 px and peaks at least
 150 px, so anyone can jump over anyone (DOS lowest and shortest, then BOHR, ERWIN highest).
 
+**SUPERposition (2026-10-22):** every fighter has a bar under their name, a green half and a
+purple half. Damage you deal fills the half of the colour you are in (damage you take, half as
+fast), so only fighting in both colours fills it; DOS, who can't switch, fills by the colour of
+his hits. Full, it shines and says A+B!: A and B together fire your super, which freezes the
+fight for its call (SUPERposition!) and hurts in either colour. The bar carries over between
+rounds. So far DOS has his, BLUE SCREEN OF DEATH: everyone on the ground near him freezes under
+an error window, and he comes down on them (25). Design:
+`../docs/superpowers/specs/2026-10-22-brawl-ket-superposition-design.md`.
+
 ## Controls
 
 | Action | Cabinet | P1 keyboard | P2 keyboard |
@@ -188,6 +197,7 @@ uv run python tools/balance.py                      # bot-against-bot win rates 
 | Module | Role |
 |---|---|
 | `basis.py` | The two bases, which errors change which, H, and each attack's error from its colour rule. Pure, exact, tested against 2x2 matrices. |
+| `superpos.py` | SUPERposition's bar: two halves, how damage fills them, full and empty. Pure. |
 | `moves.py` | Frame data: `Move` (colour rule, height, damage, the specials' twists), `Character`, ROBERT, BOHR, PHOEBE, ERWIN, DOS, M-CUTIE (her six waves, one per step) and ALICE & BOB (with BOB, the second body). |
 | `fighter.py`, `fight.py` | One fighter's state machine (basis, the Y switch); a round at a fixed 60 Hz (hits or blocks by colour, the twists, projectiles, shockwaves, the timer). THE BOX's 50/50s come from the fight's own seeded random.Random: the same seed and inputs give the same round. M-CUTIE's charge is the fighter's "charging" state, her traps the fight's `Trap`s. ALICE & BOB's Bob is a second body (`Fight.echoes`, `Fight.bodies`); KEY EXCHANGE's photon in flight is a `Toss`. Pure. |
 | `echo.py` | Bob, ALICE & BOB's second body: a Fighter that replays Alice's inputs 12 frames later and shares her health and basis; his walk back behind her, decoherence and return. Pure. |

@@ -61,6 +61,20 @@ def main(argv: list[str]) -> None:
                 renderer.draw_fight(fight, events, {"p1": 0, "p2": 0})
                 times.append(time.perf_counter() - t)
             report(f"{c1.name} v {c2.name}", times[60:])     # the first second warms the text caches
+    # SUPERposition: DOS's BLUE SCREEN OF DEATH over and over (his bar refilled every frame)
+    from brawl_ket.basis import X_BASIS, Z_BASIS
+    from brawl_ket.superpos import FULL
+    fight, times = None, []
+    for i in range(FRAMES):
+        if fight is None or fight.over:
+            fight = Fight({"p1": CHARACTERS["DOS"], "p2": CHARACTERS["ROBERT"]})
+            bots = {p: Bot(p, i + k) for k, p in enumerate(PLAYERS)}
+        fight.meters["p1"].fill = {Z_BASIS: FULL, X_BASIS: FULL}
+        t = time.perf_counter()
+        events = fight.step({p: b.input(fight) for p, b in bots.items()})
+        renderer.draw_fight(fight, events, {"p1": 0, "p2": 0})
+        times.append(time.perf_counter() - t)
+    report("DOS supers", times[60:])
     m, times = M.Match(), []
     for _ in range(FRAMES):
         t = time.perf_counter()

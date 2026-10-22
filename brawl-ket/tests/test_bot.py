@@ -396,3 +396,44 @@ def test_their_bot_anchors_bob_with_the_rival_close(monkeypatch):
     for _ in range(20):
         events += fight.step({"p1": bot.input(fight)})
     assert "anchor" in [e.kind for e in events] and bob.anchored
+
+
+# --- SUPERposition ----------------------------------------------------------------------------------
+
+
+def test_dos_fires_his_blue_screen_with_a_full_bar_and_a_rival_on_the_ground_in_reach():
+    from brawl_ket import basis
+    from brawl_ket.moves import CHARACTERS
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["DOS"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 300.0, 450.0
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    bot = Bot("p1", 1)
+    inp = bot.input(fight)
+    assert inp.a and inp.b
+
+
+def test_not_with_the_rival_out_of_reach_or_in_the_air():
+    from brawl_ket import basis
+    from brawl_ket.config import CRASH_REACH
+    from brawl_ket.moves import CHARACTERS
+    from brawl_ket.superpos import FULL
+    for gap, y in ((CRASH_REACH + 30, 0.0), (100.0, 60.0)):
+        fight = Fight({"p1": CHARACTERS["DOS"], "p2": ROBERT}, seed=1)
+        fight.fighters["p1"].x, fight.fighters["p2"].x = 300.0, 300.0 + gap
+        fight.fighters["p2"].y = y
+        fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+        inp = Bot("p1", 1).input(fight)
+        assert not (inp.a and inp.b)
+
+
+def test_a_bot_jumps_away_from_a_blue_screen_winding_up_in_reach(monkeypatch):
+    import brawl_ket.bot as bot_module
+    from brawl_ket.moves import BLUE_SCREEN, CHARACTERS
+    monkeypatch.setattr(bot_module, "SUPER_DODGE_ODDS", 1.0)
+    fight = Fight({"p1": ROBERT, "p2": CHARACTERS["DOS"]}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 300.0, 420.0
+    dos = fight.fighters["p2"]
+    dos.action, dos.move, dos.slot, dos.frame = "attack", BLUE_SCREEN, "super", 1
+    inp = Bot("p1", 1).input(fight)
+    assert inp.up and inp.dx == -1
