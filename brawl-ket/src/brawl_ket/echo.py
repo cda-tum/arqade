@@ -4,9 +4,10 @@ The fight (fight.py) gives a player whose character has a `pair` a second Fighte
 the first one (Alice, whom the player or the bot controls). Every frame Alice's input goes into
 the echo's queue and the one from ECHO_DELAY frames ago comes out for Bob, so he does what she
 did a beat later, with his own hurtbox and his own hitboxes. What the two share is the pair's:
-one health bar and one basis (both always the same colour), both kept on Alice and read and
-written through her, so a hit on either costs the bar and anything that switches or collapses
-one switches or collapses both.
+one health bar and one basis, kept on Alice and read and written through her. They are an
+entangled pair that always disagrees (the singlet): Bob is always in the other basis, so when
+Alice is green he is purple. A hit on either costs the bar, and anything that switches or
+collapses one switches or collapses both, the two staying opposite.
 
 Bob faces as Alice does and stands ECHO_GAP px behind her: his echo of her walk carries him
 along, he never walks past that spot towards her, and once he has nothing left to echo he
@@ -30,6 +31,7 @@ from .config import (
     STAGE_RIGHT,
     SWITCH_RECOVERY,
 )
+from .basis import hadamard
 from .fighter import IDLE, Fighter, FighterInput
 from .moves import Character, Move
 
@@ -37,12 +39,15 @@ from .moves import Character, Move
 class Echo(Fighter):
     def __init__(self, char: Character, lead: Fighter) -> None:
         self.lead = lead                # first: his health and basis are hers (the properties below)
+        hers = lead.basis
         super().__init__(char, lead.x - lead.facing * ECHO_GAP, lead.facing)
+        lead.basis = hers               # Fighter.__init__ set "his" basis through hers: undo that
         self.x = self.spot
         self.queue: deque[FighterInput] = deque([IDLE] * ECHO_DELAY)
         self.decohered = 0              # frames since he decohered (0: he is here)
         self.reform = 0                 # frames left of his re-forming, once back (drawn only)
         self.lock_pending = False       # Alice's Y replayed in a hitstop freeze: its lock, next step
+        self.anchored = False           # ANCHOR (down + X): he stays put, until TELEPORT swaps them
 
     # --- what the pair shares ---------------------------------------------------------------
 
@@ -56,11 +61,11 @@ class Echo(Fighter):
 
     @property
     def basis(self) -> str:
-        return self.lead.basis
+        return hadamard(self.lead.basis)        # always the other one: when she is green he is purple
 
     @basis.setter
     def basis(self, value: str) -> None:
-        self.lead.basis = value
+        self.lead.basis = hadamard(value)       # collapsing him collapses her into the other
 
     # --- where he is --------------------------------------------------------------------------
 
@@ -98,6 +103,9 @@ class Echo(Fighter):
             self.lock_pending = False
             self.switch_lock = SWITCH_RECOVERY + 1      # the step counts it down once at its start
             inp = replace(inp, y=False)
+        if self.anchored:               # planted: her attacks, not her walks or jumps
+            inp = replace(inp, dx=0, up=False)
+            return events + super().step(inp, rival_x)
         inp = self._walk_back(inp)
         before = self.x
         events += super().step(inp, rival_x)
@@ -110,7 +118,10 @@ class Echo(Fighter):
             self.lock_pending = True
 
     def _face(self, rival_x: float) -> None:
-        self.facing = self.lead.facing      # Bob's facing follows hers
+        if self.anchored:                   # anchored, he faces the rival: a pincer
+            super()._face(rival_x)
+        else:
+            self.facing = self.lead.facing  # following, his facing follows hers
 
     def _walk_back(self, inp: FighterInput) -> FighterInput:
         """With nothing to echo (a still stick and no button, now and in everything still queued),
@@ -148,6 +159,7 @@ class Echo(Fighter):
     def decohere(self) -> None:
         """Knocked down: he decoheres where he stands, out of the fight until he comes back."""
         self.decohered = 1
+        self.anchored = False
         self.move = None
         self.slot = None
         self.chained = False

@@ -55,9 +55,10 @@ OVER_THE_BAR = {("PHOEBE", "M-CUTIE"): "M-CUTIE wins about 65% against PHOEBE: f
 # ... and ALICE & BOB's two outside the bar, both measured over 400 rounds in their plan's Task 6
 # (docs/superpowers/plans/2026-10-22-brawl-ket-alice-bob.md): BOHR wins about 67% against them
 # (MEASURE, 12 and a knockdown from 130 px, and CHARGE NOISE, which hits each body inside it), and
-# they win about 63% against PHOEBE (with ROBERT's normals: ROBERT himself wins 60% against her)
+# they win about 63% against PHOEBE (with ROBERT's normals: ROBERT himself wins 60% against her).
+# After the playtest's singlet colours and ANCHOR, over 200 rounds: BOHR about 72%, them about 63%
 OVER_THE_BAR.update({
-    ("BOHR", "ALICE & BOB"): "BOHR wins about 67% against ALICE & BOB: for the user to decide",
+    ("BOHR", "ALICE & BOB"): "BOHR wins about 72% against ALICE & BOB: for the user to decide",
     ("PHOEBE", "ALICE & BOB"): "ALICE & BOB win about 63% against PHOEBE: for the user to decide",
 })
 CASES = [pytest.param(p, id="-".join(p), marks=[pytest.mark.xfail(reason=OVER_THE_BAR[p], strict=False)]

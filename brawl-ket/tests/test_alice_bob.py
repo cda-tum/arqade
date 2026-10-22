@@ -182,41 +182,48 @@ def test_the_echo_runs_on_through_a_hitstop_freeze():
 # --- what the pair shares --------------------------------------------------------------------------
 
 
+def test_they_are_always_opposite_colours():
+    """An entangled pair that always disagrees (the singlet): when Alice is green, Bob is purple."""
+    fight, alice, bob, _ = pair_fight()
+    assert (alice.basis, bob.basis) == (Z_BASIS, X_BASIS)
+
+
 def test_y_switches_both_at_once_and_bob_only_echoes_its_lock():
     fight, alice, bob, _ = pair_fight()
     fight.step({"p1": Y})
-    assert alice.basis == bob.basis == X_BASIS
+    assert (alice.basis, bob.basis) == (X_BASIS, Z_BASIS)
     for i in range(1, 30):
         fight.step({"p1": IDLE})
-        assert alice.basis == bob.basis == X_BASIS, i          # his replay of the Y never switches back
+        assert (alice.basis, bob.basis) == (X_BASIS, Z_BASIS), i   # his replay of the Y never switches back
         if i == ECHO_DELAY:
             assert bob.switch_lock == SWITCH_RECOVERY          # ... it only locks his attacks, as hers were
 
 
 def test_one_health_bar():
     fight, alice, bob, other = pair_fight()
-    bob_caught(fight, alice, bob, other)        # ROBERT jabs Bob (the pair is green, so is ROBERT)
+    bob_caught(fight, alice, bob, other)        # a purple ROBERT jabs Bob (Bob is purple: Alice is green)
+    other.basis = X_BASIS
     events = run(fight, 12, p2=once(A))
     hits = [e for e in events if e.kind == "hit" and e.player == "p1"]
     assert len(hits) == 1 and alice.health == bob.health == 100 - ROBERT.moves["stand.A"].damage
     assert bob.action == "hitstun" and alice.action == "idle"
 
 
-def test_a_colour_change_on_either_collapses_both():
+def test_a_colour_change_on_either_collapses_both_and_they_stay_opposite():
     fight, alice, bob, _ = pair_fight()
-    assert bob.measured_into(X_BASIS) and alice.basis == X_BASIS
+    assert bob.measured_into(Z_BASIS) and alice.basis == X_BASIS
     alice.switch()
-    assert bob.basis == Z_BASIS
+    assert (alice.basis, bob.basis) == (Z_BASIS, X_BASIS)
 
 
 # --- decoherence ------------------------------------------------------------------------------------
 
 
 def sweep_bob(fight, bob, other):
-    """ROBERT sweeps Bob (bob_caught): a knockdown. (A sweep is the other colour: ROBERT purple
-    sweeps green.)"""
+    """ROBERT sweeps Bob (bob_caught): a knockdown. (A sweep is the other colour: a green ROBERT
+    sweeps purple, and Bob is purple while Alice is green.)"""
     bob_caught(fight, fight.fighters["p1"], bob, other)
-    other.basis = X_BASIS
+    other.basis = Z_BASIS
     return run(fight, 20, p2=lambda i: SWEEP if i == 0 else FighterInput(down=True))
 
 
@@ -265,6 +272,7 @@ def test_the_round_ends_when_the_shared_bar_is_empty_wherever_bob_is():
     fight, alice, bob, other = pair_fight()
     alice.health = 4
     bob_caught(fight, alice, bob, other)
+    other.basis = X_BASIS                           # purple, as Bob is
     events = run(fight, 12, p2=once(A))             # a jab on Bob empties the bar
     assert fight.over and fight.winner == "p2" and "ko" in [e.kind for e in events]
     assert alice.action == "knockdown" and bob.action == "knockdown"
@@ -274,6 +282,7 @@ def test_bob_hits_with_his_own_hitbox():
     """With the rival standing in Bob's reach and out of Alice's, only Bob's echo connects."""
     fight, alice, bob, other = pair_fight()
     bob_caught(fight, alice, bob, other)    # Bob 40 px in front of the rival, both kids facing left
+    other.basis = X_BASIS                   # Bob's own colour (A) is purple: so is the rival
     events = run(fight, 20, once(A))
     hits = [e for e in events if e.kind == "hit" and e.player == "p2"]
     assert len(hits) == 1 and other.health == ROBERT.health - KID_NORMALS["stand.A"].damage
@@ -304,24 +313,25 @@ def test_a_throw_on_bob_costs_the_bar_and_decoheres_him():
 def test_bohrs_measure_on_bob_collapses_both():
     fight, alice, bob, other = pair_fight(rival=BOHR)
     bob_caught(fight, alice, bob, other)
-    other.basis = X_BASIS                       # BOHR purple, the pair green
+    other.basis = Z_BASIS                       # BOHR green; Bob purple (Alice green)
     events = run(fight, 40, p2=once(FighterInput(x=True)))
     assert [e.kind for e in events if e.player == "p1" and e.kind in ("hit", "measure")] == ["hit", "measure"]
-    assert alice.basis == bob.basis == X_BASIS and not bob.here
+    # Bob collapsed into BOHR's green, so Alice into purple: still opposite
+    assert (alice.basis, bob.basis) == (X_BASIS, Z_BASIS) and not bob.here
 
 
-def test_charge_noise_hits_each_body_inside_it():
+def test_charge_noise_reaches_each_body_inside_it_and_hurts_the_one_of_its_colour():
     fight, alice, bob, other = pair_fight(rival=BOHR)
     alice.x, bob.x, other.x = 300.0, 232.0, 262.0   # BOHR between them, both kids in his field
     alice.facing = bob.facing = -1
     first = []
     for i in range(30):
         events = fight.step({"p1": FighterInput(down=True), "p2": FighterInput(down=True, x=i == 0)})
-        first = [e for e in events if e.kind == "hit" and e.player == "p1"]
+        first = [e.kind for e in events if e.kind in ("hit", "block") and e.player == "p1"]
         if first:
             break
-    assert len(first) == 2                       # one shock, two targets ...
-    assert alice.health == 100 - 2 * BOHR.moves["crouch.X"].damage     # ... both on the one bar
+    assert sorted(first) == ["block", "hit"]     # one shock, two targets: only one is its colour
+    assert alice.health == 100 - BOHR.moves["crouch.X"].damage
 
 
 def test_an_ion_trap_under_bob_catches_him_and_leaves_alice_free():
@@ -349,7 +359,8 @@ def test_the_mouse_cable_reels_in_whichever_body_it_hooks():
     other.x = 120.0                             # the mouse reels its catch in to just in front of DOS
     start = bob.x
     events = run(fight, 30, FighterInput(down=True), once(FighterInput(down=True, x=True)))
-    assert [e.player for e in events if e.kind == "hit"] == ["p1"]
+    # DOS is always green and Bob purple: the mouse bounces off him, but reels him in all the same
+    assert [(e.kind, e.player) for e in events if e.kind in ("hit", "block")] == [("block", "p1")]
     assert bob.x < start - 30 and alice.x == 300.0      # Bob reeled in towards DOS; Alice untouched
 
 
@@ -558,31 +569,75 @@ def test_while_bob_is_gone_x_is_her_own_small_photon():
     assert other.health == ROBERT.health - SOLO_PHOTON.damage
 
 
-def test_teleport_swaps_them_at_once_with_a_flash_at_both_ends():
-    fight, alice, bob, other = pair_fight(rival_x=520.0)
+def anchored(rival_x=520.0, alice_x=300.0):
+    """A pair whose Bob has just been anchored by a down + X."""
+    fight, alice, bob, other = pair_fight(rival_x=rival_x, alice_x=alice_x)
+    log = [fight.step({"p1": DOWN_X if i == 0 else IDLE}) for i in range(10)]
+    return fight, alice, bob, other, log
+
+
+def test_the_first_down_x_anchors_bob_and_gives_the_cooldown_back():
+    fight, alice, bob, other, log = anchored()
+    assert first(log, "anchor") == ALICE_BOB.moves["crouch.X"].startup and first(log, "teleport") is None
+    assert bob.anchored and alice.cooldowns.get("crouch.X", 0) == 0     # the cooldown runs from the swap
+
+
+def test_an_anchored_bob_stays_put_but_still_echoes_her_attacks():
+    fight, alice, bob, other, _ = anchored(rival_x=560.0)
+    spot = bob.x
+    run(fight, 60, RIGHT)                       # Alice walks off towards the rival
+    assert bob.x == spot and alice.x - bob.x > ECHO_GAP + 60
+    starts = []
+    for i in range(30):
+        fight.step({"p1": A if i == 0 else IDLE})
+        if bob.action == "attack" and bob.frame == 0:
+            starts.append(i)
+    assert starts == [ECHO_DELAY] and abs(bob.x - spot) <= 6     # (only his jab's own small lunge)
+
+
+def test_an_anchored_bob_faces_the_rival():
+    fight, alice, bob, other, _ = anchored(rival_x=500.0)
+    alice.x, other.x = 450.0, 400.0             # the rival between them, Bob on the far side
+    run(fight, 20)                              # Alice free again after her down + X
+    assert bob.x < other.x and bob.facing == 1 and alice.facing == -1     # a pincer
+
+
+def test_the_second_down_x_teleports_and_bob_follows_again():
+    fight, alice, bob, other, _ = anchored()
+    run(fight, ALICE_BOB.moves["crouch.X"].startup + ALICE_BOB.moves["crouch.X"].recovery + 4)
     a0, b0 = alice.x, bob.x
     log = [fight.step({"p1": DOWN_X if i == 0 else IDLE}) for i in range(10)]
-    at = first(log, "teleport")
-    assert at == ALICE_BOB.moves["crouch.X"].startup
-    assert (alice.x, bob.x) == (b0, a0) and alice.facing == bob.facing == 1     # a step back out of trouble
-    assert other.health == ROBERT.health
+    assert first(log, "teleport") == ALICE_BOB.moves["crouch.X"].startup
+    assert (alice.x, bob.x) == (b0, a0) and not bob.anchored and other.health == ROBERT.health
+    assert alice.cooldowns["crouch.X"] > 0      # now the cooldown runs
+    run(fight, 80)
+    assert bob.x == pytest.approx(bob.spot)     # following her again
 
 
 def test_teleport_crosses_up_a_rival_standing_between_them():
-    fight, alice, bob, other = pair_fight(rival_x=520.0)
-    run(fight, 1, DOWN_X)
-    other.x = alice.x - 20.0                # the rival steps in between them, in the startup
-    run(fight, ALICE_BOB.moves["crouch.X"].startup)
-    assert alice.x < other.x < bob.x        # Alice is suddenly on the far side ...
-    assert alice.facing == 1 and bob.facing == 1        # ... facing the rival, and Bob as ever as she does
+    fight, alice, bob, other, _ = anchored(rival_x=560.0)
+    run(fight, 30, RIGHT)                       # Alice walks off; Bob stays
+    other.x = bob.x + 30.0                      # the rival steps in between them
+    run(fight, ALICE_BOB.moves["crouch.X"].recovery)
+    run(fight, ALICE_BOB.moves["crouch.X"].startup + 1, once(DOWN_X))
+    assert alice.x < other.x < bob.x            # Alice is suddenly on the far side ...
+    assert alice.facing == 1 and bob.facing == 1    # ... facing the rival, and Bob as she does
+
+
+def test_decohering_drops_the_anchor():
+    fight, alice, bob, other, _ = anchored()
+    bob.decohere()
+    assert not bob.anchored
 
 
 def test_no_teleport_while_bob_is_gone_and_he_never_echoes_it():
     fight, alice, bob, other = pair_fight(rival_x=520.0)
     bob.decohere()
     events = run(fight, 20, once(DOWN_X))
-    assert "teleport" not in [e.kind for e in events] and "crouch.X" not in alice.cooldowns
-    fight, alice, bob, other = pair_fight(rival_x=520.0)
+    kinds = [e.kind for e in events]
+    assert "teleport" not in kinds and "anchor" not in kinds and "crouch.X" not in alice.cooldowns
+    fight, alice, bob, other, log = anchored()
+    run(fight, 30)
     events = run(fight, 40, once(DOWN_X))
     assert [e.kind for e in events].count("teleport") == 1      # one swap for both
 

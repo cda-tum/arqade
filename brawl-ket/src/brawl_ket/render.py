@@ -132,6 +132,8 @@ BOX_POP_FRAMES = 14         # THE BOX: the real cardboard box shows this long af
 BOX_FADE_FRAMES = 16        # ... and the other one dissolves over this long
 SNAP_FRAMES = 12            # ION TRAP: a ring snapping shut on whoever it caught
 TELEPORT_FRAMES = 12        # TELEPORT: the flashes at both ends fade, and both re-form, over this long
+SPIN_TURN = 3               # M-CUTIE's SPIN: frames to each quarter of a turn
+ANCHOR_PIN_Y = 124          # the anchored Bob's pin: its tip this high over his feet, px
 KID_RING = {"alice": 40, "bob": 38}     # ALICE & BOB's shadows' widths, px (Bob's ring the thinner)
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
@@ -876,6 +878,11 @@ class Renderer:
         Alice, so the player knows he comes back (the look's)."""
         if bob.here:
             self._shadow(key, bob, ox, oy)
+            if bob.anchored:                    # ANCHORED: a second, bold ring, staked to the floor
+                rect = pygame.Rect(0, 0, KID_RING["bob"] + 16, 16)
+                rect.center = (round(bob.x) + ox, FLOOR_Y + 2 + oy)
+                pygame.draw.ellipse(self.surface, P.INK, rect.inflate(2, 2), 4)
+                pygame.draw.ellipse(self.surface, PLAYER_COLORS[key], rect, 2)
             return
         x = bob.x if bob.decohered <= DECOHERE_FADE else bob.spot
         rect = pygame.Rect(0, 0, KID_RING["bob"] + 8, 12)
@@ -887,6 +894,17 @@ class Renderer:
             if i % 2 == 0:
                 pygame.draw.arc(self.surface, c, rect, math.radians(a), math.radians(a + 20), 1)
 
+    def _anchor_pin(self, key: str, bob, ox: int, oy: int) -> None:
+        """ANCHOR: a pin over Bob's head in his player's colour, pointing down at him and bobbing
+        gently, so both players see he stays where he is."""
+        x = round(bob.x) + ox
+        y = round(FLOOR_Y - bob.y - ANCHOR_PIN_Y + oy + 2 * math.sin(self.t * 0.15))
+        pin = [(x - 6, y - 10), (x + 6, y - 10), (x, y)]
+        pygame.draw.polygon(self.surface, P.INK, [(x - 8, y - 12), (x + 8, y - 12), (x, y + 3)])
+        pygame.draw.polygon(self.surface, PLAYER_COLORS[key], pin)
+        pygame.draw.circle(self.surface, P.INK, (x, y - 14), 5)
+        pygame.draw.circle(self.surface, P.WHITE, (x, y - 14), 3)
+
     def _echo(self, key: str, bob, ox: int, oy: int) -> None:
         """Bob: as any fighter while he is here (re-forming in scanlines as he comes back); while
         he decoheres, standing see-through and breaking up, blinking out over the fade's last third."""
@@ -897,6 +915,8 @@ class Renderer:
                 self._dissolved(pose, bob, feet, BASIS_BODY[bob.basis], P.CREAM, 0.0, 1 - bob.reform / REFORM_FRAMES)
                 return
             self._fighter(f"{key}/bob", bob, ox, oy)
+            if bob.anchored:
+                self._anchor_pin(key, bob, ox, oy)
             return
         self.trails[f"{key}/bob"].clear()
         age = bob.decohered
@@ -961,7 +981,16 @@ class Renderer:
         if f.action == "charging":          # AMPLITUDE AMPLIFICATION: her halo and the steps so far
             j = draw_charging(self.surface, pose, feet, f.facing, body, f.charge, floor=FLOOR_Y + oy)
         elif f.action == "attack" and m is not None and m.name == "SPIN" and f.phase == "active":
-            j = draw_spin(self.surface, pose, feet, f.facing, body, strike_of(f), floor=FLOOR_Y + oy)
+            # a hurricane kick: she turns a quarter every SPIN_TURN frames, the leg out in front,
+            # tucked, out behind (drawn facing the other way), tucked, and round again
+            turn = (f.frame - f.startup) // SPIN_TURN % 4
+            facing = f.facing if turn < 2 else -f.facing
+            if turn % 2:
+                j = draw_puppet(self.surface, POSES["jump"], f.char.build, feet, facing, body, accent, flare,
+                                floor=FLOOR_Y + oy)
+            else:
+                j = draw_spin(self.surface, pose, feet, facing, body, strike_of(f) if turn == 0 else None,
+                              floor=FLOOR_Y + oy)
         else:
             strike = strike_of(f)
             if strike is not None and f.char.build in KIDS:

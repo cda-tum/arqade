@@ -113,14 +113,15 @@ ERWIN's weakness is the least health, and THE BOX is a gamble; DOS's is that his
 
 **ALICE & BOB** are two small fighters played as one, like the Ice Climbers: the player controls
 Alice, and Bob, 40 px behind her, does what she did 0.2 s later (every attack comes twice). They
-share one health bar of 100 and one colour (Y, MEASURE, anything that changes one changes both),
-and are a little faster and lighter than ROBERT. Bob has no push box: the rival can walk between
+share one health bar of 100 and are always in opposite colours, a singlet: Alice green, Bob
+purple, or the other way round (Y, MEASURE, anything that changes one flips both), so one attack
+colour never hurts them both. They are a little faster and lighter than ROBERT. Bob has no push box: the rival can walk between
 them. A knockdown on Bob decoheres him: he fades, and is gone for 3 s while Alice fights alone.
 
 | | ALICE & BOB |
 |---|---|
 | X | KEY EXCHANGE: Alice tosses a photon back to Bob along a short arc, and he fires it forward as one strong shot (12, ducked or jumped as a PHOTON; 2.5 s cooldown). A rival's body, attack or shot touching the toss in flight takes it out, and DOS's COPY catches it. While Bob is gone, Alice fires a small photon herself (6) |
-| Down + X | TELEPORT: they swap places at once, a flash at both ends: with the rival between them it crosses them up, otherwise it is a quick step back (2 s cooldown; not while Bob is gone) |
+| Down + X | ANCHOR, then TELEPORT: the first press plants Bob (a pin over his head): he stops following but still echoes her attacks, facing the rival, so they can split up. The second swaps them at once, a flash at both ends, and he follows again: with the rival between them it crosses them up, otherwise it is a quick step back (2 s cooldown, from the swap; not while Bob is gone, and a decohered Bob comes back unplanted) |
 | Air X | BELL DIVE: a steep diving kick (MID, 8), once per jump; Bob's echo dives a beat later |
 | Y | switches the pair's colour |
 

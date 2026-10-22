@@ -330,12 +330,13 @@ def test_their_bot_tosses_a_key_exchange_at_range(monkeypatch):
     assert "toss" in kinds and "catch" in kinds
 
 
-def test_their_bot_teleports_when_the_rival_stands_between_them(monkeypatch):
+def test_their_bot_teleports_when_the_rival_stands_between_them_and_bob_is_anchored(monkeypatch):
     from brawl_ket import bot as B
     monkeypatch.setattr(B, "TELEPORT_ODDS", 1.0)
     fight, alice, bob = kids_fight(gap=200.0)
     rival = fight.fighters["p2"]
     bot = Bot("p1", 1, skill=1.0)
+    bob.anchored = True
     rival.x = alice.x - 20.0                    # between Alice and Bob, 40 px behind her
     assert bob.x < rival.x < alice.x
     press = bot.input(fight)
@@ -384,3 +385,14 @@ def test_their_bot_only_ever_drives_alice():
         pressed.append(bot.input(fight))
         fight.step({"p1": pressed[-1]})
     assert replayed == [IDLE] * ECHO_DELAY + pressed[:-ECHO_DELAY]
+
+
+def test_their_bot_anchors_bob_with_the_rival_close(monkeypatch):
+    from brawl_ket import bot as B
+    monkeypatch.setattr(B, "ANCHOR_ODDS", 1.0)
+    fight, alice, bob = kids_fight(gap=80.0)
+    bot = Bot("p1", 1, skill=1.0)
+    events = []
+    for _ in range(20):
+        events += fight.step({"p1": bot.input(fight)})
+    assert "anchor" in [e.kind for e in events] and bob.anchored

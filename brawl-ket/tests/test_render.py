@@ -1258,7 +1258,9 @@ def test_the_toss_is_drawn_on_its_arc_and_bobs_shot_is_the_big_photon(surface):
 def test_teleport_flashes_at_both_ends_and_both_re_form(surface):
     from brawl_ket.fighter import FighterInput
     from brawl_ket.render import TELEPORT_FRAMES
-    r, fight = pair_frames(surface, [FighterInput(down=True, x=True)] + [None] * 7)
+    # TELEPORT swaps an anchored Bob (the first down + X anchors him)
+    r, fight = pair_frames(surface, [FighterInput(down=True, x=True)] + [None] * 7,
+                           setup=lambda f: setattr(f.echoes["p1"], "anchored", True))
     assert "p1" in r.teleported
     for _ in range(TELEPORT_FRAMES):
         r.draw_fight(fight, fight.step({}))
@@ -1310,3 +1312,43 @@ def test_the_shared_bar_has_a_bob_icon_that_greys_while_he_is_gone(surface):
                (tuple(gone.get_at((x, y))) for x in range(BOB_ICON) for y in range(BOB_ICON)) if c[3])
     hud = {tuple(surface.get_at((x, y)))[:3] for x in range(0, 320) for y in range(20, 50)}
     assert PHONES not in hud
+
+
+def test_an_anchored_bob_wears_a_pin_in_his_players_colour(surface):
+    from brawl_ket.config import FLOOR_Y as FLOOR, PLAYER_COLORS
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.render import ANCHOR_PIN_Y
+    r, fight = pair_frames(surface, [FighterInput(down=True, x=True)] + [None] * 10)
+    bob = fight.echoes["p1"]
+    assert bob.anchored
+    x, y = round(bob.x), FLOOR - ANCHOR_PIN_Y
+    seen = {tuple(surface.get_at((i, j)))[:3] for i in range(x - 8, x + 9) for j in range(y - 16, y + 6)}
+    assert PLAYER_COLORS["p1"] in seen
+
+
+def test_spin_turns_her_round_and_back(surface):
+    """M-CUTIE's SPIN is a hurricane kick: drawn facing forward, then the other way, then forward."""
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import CHARACTERS
+    from brawl_ket.render import SPIN_TURN
+    import brawl_ket.render as R
+    cutie = CHARACTERS["M-CUTIE"]
+    r = Renderer(surface)
+    fight = Fight({"p1": cutie, "p2": ROBERT})
+    fight.fighters["p2"].x = 600.0
+    drawn = []
+    real_spin, real_puppet = R.draw_spin, R.draw_puppet
+    R.draw_spin = lambda surf, pose, feet, facing, *a, **k: (drawn.append(facing), real_spin(surf, pose, feet, facing, *a, **k))[1]
+    try:
+        r.draw_fight(fight, fight.step({"p1": FighterInput(up=True)}))
+        for i in range(12):
+            r.draw_fight(fight, fight.step({"p1": FighterInput(x=i == 8)}))
+        me = fight.fighters["p1"]
+        for _ in range(4 * SPIN_TURN):
+            if me.phase != "active":
+                r.draw_fight(fight, fight.step({}))
+                continue
+            r.draw_fight(fight, fight.step({}))
+    finally:
+        R.draw_spin, R.draw_puppet = real_spin, real_puppet
+    assert 1 in drawn and -1 in drawn               # out in front, then out behind

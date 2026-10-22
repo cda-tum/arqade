@@ -63,7 +63,11 @@ GRAB_JUMP = 0.8         # ... and this often jumps at a rival winding up a dashi
 GRAB_SPIN = 70          # ... this close, to SPIN them out of it before it dashes (from further, it would catch her)
 KEY_RANGE = 110         # ALICE & BOB: KEY EXCHANGE with the rival at least this far from Alice ...
 KEY_ODDS = 0.03         # ... a chance a frame
-TELEPORT_ODDS = 0.15    # ... TELEPORT, a chance a frame while the rival stands between them
+TELEPORT_ODDS = 0.15    # ... TELEPORT, a chance a frame while the rival stands between them and Bob
+                        # is anchored
+ANCHOR_RANGE = 100      # ... ANCHOR Bob with the rival this close, then jump over the rival
+ANCHOR_ODDS = 0.005     # ... a chance a frame (0.02 jumped over BOHR into his anti-air: he won 83%)
+ANCHOR_HOLD = 180       # ... and swap back to Bob anyway after this long anchored with no opening
 DIVE_JUMP = (50, 120)   # ... a jump at a rival on the ground this far away, to BELL DIVE on them ...
 DIVE_JUMP_ODDS = 0.004  # ... a chance a frame (no bot answers a dive: at 0.01 they won 65-76%)
 DIVE_REACH = (10, 60)   # ... diving once they are this far ahead of her, below her
@@ -108,6 +112,7 @@ class Bot:
         self.t = 0
         self.air_pressed = False
         self.box_hold = 0               # THE BOX: how long this bot stays in the boxes
+        self.anchor_t = 0               # ALICE & BOB: frames Bob has been anchored
         self.mouse_t = -1000            # DOS: when it last flung the mouse (to follow up a pull)
         self.charge_goal = 0            # M-CUTIE: the steps this charge is mashed up to
         self.spin_jump = False          # ... this jump is one to SPIN in (her other jumps don't)
@@ -403,9 +408,10 @@ class Bot:
         return None
 
     def _kids(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
-        """ALICE & BOB (the bot is Alice): TELEPORT when the rival stands between her and Bob, KEY
-        EXCHANGE at range when they don't (Alice's own photon while Bob is gone), and now and then
-        a jump at a rival on the ground, to BELL DIVE on them."""
+        """ALICE & BOB (the bot is Alice): ANCHOR Bob with the rival close and jump over them, then
+        TELEPORT once the rival stands between her and the anchored Bob (or after a while anyway,
+        to have him back); KEY EXCHANGE at range otherwise (Alice's own photon while Bob is gone),
+        and now and then a jump at a rival on the ground, to BELL DIVE on them."""
         if me.char.pair is None or me.action not in ("idle", "walk", "crouch") or self.gap > 0:
             return None
         m = rival.move
@@ -416,13 +422,19 @@ class Bot:
             return FighterInput(up=True, dx=toward)             # over a dashing grab, and dive on them
         bob = fight.echoes[self.player]
         between = bob.here and min(me.x, bob.x) < rival.x < max(me.x, bob.x)
-        if between:
-            if me.cooldowns.get("crouch.X", 0) == 0 and self.rng.random() < TELEPORT_ODDS:
-                self.down = True
-                press = self._press("x", 0)                     # TELEPORT, from a crouch ...
-                self.down = False                               # ... and up again
-                return press
-            return None
+        ready = me.cooldowns.get("crouch.X", 0) == 0
+        if bob.here and bob.anchored:
+            self.anchor_t += 1
+            if ready and ((between and self.rng.random() < TELEPORT_ODDS) or self.anchor_t > ANCHOR_HOLD):
+                return self._down_x()                           # TELEPORT: across the rival, or back to him
+            if not between and dist <= ANCHOR_RANGE and rival.y == 0:
+                self.down = False
+                return FighterInput(up=True, dx=toward)         # over the rival, to put them between us
+            if between:
+                return None
+        elif bob.here and ready and dist <= ANCHOR_RANGE and self.rng.random() < ANCHOR_ODDS:
+            self.anchor_t = 0
+            return self._down_x()                               # ANCHOR Bob where he stands
         key = me.char.moves["stand.X"]
         if dist >= KEY_RANGE and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, key, rival) \
                 and self.rng.random() < KEY_ODDS:
@@ -433,6 +445,13 @@ class Bot:
             self.dive_jump = True
             return FighterInput(up=True, dx=toward)             # up, to come down on them
         return None
+
+    def _down_x(self) -> FighterInput:
+        """Down + X, from a crouch, and up again (ANCHOR, then TELEPORT)."""
+        self.down = True
+        press = self._press("x", 0)
+        self.down = False
+        return press
 
     def _on_ground(self, me, rival, toward: int, dist: float) -> FighterInput:
         roll = self.rng.random()

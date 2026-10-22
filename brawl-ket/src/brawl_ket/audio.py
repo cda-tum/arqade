@@ -171,6 +171,8 @@ def build_sfx() -> dict[str, list[int]]:
         "toss": tone(c("G5"), 0.04, 0.16, "pulse", decay=14),
         "catch": concat(noise_wave(0.02, 0.18, decay=60, hold=1, seed=51), tone(c("C6"), 0.03, 0.16, "square", decay=30)),
         "key_shot": mix(tone(520, 0.22, 0.24, "pulse", decay=7, slide=2.4), noise_wave(0.12, 0.1, decay=20, hold=2, seed=53)),
+        # ANCHOR: Bob planted, a low click and a thunk
+        "anchor": concat(tone(c("D4"), 0.03, 0.2, "pulse"), tone(140, 0.08, 0.22, "square", decay=12, slide=0.7)),
         "teleport": concat(tone(1300, 0.1, 0.14, "triangle", decay=5, slide=0.45),
                            tone(600, 0.1, 0.14, "triangle", decay=5, slide=2.2)),
         "bell_dive": mix(tone(520, 0.12, 0.12, "triangle", decay=10, slide=0.4),
@@ -195,7 +197,7 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 # ALICE & BOB; "pass" and "swap" are the fighter's own, which the fight turns into a
                 # toss and a TELEPORT; a toss taken out in flight sizzles as a LASER on the floor
                 "pass": None, "swap": None, "toss": "toss", "catch": "catch", "key_shot": "key_shot",
-                "intercept": "sizzle", "teleport": "teleport", "bell_dive": "bell_dive",
+                "intercept": "sizzle", "teleport": "teleport", "anchor": "anchor", "bell_dive": "bell_dive",
                 "decohere": "decohere", "recohere": "recohere",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw

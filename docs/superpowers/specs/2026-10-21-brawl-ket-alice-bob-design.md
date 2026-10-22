@@ -121,6 +121,19 @@ instantly, with a flash at both ends.
 - It does no damage, and Bob doesn't echo it (the swap is one move for both).
 - It doesn't work while Bob is decohered.
 
+**Changed after the first playtest (2026-10-22): ANCHOR first.** Bob copied Alice so closely
+that the pair never split, and TELEPORT had nothing to swap across. Now the first down + X
+**anchors** Bob: he stays where he is (a pin over his head and a second floor ring), still
+echoes her attacks, but not her walks or jumps, and faces the rival. The cooldown starts only
+with the second press, the swap above, after which he follows her again. Decoherence drops the
+anchor.
+
+**Also from that playtest: opposite colours.** They no longer share one colour: Bob is always
+in the other basis (a singlet), so Y or MEASURE on either flips both and they stay opposite.
+One attack colour then only ever hurts one of them. The user agreed to this with less damage
+in mind, but over 200 rounds a side it made them no stronger (BOHR still wins about 72%
+against them, PHOEBE about 37%), so their damage is unchanged.
+
 ### Air X: BELL DIVE (their colour, once per jump)
 
 A steep diving kick: MID, 8 damage. Bob's echo lands a beat later, so the dive comes twice.

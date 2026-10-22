@@ -332,12 +332,20 @@ class Fight:
                     events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
 
     def _teleport(self, key: str, events: list[Event]) -> None:
-        """TELEPORT: Alice and Bob swap places at once, and she turns to face the rival (Bob, as
-        ever, faces as she does). Nothing happens if Bob decohered in its startup."""
+        """Down + X, in two steps. With Bob following, it ANCHORS him: he stays where he stands
+        (still echoing her attacks, facing the rival) and the cooldown is given back. With Bob
+        anchored, it is TELEPORT: Alice and Bob swap places at once, she turns to face the rival,
+        and he follows her again. Nothing happens if Bob decohered in its startup."""
         echo = self.echoes.get(key)
         if echo is None or not echo.here:
             return
         f, rival = self.fighters[key], self.fighters[_other(key)]
+        if not echo.anchored:
+            echo.anchored = True
+            f.cooldowns.pop(f.slot or "crouch.X", None)     # the cooldown runs from the swap
+            events.append(Event("anchor", key, None, echo.x, FLOOR_Y))
+            return
+        echo.anchored = False
         (f.x, f.y), (echo.x, echo.y) = (echo.x, echo.y), (f.x, f.y)
         if rival.x != f.x:
             f.facing = 1 if rival.x > f.x else -1
