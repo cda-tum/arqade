@@ -162,7 +162,8 @@ LIST_W = 252                # a side's list of specials, px: the label, the name
 LIST_NAME_X = 56            # ... where in it the names start
 LIST_GAP = 9                # ... and the lines' spacing (four lines: the super's too)
 MOVE_LABELS = {"AMPLITUDE AMPLIFICATION": "AMP. AMPLIFICATION",     # names too long for that list
-               "BLUE SCREEN OF DEATH": "BLUE SCREEN"}
+               "BLUE SCREEN OF DEATH": "BLUE SCREEN",
+               "WAVEFUNCTION COLLAPSE": "WAVEFUNC. COLLAPSE"}
 # the select screen: what each fighter is, in a line, and how its X moves are entered
 TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY", "PHOEBE": "TALL AND TRICKY",
           "ERWIN": "QUICK AND SLIPPERY", "DOS": "SLOW AND CLASSICAL", "M-CUTIE": "PATIENT AND TECHNICAL",

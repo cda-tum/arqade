@@ -189,6 +189,19 @@ def build_sfx() -> dict[str, list[int]]:
         # BLUE SCREEN OF DEATH: the error chord as it freezes, and the crash as he lands
         "crash": concat(tone(c("A4"), 0.12, 0.18, "square", decay=6), tone(c("E4"), 0.25, 0.18, "square", decay=5)),
         "bsod_land": mix(noise_wave(0.5, 0.3, decay=6, hold=2, seed=59), tone(60, 0.5, 0.3, "square", decay=6, slide=0.5)),
+        # the six other supers: the lock's ping; BLOCH SPHERE's rumble and the H-gate's chime;
+        # the collapse's fall; the beam's hum; the ghosts' hiss and the swipe; the fridge's crash;
+        # the key's pass and the padlock's click
+        "lock": tone(c("E6"), 0.08, 0.16, "triangle", decay=8),
+        "bloch": mix(tone(90, 0.5, 0.22, "saw", decay=3, slide=1.4), noise_wave(0.5, 0.08, decay=3, hold=4, seed=61)),
+        "h_gate": concat(tone(c("C6"), 0.05, 0.18, "square", decay=10), tone(c("G6"), 0.12, 0.18, "square", decay=8)),
+        "collapse": mix(tone(1400, 0.4, 0.14, "triangle", decay=4, slide=0.2), noise_wave(0.4, 0.14, decay=5, hold=2, seed=63)),
+        "beam": mix(tone(220, 1.0, 0.16, "saw", decay=1.5), tone(660, 1.0, 0.06, "sine", decay=1.5)),
+        "ghosts": noise_wave(0.6, 0.12, decay=3, hold=6, seed=65),
+        "swipe": mix(noise_wave(0.15, 0.25, decay=14, hold=1, seed=67), tone(900, 0.12, 0.12, "saw", decay=12, slide=0.4)),
+        "fridge": mix(noise_wave(0.6, 0.3, decay=5, hold=2, seed=69), tone(55, 0.6, 0.3, "square", decay=5, slide=0.6)),
+        "key_pass": tone(c("A5"), 0.06, 0.14, "pulse", decay=12),
+        "padlock": concat(tone(c("G5"), 0.03, 0.2, "square", decay=30), tone(c("C5"), 0.06, 0.2, "square", decay=20)),
     }
 
 
@@ -210,7 +223,10 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 "intercept": "sizzle", "teleport": "teleport", "anchor": "anchor", "bell_dive": "bell_dive",
                 "super_half": "super_half", "super_full": "super_full", "super": "super",
                 "crash": "crash", "bsod_land": "bsod_land",
-                "lock": None, "lock_miss": None,
+                "lock": "lock", "lock_miss": None,
+                "bloch": "bloch", "h_gate": "h_gate", "collapse": "collapse", "beam": "beam",
+                "ghosts": "ghosts", "swipe": "swipe", "fridge": "fridge", "key_pass": "key_pass",
+                "padlock": "padlock",
                 "decohere": "decohere", "recohere": "recohere",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw

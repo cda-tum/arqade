@@ -1447,14 +1447,17 @@ def test_a_full_bar_says_a_plus_b_for_a_fighter_with_a_super(surface):
     r = Renderer(surface)
     seen = {}
     for name in ("DOS", "ROBERT"):
-        fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT})
+        from types import MappingProxyType
+        from dataclasses import replace as _replace
+        char = CHARACTERS[name] if name == "DOS" else _replace(ROBERT, extra=MappingProxyType({}))
+        fight = Fight({"p1": char, "p2": ROBERT})
         fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
         frames = []
         for _ in range(24):                             # it blinks: look over a whole cycle
             r.draw_fight(fight, [], {"p1": 0, "p2": 0})
             frames.append(surface.subsurface((0, 40, 300, 18)).copy())
         seen[name] = len({pygame.image.tostring(s, "RGB") for s in frames})
-    assert seen["DOS"] > seen["ROBERT"]                  # (ROBERT has no super yet: no A+B!)
+    assert seen["DOS"] > seen["ROBERT"]                  # (a fighter with no super: no A+B!)
 
 
 def test_the_freeze_shows_the_call(surface):

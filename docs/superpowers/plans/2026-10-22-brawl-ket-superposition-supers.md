@@ -439,6 +439,7 @@ Append to `tests/test_superpos.py`:
 
 # --- part 2: the six supers --------------------------------------------------------------------------
 
+from brawl_ket.config import FLOOR_Y  # noqa: E402
 from brawl_ket.moves import (  # noqa: E402
     BLOCH_SPHERE,
     COHERENT_BEAM,
@@ -501,8 +502,8 @@ def test_bloch_sphere_rolls_six_px_a_frame_and_a_jump_clears_it():
     fight = fight_of(CHARACTERS["ROBERT"], ROBERT, 300.0)
     fire(fight)
     x = fight.fighters["p1"].x
-    run(fight, BLOCH_SPHERE.startup + 5)
-    assert fight.fighters["p1"].x == x + 6 * 5
+    run(fight, BLOCH_SPHERE.startup + 5)               # its first active frame is the startup's last
+    assert fight.fighters["p1"].x == x + 6 * 6
     fight = fight_of(CHARACTERS["ROBERT"], ROBERT, 150.0)
     fire(fight)
     run(fight, BLOCH_SPHERE.startup + 8)
@@ -517,7 +518,7 @@ def test_wavefunction_collapse_falls_where_they_stood_at_the_lock():
     fight = fight_of(CHARACTERS["BOHR"], ROBERT, 300.0)
     fire(fight)
     run(fight, WAVE_COLLAPSE.startup - WAVE_COLLAPSE.lock + 1)
-    fight.fighters["p2"].x += 120                   # walked off the ring
+    fight.fighters["p2"].x -= 120                   # walked off the ring (towards him: the stage ends behind)
     run(fight, 40)
     assert fight.fighters["p2"].health == ROBERT.health
 
@@ -535,7 +536,10 @@ def test_nine_lives_eight_pounces_then_the_swipe_from_right_in_front():
     assert fight.fighters["p2"].health == ROBERT.health - 25
     fight = fight_of(CHARACTERS["ERWIN"], ROBERT, 120.0)
     fire(fight)
-    run(fight, NINE_LIVES.startup + NINE_LIVES.active)
+    for _ in range(200):                            # (the pounces' hitstop holds the frames back)
+        if fight.fighters["p1"].move is NINE_SWIPE:
+            break
+        fight.step({})
     assert fight.fighters["p1"].move is NINE_SWIPE
     assert abs(fight.fighters["p1"].x - (420.0 - NINE_SWIPE.warp)) <= 4     # (the push box nudges)
 
@@ -551,7 +555,7 @@ def test_dilution_fridge_crushes_who_stays_and_frosts_who_got_out_but_not_who_ju
     fight = fight_of(CHARACTERS["M-CUTIE"], ROBERT, 300.0)
     fire(fight)
     run(fight, DILUTION_FRIDGE.startup - DILUTION_FRIDGE.lock + 1)
-    fight.fighters["p2"].x += 90                    # out of the shadow, into the frost
+    fight.fighters["p2"].x -= 90                    # out of the shadow, into the frost
     run(fight, 60)
     assert fight.fighters["p2"].health == ROBERT.health - 5
 

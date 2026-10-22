@@ -180,7 +180,7 @@ def test_without_a_full_bar_a_and_b_are_as_ever():
 
 
 def test_a_fighter_with_no_super_never_waits():
-    fight = fight_of()
+    fight = fight_of(replace(ROBERT, extra=MappingProxyType({})))
     full(fight)
     fight.step({"p1": A})
     assert fight.fighters["p1"].slot == "stand.A"
@@ -464,3 +464,138 @@ def test_a_decohered_bob_comes_back_for_their_super():
     full(fight)
     events = fight.step({"p1": AB})
     assert fight.echoes["p1"].here and "recohere" in kinds(events)
+
+
+# --- part 2: the six supers --------------------------------------------------------------------------
+
+from brawl_ket.config import FLOOR_Y  # noqa: E402
+from brawl_ket.moves import (  # noqa: E402
+    BLOCH_SPHERE,
+    COHERENT_BEAM,
+    DILUTION_FRIDGE,
+    H_UPPERCUT,
+    NINE_LIVES,
+    NINE_SWIPE,
+    ONE_TIME_PAD,
+    WAVE_COLLAPSE,
+)
+
+ALL_SUPERS = {"ROBERT": "BLOCH SPHERE", "BOHR": "WAVEFUNCTION COLLAPSE", "PHOEBE": "COHERENT BEAM",
+              "ERWIN": "NINE LIVES", "DOS": "BLUE SCREEN OF DEATH", "M-CUTIE": "DILUTION FRIDGE",
+              "ALICE & BOB": "ONE-TIME PAD"}
+
+
+def test_everyone_has_their_super_and_it_is_both_colours():
+    for name, sup in ALL_SUPERS.items():
+        m = CHARACTERS[name].extra["super"]
+        assert m.name == sup and m.kind == "super" and m.colour == BOTH, name
+        part = m
+        while part is not None:                     # its follow-ups too
+            assert part.kind == "super" and part.colour == BOTH, part.name
+            part = part.follow
+
+
+def total(m) -> int:
+    n = 0
+    while m is not None:
+        n += m.damage * (m.hits or 1)
+        m = m.follow
+    return n
+
+
+def test_each_is_about_25_in_all():
+    for name in ALL_SUPERS:
+        m = CHARACTERS[name].extra["super"]
+        if m.name == "DILUTION FRIDGE":
+            assert total(m) == 25                   # the fridge and the frost don't both land on one rival
+        else:
+            assert total(m) == 25, name
+
+
+def landed(name: str, rival=ROBERT, gap=60.0, frames=200, setup=None) -> Fight:
+    fight = fight_of(CHARACTERS[name], rival, gap)
+    if setup:
+        setup(fight)
+    fire(fight)
+    run(fight, frames)
+    return fight
+
+
+def test_bloch_sphere_rolls_in_for_4_hits_then_the_uppercut_and_he_switches():
+    fight = landed("ROBERT", gap=200.0)
+    assert fight.fighters["p2"].health == ROBERT.health - 25
+    assert fight.fighters["p1"].basis == X
+
+
+def test_bloch_sphere_rolls_six_px_a_frame_and_a_jump_clears_it():
+    fight = fight_of(CHARACTERS["ROBERT"], ROBERT, 300.0)
+    fire(fight)
+    x = fight.fighters["p1"].x
+    run(fight, BLOCH_SPHERE.startup + 5)               # its first active frame is the startup's last
+    assert fight.fighters["p1"].x == x + 6 * 6
+    fight = fight_of(CHARACTERS["ROBERT"], ROBERT, 150.0)
+    fire(fight)
+    run(fight, BLOCH_SPHERE.startup + 8)
+    fight.step({"p2": FighterInput(up=True)})
+    run(fight, 14)
+    assert fight.fighters["p2"].health >= ROBERT.health - H_UPPERCUT.damage    # the roll passed under
+
+
+def test_wavefunction_collapse_falls_where_they_stood_at_the_lock():
+    fight = landed("BOHR", gap=300.0)
+    assert fight.fighters["p2"].health == ROBERT.health - 25
+    fight = fight_of(CHARACTERS["BOHR"], ROBERT, 300.0)
+    fire(fight)
+    run(fight, WAVE_COLLAPSE.startup - WAVE_COLLAPSE.lock + 1)
+    fight.fighters["p2"].x -= 120                   # walked off the ring (towards him: the stage ends behind)
+    run(fight, 40)
+    assert fight.fighters["p2"].health == ROBERT.health
+
+
+def test_coherent_beam_hits_five_times_crouching_or_not_and_its_top_is_110_px():
+    fight = landed("PHOEBE", gap=300.0, setup=lambda f: setattr(f.fighters["p2"], "crouching", True))
+    assert fight.fighters["p2"].health == ROBERT.health - 25
+    phoebe = fight.fighters["p1"]
+    _, top, _, h = phoebe.world_box(COHERENT_BEAM.hitbox)
+    assert top + h == FLOOR_Y and h == 110
+
+
+def test_nine_lives_eight_pounces_then_the_swipe_from_right_in_front():
+    fight = landed("ERWIN", gap=120.0)
+    assert fight.fighters["p2"].health == ROBERT.health - 25
+    fight = fight_of(CHARACTERS["ERWIN"], ROBERT, 120.0)
+    fire(fight)
+    for _ in range(200):                            # (the pounces' hitstop holds the frames back)
+        if fight.fighters["p1"].move is NINE_SWIPE:
+            break
+        fight.step({})
+    assert fight.fighters["p1"].move is NINE_SWIPE
+    assert abs(fight.fighters["p1"].x - (420.0 - NINE_SWIPE.warp)) <= 4     # (the push box nudges)
+
+
+def test_nine_lives_misses_a_rival_out_of_its_reach():
+    fight = landed("ERWIN", gap=NINE_LIVES.lock_range + 30.0)
+    assert fight.fighters["p2"].health == ROBERT.health
+
+
+def test_dilution_fridge_crushes_who_stays_and_frosts_who_got_out_but_not_who_jumps():
+    fight = landed("M-CUTIE", gap=300.0)
+    assert fight.fighters["p2"].health == ROBERT.health - 20
+    fight = fight_of(CHARACTERS["M-CUTIE"], ROBERT, 300.0)
+    fire(fight)
+    run(fight, DILUTION_FRIDGE.startup - DILUTION_FRIDGE.lock + 1)
+    fight.fighters["p2"].x -= 90                    # out of the shadow, into the frost
+    run(fight, 60)
+    assert fight.fighters["p2"].health == ROBERT.health - 5
+
+
+def test_one_time_pad_holds_the_rival_between_them_for_25():
+    fight = landed("ALICE & BOB", gap=80.0)
+    rival, alice, bob = fight.fighters["p2"], fight.fighters["p1"], fight.echoes["p1"]
+    assert rival.health == ROBERT.health - 25
+    assert alice.x < rival.x < bob.x or bob.x < rival.x < alice.x
+
+
+def test_one_time_pad_misses_out_of_reach_or_in_the_air():
+    fight = landed("ALICE & BOB", gap=ONE_TIME_PAD.lock_range + 30.0)
+    assert fight.fighters["p2"].health == ROBERT.health

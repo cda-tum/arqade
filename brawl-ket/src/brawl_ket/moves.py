@@ -713,6 +713,93 @@ ALICE_BOB = Character(
     extra=MappingProxyType({"catch": KEY_SHOT, "alone": SOLO_PHOTON}),
     pair=BOB,
 )
+# --- SUPERposition: the six other supers (docs/superpowers/specs/2026-10-22-brawl-ket-superposition-design.md,
+# 4; their look: 2026-10-22-brawl-ket-superposition-looks.py). All BOTH: they hurt either colour.
+
+# ROBERT: BLOCH SPHERE. A Bloch sphere forms round him and he rolls in inside it, LOW (a jump
+# clears it), 4 hits of 4; then an H-gate uppercut (9) flips its arrow to |1>, and him with it.
+H_UPPERCUT = Move(
+    "H-GATE UPPERCUT", 4, 6, 24, Box(6, 50, 36, 80), BOTH, MID,
+    damage=9, hitstun=30, knockback=3.0, knockdown=True, kind="super", switch_self_on_hit=True,
+    cue="h_gate", poses=("crouch", "slam", "slam"),
+)
+BLOCH_SPHERE = Move(
+    "BLOCH SPHERE", 8, 50, 1, Box(-33, 0, 66, 66), BOTH, LOW,
+    damage=4, hitstun=16, knockback=1.0, kind="super", hit_every=6, hits=4, lunge=6.0,
+    hurt_active=Box(-30, 0, 60, 60), follow=H_UPPERCUT, cue="bloch",
+    poses=("brace", "crouch", "crouch"),
+)
+# BOHR: WAVEFUNCTION COLLAPSE. A probability cloud spreads over the floor; 12 frames before it
+# falls it locks on the rival's x, and a pillar of light falls there: 25, a knockdown.
+WAVE_COLLAPSE = Move(
+    "WAVEFUNCTION COLLAPSE", 36, 6, 30, Box(-30, 0, 60, 320), BOTH, MID,
+    damage=25, hitstun=30, knockback=0.0, knockdown=True, kind="super", lock=12, remote=True,
+    cue="collapse", poses=("stomp", "slam", "slam"),
+)
+# PHOEBE: COHERENT BEAM. A laser straight forward to the screen's edge, floor to 110 px up:
+# 5 hits of 5. Only a jump above it passes over.
+COHERENT_BEAM = Move(
+    "COHERENT BEAM", 12, 60, 30, Box(20, 0, 660, 110), BOTH, MID,
+    damage=5, hitstun=16, knockback=1.0, kind="super", hit_every=12, hits=5,
+    cue="beam", poses=("throw_reach", "throw_reach", "throw_reach"),
+)
+# ERWIN: NINE LIVES. Into THE BOX, which splits into nine ERWINs round a rival within 160 px:
+# eight ghost pounces, LOW, 2 each; then the real one warps in and swipes (9, a knockdown).
+NINE_SWIPE = Move(
+    "NINE LIVES", 2, 6, 30, Box(10, 20, 60, 90), BOTH, MID,
+    damage=9, hitstun=30, knockback=3.0, knockdown=True, kind="super", warp=40,
+    cue="swipe", poses=("swipe", "swipe", "idle"),
+)
+NINE_LIVES = Move(
+    "NINE LIVES", 10, 64, 1, Box(-40, 0, 80, 40), BOTH, LOW,
+    damage=2, hitstun=14, knockback=0.0, kind="super", hit_every=8, hits=8,
+    lock=0, lock_range=160, remote=True, follow=NINE_SWIPE, cue="ghosts",
+    poses=("box_duck", "box_duck", "box_duck"),
+)
+# M-CUTIE: DILUTION FRIDGE. A shadow follows the rival and locks 12 frames before a giant gold
+# dilution refrigerator lands there (20, a knockdown); then a frosty shockwave, LOW, 150 px
+# either side (5) for whoever got out of the shadow.
+FROST_WAVE = Move(
+    "DILUTION FRIDGE", 1, 6, 30, Box(-150, 0, 300, 30), BOTH, LOW,
+    damage=5, hitstun=14, knockback=3.0, kind="super", remote=True,
+    poses=("idle", "idle", "idle"),
+)
+DILUTION_FRIDGE = Move(
+    "DILUTION FRIDGE", 42, 4, 1, Box(-35, 0, 70, 320), BOTH, MID,
+    damage=20, hitstun=30, knockback=3.0, knockdown=True, kind="super", lock=12, remote=True,
+    follow=FROST_WAVE, cue="fridge", poses=("slam", "slam", "slam"),
+)
+# ALICE & BOB: ONE-TIME PAD. A rival on the ground within 100 px of Alice is held, and the two
+# re-form either side of them; the key passes through them six times (3 each), then a padlock
+# snaps shut (7, a knockdown).
+OTP_HOLD = Move(
+    "ONE-TIME PAD", 0, 1, 1, None, BOTH, MID,
+    damage=0, hitstun=75, knockback=0.0, hold=True,
+)
+PADLOCK = Move(
+    "ONE-TIME PAD", 2, 4, 30, Box(-30, 0, 60, 140), BOTH, MID,
+    damage=7, hitstun=30, knockback=3.0, knockdown=True, kind="super", remote=True,
+    cue="padlock", poses=("fire", "fire", "idle"),
+)
+ONE_TIME_PAD = Move(
+    "ONE-TIME PAD", 6, 60, 1, Box(-20, 20, 40, 100), BOTH, MID,
+    damage=3, hitstun=14, knockback=0.0, kind="super", hit_every=10, hits=6,
+    lock=0, lock_range=100, lock_ground=True, lock_hold=OTP_HOLD, flank=50, remote=True,
+    follow=PADLOCK, cue="key_pass", poses=("catch", "fire", "fire"),
+)
+
+
+def _with_super(char: Character, move: Move) -> Character:
+    return replace(char, extra=MappingProxyType({**char.extra, "super": move}))
+
+
+ROBERT = _with_super(ROBERT, BLOCH_SPHERE)
+BOHR = _with_super(BOHR, WAVE_COLLAPSE)
+PHOEBE = _with_super(PHOEBE, COHERENT_BEAM)
+ERWIN = _with_super(ERWIN, NINE_LIVES)
+M_CUTIE = _with_super(M_CUTIE, DILUTION_FRIDGE)
+ALICE_BOB = _with_super(ALICE_BOB, ONE_TIME_PAD)
+
 
 CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE, "ERWIN": ERWIN, "DOS": DOS,
                                     "M-CUTIE": M_CUTIE, "ALICE & BOB": ALICE_BOB}
