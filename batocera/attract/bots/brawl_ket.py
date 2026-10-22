@@ -16,7 +16,8 @@ colour rule are: in reach it presses the matching colour (A against its own,
 B against the other) four times as often, jumps in more, and ROBERT slides in
 with PHASE SLIDE. Everything else is the game's own CPU: the dodge switches
 (Y), the throws on a rival who keeps switching, CHARGE NOISE and MEASURE,
-the height reads.
+the height reads, and SUPERposition: with a full bar the CPU fires its super
+(A and B on the same frame) where it will land.
 
 Two such CPUs would still trade rounds at random, so each round has a
 script, as in bots/qurves.py: who wins it, and a line each fighter's health
@@ -24,31 +25,38 @@ should follow (the loser's down to 0 in ROUND_SECONDS, the winner's to
 WINNER_LEFT). A fighter whose rival is above its line presses harder and
 stops dodging; one whose rival is below it now and then presses the wrong
 colour, which bounces off with the game's ping, and never finishes off the
-round's winner. BOHR takes round 1 and ROBERT comes back to win 2-1 (with
-seed 1: K.O.s at 24, 52.5 and 78.5 s, then P1 WINS! to the end). The demo CPU
-can also flicker, Y and straight back, so switches are kept SWITCH_GAP apart.
+round's winner (a super is never fired at the round's winner with 25 or less
+left). BOHR takes round 1 and ROBERT comes back to win 2-1 (with seed 1: K.O.s
+at 28.5, 55.5 and 87.5 s; the bars carry over into round 2, where BOHR fires
+WAVEFUNCTION COLLAPSE at 34.5 s and ROBERT answers with BLOCH SPHERE at 37.5 s).
+The demo CPU can also flicker, Y and straight back, so switches are kept
+SWITCH_GAP apart.
+
+To re-cut HIGHLIGHTS after a change, capture with BRAWL_REEL_LOG=<file>: the
+bot writes each super, knockdown and round end there with its time (the bot's
+clock, about 0.3 s behind the clip's).
 """
 
+import os
 from dataclasses import replace
 
 from brawl_ket import match as M
 from brawl_ket.bot import STRIKE_RANGE, Bot as CPU
 from brawl_ket.fighter import FighterInput
 
-SECONDS = 85.0
+SECONDS = 90.0
 SKIP = 3.8  # title 0.4 s, select 0.7 s, stage 0.35 s, HOW TO PLAY 0.35 s, then ROUND 1 / FIGHT!;
             # the fight starts at 3.77 s
-HIGHLIGHTS = [  # 2 s windows with seed 1, best first (CHOOSE YOUR STAGE and HOW TO PLAY: +0.7 s)
-    36.0,   # BOHR's CHARGE NOISE shocks ROBERT, ROBERT switches (H) and the shocks bounce off,
-            # then ROBERT knocks BOHR down
-    22.6,   # end of round 1: ROBERT sweeps BOHR down, BOHR switches, throws ROBERT: K.O.
-    57.7,   # round 3: a green hit, BOHR switches and the next one bounces, CHARGE NOISE
-            # against a HADAMARD DIVE
-    4.2,    # the opening: both switch, a PHOTON, a PHASE SLIDE knocks BOHR down
-    77.2,   # match point: purple hits on BOHR, K.O. in slow motion, ROBERT WINS THE ROUND
-    67.9,   # knockdowns traded: BOHR down, ROBERT thrown, BOHR down again
-    38.9,   # a sweep, BOHR's MEASURE, ROBERT knocked down
-    51.1,   # end of round 2: ROBERT lands the last purple hits, K.O.
+HIGHLIGHTS = [  # 2 s windows with seed 1, best first (checked frame by frame, 2026-10-22)
+    37.4,   # SUPERposition! ROBERT's BLOCH SPHERE: the call, the sphere rolls in, the H-gate
+            # uppercut flips its arrow to |1> and ROBERT from purple to green
+    34.3,   # SUPERposition! BOHR's WAVEFUNCTION COLLAPSE: the call, the cloud, the pillar
+    26.6,   # BOHR's CHARGE NOISE crackles round ROBERT, then K.O.: BOHR WINS THE ROUND
+    21.6,   # ROBERT jumps clean over BOHR, lands and sweeps him down
+    85.8,   # match point: the last kicks, K.O. in slow motion, ROBERT WINS THE ROUND
+    54.0,   # end of round 2: purple hits on BOHR, K.O.
+    4.0,    # the opening: both switch, BOHR's purple CHARGE NOISE
+    80.0,   # CHARGE NOISE against ROBERT's kicks; BOHR knocked down
 ]
 
 MENU_GAP = 20  # frames between two menu presses
@@ -84,7 +92,7 @@ class Keen(CPU):
         line = 1 - (1 - left) * min(1.0, self.t / 60 / ROUND_SECONDS)
         return f.health / f.char.health - line
 
-    def _on_ground(self, me, rival, toward, dist):
+    def _on_ground(self, fight, me, rival, toward, dist):
         if not self.chain and self.gap == 0:
             roll = self.rng.random()
             push = self.excess(self.rival, rival)
@@ -102,7 +110,7 @@ class Keen(CPU):
             if dist > STRIKE_RANGE + 30 and roll < JUMP_IN:
                 self.down = False
                 return FighterInput(up=True, dx=toward)
-        return super()._on_ground(me, rival, toward, dist)
+        return super()._on_ground(fight, me, rival, toward, dist)
 
     def input(self, fight):
         """The CPU's answer, but while the rival is behind the script an attack now and
@@ -110,6 +118,10 @@ class Keen(CPU):
         finished off, and a switch is never undone at once."""
         inp = super().input(fight)
         me, rival = fight.fighters[self.player], fight.fighters[self.rival]
+        if inp.a and inp.b:     # SUPERposition: the CPU fires its super (never at the round's winner, low)
+            if self.rival == self.winner and rival.health < SPARE * rival.char.health + 25:
+                inp = replace(inp, a=False, b=False)
+            return inp
         if inp.a or inp.b or inp.x:
             chance = MISREAD * (-self.excess(self.rival, rival) - 0.05)
             if self.rival == self.winner and rival.health < SPARE * rival.char.health:
@@ -142,6 +154,20 @@ class Bot:
             return
         if game.state in (M.ROUND_INTRO, M.FIGHT, M.ROUND_END) and not game.paused:
             self.play(game)
+            log = os.environ.get("BRAWL_REEL_LOG")      # (for picking HIGHLIGHTS: what happened when)
+            if log:
+                f = game.fight
+                with open(log, "a") as out:
+                    frozen = f.freeze > 0
+                    if frozen and not getattr(self, "_frozen", False):
+                        out.write(f"{t:.2f} super {f.supers[0]} {f.fighters[f.supers[0]].char.name}\n")
+                    self._frozen = frozen
+                    for k, fi in f.fighters.items():
+                        if fi.action == "knockdown" and fi.frame == 1:
+                            out.write(f"{t:.2f} down {k} health {fi.health}\n")
+                    if f.over and not getattr(self, "_logged_over", None) is f:
+                        self._logged_over = f
+                        out.write(f"{t:.2f} over winner {f.winner}\n")
             return
         # Menus: one press (a single frame) every MENU_GAP frames.
         self.pads.release_all()
