@@ -50,7 +50,7 @@ def test_the_game_runs_headless_and_quits(monkeypatch) -> None:
 
 
 def test_quit_on_the_title_ends_the_game_loop(monkeypatch) -> None:
-    """Down, then A: the loop returns, the way Start + Select leaves it."""
+    """Up (round to the last row), then A: the loop returns, the way Start + Select leaves it."""
     import pygame
 
     from brawl_ket import game
@@ -62,7 +62,7 @@ def test_quit_on_the_title_ends_the_game_loop(monkeypatch) -> None:
         real_update(self, dt)
         frames["n"] += 1
         if frames["n"] == 3:
-            self.frame.nav["p1"] = (0, 1)
+            self.frame.nav["p1"] = (0, -1)
         elif frames["n"] == 5:
             self.frame.confirms["p1"] = True
         elif frames["n"] > 120:             # never got out: fail rather than hang

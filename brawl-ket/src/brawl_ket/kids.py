@@ -303,11 +303,11 @@ def draw_kid(surf, j, facing, base, who, strike=None) -> dict:
     return j
 
 
-def draw_pair(surf, pose, feet, facing, base, gap=40) -> tuple[dict, dict]:
+def draw_pair(surf, pose, feet, facing, base, gap=40, bob_base=None) -> tuple[dict, dict]:
     """Both at once, Bob `gap` px behind Alice (drawn first, behind her), as the screens show
-    them. Returns Alice's joints and Bob's."""
+    them, Bob in `bob_base` (their other colour) if given. Returns Alice's joints and Bob's."""
     bx = feet[0] - facing * gap
-    jb = draw_kid(surf, joints(pose, "bob", (bx, feet[1]), facing), facing, base, "bob")
+    jb = draw_kid(surf, joints(pose, "bob", (bx, feet[1]), facing), facing, bob_base or base, "bob")
     ja = draw_kid(surf, joints(pose, "alice", feet, facing), facing, base, "alice")
     return ja, jb
 

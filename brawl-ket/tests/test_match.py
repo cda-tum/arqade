@@ -118,9 +118,11 @@ def test_a_or_start_on_the_title_goes_to_select() -> None:
 
 
 def test_the_title_menu_ends_with_quit_and_the_stick_moves_through_it() -> None:
-    assert TITLE_ITEMS == ("PLAY", "QUIT")
+    assert TITLE_ITEMS == ("PLAY", "CPU VS CPU", "QUIT")
     m = Match(random.Random(1))
     assert "blip" in cues(m.update(press("down", "p2")))
+    assert TITLE_ITEMS[m.title_index] == "CPU VS CPU"
+    m.update(press("down"))
     assert TITLE_ITEMS[m.title_index] == "QUIT"
     m.update(press("down"))                 # round again
     assert TITLE_ITEMS[m.title_index] == "PLAY"
@@ -130,18 +132,18 @@ def test_the_title_menu_ends_with_quit_and_the_stick_moves_through_it() -> None:
 
 def test_a_on_quit_quits_at_once() -> None:
     m = Match(random.Random(1))
-    m.update(press("down"))
+    m.update(press("up"))
     m.update(press("confirm", "p2"))
     assert m.quit and m.state == TITLE
 
 
 def test_start_always_plays_and_b_never_quits() -> None:
     m = Match(random.Random(1))
-    m.update(press("down"))
+    m.update(press("up"))
     m.update(press("back"))
     assert not m.quit and m.state == TITLE
     m.update(press("start"))                # QUIT is selected, but Start starts
-    assert not m.quit and m.state == SELECT
+    assert not m.quit and m.state == SELECT and not any(m.cpu.values())
 
 
 def test_the_demo_puts_the_title_back_on_play() -> None:
@@ -856,3 +858,120 @@ def test_the_demo_plays_alice_and_bob_with_their_bot() -> None:
         bob = m.attract.echoes[key]
         echoed = echoed or bob.action == "attack"
     assert echoed                       # the bot drove Alice, and Bob echoed her
+
+
+# --- CPU VS CPU ---------------------------------------------------------------------------------
+
+
+def to_cpu_select(m: Match, kind: str = "confirm") -> None:
+    m.update(press("down"))
+    assert TITLE_ITEMS[m.title_index] == "CPU VS CPU"
+    m.update(press(kind))
+    assert m.state == SELECT and m.watching
+
+
+def to_cpu_fight(m: Match, p1: int = 0, p2: int = 1) -> None:
+    """From the title, CPU VS CPU: pick both fighters with P1's pad, RANDOM stage, intro."""
+    to_cpu_select(m)
+    for p, want in (("p1", p1), ("p2", p2)):
+        assert m.picking == p
+        while m.picks[p] != want:
+            m.update(press("right"))
+        m.update(press("confirm"))
+    assert m.state == STAGE_SELECT
+    run(m, STAGE_LOCK)
+    m.update(press("confirm"))
+    assert m.state == ROUND_INTRO           # no HOW TO PLAY: nobody plays
+    run(m, config.ROUND_INTRO_FRAMES)
+    assert m.state == FIGHT
+
+
+@pytest.mark.parametrize("kind", ["confirm", "start"])
+def test_a_or_start_on_cpu_vs_cpu_starts_it(kind) -> None:
+    m = Match(random.Random(1))
+    to_cpu_select(m, kind)
+    assert m.cpu == {"p1": True, "p2": True} and m.picking == "p1"
+
+
+def test_play_is_people_on_both_sides() -> None:
+    m = Match(random.Random(1))
+    m.update(press("confirm"))
+    assert not m.watching and m.cpu == {"p1": False, "p2": False}
+
+
+def test_either_pad_picks_the_left_cpu_then_the_right_one() -> None:
+    m = Match(random.Random(1))
+    to_cpu_select(m)
+    m.update(press("right", "p2"))
+    assert m.picks["p1"] == 1               # p2's pad works the one cursor too
+    m.update(press("confirm", "p2"))
+    assert m.ready["p1"] and m.picking == "p2"
+    before = m.picks["p2"]
+    m.update(press("right"))
+    assert m.picks["p2"] == before + 1 and m.picks["p1"] == 1
+
+
+def test_b_takes_the_last_cpu_pick_back_then_goes_to_the_title() -> None:
+    m = Match(random.Random(1))
+    to_cpu_select(m)
+    m.update(press("confirm"))
+    m.update(press("back", "p2"))
+    assert m.state == SELECT and m.picking == "p1"
+    m.update(press("back"))
+    assert m.state == TITLE and not m.watching
+
+
+def test_back_from_the_stage_select_one_a_goes_on() -> None:
+    m = Match(random.Random(1))
+    to_cpu_select(m)
+    m.update(press("confirm"))
+    m.update(press("confirm"))
+    assert m.state == STAGE_SELECT
+    m.update(press("back"))
+    assert m.state == SELECT and m.picking is None
+    m.update(press("confirm"))
+    assert m.state == STAGE_SELECT
+
+
+def test_the_cpu_fights_both_sides_and_the_pads_do_nothing() -> None:
+    m = Match(random.Random(1))
+    to_cpu_fight(m, p1=0, p2=1)
+    assert m.fight.fighters["p1"].char is ROBERT and m.fight.fighters["p2"].char is BOHR
+    start = {p: f.x for p, f in m.fight.fighters.items()}
+    walk = FrameInput(activity=True)
+    walk.fighters["p1"] = FighterInput(dx=-1)       # a person pushing left: ignored
+    run(m, 120, walk)
+    moved = {p: m.fight.fighters[p].x != start[p] for p in start}
+    assert moved == {"p1": True, "p2": True}
+    assert m.fight.fighters["p1"].x > start["p1"]   # the bot walked in, not left
+
+
+def test_a_cpu_match_plays_to_the_end_untouched_and_names_the_winner_cpu() -> None:
+    m = Match(random.Random(3))
+    to_cpu_fight(m)
+    for _ in range(config.FPS * 60 * 6):
+        m.update(idle())
+        if m.state in (MATCH_RESULT, TITLE):
+            break
+    assert m.state == MATCH_RESULT          # the idle timeout never cut it short
+    assert m.wins[m.winner] == config.ROUNDS_TO_WIN
+
+
+def test_a_paused_cpu_match_still_times_out() -> None:
+    m = Match(random.Random(1))
+    to_cpu_fight(m)
+    m.update(press("start"))
+    assert m.paused
+    run(m, config.IDLE_TIMEOUT)
+    assert m.state == TITLE and not m.watching
+
+
+def test_a_cpu_rematch_is_cpu_again_and_the_title_clears_it() -> None:
+    m = Match(random.Random(1))
+    to_cpu_fight(m)
+    finish(m)
+    run(m, config.MATCH_RESULT_LOCK)
+    m.update(press("confirm"))
+    assert m.state == ROUND_INTRO and m.watching and set(m.cpu_bots) == {"p1", "p2"}
+    m._to_title()
+    assert not m.watching and m.cpu_bots == {}

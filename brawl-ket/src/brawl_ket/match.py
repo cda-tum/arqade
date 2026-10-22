@@ -3,8 +3,14 @@
   title -> select -> stage select -> tutorial -> round intro -> fight -> round end
         -> (round intro ...) -> match result -> rematch (round intro) or title
 
-The title is a menu, PLAY / QUIT: the stick picks, A takes it, and Start always plays.
-QUIT ends the game (`quit` is set and the main loop exits, as Start + Select does).
+The title is a menu, PLAY / CPU VS CPU / QUIT: the stick picks, A takes it, and Start
+plays (CPU VS CPU on that row). QUIT ends the game (`quit` is set and the main loop
+exits, as Start + Select does).
+
+CPU VS CPU is a match like any other, but both sides are fought by the game's CPU (the
+title demo's Bot) and the pads only watch: on CHOOSE YOUR FIGHTER either pad picks the
+left CPU's fighter, then the right one's; there is no HOW TO PLAY card (nobody plays);
+Start still pauses, and the idle timeout only runs outside the rounds.
 The tutorial is the HOW TO PLAY card, before every match from the stage select (not
 a rematch); any button pressed after its first TUTORIAL_LOCK frames goes on.
 
@@ -38,7 +44,8 @@ ROUND_INTRO = "round_intro"
 FIGHT = "fight"
 ROUND_END = "round_end"
 MATCH_RESULT = "match_result"
-TITLE_ITEMS = ("PLAY", "QUIT")
+CPU_VS_CPU = "CPU VS CPU"
+TITLE_ITEMS = ("PLAY", CPU_VS_CPU, "QUIT")
 PAUSE_ITEMS = ("RESUME", "QUIT TO TITLE")
 PAUSABLE = (ROUND_INTRO, FIGHT, ROUND_END)
 FIGHT_CALL = config.ROUND_INTRO_FRAMES // 2     # "ROUND n" until here, then "FIGHT!"
@@ -121,11 +128,14 @@ class Match:
         self._title_phase = 0       # frames into the current demo or card
         self.bots: dict[str, Bot] = {}
         self._attract_over = 0
+        self.cpu = {p: False for p in PLAYERS}     # the sides the CPU fights (CPU VS CPU: both)
+        self.cpu_bots: dict[str, Bot] = {}          # ... and its bots, new every round
 
     # --- the frame -------------------------------------------------------------------------
 
     def update(self, inp: FrameInput) -> list:
-        self.idle = 0 if inp.activity else self.idle + 1
+        watching = self.watching and self.state in PAUSABLE and not self.paused
+        self.idle = 0 if inp.activity or watching else self.idle + 1
         if self.state != TITLE and self.idle >= config.IDLE_TIMEOUT:
             self._to_title()
             return []
@@ -185,7 +195,10 @@ class Match:
             self._step_attract()
             return
         dy = next((d[1] for d in inp.nav.values() if d[1]), 0)
-        if inp.pause or (inp.confirm and TITLE_ITEMS[self.title_index] == "PLAY"):
+        item = TITLE_ITEMS[self.title_index]
+        if inp.pause or (inp.confirm and item != "QUIT"):
+            # Start plays from any row, CPU VS CPU on its own
+            self.cpu = {p: item == CPU_VS_CPU for p in PLAYERS}
             self.ready = {p: False for p in PLAYERS}
             self._set_state(SELECT)
             events.append(Cue("confirm"))
@@ -198,6 +211,9 @@ class Match:
             self._start_attract()
 
     def _on_select(self, inp: FrameInput, events: list) -> None:
+        if self.watching:
+            self._on_cpu_select(inp, events)
+            return
         for p in PLAYERS:
             if inp.backs[p]:
                 if not self.ready[p]:
@@ -220,6 +236,44 @@ class Match:
             if Cue("blip") not in events:
                 events.append(Cue("blip"))
 
+    def _on_cpu_select(self, inp: FrameInput, events: list) -> None:
+        """CPU VS CPU's fighter screen: either pad works the one cursor, the left CPU's until
+        it is READY, then the right one's. B takes the last READY back, or goes to the title."""
+        picking = self.picking
+        if inp.back:
+            done = [p for p in PLAYERS if self.ready[p]]
+            if not done:
+                self._to_title()
+            else:
+                self.ready[done[-1]] = False
+            events.append(Cue("blip"))
+            return
+        if picking is None:         # both READY (back from the stage select): one A goes on
+            if inp.confirm:
+                self._set_state(STAGE_SELECT)
+                events.append(Cue("blip"))
+            return
+        if inp.confirm:
+            self.ready[picking] = True
+            events.append(Cue("blip"))
+            if self.picking is None:
+                self._set_state(STAGE_SELECT)
+            return
+        nav = next((d for d in inp.nav.values() if d != (0, 0)), None)
+        if nav:
+            self.picks[picking] = grid_move(self.picks[picking], *nav)
+            events.append(Cue("blip"))
+
+    @property
+    def picking(self) -> str | None:
+        """CPU VS CPU: the side whose fighter the cursor is picking (None: both READY)."""
+        return next((p for p in PLAYERS if not self.ready[p]), None)
+
+    @property
+    def watching(self) -> bool:
+        """Nobody plays: CPU VS CPU."""
+        return all(self.cpu.values())
+
     def _on_stage_select(self, inp: FrameInput, events: list) -> None:
         """Either stick flips through the stages, A or Start fights there, B goes back to
         the fighters with both still READY."""
@@ -230,6 +284,9 @@ class Match:
         if inp.confirm and self.t >= STAGE_LOCK:
             events.append(Cue("confirm"))
             self._pick_stage()      # now, so HOW TO PLAY is shown in the room the match is in
+            if self.watching:       # nobody to teach
+                self._start_match(events)
+                return
             self.lesson = Lesson()
             self._set_state(TUTORIAL)
             return
@@ -257,7 +314,8 @@ class Match:
 
     def _on_fight(self, inp: FrameInput, events: list) -> None:
         fight = self.fight
-        events += fight.step(inp.fighters)
+        fighters = {p: self.cpu_bots[p].input(fight) if p in self.cpu_bots else inp.fighters[p] for p in PLAYERS}
+        events += fight.step(fighters)
         if not fight.over:
             return
         self.round_winner = fight.winner
@@ -345,6 +403,8 @@ class Match:
         self._stop_attract()
         self.stage_pick = 0
         self.title_index = 0
+        self.cpu = {p: False for p in PLAYERS}
+        self.cpu_bots = {}
         self._set_state(TITLE)
 
     def _pick_stage(self) -> None:
@@ -360,7 +420,9 @@ class Match:
         self._start_round(events)
 
     def _start_round(self, events: list) -> None:
-        self.fight = Fight({p: ROSTER[self.picks[p]] for p in PLAYERS}, self.rng.randrange(1 << 30))
+        seed = self.rng.randrange(1 << 30)
+        self.fight = Fight({p: ROSTER[self.picks[p]] for p in PLAYERS}, seed)
+        self.cpu_bots = {p: Bot(p, seed + i) for i, p in enumerate(PLAYERS) if self.cpu[p]}
         self.round_winner = None
         self.perfect = False
         self.ko = False

@@ -342,7 +342,7 @@ def test_the_how_to_play_card_draws_its_scene_and_title_draws_quit(surface):
     r = Renderer(surface)
     m = M.Match(random.Random(1))
     inp = M.FrameInput(activity=True)
-    inp.nav["p1"] = (0, 1)
+    inp.nav["p1"] = (0, -1)                 # up: round to the last row
     r.draw(m, m.update(inp))
     assert M.TITLE_ITEMS[m.title_index] == "QUIT"
     for kind in ("p1", "p1", "p2", "p1"):
@@ -1352,3 +1352,31 @@ def test_spin_turns_her_round_and_back(surface):
     finally:
         R.draw_spin, R.draw_puppet = real_spin, real_puppet
     assert 1 in drawn and -1 in drawn               # out in front, then out behind
+
+
+def test_cpu_vs_cpu_names_both_sides_cpu(surface):
+    """CPU VS CPU: the fighter screen says whose fighter is being picked, and the HUD and the
+    result say CPU1 and CPU2 where a match between people says P1 and P2."""
+    import random
+
+    from brawl_ket import config
+    from brawl_ket import match as M
+    from brawl_ket.render import tags_of
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    assert tags_of(m) == {"p1": "P1", "p2": "P2"}
+    title = M.FrameInput(activity=True)
+    title.nav["p1"] = (0, 1)
+    r.draw(m, m.update(title))
+    r.draw(m, m.update(M.FrameInput(activity=True, confirms={"p1": True, "p2": False})))
+    assert m.state == M.SELECT and tags_of(m) == {"p1": "CPU1", "p2": "CPU2"}
+    r.draw(m, [])
+    for _ in range(2):
+        r.draw(m, m.update(M.FrameInput(activity=True, confirms={"p1": True, "p2": False})))
+    for _ in range(M.STAGE_LOCK):
+        m.update(M.FrameInput())
+    r.draw(m, m.update(M.FrameInput(activity=True, confirms={"p1": True, "p2": False})))
+    assert m.state == M.ROUND_INTRO
+    for _ in range(config.ROUND_INTRO_FRAMES + 30):
+        r.draw(m, m.update(M.FrameInput()))
+    assert m.state == M.FIGHT and r.tags["p1"] == "CPU1"

@@ -227,7 +227,7 @@ def portrait(name: str) -> pygame.Surface:
     char = CHARACTERS[name]
     big = pygame.Surface((200, 220), pygame.SRCALPHA)
     if char.pair is not None:           # both, Alice in front: framed between their faces
-        j, _jb = draw_pair(big, POSES["idle"], (108, 210), 1, GREEN, PORTRAIT_PAIR_GAP)
+        j, _jb = draw_pair(big, POSES["idle"], (108, 210), 1, GREEN, PORTRAIT_PAIR_GAP, PURPLE)
         hx = round(j["head"][0]) - PORTRAIT_PAIR_GAP // 2
     else:
         j = draw_puppet(big, POSES["idle"], char.build, (100, 210), 1, GREEN, ACCENT.get(char.name, P.CREAM))
@@ -247,7 +247,8 @@ def draw_character(surf: pygame.Surface, char: Character, pose, feet, facing: in
     pair, centred on `feet` with Bob behind Alice; anyone else as their puppet. Returns the
     (front) fighter's joints."""
     if char.pair is not None:
-        ja, _jb = draw_pair(surf, pose, (feet[0] + facing * 20, feet[1]), facing, body)
+        other = {GREEN: PURPLE, PURPLE: GREEN}.get(body, body)        # Bob: always the other colour
+        ja, _jb = draw_pair(surf, pose, (feet[0] + facing * 20, feet[1]), facing, body, bob_base=other)
         return ja
     return draw_puppet(surf, pose, char.build, feet, facing, body, ACCENT.get(char.name, P.CREAM))
 
@@ -557,6 +558,11 @@ class Effect:
     color: tuple = P.WHITE
     text: str = ""
     facing: int = 1
+
+
+def tags_of(match: M.Match) -> dict[str, str]:
+    """What each side is called on screen: P1 and P2, or CPU1 and CPU2 for a side the CPU fights."""
+    return {p: f"CPU{p[1]}" if match.cpu[p] else p.upper() for p in M.PLAYERS}
 
 
 class Renderer:
@@ -1315,7 +1321,7 @@ class Renderer:
                 if color is None and fill.w > 4:
                     surf.fill(P.lighten(col, 0.5), (fill.x + 2, fill.y + 2, fill.w - 4, 2))
             name = outlined(f.char.name, 8, PLAYER_COLORS[key])
-            tag = outlined(key.upper(), 8, P.MIST)
+            tag = outlined(self.tags[key], 8, P.MIST)
             y = rect.bottom + 6
             if side < 0:
                 surf.blit(name, (rect.left + 2, y))
@@ -1332,7 +1338,7 @@ class Renderer:
             if f.char.copy_paste:           # DOS's clipboard, beside his A / B chips
                 self._clipboard(key, f, lx + LEGEND_W + 4 if side < 0 else lx - CLIP_W - 4, y - 3)
             if key in fight.echoes:         # ALICE & BOB's Bob, grey while he is decohered
-                icon = bob_icon(BASIS_BODY[f.basis], not fight.echoes[key].here)
+                icon = bob_icon(BASIS_BODY[fight.echoes[key].basis], not fight.echoes[key].here)
                 self.surface.blit(icon, (lx + LEGEND_W + 4 if side < 0 else lx - BOB_ICON - 4, y - 6))
         # the clock and the round pips
         cx = W // 2
@@ -1404,11 +1410,14 @@ class Renderer:
 
     # --- the match's screens -------------------------------------------------------------------
 
+    tags = {p: p.upper() for p in M.PLAYERS}     # each side's HUD tag: P1 / P2, or CPU1 / CPU2
+
     def draw(self, match: M.Match, events: list) -> None:
         """The whole frame for the match's state. Cues are the match's own; the fight's
         events (hits, blocks, switches, ...) start the effects."""
         fight_events = [e for e in events if not isinstance(e, M.Cue)]
         self.use_stage(match.stage)
+        self.tags = tags_of(match)
         state = match.state
         if state == M.TITLE:
             if match.card:
@@ -1477,7 +1486,7 @@ class Renderer:
         surf = self.surface
         # ROBERT green and the last fighter who can switch (ALICE & BOB) purple: the title shows both colours
         rival = next(c for c in reversed(M.ROSTER) if c.fixed_basis is None)
-        for char, key, x, facing in ((M.ROSTER[0], "p1", 180, 1), (rival, "p2", 460, -1)):
+        for char, key, x, facing in ((M.ROSTER[0], "p1", 150, 1), (rival, "p2", 495, -1)):
             rect = pygame.Rect(0, 0, 52, 8)
             rect.center = (x, FLOOR_Y + 2)
             pygame.draw.ellipse(surf, SHADOW, rect)
@@ -1486,9 +1495,9 @@ class Renderer:
         self._band(32, 132)
         self._logo(72)
         blit_center(surf, outlined("COLOUR MUST MATCH TO HURT", 8, P.MIST), (W / 2, 114))
-        # PLAY / QUIT, in a box between the two fighters
-        box = pygame.Rect(0, 0, 132, 72)
-        box.center = (W // 2, 214)
+        # PLAY / CPU VS CPU / QUIT, in a box between the two fighters
+        box = pygame.Rect(0, 0, 200, 100)
+        box.center = (W // 2, 222)
         pygame.draw.rect(surf, P.INK, box.inflate(4, 4), border_radius=8)
         pygame.draw.rect(surf, P.NIGHT, box, border_radius=7)
         pygame.draw.rect(surf, P.MIST, box, 2, border_radius=7)
@@ -1499,7 +1508,8 @@ class Renderer:
             blit_center(surf, img, (W / 2, y))
             if on:
                 nudge = 2 if (self.t // 15) % 2 else 0
-                blit_center(surf, outlined(">", 16, P.GOLD, thick=2), (W / 2 - 44 - nudge, y))
+                left = W / 2 - img.get_width() / 2
+                blit_center(surf, outlined(">", 16, P.GOLD, thick=2), (left - 14 - nudge, y))
 
     def _attract_overlay(self) -> None:
         self._band(H - 58, H)
@@ -1518,7 +1528,10 @@ class Renderer:
             self._select_side(key, side, M.ROSTER[match.picks[key]], match.ready[key])
         blit_center(surf, outlined("VS", 32, P.GOLD, thick=2), (W / 2, 104))
         self._portraits(match)
-        blit_center(surf, outlined("STICK: CHOOSE   A: READY   B: BACK", 8, P.MIST), (W / 2, H - 5))
+        hint = "STICK: CHOOSE   A: READY   B: BACK"
+        if match.watching and match.picking:
+            hint = f"STICK: CHOOSE {self.tags[match.picking]}'S FIGHTER   A: READY   B: BACK"
+        blit_center(surf, outlined(hint, 8, P.MIST), (W / 2, H - 5))
 
     def _select_side(self, key: str, side: int, char: Character, ready: bool) -> None:
         """One player's half: the fighter big, facing the middle (flexing once ready), the name,
@@ -1527,7 +1540,8 @@ class Renderer:
         color = PLAYER_COLORS[key]
         cx = W / 2 + side * SIDE_X
         floor = SIDE_FLOOR
-        surf.blit(outlined(key.upper(), 8, color), (12 if side < 0 else W - 28, 32))
+        tag = outlined(self.tags[key], 8, color)
+        surf.blit(tag, (12 if side < 0 else W - 12 - tag.get_width(), 32))
         rect = pygame.Rect(0, 0, 60, 10)
         rect.center = (round(cx), floor + 2)
         pygame.draw.ellipse(surf, SHADOW, rect)
@@ -1571,13 +1585,15 @@ class Renderer:
             surf.blit(portrait(char.name), tile)
         blink = (self.t // 8) % 2
         for key, inset, tag_side in (("p1", 0, -1), ("p2", 3, 1)):
+            if match.watching and match.picking not in (None, key) and not match.ready[key]:
+                continue            # CPU VS CPU: the right CPU's cursor turns up once the left is READY
             tile = tiles[match.picks[key]]
             colour = PLAYER_COLORS[key]
             ring = tile.inflate(8 - 2 * inset, 8 - 2 * inset)
             lit = colour if match.ready[key] or blink else P.lighten(colour, 0.6)     # blinks till ready
             pygame.draw.rect(surf, P.INK, ring.inflate(2, 2), 4, border_radius=5)
             pygame.draw.rect(surf, lit, ring, 3, border_radius=5)
-            tag = outlined(key[1] + "P", 8, colour)     # in the tile's top corner: the rows sit close
+            tag = outlined(f"C{key[1]}" if match.cpu[key] else key[1] + "P", 8, colour)     # in the tile's top corner: the rows sit close
             surf.blit(tag, (tile.left + 1 if tag_side < 0 else tile.right - tag.get_width() - 1, tile.top + 1))
 
     def _stage_select(self, match: M.Match) -> None:
@@ -1789,7 +1805,7 @@ class Renderer:
         winner = match.winner
         self._band(CALL_Y - 48, CALL_Y + 76)
         name = match.fight.fighters[winner].char.name
-        self._call(f"{winner.upper()} WINS!", PLAYER_COLORS[winner], y=CALL_Y - 20, age=match.t)
+        self._call(f"{self.tags[winner]} WINS!", PLAYER_COLORS[winner], y=CALL_Y - 20, age=match.t)
         blit_center(self.surface, outlined(f"{name}  {match.wins['p1']} - {match.wins['p2']}", 16, P.WHITE,
                                            thick=2), (W / 2, CALL_Y + 20))
         if match.t >= MATCH_RESULT_LOCK:

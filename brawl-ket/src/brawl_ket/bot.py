@@ -1,6 +1,6 @@
-"""A simple, deterministic CPU fighter for the attract demo and the bot-vs-bot tests.
+"""A simple, deterministic CPU fighter: the title demo, CPU VS CPU and the bot-vs-bot tests.
 
-Pure logic, no pygame. It is never a playable mode. Everything random comes from
+Pure logic, no pygame. Everything random comes from
 one random.Random(seed), so the same seed against the same opponent plays the
 same round.
 
