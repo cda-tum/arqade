@@ -38,6 +38,7 @@ from .config import (
     STAGE_NAMES,
     STAGES,
 )
+from .cutie import JUMP_SWING, GOLD_PLATE, draw_charging, draw_cutie, draw_spin, draw_trap, draw_wave
 from .dos import BEIGE, CLIP_W, clip_icon, draw_dos, draw_floppy
 from .erwin import (
     EYE,
@@ -60,11 +61,11 @@ from .poses import BASE_BONES, HEAD_R, LIMB_W, POSES, SCALE, Pose, drawn_joints,
 
 W, H = INTERNAL_WIDTH, INTERNAL_HEIGHT
 PLAYERS = ("p1", "p2")
-ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL, "ERWIN": EYE, "DOS": BEIGE}
+ACCENT = {"ROBERT": P.CREAM, "BOHR": P.GOLD, "PHOEBE": P.TEAL, "ERWIN": EYE, "DOS": BEIGE, "M-CUTIE": GOLD_PLATE}
 
 # how each build is drawn (the skeleton's proportions are in poses.py)
-TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5, "cutie": 5}   # the lean torso is this much thicker than a limb
-PLATES = {"lean": False, "heavy": True, "toy": False, "cutie": False}   # armour: the heavy's wedge torso, plates, helm
+TORSO_EXTRA = {"lean": 5, "heavy": 8, "toy": 5}   # the lean torso is this much thicker than a limb
+PLATES = {"lean": False, "heavy": True, "toy": False}   # armour: the heavy's wedge torso, plates, helm
 # PHOEBE (the "toy" build): a scientist, not a puppet. Her neutral colours; the coat, the lining
 # and her trousers are shades of her basis colour (docs/.../2026-10-09-brawl-ket-phoebe-design.md)
 SKIN = (232, 176, 128)
@@ -86,7 +87,7 @@ ERROR_COLOUR = {basis.X: GREEN, basis.Z: PURPLE, basis.Y: P.WHITE}
 BADGE = {basis.Z_BASIS: "0/1", basis.X_BASIS: "+/-"}     # the basis's states, on the health bar
 # the striking limb's joints, from the shoulder or hip out to the hand or foot that lands
 STRIKE_LIMB = {"hand_f": ("shoulder_f", "elbow_f", "hand_f"), "foot_f": ("hip", "knee_f", "foot_f")}
-SELF_LIT = ("cat", "dos")   # builds that draw their own lit limb: the striker adds only its trail and tip
+SELF_LIT = ("cat", "dos", "cutie")     # builds that draw their own lit limb: the striker adds only its trail and tip
 TRAIL_LEN = 5               # a live strike's hand or foot leaves this many fading echoes
 LEGEND_CHIP = 14            # the A / B colour chips under each health bar, px
 LEGEND_W = 2 * LEGEND_CHIP + 4
@@ -99,6 +100,7 @@ STRIKER = {
     "LIGHT PILLAR": "hand_f", "LASER": "hand_f",
     "BOX SWIPE": "hand_f", "POUNCE": "hand_f", "BOX DROP": "hand_f",
     "MOUSE CABLE": "hand_f", "CRT DROP": "foot_f",
+    "AMPLITUDE AMPLIFICATION": "hand_f", "ION TRAP": "hand_f", "SPIN": "foot_f",
 }
 
 # effect lengths, in frames
@@ -118,6 +120,7 @@ MEASURE_FLASH_FRAMES = 12   # MEASURE: the rival flashes in BOHR's colour as it 
 COLLAPSE_FRAMES = 14        # ... with a ring closing in on it
 BOX_POP_FRAMES = 14         # THE BOX: the real cardboard box shows this long after a collapse
 BOX_FADE_FRAMES = 16        # ... and the other one dissolves over this long
+SNAP_FRAMES = 12            # ION TRAP: a ring snapping shut on whoever it caught
 TRAIL_DELAY = 20            # the damage trail waits this long, then drains
 TRAIL_SPEED = 0.6           # health per frame
 PREVIEW_W, PREVIEW_H = 320, 180     # CHOOSE YOUR STAGE's preview: the stage at half size
@@ -236,8 +239,13 @@ def draw_puppet(surf: pygame.Surface, pose, build: str, feet, facing: int, body,
                 flare: float = 0.0, strike: tuple[str, tuple] | None = None, mood: str = "calm",
                 led: bool = False, eject: bool = False) -> dict:
     """One fighter, back limbs first. Returns the joints (screen px). `flare` (px) blows a
-    coat's hem out behind (PHOEBE's); `strike` = (joint, colour) is the lit limb, for a build
-    that draws its own (SELF_LIT); `mood`, `led` and `eject` are DOS's screen (dos.py)."""
+    coat's hem out behind (PHOEBE's) or M-CUTIE's hair back; `strike` = (joint, colour) is the
+    lit limb, for a build that draws its own (SELF_LIT); `mood`, `led` and `eject` are DOS's
+    screen (dos.py)."""
+    if build == "cutie":
+        j = joints(pose, build, feet, facing)
+        draw_cutie(surf, j, pose.lean, facing, body, strike, swing=flare)
+        return j
     if build == "dos":
         j = drawn_joints(pose, build, feet, facing)
         draw_dos(surf, j, facing, body, strike, led, mood, eject)
@@ -595,6 +603,9 @@ class Renderer:
         self._blink(ox, oy)
 
         order = sorted(PLAYERS, key=lambda p: fight.fighters[p].action == "attack")
+        for t in fight.traps:                   # on the floor, under everyone
+            colour = ERROR_COLOUR[basis.error_for(t.move.colour, t.basis)]
+            draw_trap(surf, round(t.x) + ox, FLOOR_Y + oy, colour, t.state != "arming")
         for p in PLAYERS:
             self._shadow(p, fight.fighters[p], ox, oy)
         heads = {}
@@ -648,6 +659,8 @@ class Renderer:
                                            facing=f.facing))
             elif e.kind == "copy":
                 self.effects.append(Effect("copy", e.x, e.y, COPY_FLASH_FRAMES, COPY_FLASH_FRAMES, P.WHITE))
+            elif e.kind == "trap_close":      # a ring of light snapping shut round the ion
+                self.effects.append(Effect("snap", e.x, e.y - 17, SNAP_FRAMES, SNAP_FRAMES, P.WHITE))
             elif e.kind == "paste" and e.player and self._fight is not None:
                 f = self._fight.fighters[e.player]
                 self.effects.append(Effect("tag", f.x + f.facing * 36, FLOOR_Y - f.y - DRIVE_SLOT_Y - 16,
@@ -712,6 +725,12 @@ class Renderer:
             elif world and fx.kind == "box_fade":    # the other one dissolving in a dither
                 step = 1 + min(FADE_STEPS - 2, age * (FADE_STEPS - 1) // fx.life)
                 draw_holo_box(surf, fx.x + ox, fx.y + oy, fx.facing, fx.color, 0, step)
+            elif world and fx.kind == "snap":       # ION TRAP closing: a ring shrinking onto the ion
+                r = round(26 * (1 - age / fx.life)) + 4
+                pygame.draw.ellipse(surf, P.INK, pygame.Rect(0, 0, 2 * r + 4, r + 4).move(
+                    round(fx.x) + ox - r - 2, round(fx.y) + oy - r // 2 - 2), 4)
+                pygame.draw.ellipse(surf, fx.color, pygame.Rect(0, 0, 2 * r, r).move(
+                    round(fx.x) + ox - r, round(fx.y) + oy - r // 2), 2)
             elif world and fx.kind == "copy":       # COPY: a selection box closing on the caught shot
                 k = age / fx.life
                 half = round(18 * (1 - k)) + 4
@@ -796,8 +815,11 @@ class Renderer:
             return f.boxes[0], FLOOR_Y - 60.0
         feet = (f.x + ox, FLOOR_Y - f.y + oy)
         pose = self._pose(key, f)
-        # a long coat blows out behind her as she moves, and trails in a jump
+        # a long coat blows out behind her as she moves, and trails in a jump (M-CUTIE's hair:
+        # blown back in the air, as in her look)
         flare = min(MAX_FLARE, abs(f.vx) * 2.5 + (6 if f.y > 0 else 0))
+        if f.char.build == "cutie":
+            flare = JUMP_SWING if f.y > 0 else 0.0
         m = f.move
         if f.action == "attack" and m is not None and m.tunnel:
             self._tunnel_line(f, ox, oy)
@@ -806,8 +828,13 @@ class Renderer:
                 j = self._dissolved(pose, f, feet, body, accent, flare, seen)
                 return j["head"][0] - ox, j["head"][1] - oy
         mood, led, eject = dos_screen(f) if f.char.build == "dos" else ("calm", False, False)
-        j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare,
-                        strike=strike_of(f), mood=mood, led=led, eject=eject)
+        if f.action == "charging":          # AMPLITUDE AMPLIFICATION: her halo and the steps so far
+            j = draw_charging(self.surface, pose, feet, f.facing, body, f.charge)
+        elif f.action == "attack" and m is not None and m.name == "SPIN" and f.phase == "active":
+            j = draw_spin(self.surface, pose, feet, f.facing, body, strike_of(f))
+        else:
+            j = draw_puppet(self.surface, pose, f.char.build, feet, f.facing, body, accent, flare,
+                            strike=strike_of(f), mood=mood, led=led, eject=eject)
         self._striker(key, f, j)
         if f.action == "attack" and m is not None:
             if m.catch is not None:
@@ -1048,6 +1075,9 @@ class Renderer:
         left, top, w, h = s.box
         cx, cy = left + w / 2 + ox, top + h / 2 + oy
         color = ERROR_COLOUR[basis.error_for(s.move.colour, s.basis)]
+        if s.move.projectile.floor:         # M-CUTIE's wave, standing on the floor as tall as its step
+            draw_wave(self.surface, round(cx), FLOOR_Y + oy, s.move.projectile.box.h, color, s.facing)
+            return
         if s.move.name == "FLOPPY":         # a spinning disk (one pasted back too)
             draw_floppy(self.surface, (cx, cy), -(self.t * 12 % 360) * s.facing, color, s.facing)
             return
@@ -1091,6 +1121,8 @@ class Renderer:
                 pygame.draw.rect(self.surface, P.BAD, pygame.Rect(f.world_box(m.hitbox)).move(ox, oy), 1)
         for s in fight.shots:
             pygame.draw.rect(self.surface, P.BAD, pygame.Rect(s.box).move(ox, oy), 1)
+        for t in fight.traps:
+            pygame.draw.rect(self.surface, P.BAD if t.armed else P.MIST, pygame.Rect(t.box).move(ox, oy), 1)
 
     # --- the HUD -------------------------------------------------------------------------------
 

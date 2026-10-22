@@ -728,3 +728,211 @@ def test_choose_your_fighter_frames_both_picks_in_the_players_colours(surface):
     r.draw(m, [])
     seen = {tuple(surface.get_at((x, y)))[:3] for x in range(0, surface.get_width(), 2) for y in range(270, 345, 2)}
     assert PLAYER_COLORS["p1"] in seen and PLAYER_COLORS["p2"] in seen
+
+
+# --- M-CUTIE: her approved look (variant B), her specials, and her cached layers --------------
+
+CUTIE_LOOK = "2026-10-21-brawl-ket-m-cutie-look.py"
+
+
+@pytest.mark.parametrize("name,strike,swing,bright", [
+    ("idle", None, 0, 0.0), ("crouch", None, 0, 0.0), ("jump", None, 6, 0.0), ("walk1", None, 0, 0.0),
+    ("heavy_hit", ("hand_f", PURPLE), 0, 0.0), ("sweep_hit", ("foot_f", PURPLE), 0, 0.0),
+    ("charge", None, 0, 0.8), ("knockdown", None, 0, 0.0),
+])
+@pytest.mark.parametrize("facing", [1, -1])
+@pytest.mark.parametrize("base", [GREEN, PURPLE], ids=["green", "purple"])
+@pytest.mark.parametrize("feet", [(120.0, 220.0), (121.0, 221.0), (120.5, 220.0)], ids=["even", "odd", "half"])
+def test_m_cutie_matches_her_approved_look(look, name, strike, swing, bright, facing, base, feet):
+    from brawl_ket.cutie import draw_cutie
+    from brawl_ket.poses import POSES, joints
+    ref = look(CUTIE_LOOK)
+    pygame.init()
+    a, b = pygame.Surface((240, 240)), pygame.Surface((240, 240))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    pose = POSES[name]
+    ref.draw_cutie(a, pose, feet, facing, base, "B", strike, bright=bright, swing=swing)
+    draw_cutie(b, joints(pose, "cutie", feet, facing), pose.lean, facing, base, strike, bright=bright, swing=swing)
+    assert same_pixels(a, b)
+
+
+def test_her_build_and_poses_are_the_looks(look):
+    from brawl_ket import poses as PS
+    ours = (PS.SCALE["cutie"], dict(PS.BUILD_BONES["cutie"]), PS.HEAD_R["cutie"], PS.LIMB_W["cutie"])
+    ref = look(CUTIE_LOOK)                      # (it writes its build into the tables)
+    assert ours == (PS.SCALE["cutie"], PS.BUILD_BONES["cutie"], PS.HEAD_R["cutie"], PS.LIMB_W["cutie"])
+    assert PS.POSES["spin"] == ref.SPIN and PS.POSES["charge"] == ref.CHARGE
+
+
+@pytest.mark.parametrize("facing", [1, -1])
+@pytest.mark.parametrize("feet", [(556.0, FLOOR_Y - 70.0), (557.5, FLOOR_Y - 71.0)], ids=["whole", "half"])
+def test_spin_matches_the_look(look, facing, feet):
+    from brawl_ket.cutie import draw_spin
+    from brawl_ket.poses import POSES, joints
+    ref = look(CUTIE_LOOK)
+    pygame.init()
+    a, b = pygame.Surface((640, 360)), pygame.Surface((640, 360))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    ref.leg_ghosts(a, ref.SPIN, feet, facing, GREEN)        # the look's row of specials, in its order
+    j = joints(ref.SPIN, "cutie", feet, facing)
+    ref.spin_whirl(a, j, GREEN, "back")
+    ref.draw_cutie(a, ref.SPIN, feet, facing, GREEN, "B", swing=10, spread=1.2, squash=0.75)
+    ref.spin_whirl(a, j, GREEN, "front")
+    draw_spin(b, POSES["spin"], feet, facing, GREEN)
+    assert same_pixels(a, b)
+
+
+@pytest.mark.parametrize("steps", range(1, 7))
+@pytest.mark.parametrize("colour", [GREEN, PURPLE], ids=["green", "purple"])
+@pytest.mark.parametrize("facing", [1, -1])
+def test_her_wave_matches_the_look(look, steps, colour, facing):
+    from brawl_ket.cutie import draw_wave, drive_pulse
+    from brawl_ket.moves import AMP_WAVES
+    ref = look(CUTIE_LOOK)
+    pygame.init()
+    h = AMP_WAVES[steps - 1].projectile.box.h
+    for x in (172, 173):                        # both pixel parities of its middle
+        a, b = pygame.Surface((640, 360)), pygame.Surface((640, 360))
+        a.fill(BLANK)
+        b.fill(BLANK)
+        ref.drive_pulse(a, x, h, colour, facing)
+        draw_wave(b, x, FLOOR_Y, h, colour, facing)
+        assert same_pixels(a, b), x
+    a.fill(BLANK)                               # ... and a floor line shaken a px down
+    b.fill(BLANK)
+    drive_pulse(a, 172, h, colour, facing, FLOOR_Y + 1)
+    draw_wave(b, 172, FLOOR_Y + 1, h, colour, facing)
+    assert same_pixels(a, b)
+
+
+@pytest.mark.parametrize("armed", [False, True], ids=["arming", "armed"])
+@pytest.mark.parametrize("colour", [GREEN, PURPLE], ids=["green", "purple"])
+def test_her_trap_matches_the_look(look, armed, colour):
+    from brawl_ket.cutie import draw_trap
+    ref = look(CUTIE_LOOK)
+    pygame.init()
+    a, b = pygame.Surface((640, 360)), pygame.Surface((640, 360))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    ref.ion_trap(a, 360, colour, armed)
+    draw_trap(b, 360, FLOOR_Y, colour, armed)
+    assert same_pixels(a, b)
+
+
+@pytest.mark.parametrize("steps", [1, 4, 6])
+def test_the_charge_halo_is_the_looks_to_one_colour_step(look, steps):
+    """The one approximation: one blend per pixel instead of 16. The same pixels change, and
+    every one is within one step of the 15-bit grid (8) of the look's, but the head's glow
+    on the background (which the look's own layer drops)."""
+    from brawl_ket import palette as Pal
+    from brawl_ket.cutie import charge_look, draw_charging
+    from brawl_ket.poses import POSES
+    ref = look(CUTIE_LOOK)
+    pygame.init()
+    a, b = pygame.Surface((640, 360)), pygame.Surface((640, 360))
+    a.fill(BLANK)
+    b.fill(BLANK)
+    bright, k = charge_look(steps)
+    j = ref.aura(a, lambda s: ref.draw_cutie(s, ref.CHARGE, (64, FLOOR_Y), 1, GREEN, "B", bright=bright), GREEN, k)
+    ref.glow(a, j["hand_f"], 9, Pal.lighten(GREEN, 0.6), 160)
+    ref.pips(a, (j["head"][0], j["head"][1] - 30), steps, GREEN)
+    draw_charging(b, POSES["charge"], (64, FLOOR_Y), 1, GREEN, steps)
+    pts = [(x, y) for x in range(0, 140) for y in range(120, 330)]
+    changed_a = {p for p in pts if tuple(a.get_at(p))[:3] != BLANK}
+    changed_b = {p for p in pts if tuple(b.get_at(p))[:3] != BLANK}
+    assert changed_a == changed_b
+    far = [p for p in changed_a if max(abs(u - v) for u, v in zip(a.get_at(p)[:3], b.get_at(p)[:3])) > 8]
+    assert len(far) <= 16
+    assert charge_look(4) == (0.8, 1.0)         # 4 steps: the look's sheet
+
+
+def test_her_head_wave_and_trap_are_drawn_from_cached_layers(surface):
+    from brawl_ket.cutie import head_layers, pulse_layers, trap_layers
+    from brawl_ket.moves import M_CUTIE
+    for cache in (head_layers, pulse_layers, trap_layers):
+        cache.cache_clear()
+    r = Renderer(surface)
+    for fight, events in bot_frames(600, chars=(M_CUTIE, ROBERT)):
+        r.draw_fight(fight, events)
+    info = head_layers.cache_info()
+    assert info.hits > 10 * info.misses
+
+
+def cutie_frames(r, presses, frames, rival_x=600, rival=None):
+    """M-CUTIE (p1) against a ROBERT at `rival_x`, `presses(i)` each frame, drawn every frame."""
+    from brawl_ket.fighter import IDLE
+    from brawl_ket.moves import M_CUTIE
+    fight = Fight({"p1": M_CUTIE, "p2": ROBERT})
+    fight.fighters["p2"].x = rival_x
+    for i in range(frames):
+        r.draw_fight(fight, fight.step({"p1": presses(i), "p2": rival or IDLE}))
+    return fight
+
+
+def test_charging_shows_a_pip_per_step_above_her_head(surface):
+    from brawl_ket import palette as Pal
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.poses import POSES, joints
+    r = Renderer(surface)
+    fight = cutie_frames(r, lambda i: FighterInput(x=i in (0, 4, 8)), 10)
+    me = fight.fighters["p1"]
+    assert me.action == "charging" and me.charge == 3
+    j = joints(POSES["charge"], "cutie", (me.x, FLOOR_Y), me.facing)
+    y = round(j["head"][1] - 30)
+    lit = [x for x in range(round(j["head"][0]) - 30, round(j["head"][0]) + 31)
+           if tuple(surface.get_at((x, y)))[:3] == Pal.lighten(GREEN, 0.45)]
+    assert len(lit) >= 3 * 5                    # three diamonds, each about 7 px across
+
+
+def test_her_wave_is_drawn_on_the_floor_in_its_colour(surface):
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import AMP_WAVES
+    r = Renderer(surface)
+    fight = cutie_frames(r, lambda i: FighterInput(x=i % 4 == 0 and i < 21), 21 + 16 + AMP_WAVES[0].startup + 10)
+    (shot,) = fight.shots
+    assert shot.move is AMP_WAVES[5]
+    x = round(shot.x)
+    column = {tuple(surface.get_at((x, y)))[:3] for y in range(FLOOR_Y - 50, FLOOR_Y - 2)}
+    assert GREEN in column
+
+
+def test_a_trap_is_dim_while_it_arms_and_lit_once_armed(surface):
+    from brawl_ket import palette as Pal
+    from brawl_ket.config import TRAP_ARM
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import M_CUTIE
+    trap = M_CUTIE.moves["crouch.X"]
+    r = Renderer(surface)
+    fight = cutie_frames(r, lambda i: FighterInput(down=True, x=i == 0), trap.startup + 2)
+    (t,) = fight.traps
+    ion = (round(t.x), FLOOR_Y - 17)
+    assert tuple(surface.get_at(ion))[:3] == Pal.shade(GREEN, 0.5)
+    for _ in range(TRAP_ARM):
+        r.draw_fight(fight, fight.step({}))
+    assert t.armed and tuple(surface.get_at(ion))[:3] == Pal.lighten(GREEN, 0.6)
+
+
+def test_her_spin_whirls_and_its_kicking_leg_is_lit(surface):
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import M_CUTIE
+    spin = M_CUTIE.moves["air.X"]
+    r = Renderer(surface)
+    fight = cutie_frames(r, lambda i: FighterInput(up=i == 0, x=i == 8), 8 + spin.startup + 2)
+    me = fight.fighters["p1"]
+    assert me.move is spin and me.phase == "active"
+    from brawl_ket.poses import joints
+    j = joints(r.pose_last["p1"], "cutie", (me.x, FLOOR_Y - me.y), me.facing)
+    assert GREEN in limb_colours(surface, r, me, j, "knee_f", "foot_f")     # her colour, lit
+
+
+def test_a_closing_trap_snaps_a_ring_shut(surface):
+    from brawl_ket.fight import Event
+    r = Renderer(surface)
+    fight = Fight({"p1": ROBERT, "p2": ROBERT})
+    r.draw_fight(fight, [Event("trap_close", "p2", None, 300.0, FLOOR_Y)])
+    assert [fx.kind for fx in r.effects] == ["snap"]
+    for _ in range(20):
+        r.draw_fight(fight, [])
+    assert r.effects == []

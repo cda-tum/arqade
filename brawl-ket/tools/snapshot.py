@@ -21,6 +21,9 @@ Writes:
 - moves_dos.png, dos_*.png: DOS's moves; FLOPPY in flight; COPY's CTRL+C frame catching a PHOTON
   and the clipboard after it; PASTE; MOUSE CABLE out and reeling in; COPY taking BOHR's
   electricity, and PASTE crackling with it; CRT DROP;
+- moves_cutie.png, cutie_*.png: M-CUTIE's moves; AMPLITUDE AMPLIFICATION charging (1, 4 and 6
+  steps), its wave in flight (2 and 6 steps) and DOS pasting one back; ION TRAP arming, armed and
+  closed on a ROBERT; SPIN into a ROBERT;
 - screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
   vs_close.png, the two walked into each other;
@@ -52,7 +55,7 @@ from brawl_ket import palette as P
 from brawl_ket.bot import Bot
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import Fighter
-from brawl_ket.moves import BOHR, DOS, ERWIN, ROBERT
+from brawl_ket.moves import AMP_WAVES, BOHR, DOS, ERWIN, M_CUTIE, ROBERT
 from brawl_ket.poses import POSE_NAMES, POSES, SCALE, joints, pose_for
 from brawl_ket.render import Renderer, draw_puppet, outlined
 
@@ -435,6 +438,42 @@ def dos_frames(out_dir: str) -> None:
           rival_x=config.START_X["p1"] + 30)
 
 
+def cutie_frames(out_dir: str) -> None:
+    """M-CUTIE against a ROBERT (and a DOS): the charge, the wave, the trap and SPIN."""
+    from brawl_ket.fighter import IDLE, FighterInput
+
+    surface = pygame.Surface((W, H))
+
+    def scene(name, presses, frames, rival_x=None, rival=lambda i: IDLE, other=ROBERT, setup=None):
+        fight, r = Fight({"p1": M_CUTIE, "p2": other}), Renderer(surface)
+        if rival_x is not None:
+            fight.fighters["p2"].x = rival_x
+        if setup is not None:
+            setup(fight)
+        for i in range(frames):
+            r.draw_fight(fight, fight.step({"p1": presses(i), "p2": rival(i)}), {"p1": 0, "p2": 0})
+        save(surface, out_dir, f"{name}.png")
+
+    for steps in (1, 4, 6):         # charging: a press every 4 frames, saved on the last one (6 fires at once)
+        last = 4 * (steps - 1)
+        scene(f"cutie_charge_{steps}", lambda i, n=last: FighterInput(x=i % 4 == 0 and i <= n),
+              last + (0 if steps == 6 else 1))
+    for steps in (2, 6):            # the wave, well on its way
+        last = 4 * (steps - 1)
+        scene(f"cutie_wave_{steps}", lambda i, n=last: FighterInput(x=i % 4 == 0 and i <= n),
+              last + config.CHARGE_WAIT + AMP_WAVES[0].startup + 20)
+    trap = M_CUTIE.moves["crouch.X"]
+    scene("cutie_trap_arming", lambda i: FighterInput(down=True, x=i == 0), trap.startup + 4)
+    scene("cutie_trap_armed", lambda i: FighterInput(down=True, x=i == 0), trap.startup + config.TRAP_ARM + 4)
+    scene("cutie_trap_closed", lambda i: FighterInput(down=True, x=i == 0), 80,
+          rival=lambda i: FighterInput(dx=-1) if i > 30 else IDLE)
+    scene("cutie_spin", lambda i: FighterInput(up=i == 0, x=i == 5), 5 + M_CUTIE.moves["air.X"].startup + 8,
+          rival_x=config.START_X["p1"] + 90)
+    scene("cutie_dos_paste", lambda i: IDLE, DOS.extra["paste"].startup + 14, other=DOS,
+          rival=lambda i: FighterInput(y=i == 0),
+          setup=lambda f: setattr(f.fighters["p2"], "clipboard", (AMP_WAVES[3], "Z")))
+
+
 def main(argv: list[str]) -> None:
     if len(argv) != 1:
         sys.exit(__doc__)
@@ -449,6 +488,8 @@ def main(argv: list[str]) -> None:
     erwin_frames(out_dir)
     save(move_sheet(DOS), out_dir, "moves_dos.png")
     dos_frames(out_dir)
+    save(move_sheet(M_CUTIE), out_dir, "moves_cutie.png")
+    cutie_frames(out_dir)
     bohr_frames(out_dir)
     scripted_frames(out_dir)
     close_frame(out_dir)
