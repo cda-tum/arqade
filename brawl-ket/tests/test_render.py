@@ -491,6 +491,25 @@ def boxed_fight(r, frames=40):
     return fight
 
 
+def test_m_cutie_s_charge_halos_are_built_as_the_fight_starts(surface):
+    from brawl_ket.config import CHARGE_CAP
+    from brawl_ket.cutie import halo
+    from brawl_ket.fighter import FighterInput
+    halo.cache_clear()
+    r = Renderer(surface)
+    fight = Fight({"p1": CHARACTERS["M-CUTIE"], "p2": CHARACTERS["M-CUTIE"]}, seed=1)
+    fight.fighters["p2"].x = 600
+    r.draw_fight(fight, fight.step({}))
+    # every halo, both colours, both facings, every step: all of them fit the cache, so a
+    # charge mid-round builds nothing new (a hitch on the cabinet otherwise)
+    info = halo.cache_info()
+    assert info.currsize == info.misses == 2 * 2 * CHARGE_CAP <= info.maxsize
+    for i in range(40):
+        r.draw_fight(fight, fight.step({"p1": FighterInput(x=i % 4 == 0)}))
+    assert fight.fighters["p1"].charge or fight.shots
+    assert halo.cache_info().misses == info.misses
+
+
 def test_superposed_erwin_is_two_boxes_drawn_from_cached_sprites(surface):
     from brawl_ket.erwin import FADE_STEPS, HOLO_PHASES, holo_sprite
     from brawl_ket.stages import MARGIN

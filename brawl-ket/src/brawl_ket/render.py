@@ -27,6 +27,7 @@ from . import palette as P
 from . import basis
 from .config import (
     CARD_FRAMES,
+    CHARGE_CAP,
     DRIVE_SLOT_Y,
     FLOOR_Y,
     FPS,
@@ -38,7 +39,7 @@ from .config import (
     STAGE_NAMES,
     STAGES,
 )
-from .cutie import JUMP_SWING, GOLD_PLATE, draw_charging, draw_cutie, draw_spin, draw_trap, draw_wave
+from .cutie import JUMP_SWING, GOLD_PLATE, draw_charging, draw_cutie, draw_spin, draw_trap, draw_wave, halo
 from .dos import BEIGE, CLIP_W, clip_icon, draw_dos, draw_floppy
 from .erwin import (
     EYE,
@@ -609,6 +610,11 @@ class Renderer:
                                 holo_sprite(fur, facing, phase)
                             for step in range(1, FADE_STEPS):     # ... and every step of a fade
                                 holo_sprite(fur, facing, 0, step)
+                if f.char.build == "cutie":     # M-CUTIE's charge halos too (1-2 ms each, built cold)
+                    for body in BASIS_BODY.values():
+                        for facing in (1, -1):
+                            for steps in range(1, CHARGE_CAP + 1):
+                                halo(body, facing, steps)
         self.t += 1
         self._start_effects(events)
 
