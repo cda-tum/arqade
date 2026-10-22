@@ -80,6 +80,9 @@ KIDS_STRIKE_ODDS = 0.017
 # feints (switches at range) a little more often while one half is full and the other isn't
 SUPER_DODGE_ODDS = 0.1
 LOPSIDED_FEINT = 0.06
+# ... and where each super lands: the rival on the ground within this many px
+SUPER_REACH = {"BLUE SCREEN OF DEATH": CRASH_REACH - 20, "BLOCH SPHERE": 260, "WAVEFUNCTION COLLAPSE": 2000,
+               "COHERENT BEAM": 520, "NINE LIVES": 150, "DILUTION FRIDGE": 2000, "ONE-TIME PAD": 90}
 
 _BUSY = ("hitstun", "knockdown")
 
@@ -146,8 +149,9 @@ class Bot:
         if self._super(fight, me, rival, dist):
             self.gap = PRESS_GAP
             return FighterInput(a=True, b=True)
-        if self._dodge_super(me, rival, dist):
-            return FighterInput(up=True, dx=-toward)
+        dodge = self._dodge_super(me, rival, toward, dist)
+        if dodge is not None:
+            return dodge
         m = rival.move
         if m is not None and keep_clear_of(m) and rival.action == "attack" and dist <= FIELD_RANGE + 20 \
                 and self.would_hurt(rival, m, me) and me.action in ("idle", "walk", "crouch"):
@@ -254,16 +258,30 @@ class Bot:
         if move is None or not fight.meters[self.player].full or self.gap \
                 or me.action not in ("idle", "walk", "crouch"):
             return False
-        if move.crash is not None:      # BLUE SCREEN OF DEATH: a rival on the ground in reach
-            return rival.y == 0 and dist <= CRASH_REACH - 20 and not rival.boxed and not rival.intangible
-        return False
+        return rival.y == 0 and dist <= SUPER_REACH.get(move.name, 0) and not rival.boxed \
+            and not rival.intangible and rival.action != "knockdown"
 
-    def _dodge_super(self, me, rival, dist: float) -> bool:
-        """Jump away from a BLUE SCREEN OF DEATH winding up in reach (in the air, it can't freeze you)."""
+    def _dodge_super(self, me, rival, toward: int, dist: float) -> FighterInput | None:
+        """Get out of a rival's super, the way each one is dodged (a chance a frame): jump away from
+        a BLUE SCREEN winding up, jump the BLOCH SPHERE rolling in and the COHERENT BEAM as it
+        fires, walk off a WAVEFUNCTION COLLAPSE's or DILUTION FRIDGE's locked ring, back off from
+        NINE LIVES and ONE-TIME PAD winding up."""
         m = rival.move
-        return (rival.action == "attack" and m is not None and m.crash is not None and rival.phase == "startup"
-                and dist <= CRASH_REACH + 10 and me.action in ("idle", "walk", "crouch")
-                and self.rng.random() < SUPER_DODGE_ODDS)
+        if rival.action != "attack" or m is None or m.kind != "super" or me.action not in ("idle", "walk", "crouch") \
+                or self.rng.random() >= SUPER_DODGE_ODDS:
+            return None
+        if m.crash is not None and rival.phase == "startup" and dist <= CRASH_REACH + 10:
+            return FighterInput(up=True, dx=-toward)
+        if m.name == "BLOCH SPHERE" and rival.phase == "active" and dist <= 120:
+            return FighterInput(up=True)
+        if m.name == "COHERENT BEAM" and rival.phase == "startup" and rival.frame >= rival.startup - 3:
+            return FighterInput(up=True)
+        if m.remote and m.lock > 0 and rival.target_x is not None and rival.phase == "startup" \
+                and abs(me.x - rival.target_x) < 70:
+            return FighterInput(dx=1 if me.x >= rival.target_x else -1)
+        if m.lock_range and rival.phase == "startup" and dist <= m.lock_range + 20:
+            return FighterInput(dx=-toward)
+        return None
 
     def _in_air(self, me, rival, toward: int, dist: float) -> FighterInput:
         air = me.char.moves["air.X"]

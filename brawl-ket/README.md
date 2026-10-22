@@ -157,9 +157,19 @@ purple half. Damage you deal fills the half of the colour you are in (damage you
 fast), so only fighting in both colours fills it; DOS, who can't switch, fills by the colour of
 his hits. Full, it shines and says A+B!: A and B together fire your super, which freezes the
 fight for its call (SUPERposition!) and hurts in either colour. The bar carries over between
-rounds. So far DOS has his, BLUE SCREEN OF DEATH: everyone on the ground near him freezes under
-an error window, and he comes down on them (25). Design:
-`../docs/superpowers/specs/2026-10-22-brawl-ket-superposition-design.md`.
+rounds. Design: `../docs/superpowers/specs/2026-10-22-brawl-ket-superposition-design.md`.
+
+Each fighter's super, and how to get out of it:
+
+| Fighter | Super | Dodge |
+|---|---|---|
+| ROBERT | BLOCH SPHERE: rolls in inside a Bloch sphere (4 hits), then an H-gate uppercut flips him to the other colour | jump the sphere |
+| BOHR | WAVEFUNCTION COLLAPSE: a probability cloud locks onto you, and a pillar of light falls there | move after the lock |
+| PHOEBE | COHERENT BEAM: a laser to the screen's edge, floor to 110 px (5 hits) | be above it |
+| ERWIN | NINE LIVES: nine ERWINs pounce from both sides (8 ghosts, low), the ninth real | partly: jump in time |
+| DOS | BLUE SCREEN OF DEATH: everyone on the ground near him freezes under an error window; he comes down on them | be in the air, or far |
+| M-CUTIE | DILUTION FRIDGE: a shadow locks onto you; a giant gold dilution fridge falls there, then frost either side | leave the shadow, jump the frost |
+| ALICE & BOB | ONE-TIME PAD: they re-form either side of you, pass the key through you six times, and a padlock snaps shut | stay out of reach, or jump |
 
 ## Controls
 

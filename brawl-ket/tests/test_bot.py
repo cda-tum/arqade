@@ -437,3 +437,29 @@ def test_a_bot_jumps_away_from_a_blue_screen_winding_up_in_reach(monkeypatch):
     dos.action, dos.move, dos.slot, dos.frame = "attack", BLUE_SCREEN, "super", 1
     inp = Bot("p1", 1).input(fight)
     assert inp.up and inp.dx == -1
+
+
+@pytest.mark.parametrize("name,gap", [("ROBERT", 150.0), ("BOHR", 400.0), ("PHOEBE", 300.0),
+                                      ("ERWIN", 120.0), ("M-CUTIE", 400.0), ("ALICE & BOB", 80.0)])
+def test_every_bot_fires_its_super_when_it_will_land(name, gap):
+    from brawl_ket import basis
+    from brawl_ket.moves import CHARACTERS
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 150.0, 150.0 + gap
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    inp = Bot("p1", 1).input(fight)
+    assert inp.a and inp.b
+
+
+def test_a_bot_walks_off_a_locked_ring(monkeypatch):
+    import brawl_ket.bot as bot_module
+    from brawl_ket.moves import CHARACTERS, WAVE_COLLAPSE
+    monkeypatch.setattr(bot_module, "SUPER_DODGE_ODDS", 1.0)
+    fight = Fight({"p1": ROBERT, "p2": CHARACTERS["BOHR"]}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 300.0, 500.0
+    bohr = fight.fighters["p2"]
+    bohr.action, bohr.move, bohr.slot, bohr.frame = "attack", WAVE_COLLAPSE, "super", 30
+    bohr.target_x = 300.0
+    inp = Bot("p1", 1).input(fight)
+    assert inp.dx != 0 and not inp.up
