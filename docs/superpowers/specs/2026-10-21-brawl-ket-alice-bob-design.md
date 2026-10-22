@@ -121,6 +121,11 @@ instantly, with a flash at both ends.
 - It does no damage, and Bob doesn't echo it (the swap is one move for both).
 - It doesn't work while Bob is decohered.
 
+**Also changed after the first playtest: KEY EXCHANGE is drawn as a key.** The toss is a
+small key tumbling end over end along the arc, and Bob's shot a big one, blade first, with the
+big photon's speed lines and glow (`kids.key_sprite`). Only the art changed. Alice's own shot
+while Bob is gone is still a plain photon.
+
 **Changed after the first playtest (2026-10-22): ANCHOR first.** Bob copied Alice so closely
 that the pair never split, and TELEPORT had nothing to swap across. Now the first down + X
 **anchors** Bob: he stays where he is (a pin over his head and a second floor ring), still

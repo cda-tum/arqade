@@ -1236,11 +1236,19 @@ def test_a_decohering_bob_fades_and_his_ring_waits_dimmed_behind_her(surface):
                for j in range(FLOOR_Y - 4, FLOOR_Y + 9))
 
 
-def test_the_toss_is_drawn_on_its_arc_and_bobs_shot_is_the_big_photon(surface):
+def test_the_toss_and_bobs_shot_are_keys(surface, monkeypatch):
+    """KEY EXCHANGE is a key (after the first playtest): a small one tumbling along the toss's arc,
+    then Bob's shot, a big one, blade first."""
+    import brawl_ket.render as R
     from brawl_ket.fighter import FighterInput
+    from brawl_ket.kids import key_sprite
     from brawl_ket.render import ERROR_COLOUR
+    tossed, shot_keys = [], []
+    real_toss, real_shot = R.tossed_key, R.key_shot
+    monkeypatch.setattr(R, "tossed_key", lambda surf, c, *a: (tossed.append(c), real_toss(surf, c, *a)))
+    monkeypatch.setattr(R, "key_shot", lambda surf, c, *a: (shot_keys.append(c), real_shot(surf, c, *a)))
     r, fight = pair_frames(surface, [FighterInput(x=True)] + [None] * 16)
-    assert fight.tosses
+    assert fight.tosses and tossed
     t = fight.tosses[0]
     centre = (round(t.x), round(FLOOR_Y - t.y))
     near = {tuple(surface.get_at((centre[0] + dx, centre[1] + dy)))[:3] for dx in range(-3, 4) for dy in range(-3, 4)}
@@ -1249,10 +1257,20 @@ def test_the_toss_is_drawn_on_its_arc_and_bobs_shot_is_the_big_photon(surface):
         r.draw_fight(fight, fight.step({}))
     (shot,) = fight.shots
     left, top, w, h = shot.box
-    cx, cy = round(left + w / 2), round(top + h / 2)
-    big = sum(1 for i in range(cx - 12, cx + 13) for j in range(cy - 12, cy + 13)
-              if tuple(surface.get_at((i, j)))[:3] == GREEN)
-    assert big > 150                                        # radius 10 of green, not a PHOTON's 6
+    assert shot_keys and shot_keys[-1] == (left + w / 2, top + h / 2)
+    key = key_sprite(GREEN, True, shot.facing)
+    assert key.get_width() > key.get_height()               # lying flat, blade first
+
+
+def test_a_key_turns_a_quarter_at_a_time_and_flips_with_its_facing():
+    from brawl_ket.kids import key_sprite
+    flat = key_sprite(GREEN, False)
+    assert key_sprite(GREEN, False, 1, 1).get_size() == flat.get_size()[::-1]
+    assert key_sprite(GREEN, False, 1, 4).get_size() == flat.get_size()
+    left = key_sprite(GREEN, True, -1)
+    right = key_sprite(GREEN, True, 1)
+    assert pygame.image.tostring(pygame.transform.flip(right, True, False), "RGBA") == \
+        pygame.image.tostring(left, "RGBA")
 
 
 def test_teleport_flashes_at_both_ends_and_both_re_form(surface):

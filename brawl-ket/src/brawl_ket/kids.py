@@ -338,9 +338,10 @@ def photon(surf, c, color, facing, big=False):
     surf.fill(P.WHITE, (round(cx) - 2 - facing, round(cy) - 3, 2, 2))
 
 
-def lob(surf, a, b, color, k_at=0.62, height=34):
+def lob(surf, a, b, color, k_at=0.62, height=34, item=True):
     """KEY EXCHANGE's toss: a dotted arc from Alice's hand back to Bob's, the photon on it at
-    `k_at` of the way, and a ring round his hand where it will land."""
+    `k_at` of the way (or nothing, without `item`: the game draws a key there), and a ring
+    round his hand where it will land. Returns where the photon is."""
     def on(k):
         return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k - height * 4 * k * (1 - k))
     for i in range(1, 16):
@@ -350,15 +351,74 @@ def lob(surf, a, b, color, k_at=0.62, height=34):
             surf.fill(P.INK, (p[0] - 2, p[1] - 2, 4, 4))
             surf.fill(P.lighten(color, 0.4), (p[0] - 1, p[1] - 1, 2, 2))
     c = on(k_at)
-    glow(surf, c, 12, color, 150)
-    pygame.draw.circle(surf, P.INK, _pt(c), 7)
-    pygame.draw.circle(surf, color, _pt(c), 6)
-    pygame.draw.circle(surf, P.lighten(color, 0.6), _pt(c), 2)
-    surf.set_at((round(c[0]) - 1, round(c[1]) - 2), P.WHITE)
+    if item:
+        glow(surf, c, 12, color, 150)
+        pygame.draw.circle(surf, P.INK, _pt(c), 7)
+        pygame.draw.circle(surf, color, _pt(c), 6)
+        pygame.draw.circle(surf, P.lighten(color, 0.6), _pt(c), 2)
+        surf.set_at((round(c[0]) - 1, round(c[1]) - 2), P.WHITE)
     rr = pygame.Rect(0, 0, 26, 26)
     rr.center = _pt(b)
     pygame.draw.arc(surf, P.INK, rr.inflate(2, 2), 0.3, 2.8, 3)
     pygame.draw.arc(surf, P.lighten(color, 0.5), rr, 0.3, 2.8, 1)
+    return c
+
+
+# --- KEY EXCHANGE's key (after the first playtest: the toss and the shot are a key, not a photon) --
+
+KEY_TUMBLE = 4      # frames a tossed key shows each quarter turn
+
+
+@lru_cache(maxsize=32)
+def key_sprite(color, big: bool, facing: int = 1, turn: int = 0) -> pygame.Surface:
+    """A key, blade first in `facing`: the bow (a ring with a hole) behind, two bits under the
+    blade. `big` is Bob's shot, small the toss; `turn` quarter turns anticlockwise."""
+    w, h = (34, 20) if big else (24, 14)
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    cy = h // 2
+    bow_r, hole = (6, 2) if big else (4, 1)
+    bx = bow_r + 1
+    blade = pygame.Rect(bx + bow_r - 1, cy - (2 if big else 1), w - (bx + bow_r) - 1, 4 if big else 3)
+    bits = (pygame.Rect(blade.right - (4 if big else 3), blade.bottom, 3 if big else 2, 4 if big else 3),
+            pygame.Rect(blade.right - (9 if big else 6), blade.bottom, 2, 3 if big else 2))
+
+    def shape(grow, col):
+        pygame.draw.circle(surf, col, (bx, cy), bow_r + grow)
+        pygame.draw.rect(surf, col, blade.inflate(2 * grow, 2 * grow))
+        for b in bits:
+            pygame.draw.rect(surf, col, b.inflate(2 * grow, 2 * grow))
+
+    shape(1, P.INK)
+    shape(0, color)
+    light = P.lighten(color, 0.55)
+    surf.fill(light, (blade.x + 1, blade.y, blade.w - 2, 1))           # along the blade's top
+    pygame.draw.arc(surf, light, pygame.Rect(bx - bow_r + 1, cy - bow_r + 1, 2 * bow_r - 2, 2 * bow_r - 2),
+                    1.2, 2.9, 1)
+    pygame.draw.circle(surf, P.INK, (bx, cy), hole + 1)
+    pygame.draw.circle(surf, (0, 0, 0, 0), (bx, cy), hole)
+    if facing < 0:
+        surf = pygame.transform.flip(surf, True, False)
+    return pygame.transform.rotate(surf, 90 * (turn % 4)) if turn % 4 else surf
+
+
+def key_shot(surf, c, color, facing):
+    """Bob's KEY EXCHANGE shot: the big key, blade first, with the big photon's speed lines and glow."""
+    cx, cy = c
+    back = -facing
+    for dy, ln in ((-7, 20), (0, 30), (7, 18)):
+        x0 = cx + back * 16
+        pygame.draw.line(surf, P.INK, _pt((x0, cy + dy)), _pt((x0 + back * ln, cy + dy)), 4)
+        pygame.draw.line(surf, P.lighten(color, 0.4), _pt((x0, cy + dy)), _pt((x0 + back * ln, cy + dy)), 2)
+    glow(surf, c, 22, color, 150)
+    key = key_sprite(color, True, facing)
+    surf.blit(key, key.get_rect(center=_pt(c)))
+
+
+def tossed_key(surf, c, color, age):
+    """Alice's toss in flight: the small key, glowing, tumbling end over end."""
+    glow(surf, c, 12, color, 150)
+    key = key_sprite(color, False, 1, age // KEY_TUMBLE)
+    surf.blit(key, key.get_rect(center=_pt(c)))
 
 
 @lru_cache(maxsize=16)

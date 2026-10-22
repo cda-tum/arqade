@@ -58,7 +58,8 @@ from .erwin import (
     holo_sprite,
 )
 from .fight import Fight
-from .kids import BOB_ICON, bob_icon, dive_streaks, draw_decohered, draw_kid, draw_pair, flash, lob, photon, swap_arc
+from .kids import (BOB_ICON, bob_icon, dive_streaks, draw_decohered, draw_kid, draw_pair, flash, key_shot, lob,
+                   swap_arc, tossed_key)
 from .fighter import Fighter
 from .fonts import load_font
 from .ink import _ball, _block, _boot, _poly, _pt, _towards, limb
@@ -941,12 +942,13 @@ class Renderer:
             flash(self.surface, f.x + ox, colour, round(k, 2), FLOOR_Y + oy)
 
     def _toss(self, fight: Fight, t, ox: int, oy: int) -> None:
-        """KEY EXCHANGE in flight: the dotted arc from Alice's hand to Bob's, the photon on it."""
+        """KEY EXCHANGE in flight: the dotted arc from Alice's hand to Bob's, the key on it."""
         bob = fight.echoes[t.owner]
         colour = ERROR_COLOUR[basis.error_for(basis.OWN, t.basis)]
         a = (t.x0 + ox, FLOOR_Y - t.y0 + oy)
         b = (bob.x + bob.facing * TOSS_TO[0] + ox, FLOOR_Y - bob.y - TOSS_TO[1] + oy)
-        lob(self.surface, a, b, colour, k_at=min(1.0, t.age / TOSS_FRAMES), height=TOSS_ARC)
+        c = lob(self.surface, a, b, colour, k_at=min(1.0, t.age / TOSS_FRAMES), height=TOSS_ARC, item=False)
+        tossed_key(self.surface, c, colour, t.age)
 
     def _fighter(self, key: str, f: Fighter, ox: int, oy: int) -> tuple[float, float]:
         """One body (`key`: its player's, or "p1/bob" for p1's Bob): pose, colours, its moves' art."""
@@ -1246,8 +1248,8 @@ class Renderer:
         if s.move.projectile.floor:         # M-CUTIE's wave, standing on the floor as tall as its step
             draw_wave(self.surface, round(cx), FLOOR_Y + oy, s.move.projectile.box.h, color, s.facing)
             return
-        if s.move.name == "KEY EXCHANGE":   # Bob's strong shot (one pasted back too)
-            photon(self.surface, (cx, cy), color, s.facing, big=True)
+        if s.move.name == "KEY EXCHANGE":   # Bob's strong shot, a key (one pasted back too)
+            key_shot(self.surface, (cx, cy), color, s.facing)
             return
         if s.move.name == "FLOPPY":         # a spinning disk (one pasted back too)
             draw_floppy(self.surface, (cx, cy), -(self.t * 12 % 360) * s.facing, color, s.facing)
