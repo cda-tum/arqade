@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import re
 
-from brawl_ket import audio, fight, fighter, match
+from brawl_ket import audio, echo, fight, fighter, match
 from brawl_ket.fight import Event
 from brawl_ket.match import Cue
 from brawl_ket.moves import CHARACTERS
@@ -21,7 +21,8 @@ def test_every_match_cue_has_a_sound() -> None:
 def test_every_fight_event_is_mapped() -> None:
     """A sound, or None for the ones deliberately silent (a stance switch, a landing)."""
     kinds = set(re.findall(r'Event\("(\w+)"', inspect.getsource(fight)))
-    kinds |= set(re.findall(r'events\.append\(\("(\w+)"', inspect.getsource(fighter)))
+    for module in (fighter, echo):
+        kinds |= set(re.findall(r'events\.append\(\("(\w+)"', inspect.getsource(module)))
     assert kinds <= set(audio.EVENT_SOUNDS), kinds - set(audio.EVENT_SOUNDS)
     assert {s for s in audio.EVENT_SOUNDS.values() if s} <= set(audio.build_sfx())
     assert {"hit", "block", "switch", "measure"} <= {k for k, s in audio.EVENT_SOUNDS.items() if s}

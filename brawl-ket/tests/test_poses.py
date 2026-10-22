@@ -262,6 +262,19 @@ def test_the_striking_limb_reaches_the_hitbox_on_impact(char, slot):
     assert distance_to_box(point, screen_box(move)) <= REACH, (move.name, point)
 
 
+@pytest.mark.parametrize("build", ["alice", "bob"])
+@pytest.mark.parametrize("slot", ["stand.A", "stand.B", "crouch.A", "crouch.B", "air.A", "air.B", "throw"])
+def test_the_kids_striking_limbs_reach_their_hitboxes(build, slot):
+    """ALICE & BOB share their normals, fitted to both of them (Bob's back is a little longer)."""
+    from brawl_ket.moves import ALICE_BOB, BOB
+    c = ALICE_BOB if build == "alice" else BOB
+    move = c.moves[slot]
+    f = Fighter(c, FEET[0], 1)
+    f.action, f.move, f.slot, f.frame = "attack", move, slot, move.startup
+    j = drawn_joints(pose_for(f), build, FEET, 1)
+    assert distance_to_box(j[STRIKER[move.name]], screen_box(move)) <= REACH, (build, move.name)
+
+
 def test_photon_leaves_from_the_hand():
     move = ROBERT.moves["stand.X"]
     j = joints(POSES[move.poses[1]], ROBERT.build, FEET, 1)

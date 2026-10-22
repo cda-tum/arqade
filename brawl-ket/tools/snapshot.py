@@ -63,7 +63,8 @@ from brawl_ket.render import Renderer, draw_puppet, outlined
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 CELL_W, CELL_H, COLS = 180, 230, 6
 CELL_FLOOR = 200
-ACCENTS = {"lean": P.CREAM, "heavy": P.GOLD, "toy": P.TEAL, "cat": P.GOLD, "dos": P.CREAM, "cutie": P.GOLD}
+ACCENTS = {"lean": P.CREAM, "heavy": P.GOLD, "toy": P.TEAL, "cat": P.GOLD, "dos": P.CREAM, "cutie": P.GOLD,
+           "alice": P.CREAM, "bob": P.CREAM}
 
 
 def save(surf: pygame.Surface, out_dir: str, name: str) -> None:

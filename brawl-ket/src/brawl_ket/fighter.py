@@ -472,8 +472,8 @@ class Fighter:
             self._charging(events)
             return
         on_ground_free = self.action in _GROUND_FREE
-        if on_ground_free and rival_x != self.x:
-            self.facing = 1 if rival_x > self.x else -1
+        if on_ground_free:
+            self._face(rival_x)
 
         if on_ground_free:
             self.crouching = inp.down and not inp.up    # crouching is instant: it's ducking
@@ -495,6 +495,11 @@ class Fighter:
         else:
             self.vx = inp.dx * self.char.walk
             self._set_action("walk" if inp.dx else "idle")
+
+    def _face(self, rival_x: float) -> None:
+        """On the ground and free, turn to face the rival. (Bob, echo.py, faces as Alice does.)"""
+        if rival_x != self.x:
+            self.facing = 1 if rival_x > self.x else -1
 
     def _try_buffer(self, dx: int, rival_x: float, free: bool, events: list) -> None:
         for entry in reversed(self.buffer):

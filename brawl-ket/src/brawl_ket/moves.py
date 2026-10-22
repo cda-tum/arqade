@@ -100,7 +100,7 @@ class Move:
 @dataclass(frozen=True)
 class Character:
     name: str
-    build: str                          # "lean" / "heavy" / "toy" / "cat" / "dos" / "cutie" (poses scale)
+    build: str                          # "lean" / "heavy" / "toy" / "cat" / "dos" / "cutie" / "alice" / "bob"
     health: int
     walk: float
     jump_vy: float
@@ -111,6 +111,7 @@ class Character:
     fixed_basis: str | None = None      # DOS: always this basis; Y and MEASURE never change it
     copy_paste: bool = False            # DOS: Y is COPY / PASTE (`extra`), not a switch
     extra: Mapping[str, Move] = field(default_factory=lambda: MappingProxyType({}))   # moves outside SLOTS
+    pair: Character | None = None       # ALICE & BOB: the second body (BOB), an echo of this one (echo.py)
 
 
 SLOTS = (
@@ -575,6 +576,42 @@ M_CUTIE = Character(
             poses=("jump", "spin", "jump"),
         ),
     }),
+)
+
+# ALICE & BOB's normals: ROBERT's frame data, every box fitted to the kids' smaller bodies (their
+# fists and feet land about 0.7 of ROBERT's height up, and reach about 10 px less far)
+KID_BOXES = {
+    "stand.A": Box(12, 50, 40, 12), "stand.B": Box(12, 48, 36, 16), "crouch.A": Box(10, 14, 36, 12),
+    "crouch.B": Box(8, 4, 44, 12), "air.A": Box(8, 30, 24, 16), "air.B": Box(6, 18, 28, 20),
+    "throw": Box(0, 30, 40, 44),
+}
+KID_NORMALS = MappingProxyType({slot: replace(ROBERT.moves[slot], hitbox=box) for slot, box in KID_BOXES.items()})
+
+# Bob, the receiver: the second body of ALICE & BOB, never picked on his own. He has the kids'
+# normals (his echo of Alice's), and none of her ground specials.
+BOB = Character(
+    name="BOB",
+    build="bob",
+    health=100,                         # the pair's one bar (echo.py: his health is Alice's)
+    walk=2.4,
+    jump_vy=11.0,
+    gravity=0.5,
+    hurt_stand=Box(-13, 0, 26, 93),     # to about his drawn head's centre (104 px up), as ROBERT's
+    hurt_crouch=Box(-15, 0, 30, 77),
+    moves=KID_NORMALS,
+)
+
+ALICE_BOB = Character(
+    name="ALICE & BOB",
+    build="alice",                      # Alice's skeleton; Bob is drawn on his own ("bob")
+    health=100,                         # one shared bar
+    walk=2.4,                           # a little faster than ROBERT (2.2) ...
+    jump_vy=11.0,                       # ... and lighter: a quicker, smaller hop, an apex of about 121 px
+    gravity=0.5,                        # (ROBERT's 144) and 44 frames in the air (his 48)
+    hurt_stand=Box(-13, 0, 26, 86),     # to about her drawn head's centre (97 px up), as ROBERT's
+    hurt_crouch=Box(-15, 0, 30, 70),
+    moves=KID_NORMALS,
+    pair=BOB,
 )
 
 CHARACTERS: dict[str, Character] = {"ROBERT": ROBERT, "BOHR": BOHR, "PHOEBE": PHOEBE, "ERWIN": ERWIN, "DOS": DOS,

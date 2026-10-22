@@ -37,6 +37,7 @@ from .config import (
     TRAP_MAX,
     TRAP_REACH,
 )
+from .echo import Echo
 from .fighter import IDLE, STUN_DECAY, Fighter, FighterInput
 from .moves import HIGH, LOW, Box, Character, Move
 
@@ -131,6 +132,8 @@ class _Strike:
     shot: Shot | None = None
     box: frozenset[int] | None = None   # THE BOX: which of the defender's boxes it touched
     trap: Trap | None = None            # ION TRAP: the trap that closes
+    target: Fighter | None = None       # the body it lands on (the defender's, or Bob)
+    body: Fighter | None = None         # the attacker's body whose move connected (theirs, or Bob)
 
 
 def _world_box(x: float, y: float, facing: int, box: Box) -> Rect:
@@ -184,8 +187,11 @@ class Fight:
             "p1": Fighter(chars["p1"], START_X["p1"], 1),
             "p2": Fighter(chars["p2"], START_X["p2"], -1),
         }
+        # ALICE & BOB: the second body, Bob, an echo of Alice's inputs (echo.py)
+        self.echoes: dict[str, Echo] = {key: Echo(chars[key].pair, f) for key, f in self.fighters.items()
+                                        if chars[key].pair is not None}
         self.body_width = body_width(chars["p1"], chars["p2"])
-        for f in self.fighters.values():   # a throw reaches a little past the push box
+        for f in (*self.fighters.values(), *self.echoes.values()):   # a throw reaches a little past the push box
             f.throw_range = self.body_width + THROW_SLACK
             f.body_width = self.body_width
             f.rng = self.rng
@@ -197,6 +203,12 @@ class Fight:
         self.over = False
         self.winner: str | None = None      # None with over: a draw round
         self._landings: dict[str, _Landing] = {}
+
+    def bodies(self, key: str) -> list[Fighter]:
+        """A player's bodies in the fight: their fighter, and Bob while he is here."""
+        echo = self.echoes.get(key)
+        f = self.fighters[key]
+        return [f, echo] if echo is not None and echo.here else [f]
 
     # --- the frame --------------------------------------------------------------------
 
@@ -210,6 +222,11 @@ class Fight:
             for key, f in self.fighters.items():
                 f.buffer_presses(inputs.get(key, IDLE))
                 f.hold_switch(inputs.get(key, IDLE))
+            for key, echo in self.echoes.items():      # Bob's echo runs on through the freeze
+                late = echo.replay(inputs.get(key, IDLE))
+                if echo.here:
+                    echo.buffer_presses(late)
+                    echo.hold_switch(late)
             return []
 
         events: list[Event] = []
@@ -232,32 +249,41 @@ class Fight:
         for key, f in self.fighters.items():
             rival = self.fighters[_other(key)]
             f.rival_boxes = rival.boxes if rival.boxed else None
-            for kind, data in f.step(inputs.get(key, IDLE), start_x[_other(key)]):
-                if kind == "projectile":
-                    move = data["move"]
-                    proj = move.projectile
-                    assert proj is not None
-                    speed = proj.speed
-                    if data.get("paste"):   # PASTE: level, from his drive slot, in the colour it was fired in
-                        slot_y = f.y if proj.floor else f.y + DRIVE_SLOT_Y - proj.box.y    # a wave stays on the floor
-                        y, vy, shot_basis = slot_y, 0.0, data["basis"]
-                        speed = max(speed, PASTE_SPEED)     # a pasted BOX DROP flies too
-                    else:
-                        y, vy, shot_basis = f.y, proj.vy, f.attack_basis
-                    self.shots.append(Shot(
-                        key, move, f.x + f.facing * SHOT_SPAWN_OFFSET, y,
-                        speed * f.facing, proj.lifetime, shot_basis, vy,
-                    ))
-                    events.append(Event("projectile", key))
-                elif kind == "trap":
-                    self._set_trap(key, f, data["move"])
+            self._fighter_events(key, f, f.step(inputs.get(key, IDLE), start_x[_other(key)]), events)
+        for key, echo in self.echoes.items():     # Bob after Alice: he faces as she now does
+            late = echo.replay(inputs.get(key, IDLE))
+            rival = self.fighters[_other(key)]
+            echo.rival_boxes = rival.boxes if rival.boxed else None
+            self._fighter_events(key, echo, echo.step(late, start_x[_other(key)]), events)
+
+    def _fighter_events(self, key: str, f: Fighter, local: list[tuple[str, dict]], events: list[Event]) -> None:
+        """A body's own events this frame, turned into the fight's: shots, traps and the rest."""
+        for kind, data in local:
+            if kind == "projectile":
+                move = data["move"]
+                proj = move.projectile
+                assert proj is not None
+                speed = proj.speed
+                if data.get("paste"):   # PASTE: level, from his drive slot, in the colour it was fired in
+                    slot_y = f.y if proj.floor else f.y + DRIVE_SLOT_Y - proj.box.y    # a wave stays on the floor
+                    y, vy, shot_basis = slot_y, 0.0, data["basis"]
+                    speed = max(speed, PASTE_SPEED)     # a pasted BOX DROP flies too
                 else:
-                    events.append(Event(kind, key))
-                    if kind == "land" and data["dive"] and f.move is not None \
-                            and f.move.landing is not None:
-                        self._landings[key] = _Landing(f.move)
-                        error = basis.error_for(f.move.landing_colour, f.attack_basis)
-                        events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
+                    y, vy, shot_basis = f.y, proj.vy, f.attack_basis
+                self.shots.append(Shot(
+                    key, move, f.x + f.facing * SHOT_SPAWN_OFFSET, y,
+                    speed * f.facing, proj.lifetime, shot_basis, vy,
+                ))
+                events.append(Event("projectile", key))
+            elif kind == "trap":
+                self._set_trap(key, f, data["move"])
+            else:
+                events.append(Event(kind, key))
+                if kind == "land" and data["dive"] and f.move is not None \
+                        and f.move.landing is not None:
+                    self._landings[key] = _Landing(f.move)
+                    error = basis.error_for(f.move.landing_colour, f.attack_basis)
+                    events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
 
     def _push_apart(self) -> None:
         """The bodies are solid: two grounded fighters never stand closer than body_width."""
@@ -370,22 +396,27 @@ class Fight:
     # --- hits ---------------------------------------------------------------------------
 
     def _resolve_hits(self, events: list[Event]) -> None:
+        # Every body of a player strikes at every body of the rival's (ALICE & BOB have two): a
+        # move or a shot lands on the first body it touches, Alice before Bob.
         strikes: list[_Strike] = []
         for key, f in self.fighters.items():
             rival_key = _other(key)
-            rival = self.fighters[rival_key]
-            self._move_strike(key, f, rival_key, rival, strikes)
-            self._landing_strike(key, f, rival_key, rival, strikes)
+            targets = self.bodies(rival_key)
+            for body in self.bodies(key):
+                self._move_strike(key, body, rival_key, targets, strikes)
+            self._landing_strike(key, f, rival_key, self.fighters[rival_key], strikes)
         for s in self.shots:
             rival_key = _other(s.owner)
-            target = self.fighters[rival_key]
-            if target.action == "knockdown" or target.wakeup or target.intangible:
-                continue        # downed, getting up or tunnelling: shots fly over or through
-            if not can_reach(s.move.height, target):
-                continue
-            touch = self._touch(s.box, target)
-            if touch is not None:
-                strikes.append(_Strike(None, s.owner, rival_key, s.move, s.facing, touch[0], s, box=touch[1]))
+            for target in self.bodies(rival_key):
+                if target.action == "knockdown" or target.wakeup or target.intangible:
+                    continue        # downed, getting up or tunnelling: shots fly over or through
+                if not can_reach(s.move.height, target):
+                    continue
+                touch = self._touch(s.box, target)
+                if touch is not None:
+                    strikes.append(_Strike(None, s.owner, rival_key, s.move, s.facing, touch[0], s, box=touch[1],
+                                           target=target))
+                    break
 
         caught: set[str] = set()
         for t in self.traps:
@@ -400,7 +431,8 @@ class Fight:
             if touch is not None:
                 caught.add(rival_key)
                 side = 1 if target.x >= t.x else -1
-                strikes.append(_Strike(None, t.owner, rival_key, t.move, side, touch[0], box=touch[1], trap=t))
+                strikes.append(_Strike(None, t.owner, rival_key, t.move, side, touch[0], box=touch[1], trap=t,
+                                       target=target))
 
         traps = [st.trap for st in strikes if st.trap is not None]
         strikes = self._measure(strikes, events)
@@ -411,8 +443,8 @@ class Fight:
         # Every strike was found against the state at the start of the resolution,
         # so a trade (both fighters connecting on the same frame) applies both.
         for st in strikes:
-            if st.attacker is not None:
-                f = self.fighters[st.attacker]
+            if st.body is not None:
+                f = st.body
                 f.move_hit = True
                 f.hit_frame = f.frame       # a repeating move (CHARGE NOISE) counts from here
 
@@ -420,9 +452,9 @@ class Fight:
         # whole, as if the fighter had been down from the start: no event, no damage, and a
         # shot flies on over them.
         landed_shots: set[int] = set()
-        downed: set[str] = set()
+        downed: set[Fighter] = set()
         for st in strikes:
-            if st.defender in downed:
+            if st.target in downed:
                 continue
             if st.shot is not None:
                 landed_shots.add(id(st.shot))
@@ -454,7 +486,7 @@ class Fight:
             if st.box is None:
                 kept.append(st)
                 continue
-            d = self.fighters[st.defender]
+            d = st.target
             if st.defender not in real:
                 if len(st.box) == 2:
                     k = 0 if self.rng.random() < 0.5 else 1
@@ -466,14 +498,14 @@ class Fight:
                 events.append(Event("box_collapse", st.defender, None, d.x, FLOOR_Y))
             if real[st.defender] in st.box:
                 kept.append(st)
-            elif st.attacker is not None and st.move.hit_every:
-                a = self.fighters[st.attacker]
+            elif st.body is not None and st.move.hit_every:
+                a = st.body
                 a.move_hit, a.hit_frame = True, a.frame
         return kept
 
-    def _apply_strike(self, st: _Strike, events: list[Event], downed: set[str]) -> None:
-        defender = self.fighters[st.defender]
-        owner = self.fighters[st.owner]
+    def _apply_strike(self, st: _Strike, events: list[Event], downed: set[Fighter]) -> None:
+        defender = st.target
+        owner = st.body or self.fighters[st.owner]      # the body whose move it is (a shot's: its player)
         x, y = st.where
         m = st.move
         # The colour rule against the basis the attack started in: a move's colour is fixed
@@ -494,16 +526,20 @@ class Fight:
             events.append(Event("block", st.defender, error, x, y))
             self.hitstop = max(self.hitstop, BLOCK_HITSTOP)
             return
-        self._landings.pop(st.defender, None)   # a hit fighter's shockwave is gone
+        if defender is self.fighters[st.defender]:
+            self._landings.pop(st.defender, None)   # a hit fighter's shockwave is gone
         events.append(Event("hit", st.defender, error, x, y))
         knocked = defender.action == "knockdown"
         if knocked:
-            downed.add(st.defender)
+            downed.add(defender)
+            if isinstance(defender, Echo):  # Bob knocked down decoheres: gone for a while
+                defender.decohere()
+                events.append(Event("decohere", st.defender, None, defender.x, FLOOR_Y))
         self.hitstop = max(self.hitstop, HITSTOP_KNOCKDOWN if knocked else HITSTOP)
         if m.measure_rival and defender.measured_into(owner.basis):
             # MEASURE projects the rival onto BOHR's basis (never DOS: a classical bit)
             events.append(Event("measure", st.defender, None, x, y))
-        if st.attacker is not None and owner.move is m:
+        if st.body is not None and owner.move is m:
             if m.switch_self_on_hit:        # HADAMARD DIVE: an H on the diver, at once
                 owner.switch()
                 events.append(Event("switch", st.attacker, None, owner.x, FLOOR_Y - owner.y - 60))
@@ -511,7 +547,7 @@ class Fight:
                 owner.bounce()              # a DIVE springs back off what it hit
 
     def _move_strike(
-        self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],
+        self, key: str, f: Fighter, rival_key: str, targets: list[Fighter], strikes: list[_Strike],
     ) -> None:
         m = f.move
         if m is None or m.hitbox is None or f.phase != "active":
@@ -519,18 +555,20 @@ class Fight:
         # a move hits once, except one that repeats (hit_every frames after its last hit)
         if f.move_hit and not (m.hit_every and f.frame - f.hit_frame >= m.hit_every):
             return
-        if rival.action == "knockdown" or rival.wakeup or rival.intangible:   # downed, getting up, gone
-            return
-        if not can_reach(m.height, rival):
-            return
-        # GAME RULE: a throw (MEASURE too) can't take a rival already reeling from
-        # a hit. A throw is MID, so it catches a jumping rival as well as a crouching one.
-        if m.kind == "throw" and rival.action in _STUNNED:
-            return
-        touch = self._touch(f.world_box(m.hitbox), rival)
-        if touch is not None:
-            where, box = touch
-            strikes.append(_Strike(key, key, rival_key, m, f.facing, where, box=box))
+        for rival in targets:
+            if rival.action == "knockdown" or rival.wakeup or rival.intangible:   # downed, getting up, gone
+                continue
+            if not can_reach(m.height, rival):
+                continue
+            # GAME RULE: a throw (MEASURE too) can't take a rival already reeling from
+            # a hit. A throw is MID, so it catches a jumping rival as well as a crouching one.
+            if m.kind == "throw" and rival.action in _STUNNED:
+                continue
+            touch = self._touch(f.world_box(m.hitbox), rival)
+            if touch is not None:
+                where, box = touch
+                strikes.append(_Strike(key, key, rival_key, m, f.facing, where, box=box, target=rival, body=f))
+                return
 
     def _landing_strike(
         self, key: str, f: Fighter, rival_key: str, rival: Fighter, strikes: list[_Strike],
@@ -553,7 +591,7 @@ class Fight:
                 win.hit = True
                 strikes.append(_Strike(
                     None, key, rival_key, replace(move, colour=move.landing_colour, height=move.landing_height),
-                    f.facing, touch[0], box=touch[1],
+                    f.facing, touch[0], box=touch[1], target=rival,
                 ))
         win.left -= 1
         if win.left <= 0:
@@ -570,6 +608,8 @@ class Fight:
         start_x = {key: f.x for key, f in self.fighters.items()}
         for key, f in self.fighters.items():
             f.step(IDLE, start_x[_other(key)])
+        for key, echo in self.echoes.items():
+            echo.step(IDLE, start_x[_other(key)])
         self._push_apart()
 
     def _check_end(self, events: list[Event]) -> None:
@@ -583,8 +623,9 @@ class Fight:
             for key, f in self.fighters.items():
                 if f.health <= 0:
                     rival = self.fighters[_other(key)]
-                    away = 1 if f.x > rival.x else -1 if f.x < rival.x else -f.facing
-                    f.knock_out(away, KO_PUSH)
+                    for body in self.bodies(key):       # Bob goes down with her, wherever he is
+                        away = 1 if body.x > rival.x else -1 if body.x < rival.x else -body.facing
+                        body.knock_out(away, KO_PUSH)
         elif self.frames_left <= 0:
             self.over = True
             events.append(Event("timeout"))

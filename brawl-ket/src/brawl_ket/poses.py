@@ -141,10 +141,15 @@ BUILD_BONES = {
     "dos": {"torso": 33, "shoulder": 15, "thigh": 14, "shin": 15, "upper_arm": 10, "forearm": 10, "neck": 4.5},
     # M-CUTIE: PHOEBE's long-limbed build, a little shorter in the body and legs, thinner limbs
     "cutie": {"torso": 22, "shoulder": 19, "thigh": 17, "shin": 17, "upper_arm": 12, "forearm": 12, "neck": 7},
+    # ALICE & BOB, the "kid" builds: a short body and a big head, about 0.78 of ROBERT's height;
+    # Bob's back and neck a little longer than Alice's, so his face shows over her head
+    "alice": {"torso": 19, "shoulder": 16, "neck": 7, "thigh": 14, "shin": 14, "upper_arm": 11, "forearm": 11},
+    "bob": {"torso": 21, "shoulder": 18, "neck": 8.5, "thigh": 14, "shin": 14, "upper_arm": 11, "forearm": 11},
 }
-SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1, "cat": 2.1, "dos": 2.2, "cutie": 2.1}   # the mockup's proportions: about 130 px tall
-HEAD_R = {"lean": 13, "heavy": 15, "toy": 14, "cat": 17, "dos": 15, "cutie": 15}
-LIMB_W = {"lean": 12, "heavy": 16, "toy": 12, "cat": 13, "dos": 13, "cutie": 12}
+SCALE = {"lean": 2.0, "heavy": 2.3, "toy": 2.1, "cat": 2.1, "dos": 2.2, "cutie": 2.1,   # the mockup's proportions: about 130 px tall
+         "alice": 1.85, "bob": 1.85}
+HEAD_R = {"lean": 13, "heavy": 15, "toy": 14, "cat": 17, "dos": 15, "cutie": 15, "alice": 15, "bob": 15}
+LIMB_W = {"lean": 12, "heavy": 16, "toy": 12, "cat": 13, "dos": 13, "cutie": 12, "alice": 11, "bob": 11}
 CASE_TILT = 0.3         # DOS's case leans only this much of a pose's lean: the legs do the work
 LEAN_SCALE = {"dos": CASE_TILT}
 # DOS's arms come out of the case's sides, under the screen: each arm's joints move `front` px
