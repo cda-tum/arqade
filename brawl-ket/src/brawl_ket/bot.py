@@ -14,7 +14,9 @@ ERWIN boxes against a shot or a heavy that would hurt him and pops out when the 
 near a box, pounces on crouchers and drops a box on rivals below him; DOS COPYs incoming shots
 and BOHR's crackling field, PASTEs (a field only up close), FLOPPYs at range, reels in rivals
 out of reach with MOUSE CABLE and CRT DROPs on one under him. DOS never switches, so he never
-uses Y to dodge or feint.
+uses Y to dodge or feint. M-CUTIE sets traps while the rival is far (more often when they walk
+in) and hits a rival one holds, charges a wave at range for a random 2 to 6 steps, and jumps at
+a rival in the air at mid range to SPIN into them, or at one winding up a dashing grab close by.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ import random
 from collections import deque
 
 from . import basis
+from .config import TRAP_MAX
 from .fight import Fight
 from .fighter import FighterInput
 
@@ -44,6 +47,17 @@ MOUSE_RANGE = (70, 180)     # DOS flings his mouse at a rival on the ground this
 FIELD_PASTE = 70        # ... and pastes a copied field only with the rival this close
 MOUSE_FOLLOW = 60       # ... and strikes a rival its mouse reeled in, this many frames after the fling
 DROP_RANGE = 30         # DOS stomps on a rival this close under him
+TRAP_RANGE = 150        # M-CUTIE sets a trap with the rival at least this far away
+TRAP_ODDS = (0.003, 0.008)  # ... a chance a frame (the second: while the rival walks in)
+CHARGE_RANGE = 160      # ... and charges a wave with the rival at least this far away
+CHARGE_ODDS = 0.01      # ... a chance a frame
+CHARGE_STEPS = (2, 6)   # ... mashing for this many steps, picked at random each time
+SPIN_RANGE = (40, 110)  # ... and jumps at a rival in the air this far away, to SPIN into them
+ANTI_AIR_ODDS = 0.02    # ... a chance a frame (never at one on the ground: no bot answers that)
+SPIN_REACH = (20, 100)  # ... spinning in that jump once they are this far ahead of her
+SPIN_HEIGHT = (-60, 80)     # ... and her height over theirs puts her leg on their body
+GRAB_JUMP = 0.8         # ... and this often jumps at a rival winding up a dashing grab (MEASURE) ...
+GRAB_SPIN = 70          # ... this close, to SPIN them out of it before it dashes (from further, it would catch her)
 
 _BUSY = ("hitstun", "knockdown")
 
@@ -69,6 +83,8 @@ class Bot:
         self.air_pressed = False
         self.box_hold = 0               # THE BOX: how long this bot stays in the boxes
         self.mouse_t = -1000            # DOS: when it last flung the mouse (to follow up a pull)
+        self.charge_goal = 0            # M-CUTIE: the steps this charge is mashed up to
+        self.spin_jump = False          # ... this jump is one to SPIN in (her other jumps don't)
 
     def input(self, fight: Fight) -> FighterInput:
         me, rival = fight.fighters[self.player], fight.fighters[self.rival]
@@ -83,6 +99,8 @@ class Bot:
             return FighterInput(down=self.down, y=True)
         if me.boxed:
             return self._in_box(me, rival)
+        if me.action == "charging":
+            return self._charging(me)
         if me.action in _BUSY:
             self.chain.clear()
             return FighterInput(down=self.down)
@@ -95,7 +113,8 @@ class Bot:
             return FighterInput(dx=-toward)                     # back out of a field that hurts
         if me.stance == "air":
             return self._in_air(me, rival, toward, dist)
-        for rule in (self._phoebe, self._erwin, self._dos):
+        self.spin_jump = False
+        for rule in (self._phoebe, self._erwin, self._dos, self._cutie):
             special = rule(fight, me, rival, toward, dist)
             if special is not None:
                 return special
@@ -201,6 +220,17 @@ class Bot:
             # for every 7 it falls: it lands about 17 + y / 14 px ahead
             self.air_pressed = True
             return self._press("x", 0)
+        if air.hover and air.lunge:     # SPIN: only in a jump made for it, once they are in reach
+            if self.spin_jump and self.would_hurt(me, air, rival):
+                if ready and SPIN_REACH[0] <= (rival.x - me.x) * me.facing <= SPIN_REACH[1] \
+                        and SPIN_HEIGHT[0] <= me.y - rival.y <= SPIN_HEIGHT[1]:
+                    self.air_pressed = True
+                    return self._press("x", 0)
+                return FighterInput(dx=toward)                  # ... and nothing else in it
+            if not self.air_pressed and self.gap == 0 and dist <= AIR_RANGE:
+                self.air_pressed = True
+                return self._press(self.matching(me, rival), toward)   # a normal air attack
+            return FighterInput(dx=toward)
         if air.dive is not None and air.dive[0] == 0 and ready and abs(rival.x - me.x) <= DROP_RANGE \
                 and me.y > rival.y + 30:
             self.air_pressed = True
@@ -286,6 +316,54 @@ class Bot:
             return FighterInput(up=True, dx=toward)             # a hop, to come down on them
         return None
 
+    def _charging(self, me) -> FighterInput:
+        """AMPLITUDE AMPLIFICATION: mash X up to this charge's goal, then let it fire."""
+        if me.charge < self.charge_goal and self.gap == 0:
+            return self._press("x", 0)
+        return FighterInput()
+
+    def _cutie(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
+        """M-CUTIE: up to SPIN a rival out of a dashing grab winding up close by; in to hit a rival
+        her trap holds; ION TRAP while the rival is far (fewer than two down; more often when they
+        walk in); AMPLITUDE AMPLIFICATION at range; and a jump at a rival in the air at mid range,
+        to SPIN into them."""
+        amp, spin = me.char.moves["stand.X"], me.char.moves["air.X"]
+        if not amp.charge or me.action not in ("idle", "walk", "crouch") or self.gap > 0:
+            return None
+        m = rival.move
+        if m is not None and rival.action == "attack" and rival.phase == "startup" and m.kind == "throw" \
+                and m.lunge and dist <= GRAB_SPIN and rival.frame == self.react and self.rng.random() < GRAB_JUMP:
+            self.down = False
+            self.spin_jump = True
+            return FighterInput(up=True, dx=toward)             # up, and SPIN them out of the grab
+        held = rival.action == "hitstun" and any(t.held == self.rival for t in fight.traps)
+        if held and not self.chain:     # a rival her trap holds: in, and hit them before it lets go
+            if dist <= STRIKE_RANGE:
+                button = self.matching(me, rival)
+                self.down = False
+                self.chain = [button, button] if button == "a" else [button]
+                return self._press(self.chain.pop(0), 0)
+            return FighterInput(dx=toward)
+        mine = sum(1 for t in fight.traps if t.owner == self.player and not t.closed)
+        walking_in = rival.action == "walk" and (rival.x - me.x) * rival.vx < 0
+        if dist >= TRAP_RANGE and mine < TRAP_MAX and me.cooldowns.get("crouch.X", 0) == 0 \
+                and self.rng.random() < TRAP_ODDS[walking_in]:
+            self.down = True
+            press = self._press("x", 0)                         # ION TRAP, from a crouch ...
+            self.down = False                                   # ... and up again
+            return press
+        if dist >= CHARGE_RANGE and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, amp, rival) \
+                and self.rng.random() < CHARGE_ODDS:
+            self.charge_goal = self.rng.randint(*CHARGE_STEPS)
+            self.down = False
+            return self._press("x", 0)                          # the first step
+        if rival.y > 0 and SPIN_RANGE[0] <= dist <= SPIN_RANGE[1] and self.would_hurt(me, spin, rival) \
+                and self.rng.random() < ANTI_AIR_ODDS:
+            self.down = False
+            self.spin_jump = True
+            return FighterInput(up=True, dx=toward)             # up after them, to SPIN
+        return None
+
     def _on_ground(self, me, rival, toward: int, dist: float) -> FighterInput:
         roll = self.rng.random()
         if self.chain:              # a buffered first press is about to come out
@@ -315,7 +393,7 @@ class Bot:
         self.down = False
         if roll < 0.01:
             return FighterInput(up=True, dx=toward)             # jump in
-        if roll < 0.03 and dist > 90 and ready and special.kind == "projectile" \
+        if roll < 0.03 and dist > 90 and ready and special.kind == "projectile" and not special.charge \
                 and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, special, rival):
             return self._press("x", 0)                          # a PHOTON that will hurt
         if roll < 0.04 and ready and me.char.fixed_basis is None:

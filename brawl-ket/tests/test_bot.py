@@ -154,15 +154,103 @@ def test_dos_never_uses_y_to_dodge_or_feint():
             fight.step(ins)
 
 
-@pytest.mark.parametrize("name,extra", [("ERWIN", {"box_split", "pounce", "box_drop"}),
-                                        ("DOS", {"floppy", "mouse", "crt_drop", "copy", "paste"})])
-def test_the_new_bots_use_all_their_specials(name, extra):
+# M-CUTIE SPINs at a rival in the air: against ERWIN, who jumps to drop his boxes
+@pytest.mark.parametrize("name,extra,rival", [("ERWIN", {"box_split", "pounce", "box_drop"}, "ROBERT"),
+                                              ("DOS", {"floppy", "mouse", "crt_drop", "copy", "paste"}, "ROBERT"),
+                                              ("M-CUTIE", {"charge2", "trap_set", "spin"}, "ERWIN")])
+def test_the_new_bots_use_all_their_specials(name, extra, rival):
     kinds: set[str] = set()
     for seed in range(40):
         if extra <= kinds:
             break
-        fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT}, seed=seed)
+        fight = Fight({"p1": CHARACTERS[name], "p2": CHARACTERS[rival]}, seed=seed)
         bots = {"p1": Bot("p1", seed), "p2": Bot("p2", seed + 1000)}
         while not fight.over:
             kinds |= {e.kind for e in fight.step({k: b.input(fight) for k, b in bots.items()}) if e.player == "p1"}
     assert extra <= kinds, extra - kinds
+
+
+M_CUTIE, BOHR = CHARACTERS["M-CUTIE"], CHARACTERS["BOHR"]
+
+
+def far_fight(rival=ROBERT, gap=300):
+    fight = Fight({"p1": M_CUTIE, "p2": rival})
+    fight.fighters["p2"].x = fight.fighters["p1"].x + gap
+    return fight
+
+
+def test_m_cutie_mashes_a_random_2_to_6_steps_at_range(monkeypatch):
+    from brawl_ket import bot as B
+    monkeypatch.setattr(B, "CHARGE_ODDS", 1.0)          # only the charge, at once
+    monkeypatch.setattr(B, "TRAP_ODDS", (0.0, 0.0))
+    steps = set()
+    for seed in range(30):
+        fight = far_fight()
+        me = fight.fighters["p1"]
+        bot = Bot("p1", seed, skill=1.0)
+        top = 0
+        for _ in range(120):
+            fight.step({"p1": bot.input(fight)})
+            top = max(top, me.charge)
+            if fight.shots:
+                break
+        assert fight.shots, seed                         # it fired
+        steps.add(top)
+    assert steps <= set(range(2, 7)) and len(steps) >= 4
+
+
+def test_m_cutie_sets_traps_while_the_rival_is_far_and_never_a_third(monkeypatch):
+    from brawl_ket import bot as B
+    monkeypatch.setattr(B, "TRAP_ODDS", (1.0, 1.0))
+    monkeypatch.setattr(B, "CHARGE_ODDS", 0.0)
+    fight = far_fight(gap=320)
+    bot, sets = Bot("p1", 1, skill=1.0), 0
+    for _ in range(400):
+        mine = sum(1 for t in fight.traps if t.owner == "p1" and not t.closed)
+        events = fight.step({"p1": bot.input(fight)})
+        new = sum(1 for e in events if e.kind == "trap_set")
+        assert not (new and mine == 2)                   # two down: she waits
+        sets += new
+        fight.fighters["p2"].x = fight.fighters["p1"].x + 320     # keep the rival far
+    assert sets == 2
+
+
+def test_m_cutie_hits_a_rival_her_trap_holds():
+    from brawl_ket.fight import Trap
+    from brawl_ket.moves import TRAP_HOLD
+    fight = far_fight(gap=90)
+    rival = fight.fighters["p2"]
+    trap = Trap("p1", TRAP_HOLD, rival.x, "Z", age=100)
+    fight.traps.append(trap)
+    fight.step({})                                       # it closes on him
+    assert trap.held == "p2" and rival.action == "hitstun"
+    bot = Bot("p1", 1, skill=1.0)
+    hits = []
+    for _ in range(TRAP_HOLD.hitstun + 10):
+        hits += [e for e in fight.step({"p1": bot.input(fight)}) if e.kind == "hit" and e.player == "p2"]
+    assert hits                                          # walked in and struck before it let go
+
+
+def test_m_cutie_jumps_at_a_dashing_grab_and_spins_its_thrower_out_of_it(monkeypatch):
+    from brawl_ket import bot as B
+    monkeypatch.setattr(B, "GRAB_JUMP", 1.0)
+    fight = far_fight(rival=BOHR, gap=70)
+    me = fight.fighters["p1"]
+    bot = Bot("p1", 1, skill=1.0)
+    events = []
+    for i in range(70):
+        events += fight.step({"p1": bot.input(fight), "p2": FighterInput(x=i == 0)})   # MEASURE
+    assert not [e for e in events if e.kind == "hit" and e.player == "p1" and e.error == "Y"]   # never grabbed
+    assert "spin" in {e.kind for e in events if e.player == "p1"} and me.health == M_CUTIE.health
+
+
+def test_m_cutie_spins_only_in_a_jump_made_for_it():
+    fight = far_fight(gap=60)
+    me = fight.fighters["p1"]
+    fight.step({"p1": FighterInput(up=True)})
+    for _ in range(3):
+        fight.step({})
+    bot = Bot("p1", 1, skill=1.0)
+    assert not bot.input(fight).x                        # an ordinary jump: no SPIN
+    bot.spin_jump, bot.air_pressed, bot.gap = True, False, 0
+    assert me.y > 0 and bot.input(fight).x               # one made for it: SPIN
