@@ -169,8 +169,8 @@ from `brawl-ket/` with an output path; it draws variant A on the left, B on the 
 
 - **HUD:** the bar sits right under each health bar, on the player's side: two halves with a
   thin divider, filling outward; a full bar shines and blinks A+B!.
-- **HOW TO PLAY card:** one more line, **FILL BOTH COLOURS, THEN A+B: SUPER**, and the button
-  drawing lights A and B together.
+- **HOW TO PLAY card:** one more row under the buttons, **A+B  SUPER: FULL BAR** (the longer
+  line didn't fit the card's controls box), A and B already lit.
 - **CHOOSE YOUR FIGHTER:** each fighter's list gets a fourth row: `A+B  <SUPER NAME>`, its chip
   reading BOTH.
 - **Sound:** none while it fills; a rising chord when a half fills and a bigger one when the

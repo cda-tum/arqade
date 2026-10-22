@@ -40,6 +40,7 @@ from .config import (
     REFORM_FRAMES,
     STAGE_NAMES,
     STAGES,
+    SUPER_FREEZE,
     TOSS_ARC,
     TOSS_FRAMES,
     TOSS_TO,
@@ -87,6 +88,12 @@ MAX_FLARE = 14              # px: how far her coat's hem can blow out behind her
 CHEST_HALF, WAIST_HALF, BELT_HALF = 21, 13, 14
 
 BAR_W, BAR_H, BAR_Y = 236, 12, 14     # the bars leave room for the basis badges by the clock
+# SUPERposition's bar, under the name line: SUPER, then a green half and a purple half
+SUPER_BAR_Y = 46
+SUPER_HALF_W = 56
+SUPER_BAR_H = 5
+SUPER_LABEL = "SUPER"
+SUPER_CALL = "SUPERposition!"       # only SUPER in capitals (the font has real lower case)
 
 # The bases' colours: a body is drawn in its basis's, an attack in the colour of the basis it
 # changes (an X is green, a Z purple; a Y, a throw, both).
@@ -151,14 +158,15 @@ PORTRAIT_GAP = 6
 PORTRAIT_Y = 306            # the (last) row of portraits' top
 LIST_W = 252                # a side's list of specials, px: the label, the name, the colour chip
 LIST_NAME_X = 56            # ... where in it the names start
-LIST_GAP = 10               # ... and the lines' spacing
-MOVE_LABELS = {"AMPLITUDE AMPLIFICATION": "AMP. AMPLIFICATION"}    # names too long for that list
+LIST_GAP = 9                # ... and the lines' spacing (four lines: the super's too)
+MOVE_LABELS = {"AMPLITUDE AMPLIFICATION": "AMP. AMPLIFICATION",     # names too long for that list
+               "BLUE SCREEN OF DEATH": "BLUE SCREEN"}
 # the select screen: what each fighter is, in a line, and how its X moves are entered
 TRAITS = {"ROBERT": "FAST AND LIGHT", "BOHR": "SLOW AND HEAVY", "PHOEBE": "TALL AND TRICKY",
           "ERWIN": "QUICK AND SLIPPERY", "DOS": "SLOW AND CLASSICAL", "M-CUTIE": "PATIENT AND TECHNICAL",
           "ALICE & BOB": "TWO AS ONE"}
 PORTRAIT_PAIR_GAP = 18      # ALICE & BOB's portrait: Bob this far behind Alice, his face over her shoulder
-X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"))
+X_INPUTS = (("stand.X", "X"), ("crouch.X", "DOWN+X"), ("air.X", "AIR X"), ("super", "A+B"))
 RULE_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y SWITCHES YOUR COLOUR")
 # DOS can't switch: his Y copies a shot and then pastes it, and he is always green
 CLASSICAL_LINES = ("A AND X: YOUR COLOUR, B: THE OTHER", "Y: COPY, THEN PASTE", "ALWAYS GREEN")
@@ -181,7 +189,7 @@ LESSON_LINES = (
 )
 CLUSTER = (("L", "X", "R"), ("Y", "B", "A"))     # the cabinet's buttons, as printed on the panel
 BUTTON_JOBS = (("A", "HIT, YOUR COLOUR"), ("B", "HIT, OTHER COLOUR"), ("X", "SPECIAL MOVE"),
-               ("Y", "SWITCH COLOUR"))
+               ("Y", "SWITCH COLOUR"), ("A+B", "SUPER: FULL BAR"))
 LESSON_VIEW = pygame.Rect(156, 118, 300, 192)   # the part of the scene's stage the card shows
 ANY_BUTTON = "PRESS ANY BUTTON TO START"
 
@@ -282,7 +290,7 @@ def panel_lines(char: Character) -> tuple[tuple[str, tuple], ...]:
 def list_top(char: Character) -> int:
     """The y of the first line of a fighter's specials on CHOOSE YOUR FIGHTER (DOS's one line
     lower, under what his Y does)."""
-    return SIDE_FLOOR + 48 + (10 if char.copy_paste else 0)
+    return SIDE_FLOOR + 46 + (6 if char.copy_paste else 0)
 
 
 def move_label(move) -> str:
@@ -704,6 +712,8 @@ class Renderer:
             self._boxes(fight, ox, oy)
         self._draw_effects(ox, oy, world=True)
         self._hud(fight, wins)
+        if fight.freeze > 0 and fight.supers:
+            self._super_call(fight)
         self._draw_effects(0, 0, world=False)
         self._advance()
 
@@ -1352,6 +1362,7 @@ class Renderer:
             else:
                 lx = rect.right - name.get_width() - tag.get_width() - 20 - LEGEND_W
             self._legend(key, f, lx, y)
+            self._super_bar(key, f, fight.meters[key], rect, side)
             if f.char.copy_paste:           # DOS's clipboard, beside his A / B chips
                 self._clipboard(key, f, lx + LEGEND_W + 4 if side < 0 else lx - CLIP_W - 4, y - 3)
             if key in fight.echoes:         # ALICE & BOB's Bob, grey while he is decohered
@@ -1387,6 +1398,62 @@ class Renderer:
             blit_center(self.surface, label, box.center)
             rects[button] = box
         self.legend_rects[key] = rects
+
+    def _super_bar(self, key: str, f: Fighter, meter, rect: pygame.Rect, side: int) -> None:
+        """SUPERposition's bar under the name line: SUPER, a green half and a purple half filling
+        away from the clock; full, both shine white and gold in turn, and A+B! blinks beside them
+        (for a fighter who has a super)."""
+        surf = self.surface
+        label = outlined(SUPER_LABEL, 8, P.MIST)
+        width = 2 * SUPER_HALF_W + 2
+        if side < 0:
+            lx = rect.left + 2
+            x0 = lx + label.get_width() + 6
+        else:
+            lx = rect.right - 2 - label.get_width()
+            x0 = lx - 6 - width
+        surf.blit(label, (lx, SUPER_BAR_Y - 2))
+        frame = pygame.Rect(x0, SUPER_BAR_Y, width, SUPER_BAR_H)
+        pygame.draw.rect(surf, P.INK, frame.inflate(4, 4), border_radius=2)
+        pygame.draw.rect(surf, P.NIGHT, frame)
+        shine = meter.full and (self.t // 6) % 2
+        for i, b in enumerate((basis.Z_BASIS, basis.X_BASIS)):
+            half = pygame.Rect(x0 + i * (SUPER_HALF_W + 2), SUPER_BAR_Y, SUPER_HALF_W, SUPER_BAR_H)
+            fill = round(SUPER_HALF_W * meter.share(b))
+            if fill <= 0:
+                continue
+            part = pygame.Rect(half.x, half.y, fill, SUPER_BAR_H)
+            if side > 0:
+                part.right = half.right
+            colour = (P.WHITE if i == 0 else P.GOLD) if shine else BASIS_BODY[b]
+            surf.fill(colour, part)
+            surf.fill(P.lighten(colour, 0.5), (part.x, part.y, part.w, 1))
+        if meter.full and "super" in f.char.extra and (self.t // 12) % 2 == 0:
+            tag = outlined("A+B!", 8, P.GOLD)
+            tx = frame.right + 8 if side < 0 else frame.left - 8 - tag.get_width()
+            surf.blit(tag, (tx, SUPER_BAR_Y - 2))
+
+    def _super_call(self, fight: Fight) -> None:
+        """A super's freeze: the screen darkens, a sweep of both colours crosses it, the fighter's
+        portrait slides in from their side, and the call: SUPERposition! and the move's name."""
+        surf = self.surface
+        key = fight.supers[0]
+        f = fight.fighters[key]
+        age = SUPER_FREEZE - fight.freeze           # frames into the call
+        surf.blit(self.dim, (0, 0))
+        if age < 10:                                # the sweep: green, then purple, across the screen
+            x = round(W * age / 10) if key == "p1" else round(W - W * age / 10)
+            for dx, colour in ((0, GREEN), (-24 if key == "p1" else 24, PURPLE)):
+                pygame.draw.rect(surf, colour, (x + dx - 10, 0, 20, H))
+        self._band(CALL_Y - 40, CALL_Y + 40)
+        side = -1 if key == "p1" else 1
+        face = pygame.transform.scale_by(portrait(f.char.name), 2)
+        slide = min(1.0, age / 8)
+        fx = round(W / 2 + side * (W / 2 + 40 - slide * 220)) - face.get_width() // 2
+        surf.blit(face, (fx, CALL_Y - face.get_height() // 2))
+        move = f.char.extra["super"]
+        blit_center(surf, outlined(SUPER_CALL, 16, P.GOLD, thick=2), (W / 2, CALL_Y - 10))
+        blit_center(surf, outlined(move.name, 8, P.WHITE), (W / 2, CALL_Y + 14))
 
     def _clipboard(self, key: str, f: Fighter, x: int, y: int) -> None:
         """DOS's clipboard: empty, or the caught shot's tiny sprite in the colour it was fired in."""
@@ -1576,7 +1643,9 @@ class Renderer:
         left = round(cx - LIST_W / 2)
         for i, (slot, how) in enumerate(X_INPUTS):
             y = top + LIST_GAP * i
-            move = char.moves[slot]
+            move = char.extra.get(slot) if slot == "super" else char.moves[slot]
+            if move is None:                # no super yet
+                continue
             surf.blit(outlined(how, 8, P.GOLD), (left, y))
             surf.blit(outlined(move_label(move), 8, P.WHITE), (left + LIST_NAME_X, y))
             self._colour_chip(move, (left + LIST_W, y + 4))
@@ -1794,7 +1863,7 @@ class Renderer:
         surf.blit(outlined("STICK", 8, P.GOLD), (box.x + 48, sy - 12))
         surf.blit(outlined("WALK, JUMP, CROUCH", 8, P.WHITE), (box.x + 48, sy))
         # the buttons
-        used = {b for b, _ in BUTTON_JOBS}
+        used = {b for b, _ in BUTTON_JOBS if len(b) == 1}
         top = box.y + 112
         for row, labels in enumerate(CLUSTER):
             for col, label in enumerate(labels):
@@ -1804,8 +1873,9 @@ class Renderer:
                 blit_center(surf, font(8).render(label, False, P.INK if on else P.MIST), (c[0] + 1, c[1] + 1))
         for i, (label, job) in enumerate(BUTTON_JOBS):
             y = top - 8 + 14 * i
-            surf.blit(outlined(label, 8, P.GOLD), (box.x + 90, y))
-            surf.blit(outlined(job, 8, P.WHITE), (box.x + 108, y))
+            tag = outlined(label, 8, P.GOLD)
+            surf.blit(tag, (box.x + 90, y))
+            surf.blit(outlined(job, 8, P.WHITE), (box.x + max(108, 96 + tag.get_width()), y))
         # Start, a pill of its own below the cluster
         pill = pygame.Rect(box.x + 10, box.y + 180, 60, 16)
         pygame.draw.rect(surf, P.INK, pill.inflate(4, 4), border_radius=8)

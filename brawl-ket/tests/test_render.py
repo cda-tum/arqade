@@ -1037,13 +1037,16 @@ def test_her_specials_read_in_full_where_they_fit_and_shortened_on_the_select_sc
     from brawl_ket.moves import M_CUTIE
     from brawl_ket.render import LIST_NAME_X, LIST_W, X_INPUTS, font, move_label
     pygame.init()
-    assert [move_label(M_CUTIE.moves[s]) for s, _how in X_INPUTS] == ["AMP. AMPLIFICATION", "ION TRAP", "SPIN"]
+    assert [move_label(M_CUTIE.moves[s]) for s, _how in X_INPUTS[:3]] == ["AMP. AMPLIFICATION", "ION TRAP", "SPIN"]
     assert M_CUTIE.moves["stand.X"].name == "AMPLITUDE AMPLIFICATION"     # the full name, everywhere else
     chip = font(8).size("YOURS")[0] + 3
     for c in CHARACTERS.values():
         for slot, how in X_INPUTS:
+            move = c.extra.get(slot) if slot == "super" else c.moves[slot]
+            if move is None:                # no super yet
+                continue
             assert font(8).size(how)[0] < LIST_NAME_X, how
-            assert LIST_NAME_X + font(8).size(move_label(c.moves[slot]))[0] + 4 <= LIST_W - chip, (c.name, slot)
+            assert LIST_NAME_X + font(8).size(move_label(move))[0] + 4 <= LIST_W - chip, (c.name, slot)
 
 
 def test_the_lists_of_specials_clear_the_two_rows_of_portraits():
@@ -1053,7 +1056,7 @@ def test_the_lists_of_specials_clear_the_two_rows_of_portraits():
     assert (M.GRID, M.ROSTER_COLS, rows) == (8, 4, 2)                       # DOS starts the second row
     grid_top = PORTRAIT_Y - (rows - 1) * (PORTRAIT + PORTRAIT_GAP) - 4      # its tiles' ink and the cursors
     for c in CHARACTERS.values():
-        assert list_top(c) + 2 * LIST_GAP + 8 < grid_top, c.name
+        assert list_top(c) + 3 * LIST_GAP + 8 < grid_top, c.name      # four rows: the super's too
     assert PORTRAIT_Y + PORTRAIT + 5 <= INTERNAL_HEIGHT - 9                 # the bottom row clears the hint
     assert INTERNAL_WIDTH / 2 + SIDE_X + LIST_W / 2 <= INTERNAL_WIDTH - 12      # and the lists the screen's edges
 
@@ -1418,3 +1421,73 @@ def test_random_shows_a_question_mark_then_whoever_it_rolled(surface):
     m._ready("p1")
     r.draw(m, [])                           # READY: the rolled fighter, as any pick
     assert m.fighter("p1") in M.ROSTER
+
+
+# --- SUPERposition ----------------------------------------------------------------------------------
+
+
+def test_the_super_bar_shows_each_half_in_its_colour(surface):
+    from brawl_ket.fight import Fight
+    from brawl_ket.render import SUPER_BAR_H, SUPER_BAR_Y, SUPER_HALF_W
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": ROBERT, "p2": ROBERT})
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL // 2}
+    r = Renderer(surface)
+    r.draw_fight(fight, [], {"p1": 0, "p2": 0})
+    y = SUPER_BAR_Y + SUPER_BAR_H // 2
+    row = [tuple(surface.get_at((x, y)))[:3] for x in range(0, INTERNAL_WIDTH // 2)]
+    assert row.count(GREEN) >= SUPER_HALF_W - 4          # the green half, full
+    assert SUPER_HALF_W // 2 - 4 <= row.count(PURPLE) <= SUPER_HALF_W // 2 + 4    # half the purple
+
+
+def test_a_full_bar_says_a_plus_b_for_a_fighter_with_a_super(surface):
+    from brawl_ket.fight import Fight
+    from brawl_ket.moves import CHARACTERS
+    from brawl_ket.superpos import FULL
+    r = Renderer(surface)
+    seen = {}
+    for name in ("DOS", "ROBERT"):
+        fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT})
+        fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+        frames = []
+        for _ in range(24):                             # it blinks: look over a whole cycle
+            r.draw_fight(fight, [], {"p1": 0, "p2": 0})
+            frames.append(surface.subsurface((0, 40, 300, 18)).copy())
+        seen[name] = len({pygame.image.tostring(s, "RGB") for s in frames})
+    assert seen["DOS"] > seen["ROBERT"]                  # (ROBERT has no super yet: no A+B!)
+
+
+def test_the_freeze_shows_the_call(surface):
+    from brawl_ket.fight import Fight
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import CHARACTERS
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["DOS"], "p2": ROBERT})
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}), {"p1": 0, "p2": 0})
+    for _ in range(12):
+        r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
+    from brawl_ket.render import CALL_Y
+    assert fight.freeze > 0
+    band = {tuple(surface.get_at((x, y)))[:3] for x in range(100, 540) for y in range(CALL_Y - 16, CALL_Y - 4)}
+    assert P.GOLD in band                                # "SUPERposition!" in gold across the middle
+
+
+def test_choose_your_fighter_lists_the_super_as_a_fourth_row(surface):
+    import random
+    from brawl_ket import match as M
+    from brawl_ket.render import LIST_GAP, list_top
+    from brawl_ket.moves import CHARACTERS
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    m.state, m.picks = M.SELECT, {"p1": M.ROSTER.index(CHARACTERS["DOS"]), "p2": 0}
+    r.draw(m, [])
+    y = list_top(CHARACTERS["DOS"]) + 3 * LIST_GAP + 4
+    row = {tuple(surface.get_at((x, y)))[:3] for x in range(20, 300)}
+    assert P.GOLD in row                                 # "A+B" in gold, on the fourth line
+
+
+def test_how_to_play_lists_a_plus_b():
+    from brawl_ket.render import BUTTON_JOBS
+    assert ("A+B", "SUPER: FULL BAR") in BUTTON_JOBS
