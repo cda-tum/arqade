@@ -90,14 +90,14 @@ def test_the_jump_is_high_and_still_short():
     while not (f.y == 0 and len(ys) > 3):
         f.step(IDLE, FAR)
         ys.append(f.y)
-    assert 130 <= max(ys) <= 150        # the apex (jump_vy 12, gravity 0.5): about 144 px
-    assert 44 <= len(ys) <= 52          # the airtime: about 48 frames
+    assert 160 <= max(ys) <= 176        # the apex (jump_vy 12.95, gravity 0.5): about 168 px
+    assert 48 <= len(ys) <= 56          # the airtime: about 52 frames
 
 
 def test_jump_keeps_horizontal_speed_from_dx():
     f = make()
     run(f, FighterInput(up=True, dx=1))
-    assert f.vx == ROBERT.walk
+    assert f.vx == ROBERT.air > ROBERT.walk            # a jump carries further than a walk
     x0 = f.x
     run(f, FighterInput(), 5)
     assert f.x > x0
@@ -126,7 +126,7 @@ def test_a_press_starts_a_jab_and_it_runs_its_frames():
     assert phases == (
         ["startup"] * JAB.startup + ["active"] * JAB.active + ["recovery"] * JAB.recovery
     )
-    assert phases == ["startup"] * 4 + ["active"] * 3 + ["recovery"] * 8
+    assert phases == ["startup"] * 4 + ["active"] * 3 + ["recovery"] * 12
     run(f)
     assert f.action == "idle" and f.phase is None and f.move is None
 
@@ -384,21 +384,21 @@ def test_hurtbox_follows_the_stance():
 
 
 def test_cooldown_blocks_a_slot_until_it_expires():
-    jab = replace(JAB, cooldown=30)
+    jab = replace(JAB, cooldown=34)
     char = replace(ROBERT, moves=MappingProxyType({**ROBERT.moves, "stand.A": jab}))
     f = Fighter(char, 300, 1)
     run(f, tap("a"))                                 # step 1
-    assert f.cooldowns["stand.A"] == 30
+    assert f.cooldowns["stand.A"] == 34
     run(f, IDLE, JAB_TOTAL)                          # move over, still cooling down
     assert f.action == "idle"
-    ev = run(f, tap("a"))                            # step 17
+    ev = run(f, tap("a"))                            # step 21
     assert "attack" not in names(ev) and f.action == "idle"
-    ev = run(f, IDLE, 12)                            # steps 18..29
+    ev = run(f, IDLE, 12)                            # steps 22..33
     assert "attack" not in names(ev)
-    # the cooldown reaches 0 on step 31; a press buffered at step 30 comes out then
-    ev = run(f, tap("a"))                            # step 30
+    # the cooldown reaches 0 on step 35; a press buffered at step 34 comes out then
+    ev = run(f, tap("a"))                            # step 34
     assert "attack" not in names(ev)
-    ev = run(f)                                      # step 31
+    ev = run(f)                                      # step 35
     assert ev == [("attack", {"slot": "stand.A"})]
 
 

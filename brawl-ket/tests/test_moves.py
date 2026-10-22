@@ -119,7 +119,7 @@ def test_photon_has_a_cooldown():
 
 def test_robert_jump_numbers():
     robert = CHARACTERS["ROBERT"]
-    assert (robert.jump_vy, robert.gravity) == (12.0, 0.5)
+    assert (robert.walk, robert.jump_vy, robert.gravity, robert.air) == (2.4, 12.95, 0.5, 2.9)
 
 
 def test_the_jab_boxes_are_long():
@@ -162,7 +162,7 @@ def test_a_landing_shockwave_always_has_its_colour():
 def test_bohr_stats():
     q = CHARACTERS["BOHR"]
     assert (q.build, q.health) == ("heavy", 115)
-    assert (q.walk, q.jump_vy, q.gravity) == (1.5, 10.5, 0.55)
+    assert (q.walk, q.jump_vy, q.gravity, q.air) == (1.65, 13.0, 0.55, 2.9)
     assert q.hurt_stand == Box(-18, 0, 36, 132)
     assert q.hurt_crouch == Box(-20, 0, 40, 104)
 
@@ -182,17 +182,17 @@ def apex(c):
 def test_bohr_is_the_slower_heavier_fighter():
     robert, bohr = CHARACTERS["ROBERT"], CHARACTERS["BOHR"]
     assert bohr.walk < robert.walk
-    assert 95 <= apex(bohr) <= 105 < apex(robert)        # about 100 px: lower and heavier
+    assert 150 <= apex(bohr) <= 158 < apex(robert)       # about 154 px: lower and heavier
     assert bohr.hurt_stand.w > robert.hurt_stand.w and bohr.hurt_stand.h > robert.hurt_stand.h
 
 
 BOHR_FRAMES = {
     # slot: (name, startup, active, recovery, hitbox, hitstun, knockback)
-    "stand.A": ("jab", 6, 3, 10, Box(16, 76, 46, 16), 17, 1.0),
+    "stand.A": ("jab", 6, 3, 14, Box(16, 76, 46, 16), 17, 1.0),
     "stand.B": ("heavy", 13, 5, 20, Box(16, 70, 48, 22), 22, 6.0),
-    "crouch.A": ("low jab", 6, 3, 11, Box(14, 22, 46, 14), 16, 1.0),
+    "crouch.A": ("low jab", 6, 3, 15, Box(14, 22, 46, 14), 16, 1.0),
     "crouch.B": ("sweep", 13, 4, 22, Box(12, 6, 64, 14), 24, 2.5),
-    "air.A": ("air jab", 5, 6, 5, Box(12, 54, 30, 20), 15, 1.5),
+    "air.A": ("air jab", 5, 6, 9, Box(12, 54, 30, 20), 15, 1.5),
     "air.B": ("jump-in", 8, 6, 8, Box(10, 30, 40, 28), 20, 3.0),
     "throw": ("throw", 6, 2, 24, Box(0, 40, 44, 70), 30, 6.0),
     "stand.X": ("MEASURE", 16, 13, 30, Box(10, 40, 30, 70), 30, 6.0),
@@ -297,7 +297,7 @@ def test_only_specials_have_twists():
 def test_phoebe_stats():
     p = CHARACTERS["PHOEBE"]
     assert (p.build, p.health) == ("toy", 95)
-    assert (p.walk, p.jump_vy, p.gravity) == (1.9, 11.5, 0.5)
+    assert (p.walk, p.jump_vy, p.gravity, p.air) == (2.1, 12.65, 0.5, 2.75)
 
 
 def test_phoebe_has_the_longest_pokes():
@@ -328,7 +328,7 @@ def test_tunnel_and_laser_numbers():
 
 def test_erwin_stats():
     e = CHARACTERS["ERWIN"]
-    assert (e.build, e.health, e.walk, e.jump_vy, e.gravity) == ("cat", 90, 2.3, 12.5, 0.5)
+    assert (e.build, e.health, e.walk, e.jump_vy, e.gravity) == ("cat", 90, 2.55, 13.05, 0.5)
     others = [c for c in CHARACTERS.values() if c is not e]
     assert apex(e) > max(apex(c) for c in others) and e.health < min(c.health for c in others)
     for slot in NORMALS:
@@ -353,7 +353,7 @@ def test_erwin_specials():
 
 def test_dos_stats():
     d = CHARACTERS["DOS"]
-    assert (d.build, d.health, d.walk, d.jump_vy, d.gravity) == ("dos", 125, 1.6, 10.0, 0.55)
+    assert (d.build, d.health, d.walk, d.jump_vy, d.gravity) == ("dos", 125, 1.75, 12.85, 0.55)
     others = [c for c in CHARACTERS.values() if c is not d]
     assert apex(d) < min(apex(c) for c in others) and d.health > max(c.health for c in others)
     assert d.fixed_basis == Z_BASIS and d.copy_paste and set(d.extra) == {"copy", "paste"}
@@ -384,7 +384,7 @@ def test_copy_and_paste_numbers():
 
 def test_m_cutie_stats():
     m = CHARACTERS["M-CUTIE"]
-    assert (m.build, m.health, m.walk, m.jump_vy, m.gravity) == ("cutie", 105, 1.8, 11.5, 0.5)
+    assert (m.build, m.health, m.walk, m.jump_vy, m.gravity) == ("cutie", 105, 2.0, 12.65, 0.5)
     assert m.walk < ROBERT.walk and m.fixed_basis is None and not m.copy_paste
     healths = sorted(c.health for c in CHARACTERS.values())
     apexes = sorted(apex(c) for c in CHARACTERS.values())
@@ -409,3 +409,18 @@ def test_m_cutie_specials():
     assert spin.hover and spin.lunge and spin.once_per_jump and spin.floor_recovery
     assert (spin.damage, spin.height) == (4, MID) and -(-spin.active // spin.hit_every) == 3
     assert 90 <= spin.lunge * spin.active <= 110     # about 100 px
+
+
+def test_anyone_can_jump_over_anyone():
+    """A forward jump carries every fighter past the widest stand-off twice over, and over the
+    tallest rival's head; the heavies' still the lowest and the shortest."""
+    from brawl_ket.fight import body_width
+    chars = list(CHARACTERS.values())
+    widest = max(body_width(a, b) for a in chars for b in chars)
+    tallest = max(c.hurt_stand.h for c in chars)
+    reach = {c.name: 2 * c.jump_vy / c.gravity * c.air for c in chars}
+    for c in chars:
+        assert reach[c.name] >= 2 * widest and apex(c) >= tallest + 10, c.name
+        assert c.air >= c.walk, c.name
+    assert min(reach, key=reach.get) in ("BOHR", "DOS")
+    assert min(chars, key=apex).name == "DOS" and max(chars, key=apex).name == "ERWIN"

@@ -117,7 +117,7 @@ def test_bob_replays_alices_inputs_exactly_12_frames_later():
 def test_every_attack_comes_twice_the_second_a_beat_late():
     fight, alice, bob, _ = pair_fight()
     starts = {}
-    for i in range(30):
+    for i in range(40):
         fight.step({"p1": A if i == 0 else IDLE})
         for name, f in (("alice", alice), ("bob", bob)):
             if f.action == "attack" and f.frame == 0:

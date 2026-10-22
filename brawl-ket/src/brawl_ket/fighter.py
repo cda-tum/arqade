@@ -492,7 +492,7 @@ class Fighter:
         if inp.up:
             self.crouching = False
             self.vy = self.char.jump_vy
-            self.vx = inp.dx * self.char.walk
+            self.vx = inp.dx * (self.char.air or self.char.walk)
             self._set_action("jump")
         elif self.crouching:
             self.vx = 0.0           # crouching doesn't walk

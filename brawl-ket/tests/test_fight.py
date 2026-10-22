@@ -865,9 +865,9 @@ def test_the_push_box_fits_each_pairing():
         for _ in range(150):
             fight.step({"p1": FighterInput(dx=1), "p2": FighterInput(dx=-1)})
         gap = fight.fighters["p2"].x - fight.fighters["p1"].x
-        assert gap == body_width(c1, c2), (c1.name, c2.name)
+        assert gap == pytest.approx(body_width(c1, c2)), (c1.name, c2.name)
         for f in fight.fighters.values():
-            assert f.throw_range == gap + THROW_SLACK, (c1.name, c2.name)
+            assert f.throw_range == pytest.approx(gap + THROW_SLACK), (c1.name, c2.name)
 
 
 def test_a_throw_works_from_the_closest_spacing_to_the_end_of_its_range():

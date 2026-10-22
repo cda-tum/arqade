@@ -58,8 +58,17 @@ OVER_THE_BAR = {("PHOEBE", "M-CUTIE"): "M-CUTIE wins about 65% against PHOEBE: f
 # they win about 63% against PHOEBE (with ROBERT's normals: ROBERT himself wins 60% against her).
 # After the playtest's singlet colours and ANCHOR, over 200 rounds: BOHR about 72%, them about 63%
 OVER_THE_BAR.update({
-    ("BOHR", "ALICE & BOB"): "BOHR wins about 72% against ALICE & BOB: for the user to decide",
-    ("PHOEBE", "ALICE & BOB"): "ALICE & BOB win about 63% against PHOEBE: for the user to decide",
+    ("BOHR", "ALICE & BOB"): "BOHR wins about 80% against ALICE & BOB: for the user to decide",
+    ("PHOEBE", "ALICE & BOB"): "ALICE & BOB win about 62% against PHOEBE: for the user to decide",
+})
+# ... and after the user's feel tuning (2026-10-22: every A normal 4 frames more recovery, faster
+# walks, and jumps long and high enough to clear anyone), over 200 rounds: ROBERT, whose jab
+# strings carried him, loses ground; BOHR's MEASURE and CHARGE NOISE catch the longer jumps
+OVER_THE_BAR.update({
+    ("ROBERT", "ERWIN"): "ERWIN wins about 68% against ROBERT: for the user to decide",
+    ("ROBERT", "DOS"): "ROBERT wins about 63% against DOS: for the user to decide",
+    ("ROBERT", "ALICE & BOB"): "ALICE & BOB win about 59-66% against ROBERT: for the user to decide",
+    ("BOHR", "ERWIN"): "BOHR wins about 65% against ERWIN: for the user to decide",
 })
 CASES = [pytest.param(p, id="-".join(p), marks=[pytest.mark.xfail(reason=OVER_THE_BAR[p], strict=False)]
                       if p in OVER_THE_BAR else []) for p in PAIRS]

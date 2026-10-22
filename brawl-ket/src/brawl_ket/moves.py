@@ -116,6 +116,10 @@ class Character:
     copy_paste: bool = False            # DOS: Y is COPY / PASTE (`extra`), not a switch
     extra: Mapping[str, Move] = field(default_factory=lambda: MappingProxyType({}))   # moves outside SLOTS
     pair: Character | None = None       # ALICE & BOB: the second body (BOB), an echo of this one (echo.py)
+    # px per frame across in a jump (None: the walk). Every forward jump carries at least 135 px
+    # and peaks at least 150 px, so anyone can jump over anyone (the widest stand-off is 64 px,
+    # the tallest rival DOS's 140); the heavies' jumps are still the lowest and the shortest.
+    air: float | None = None
 
 
 SLOTS = (
@@ -129,14 +133,15 @@ ROBERT = Character(
     name="ROBERT",
     build="lean",
     health=100,
-    walk=2.2,
-    jump_vy=12.0,
+    walk=2.4,
+    jump_vy=12.95,
     gravity=0.5,
+    air=2.9,
     hurt_stand=Box(-14, 0, 28, 120),
     hurt_crouch=Box(-16, 0, 32, 100),
     moves=MappingProxyType({
         "stand.A": Move(
-            "jab", 4, 3, 8, Box(14, 70, 44, 14), OWN, HIGH,
+            "jab", 4, 3, 12, Box(14, 70, 44, 14), OWN, HIGH,
             damage=4, hitstun=12, knockback=0.8, lunge=1.5,
             cancels=("stand.A", "stand.B", "crouch.A"),
             poses=("jab_wind", "jab_hit", "jab_wind"),
@@ -147,7 +152,7 @@ ROBERT = Character(
             poses=("heavy_wind", "heavy_hit", "heavy_recover"),
         ),
         "crouch.A": Move(
-            "low jab", 4, 3, 9, Box(12, 20, 44, 12), OWN, LOW,
+            "low jab", 4, 3, 13, Box(12, 20, 44, 12), OWN, LOW,
             damage=4, hitstun=12, knockback=0.8, lunge=1.5,
             cancels=("crouch.A", "crouch.B", "stand.B"),
             poses=("low_wind", "low_hit", "low_wind"),
@@ -158,7 +163,7 @@ ROBERT = Character(
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),
         "air.A": Move(
-            "air jab", 4, 6, 4, Box(10, 50, 26, 18), OWN, MID,
+            "air jab", 4, 6, 8, Box(10, 50, 26, 18), OWN, MID,
             damage=4, hitstun=14, knockback=1.0,
             poses=("jump", "air_jab", "jump"),
         ),
@@ -193,10 +198,9 @@ ROBERT = Character(
         "air.X": Move(
             "HADAMARD DIVE", 3, 40, 8, Box(6, 0, 26, 20), OWN, MID,
             damage=10, hitstun=18, knockback=3.0, switch_self_on_hit=True,
-            # Steep and fast: 13 px/frame lands about 14 frames after the apex, startup
-            # included. The spec's 10 px/frame can't make its ~12 frames: ROBERT's jump peaks
-            # at about 138 px, so the fall alone would take 14 frames (17 with the startup).
-            kind="special", dive=(3.0, 13.0),
+            # Steep and fast: 16 px/frame lands about 14 frames after the apex, startup
+            # included (ROBERT's jump now peaks at about 168 px: 11 frames of fall, 3 of startup).
+            kind="special", dive=(3.0, 16.0),
             poses=("jump", "dive", "crouch"),
         ),
     }),
@@ -206,14 +210,15 @@ BOHR = Character(
     name="BOHR",
     build="heavy",
     health=115,                         # slower and broader, so a little sturdier
-    walk=1.5,
-    jump_vy=10.5,
-    gravity=0.55,                       # an apex of about 100 px: lower and heavier than ROBERT's
+    walk=1.65,
+    jump_vy=13.0,
+    gravity=0.55,                       # an apex of about 154 px: lower and heavier than ROBERT's 168
+    air=2.9,
     hurt_stand=Box(-18, 0, 36, 132),
     hurt_crouch=Box(-20, 0, 40, 104),   # to about the drawn head's centre, as ROBERT's
     moves=MappingProxyType({
         "stand.A": Move(
-            "jab", 6, 3, 10, Box(16, 76, 46, 16), OWN, HIGH,
+            "jab", 6, 3, 14, Box(16, 76, 46, 16), OWN, HIGH,
             damage=4, hitstun=17, knockback=1.0, lunge=1.5,
             cancels=("stand.A", "stand.B"),
             poses=("jab_wind", "jab_hit", "jab_wind"),
@@ -224,7 +229,7 @@ BOHR = Character(
             poses=("heavy_wind", "heavy_hit", "heavy_recover"),
         ),
         "crouch.A": Move(
-            "low jab", 6, 3, 11, Box(14, 22, 46, 14), OWN, LOW,
+            "low jab", 6, 3, 15, Box(14, 22, 46, 14), OWN, LOW,
             damage=4, hitstun=16, knockback=1.0, lunge=1.5,
             cancels=("crouch.A", "crouch.B"),
             poses=("low_wind", "low_hit", "low_wind"),
@@ -235,7 +240,7 @@ BOHR = Character(
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),
         "air.A": Move(
-            "air jab", 5, 6, 5, Box(12, 54, 30, 20), OWN, MID,
+            "air jab", 5, 6, 9, Box(12, 54, 30, 20), OWN, MID,
             damage=4, hitstun=15, knockback=1.5,
             poses=("jump", "air_jab", "jump"),
         ),
@@ -291,15 +296,16 @@ PHOEBE = Character(
     name="PHOEBE",
     build="toy",
     health=95,                          # the easiest to hurt: she wins by angles, not by trading
-    walk=1.9,
-    jump_vy=11.5,
-    gravity=0.5,                        # an apex of about 132 px
+    walk=2.1,
+    jump_vy=12.65,
+    gravity=0.5,                        # an apex of about 160 px
+    air=2.75,
     hurt_stand=Box(-14, 0, 28, 128),
     hurt_crouch=Box(-16, 0, 32, 104),
     moves=MappingProxyType({
         # ROBERT's normals, a frame or two slower and longer: her jab and heavy are long pokes
         "stand.A": Move(
-            "jab", 5, 3, 9, Box(14, 84, 60, 14), OWN, HIGH,
+            "jab", 5, 3, 13, Box(14, 84, 60, 14), OWN, HIGH,
             damage=4, hitstun=13, knockback=0.8, lunge=1.5,
             cancels=("stand.A", "stand.B", "crouch.A"),
             poses=("jab_wind", "poke_hit", "jab_wind"),
@@ -310,7 +316,7 @@ PHOEBE = Character(
             poses=("heavy_wind", "lunge_hit", "heavy_recover"),
         ),
         "crouch.A": Move(
-            "low jab", 5, 3, 10, Box(12, 22, 52, 12), OWN, LOW,
+            "low jab", 5, 3, 14, Box(12, 22, 52, 12), OWN, LOW,
             damage=4, hitstun=13, knockback=0.8, lunge=1.5,
             cancels=("crouch.A", "crouch.B", "stand.B"),
             poses=("low_wind", "low_hit", "low_wind"),
@@ -321,7 +327,7 @@ PHOEBE = Character(
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),
         "air.A": Move(
-            "air jab", 5, 6, 5, Box(10, 52, 34, 18), OWN, MID,
+            "air jab", 5, 6, 9, Box(10, 52, 34, 18), OWN, MID,
             damage=4, hitstun=14, knockback=1.0,
             poses=("jump", "air_jab", "jump"),
         ),
@@ -384,9 +390,10 @@ ERWIN = Character(
     name="ERWIN",
     build="cat",
     health=90,                          # the least: quick and slippery, and THE BOX is a gamble
-    walk=2.3,
-    jump_vy=12.5,
-    gravity=0.5,                        # an apex of about 156 px: the highest
+    walk=2.55,
+    jump_vy=13.05,
+    gravity=0.5,                        # an apex of about 170 px: the highest (180 made him win 72%
+    air=2.8,                            # against ALICE & BOB: tools/balance.py)
     hurt_stand=Box(-14, 0, 28, 120),    # ROBERT's height
     hurt_crouch=Box(-16, 0, 32, 100),
     moves=MappingProxyType({
@@ -425,9 +432,10 @@ DOS = Character(
     name="DOS",
     build="dos",
     health=125,                         # the most: big and slow
-    walk=1.6,
-    jump_vy=10.0,
-    gravity=0.55,                       # an apex of about 91 px: the lowest
+    walk=1.75,
+    jump_vy=12.85,
+    gravity=0.55,                       # an apex of about 150 px: the lowest
+    air=2.9,
     hurt_stand=Box(-24, 0, 48, 140),    # the case: 54 px wide, its top 144 px up
     hurt_crouch=Box(-26, 0, 52, 112),
     fixed_basis=Z_BASIS,                # a classical bit: always green
@@ -436,7 +444,7 @@ DOS = Character(
         # BOHR's frame numbers, but slower jabs (8, not 6: with 125 health, 6 made him too strong);
         # the boxes fit his fists, which come out of the case's sides
         "stand.A": Move(
-            "jab", 8, 3, 10, Box(20, 58, 50, 16), OWN, HIGH,
+            "jab", 8, 3, 14, Box(20, 58, 50, 16), OWN, HIGH,
             damage=4, hitstun=17, knockback=1.0, lunge=1.5,
             cancels=("stand.A", "stand.B"),
             poses=("jab_wind", "jab_hit", "jab_wind"),
@@ -447,7 +455,7 @@ DOS = Character(
             poses=("heavy_wind", "heavy_hit", "heavy_recover"),
         ),
         "crouch.A": Move(
-            "low jab", 8, 3, 11, Box(18, 20, 48, 14), OWN, LOW,
+            "low jab", 8, 3, 15, Box(18, 20, 48, 14), OWN, LOW,
             damage=4, hitstun=16, knockback=1.0, lunge=1.5,
             cancels=("crouch.A", "crouch.B"),
             poses=("low_wind", "low_hit", "low_wind"),
@@ -458,7 +466,7 @@ DOS = Character(
             poses=("sweep_wind", "sweep_hit", "crouch"),
         ),
         "air.A": Move(
-            "air jab", 5, 6, 5, Box(16, 34, 44, 20), OWN, MID,
+            "air jab", 5, 6, 9, Box(16, 34, 44, 20), OWN, MID,
             damage=4, hitstun=15, knockback=1.5,
             poses=("jump", "air_jab", "jump"),
         ),
@@ -551,9 +559,10 @@ M_CUTIE = Character(
     name="M-CUTIE",
     build="cutie",
     health=105,                         # in the middle
-    walk=1.8,                           # a little slower than ROBERT
-    jump_vy=11.5,
-    gravity=0.5,                        # an apex of about 132 px: in the middle
+    walk=2.0,                           # a little slower than ROBERT
+    jump_vy=12.65,
+    gravity=0.5,                        # an apex of about 160 px: in the middle
+    air=2.75,
     hurt_stand=Box(-16, 0, 32, 116),    # a little shorter than ROBERT, and wider: her cage skirt
     hurt_crouch=Box(-18, 0, 36, 92),    # is 60 px across at its hem
     moves=MappingProxyType({
@@ -626,9 +635,10 @@ BOB = Character(
     name="BOB",
     build="bob",
     health=100,                         # the pair's one bar (echo.py: his health is Alice's)
-    walk=2.4,
-    jump_vy=11.0,
+    walk=2.65,
+    jump_vy=12.5,
     gravity=0.5,
+    air=3.0,
     hurt_stand=Box(-13, 0, 26, 93),     # to about his drawn head's centre (104 px up), as ROBERT's
     hurt_crouch=Box(-15, 0, 30, 77),
     moves=MappingProxyType({**KID_NORMALS, "air.X": BELL_DIVE}),
@@ -639,9 +649,10 @@ ALICE_BOB = Character(
     name="ALICE & BOB",
     build="alice",                      # Alice's skeleton; Bob is drawn on his own ("bob")
     health=100,                         # one shared bar
-    walk=2.4,                           # a little faster than ROBERT (2.2) ...
-    jump_vy=11.0,                       # ... and lighter: a quicker, smaller hop, an apex of about 121 px
-    gravity=0.5,                        # (ROBERT's 144) and 44 frames in the air (his 48)
+    walk=2.65,                          # a little faster than ROBERT (2.4) ...
+    jump_vy=12.5,                       # ... and lighter: a quicker, smaller hop, an apex of about 156 px
+    gravity=0.5,                        # (ROBERT's 168) and 50 frames in the air (his 52)
+    air=3.0,
     hurt_stand=Box(-13, 0, 26, 86),     # to about her drawn head's centre (97 px up), as ROBERT's
     hurt_crouch=Box(-15, 0, 30, 70),
     moves=MappingProxyType({
