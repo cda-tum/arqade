@@ -3,8 +3,8 @@
     cd brawl-ket && uv run python tools/benchmark.py            # the dev machine
     python3 benchmark.py /userdata/games/brawl_ket              # on the cabinet
 
-Bot-against-bot fights for every pairing, then the title's demo through the
-real Match, all drawn to a 640x360 surface (the display's upscale is not
+Bot-against-bot fights for every pairing (ALICE & BOB's put two more bodies on screen, four in
+their mirror), then the title's demo through the real Match, all drawn to a 640x360 surface (the display's upscale is not
 included: SDL does that on the GPU). A frame has 16.7 ms; the plan's budget
 for the game's own part is under 2 ms on the dev machine.
 """

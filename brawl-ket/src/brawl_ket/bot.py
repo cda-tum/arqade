@@ -17,6 +17,9 @@ out of reach with MOUSE CABLE and CRT DROPs on one under him. DOS never switches
 uses Y to dodge or feint. M-CUTIE sets traps while the rival is far (more often when they walk
 in) and hits a rival one holds, charges a wave at range for a random 2 to 6 steps, and jumps at
 a rival in the air at mid range to SPIN into them, or at one winding up a dashing grab close by.
+ALICE & BOB's bot controls Alice only (Bob follows by himself, as he does for a person): KEY
+EXCHANGE at range while the rival isn't standing between them, TELEPORT when the rival is, and
+now and then a jump at the rival, to BELL DIVE on them below.
 """
 
 from __future__ import annotations
@@ -58,6 +61,16 @@ SPIN_REACH = (20, 100)  # ... spinning in that jump once they are this far ahead
 SPIN_HEIGHT = (-60, 80)     # ... and her height over theirs puts her leg on their body
 GRAB_JUMP = 0.8         # ... and this often jumps at a rival winding up a dashing grab (MEASURE) ...
 GRAB_SPIN = 70          # ... this close, to SPIN them out of it before it dashes (from further, it would catch her)
+KEY_RANGE = 110         # ALICE & BOB: KEY EXCHANGE with the rival at least this far from Alice ...
+KEY_ODDS = 0.03         # ... a chance a frame
+TELEPORT_ODDS = 0.15    # ... TELEPORT, a chance a frame while the rival stands between them
+DIVE_JUMP = (50, 120)   # ... a jump at a rival on the ground this far away, to BELL DIVE on them ...
+DIVE_JUMP_ODDS = 0.004  # ... a chance a frame (no bot answers a dive: at 0.01 they won 65-76%)
+DIVE_REACH = (10, 60)   # ... diving once they are this far ahead of her, below her
+KIDS_GRAB_JUMP = 0.8    # ... and this often jumps a dashing grab (MEASURE) winding up in its reach
+# ... and starts a string up close a little less often than anyone (0.02): every attack of theirs
+# comes twice, and at 0.02 they won 60-72% against all but BOHR (tools/balance.py)
+KIDS_STRIKE_ODDS = 0.017
 
 _BUSY = ("hitstun", "knockdown")
 
@@ -98,6 +111,7 @@ class Bot:
         self.mouse_t = -1000            # DOS: when it last flung the mouse (to follow up a pull)
         self.charge_goal = 0            # M-CUTIE: the steps this charge is mashed up to
         self.spin_jump = False          # ... this jump is one to SPIN in (her other jumps don't)
+        self.dive_jump = False          # ALICE & BOB: this jump is one to BELL DIVE in
 
     def input(self, fight: Fight) -> FighterInput:
         me, rival = fight.fighters[self.player], fight.fighters[self.rival]
@@ -127,7 +141,8 @@ class Bot:
         if me.stance == "air":
             return self._in_air(me, rival, toward, dist)
         self.spin_jump = False
-        for rule in (self._phoebe, self._erwin, self._dos, self._cutie):
+        self.dive_jump = False
+        for rule in (self._phoebe, self._erwin, self._dos, self._cutie, self._kids):
             special = rule(fight, me, rival, toward, dist)
             if special is not None:
                 return special
@@ -221,6 +236,13 @@ class Bot:
     def _in_air(self, me, rival, toward: int, dist: float) -> FighterInput:
         air = me.char.moves["air.X"]
         ready = not self.air_pressed and self.gap == 0 and "air.X" not in me.air_used
+        if me.char.pair is not None and self.dive_jump:     # BELL DIVE, in a jump made for it
+            ahead = (rival.x - me.x) * me.facing
+            if ready and DIVE_REACH[0] <= ahead <= DIVE_REACH[1] and me.y > rival.y + 30 \
+                    and self.would_hurt(me, air, rival):
+                self.air_pressed = True
+                return self._press("x", 0)
+            return FighterInput(dx=toward)
         if air.hover and air.projectile is not None and ready and abs(dist - (me.y + 50)) < 45 \
                 and self.would_hurt(me, air, rival):
             # LASER: the shot leaves 50 px ahead at hand height (59 px) and falls one px per px, so
@@ -380,6 +402,38 @@ class Bot:
             return FighterInput(up=True, dx=toward)             # up after them, to SPIN
         return None
 
+    def _kids(self, fight: Fight, me, rival, toward: int, dist: float) -> FighterInput | None:
+        """ALICE & BOB (the bot is Alice): TELEPORT when the rival stands between her and Bob, KEY
+        EXCHANGE at range when they don't (Alice's own photon while Bob is gone), and now and then
+        a jump at a rival on the ground, to BELL DIVE on them."""
+        if me.char.pair is None or me.action not in ("idle", "walk", "crouch") or self.gap > 0:
+            return None
+        m = rival.move
+        if m is not None and rival.action == "attack" and rival.phase == "startup" and m.kind == "throw" \
+                and m.lunge and dist <= GRAB_RANGE and rival.frame == self.react and self.rng.random() < KIDS_GRAB_JUMP:
+            self.down = False
+            self.dive_jump = True
+            return FighterInput(up=True, dx=toward)             # over a dashing grab, and dive on them
+        bob = fight.echoes[self.player]
+        between = bob.here and min(me.x, bob.x) < rival.x < max(me.x, bob.x)
+        if between:
+            if me.cooldowns.get("crouch.X", 0) == 0 and self.rng.random() < TELEPORT_ODDS:
+                self.down = True
+                press = self._press("x", 0)                     # TELEPORT, from a crouch ...
+                self.down = False                               # ... and up again
+                return press
+            return None
+        key = me.char.moves["stand.X"]
+        if dist >= KEY_RANGE and me.cooldowns.get("stand.X", 0) == 0 and self.would_hurt(me, key, rival) \
+                and self.rng.random() < KEY_ODDS:
+            self.down = False
+            return self._press("x", 0)                          # KEY EXCHANGE (her own photon while Bob is gone)
+        if DIVE_JUMP[0] <= dist <= DIVE_JUMP[1] and rival.y == 0 and self.rng.random() < DIVE_JUMP_ODDS:
+            self.down = False
+            self.dive_jump = True
+            return FighterInput(up=True, dx=toward)             # up, to come down on them
+        return None
+
     def _on_ground(self, me, rival, toward: int, dist: float) -> FighterInput:
         roll = self.rng.random()
         if self.chain:              # a buffered first press is about to come out
@@ -398,7 +452,7 @@ class Bot:
                 and roll < 0.01:
             return self._press("x", 0)                          # MEASURE
         if dist <= STRIKE_RANGE:
-            if roll < 0.02 and ready:
+            if roll < (KIDS_STRIKE_ODDS if me.char.pair is not None else 0.02) and ready:
                 if self.rng.random() < 0.2:
                     self.down = not self.down   # strike at the other height
                 button = self.matching(me, rival)

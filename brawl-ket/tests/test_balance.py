@@ -1,8 +1,8 @@
-"""The balance bar (docs/superpowers/specs/2026-10-21-brawl-ket-erwin-dos-design.md, section 6, and
-2026-10-21-brawl-ket-m-cutie-design.md, section 5): bot against bot, from both sides, no fighter
-wins more than about 60% of the rounds against another. Held for every pairing with ERWIN, DOS or
-M-CUTIE; `tools/balance.py` prints the whole table (the older three's pairings included, which
-were never held to it)."""
+"""The balance bar (docs/superpowers/specs/2026-10-21-brawl-ket-erwin-dos-design.md, section 6,
+2026-10-21-brawl-ket-m-cutie-design.md, section 5, and 2026-10-21-brawl-ket-alice-bob-design.md, section 5):
+bot against bot, from both sides, no fighter wins more than about 60% of the rounds against another.
+Held for every pairing with ERWIN, DOS, M-CUTIE or ALICE & BOB; `tools/balance.py` prints the whole
+table (the older three's pairings included, which were never held to it)."""
 
 import itertools
 
@@ -15,7 +15,7 @@ from brawl_ket.moves import CHARACTERS
 
 SEEDS = range(50)       # 100 rounds a pairing, 50 from each side
 BAR = 0.62              # "about 60%", with room for 100 rounds' noise (tools/balance.py checks 0.60 over 400)
-NEW = ("ERWIN", "DOS", "M-CUTIE")
+NEW = ("ERWIN", "DOS", "M-CUTIE", "ALICE & BOB")
 PAIRS = [(a, b) for a, b in itertools.combinations(CHARACTERS, 2) if a in NEW or b in NEW]
 
 
@@ -45,15 +45,21 @@ def share(a: str, b: str) -> float:
 
 
 def test_every_new_pairing_is_checked():
-    assert len(PAIRS) == 15         # ERWIN's, DOS's and M-CUTIE's, ALICE & BOB's with them among them
+    assert len(PAIRS) == 18         # all 21 pairings of seven but the older three's among themselves
 
 
 # Over the bar, for the user to decide: with the health and walk the spec fixes, M-CUTIE plays
 # PHOEBE as ROBERT does (60%) with 5 more health; about 65% over 400 rounds, whatever her bot does
 # (docs/superpowers/plans/2026-10-21-brawl-ket-m-cutie.md, Task 4).
 OVER_THE_BAR = {("PHOEBE", "M-CUTIE"): "M-CUTIE wins about 65% against PHOEBE: for the user to decide"}
-# ALICE & BOB play with the generic bot until their own (2026-10-22 ALICE & BOB plan, Task 6)
-OVER_THE_BAR.update({p: "ALICE & BOB have no bot of their own yet" for p in PAIRS if "ALICE & BOB" in p})
+# ... and ALICE & BOB's two outside the bar, both measured over 400 rounds in their plan's Task 6
+# (docs/superpowers/plans/2026-10-22-brawl-ket-alice-bob.md): BOHR wins about 67% against them
+# (MEASURE, 12 and a knockdown from 130 px, and CHARGE NOISE, which hits each body inside it), and
+# they win about 63% against PHOEBE (with ROBERT's normals: ROBERT himself wins 60% against her)
+OVER_THE_BAR.update({
+    ("BOHR", "ALICE & BOB"): "BOHR wins about 67% against ALICE & BOB: for the user to decide",
+    ("PHOEBE", "ALICE & BOB"): "ALICE & BOB win about 63% against PHOEBE: for the user to decide",
+})
 CASES = [pytest.param(p, id="-".join(p), marks=[pytest.mark.xfail(reason=OVER_THE_BAR[p], strict=False)]
                       if p in OVER_THE_BAR else []) for p in PAIRS]
 

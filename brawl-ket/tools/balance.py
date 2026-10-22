@@ -4,9 +4,10 @@
 
 For each pair, the share of the decided rounds each fighter won, over SEEDS seeds from each
 side (200 by default). The bar (docs/superpowers/specs/2026-10-21-brawl-ket-erwin-dos-design.md,
-section 6, and 2026-10-21-brawl-ket-m-cutie-design.md, section 5): no fighter wins more than about
-60% against another. tests/test_balance.py holds every pairing with ERWIN, DOS or M-CUTIE to it
-(but M-CUTIE against PHOEBE, left to the user); the older three's pairings are only reported here.
+section 6, 2026-10-21-brawl-ket-m-cutie-design.md, section 5, and 2026-10-21-brawl-ket-alice-bob-design.md,
+section 5): no fighter wins more than about 60% against another. tests/test_balance.py holds every
+pairing with ERWIN, DOS, M-CUTIE or ALICE & BOB to it (but M-CUTIE against PHOEBE and BOHR against
+ALICE & BOB, left to the user); the older three's pairings are only reported here.
 """
 
 from __future__ import annotations

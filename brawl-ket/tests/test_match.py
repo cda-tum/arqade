@@ -837,3 +837,22 @@ def test_a_pair_starts_every_round_together() -> None:
     ko(m, "p2")
     alice, bob = m.fight.fighters["p1"], m.fight.echoes["p1"]
     assert m.state == ROUND_INTRO and bob.here and bob.x == alice.x - ECHO_GAP
+
+
+def test_the_demo_plays_alice_and_bob_with_their_bot() -> None:
+    m = Match(random.Random(3))
+    for _ in range(100):
+        m._start_attract()
+        keys = [k for k, f in m.attract.fighters.items() if f.char.pair is not None]
+        if keys:
+            break
+    key = keys[0]
+    bob = m.attract.echoes[key]
+    echoed = False
+    for _ in range(900):
+        m._step_attract()
+        if m.attract is None or key not in m.attract.echoes:
+            break
+        bob = m.attract.echoes[key]
+        echoed = echoed or bob.action == "attack"
+    assert echoed                       # the bot drove Alice, and Bob echoed her

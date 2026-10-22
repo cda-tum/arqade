@@ -157,7 +157,8 @@ def test_dos_never_uses_y_to_dodge_or_feint():
 # M-CUTIE SPINs at a rival in the air: against ERWIN, who jumps to drop his boxes
 @pytest.mark.parametrize("name,extra,rival", [("ERWIN", {"box_split", "pounce", "box_drop"}, "ROBERT"),
                                               ("DOS", {"floppy", "mouse", "crt_drop", "copy", "paste"}, "ROBERT"),
-                                              ("M-CUTIE", {"charge2", "trap_set", "spin"}, "ERWIN")])
+                                              ("M-CUTIE", {"charge2", "trap_set", "spin"}, "ERWIN"),
+                                              ("ALICE & BOB", {"toss", "teleport", "bell_dive"}, "ROBERT")])
 def test_the_new_bots_use_all_their_specials(name, extra, rival):
     kinds: set[str] = set()
     for seed in range(40):
@@ -303,3 +304,83 @@ def test_dos_never_copies_a_spin_but_copies_charge_noise():
     bot = Bot("p1", seed=1, skill=1.0)
     fight = _in_charge_noise("DOS", 95)
     assert any(bot.input(fight).y for _ in range(20))
+
+
+# --- ALICE & BOB: the bot is Alice; Bob follows by himself -------------------------------------------
+
+ALICE_BOB = CHARACTERS["ALICE & BOB"]
+
+
+def kids_fight(rival=ROBERT, gap=200.0):
+    fight = Fight({"p1": ALICE_BOB, "p2": rival})
+    alice, bob = fight.fighters["p1"], fight.echoes["p1"]
+    fight.fighters["p2"].x = alice.x + gap
+    return fight, alice, bob
+
+
+def test_their_bot_tosses_a_key_exchange_at_range(monkeypatch):
+    from brawl_ket import bot as B
+    monkeypatch.setattr(B, "KEY_ODDS", 1.0)
+    fight, alice, bob = kids_fight(gap=200.0)
+    bot = Bot("p1", 1, skill=1.0)
+    kinds = []
+    for _ in range(40):
+        kinds += [e.kind for e in fight.step({"p1": bot.input(fight)}) if e.player == "p1"]
+        fight.fighters["p2"].x = alice.x + 200.0
+    assert "toss" in kinds and "catch" in kinds
+
+
+def test_their_bot_teleports_when_the_rival_stands_between_them(monkeypatch):
+    from brawl_ket import bot as B
+    monkeypatch.setattr(B, "TELEPORT_ODDS", 1.0)
+    fight, alice, bob = kids_fight(gap=200.0)
+    rival = fight.fighters["p2"]
+    bot = Bot("p1", 1, skill=1.0)
+    rival.x = alice.x - 20.0                    # between Alice and Bob, 40 px behind her
+    assert bob.x < rival.x < alice.x
+    press = bot.input(fight)
+    assert press.down and press.x
+    events = []
+    for _ in range(10):
+        events += fight.step({"p1": press})
+        press = bot.input(fight)
+    assert "teleport" in [e.kind for e in events]
+
+
+def test_their_bot_never_teleports_with_nobody_between_them(monkeypatch):
+    from brawl_ket import bot as B
+    monkeypatch.setattr(B, "TELEPORT_ODDS", 1.0)
+    fight, alice, bob = kids_fight(gap=200.0)
+    bot = Bot("p1", 1, skill=1.0)
+    for _ in range(200):
+        events = fight.step({"p1": bot.input(fight)})
+        assert "teleport" not in [e.kind for e in events]
+
+
+def test_their_bot_bell_dives_on_a_rival_below(monkeypatch):
+    from brawl_ket import bot as B
+    monkeypatch.setattr(B, "DIVE_JUMP_ODDS", 1.0)
+    monkeypatch.setattr(B, "KEY_ODDS", 0.0)
+    fight, alice, bob = kids_fight(gap=90.0)
+    bot = Bot("p1", 1, skill=1.0)
+    dives = []
+    for _ in range(60):
+        events = fight.step({"p1": bot.input(fight)})
+        dives += [e for e in events if e.kind == "bell_dive" and e.player == "p1"]
+    assert len(dives) == 2                       # hers, and Bob's echo of it
+
+
+def test_their_bot_only_ever_drives_alice():
+    """The fight gives Bob nothing but Alice's own inputs, 12 frames late, hitstop included (the
+    bot never presses for him)."""
+    from brawl_ket.config import ECHO_DELAY
+    from brawl_ket.fighter import IDLE
+    fight, alice, bob = kids_fight(gap=150.0)
+    bot = Bot("p1", 3)
+    pressed, replayed = [], []
+    real = bob.replay
+    bob.replay = lambda inp: (replayed.append(real(inp)), replayed[-1])[1]
+    for _ in range(200):
+        pressed.append(bot.input(fight))
+        fight.step({"p1": pressed[-1]})
+    assert replayed == [IDLE] * ECHO_DELAY + pressed[:-ECHO_DELAY]
