@@ -81,7 +81,6 @@ Append to `tests/test_superpos.py`:
 
 # --- part 2: the twists (lock, remote, hits, follow, warp, flank) ----------------------------------
 
-from brawl_ket.moves import LOW  # noqa: E402
 
 
 def with_super(char, move):
@@ -801,7 +800,7 @@ def test_the_beam_is_white_hot_in_the_middle(surface):
     r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}))
     for _ in range(SUPER_FREEZE + COHERENT_BEAM.startup + 10):
         r.draw_fight(fight, fight.step({}))
-    assert tuple(surface.get_at((400, FLOOR_Y - 55)))[:3] == P.WHITE
+    assert min(tuple(surface.get_at((400, FLOOR_Y - 55)))[:3]) >= 230     # (the core is 240/255 opaque)
 
 
 def test_the_fridge_lands_gold_on_the_locked_spot(surface):

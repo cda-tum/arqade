@@ -53,6 +53,7 @@ from .erwin import (
     EYE,
     FADE_STEPS,
     HOLO_PHASES,
+    box as erwin_box,
     draw_collapse,
     draw_erwin,
     draw_holo_box,
@@ -61,8 +62,9 @@ from .erwin import (
     holo_sprite,
 )
 from .fight import Fight
-from .kids import (BOB_ICON, bob_icon, dive_streaks, draw_decohered, draw_kid, draw_pair, flash, key_shot, lob,
-                   swap_arc, tossed_key)
+from .kids import (BOB_ICON, bob_icon, dive_streaks, draw_decohered, draw_kid, draw_pair, flash, key_shot, key_sprite,
+                   lob, swap_arc, tossed_key)
+from . import superart as SA
 from .fighter import Fighter
 from .fonts import load_font
 from .ink import _ball, _block, _boot, _poly, _pt, _towards, limb
@@ -655,6 +657,7 @@ class Renderer:
         self.crashes: dict[str, tuple[float, int]] = {}     # BLUE SCREEN OF DEATH: whose strip (DOS's x, age)
         self.bsod_flash = 0                                 # ... and the landing's blue frame
         self._glitch = pygame.Surface((W, H), pygame.SRCALPHA)
+        self._ghost_layer = pygame.Surface((320, 320), pygame.SRCALPHA)     # NINE LIVES' ghosts
         self._windows: list[tuple[float, float, str]] = []     # ... the frozen bodies' error windows, to draw
         self.trail = {p: 0.0 for p in PLAYERS}          # the damage trail on each bar
         self.trail_wait = {p: 0 for p in PLAYERS}
@@ -733,6 +736,7 @@ class Renderer:
                          BASIS_BODY[fight.fighters[p].basis])
         for s in fight.shots:
             self._shot(s, ox, oy)
+        self._super_art(fight, ox, oy)
         if self.show_boxes:
             self._boxes(fight, ox, oy)
         self._draw_effects(ox, oy, world=True)
@@ -1030,6 +1034,108 @@ class Renderer:
         self._windows.append((f.x, FLOOR_Y - f.y - 140, exe_name(f)))    # over everyone: drawn after the bodies
         return out
 
+    def _super_body(self, f: Fighter, body, ox: int, oy: int):
+        """A super that replaces the fighter's own drawing: ROBERT rolling inside his Bloch
+        sphere, ERWIN in his box while his ghosts pounce. None: draw them as ever."""
+        m = f.move
+        if m.name == "BLOCH SPHERE" and f.phase == "active":
+            c = (f.x + ox, FLOOR_Y - 36 + oy)
+            curl = SA.curled(body, f.facing)
+            self.surface.blit(curl, curl.get_rect(center=(round(c[0]), round(c[1]) + 4)))
+            SA.bloch(self.surface, c, 36, body, up=True, spin=(f.frame - f.startup) * 0.35, fill=70)
+            return f.x, FLOOR_Y - 72.0
+        if m.name == "NINE LIVES" and m.hits and f.phase in ("startup", "active"):
+            erwin_box(self.surface, round(f.x) + ox, 70, 48, f.facing, body, FLOOR_Y + oy)
+            return f.x, FLOOR_Y - 60.0
+        return None
+
+    def _super_art(self, fight: Fight, ox: int, oy: int) -> None:
+        """Each super's art over the fight, by its frames: the sphere forming and the H gate; the
+        cloud, the lock and the pillar; the flare and the beam; the ghosts and the claws; the
+        shadow, the falling fridge and the frost; the key's passes and the padlock."""
+        surf = self.surface
+        for key, f in fight.fighters.items():
+            m = f.move
+            if f.action != "attack" or m is None or m.kind != "super":
+                continue
+            colour = BASIS_BODY[f.basis]
+            into = f.frame - f.startup                  # frames into the active ones (< 0: startup)
+            target = None if f.target_x is None else f.target_x + ox
+            rival = fight.fighters["p2" if key == "p1" else "p1"]
+            if m.name == "BLOCH SPHERE" and f.phase == "startup":
+                k = (f.frame + 1) / f.startup
+                SA.bloch(surf, (f.x + ox, FLOOR_Y - 66 + oy), round(20 + 52 * k), colour, spin=0.9, fill=34)
+            elif m.name == "H-GATE UPPERCUT" and f.frame < 18:
+                SA.h_gate(surf, (f.x + ox + f.facing * 12, FLOOR_Y - f.y - 190 + oy))
+                SA.bloch(surf, (f.x + ox - f.facing * 80, FLOOR_Y - 190 + oy), 52, colour, up=False, spin=1.2, fill=30)
+            elif m.name == "WAVEFUNCTION COLLAPSE":
+                if f.phase == "startup" and target is None:
+                    SA.cloud(surf, f.x + ox + f.facing * 160, 260, colour, t=self.t / 4, amp=22)
+                elif f.phase == "startup":
+                    left = (f.startup - f.frame) / m.lock
+                    SA.cloud(surf, target, 40 + 160 * left, colour, t=self.t / 4, amp=34)
+                    SA.lock_ring(surf, target)
+                elif target is not None and into < m.active + 14:
+                    SA.pillar(surf, target, colour, k=max(0.2, 1 - max(0, into - m.active) / 14))
+            elif m.name == "COHERENT BEAM":
+                hands = (f.x + ox + f.facing * 50, FLOOR_Y - 92 + oy)
+                if f.phase == "startup":
+                    SA.flare(surf, hands, round(8 + 22 * (f.frame + 1) / f.startup), colour)
+                elif f.phase == "active":
+                    fade = min(1.0, (m.active - into) / 10)
+                    SA.beam(surf, hands[0], f.facing, colour, t=self.t, k=max(0.25, fade))
+                    SA.flare(surf, hands, 34, colour)
+            elif m.name == "NINE LIVES" and m.hits:
+                if f.phase == "active" and target is not None:
+                    side = 1 if (into // m.hit_every) % 2 else -1
+                    gx = target + side * (70 - (into % m.hit_every) * 6)
+                    self._ghost(gx, -side, colour)
+                    SA.counter(surf, (target, FLOOR_Y - 180 + oy), f"{min(f.hit_count + 1, 8)}/9")
+            elif m.name == "NINE LIVES":
+                if f.frame < 14 and target is not None:
+                    for n in range(3):
+                        a = (target - 4 + 14 * n, FLOOR_Y - 150 + oy)
+                        b = (target + 40 + 14 * n, FLOOR_Y - 40 + oy)
+                        pygame.draw.line(surf, P.INK, a, b, 6)
+                        pygame.draw.line(surf, P.WHITE, a, b, 3)
+                    SA.counter(surf, (target, FLOOR_Y - 190 + oy), "9/9")
+            elif m.name == "DILUTION FRIDGE" and m.follow is not None:
+                if f.phase == "startup" and target is None:
+                    SA.shadow_mark(surf, rival.x + ox, colour=colour)
+                elif f.phase == "startup":
+                    SA.shadow_mark(surf, target, w=130, locked=True)
+                    k = 1 - (f.startup - f.frame) / m.lock
+                    SA.fridge(surf, target, -40 + (FLOOR_Y + 46) * k + oy, falling=True)
+                elif target is not None:
+                    SA.fridge(surf, target, FLOOR_Y + 6 + oy)
+            elif m.name == "DILUTION FRIDGE" and target is not None:
+                SA.fridge(surf, target, FLOOR_Y + 6 + oy)
+                SA.frost_wave(surf, target, k=min(1.0, (f.frame + 1) / 6))
+            elif m.name == "ONE-TIME PAD" and m.hits and f.phase == "active" and target is not None:
+                bob = fight.echoes[key]
+                a, b = (f.x, bob.x) if (into // m.hit_every) % 2 == 0 else (bob.x, f.x)
+                k = (into % m.hit_every) / m.hit_every
+                kx = a + (b - a) * k + ox
+                for x in range(round(min(a, b)) + ox + 20, round(max(a, b)) + ox - 20, 8):
+                    surf.fill(P.INK, (x - 1, FLOOR_Y - 77 + oy, 5, 4))
+                    surf.fill(P.GOLD, (x, FLOOR_Y - 76 + oy, 3, 2))
+                key_img = key_sprite(colour, True, 1 if b > a else -1)
+                surf.blit(key_img, key_img.get_rect(center=(round(kx), FLOOR_Y - 76 + oy)))
+                SA.counter(surf, (target, FLOOR_Y - 180 + oy), f"{min(f.hit_count + 1, 6)}/6")
+            elif m.name == "ONE-TIME PAD" and target is not None:
+                SA.padlock(surf, (target, FLOOR_Y - 120 + oy), closed=f.frame >= 3)
+                if f.frame < 16:
+                    blit_center(surf, outlined("CLICK!", 16, P.WHITE, thick=2), (target + 70, FLOOR_Y - 190 + oy))
+
+    def _ghost(self, x: float, facing: int, colour) -> None:
+        """One of NINE LIVES' ghost ERWINs, pouncing: see-through and pale."""
+        layer = self._ghost_layer
+        layer.fill((0, 0, 0, 0))
+        draw_puppet(layer, POSES["pounce"], "cat", (160, 300), facing, P.lighten(colour, 0.45),
+                    ACCENT.get("ERWIN", P.CREAM), 0.0)
+        layer.set_alpha(150)
+        self.surface.blit(layer, (round(x) - 160, FLOOR_Y - 300))
+
     def _fighter(self, key: str, f: Fighter, ox: int, oy: int) -> tuple[float, float]:
         """One body (`key`: its player's, or "p1/bob" for p1's Bob): pose, colours, its moves' art."""
         body = BASIS_BODY[f.basis]
@@ -1043,6 +1149,10 @@ class Renderer:
             self.trails[key].clear()
             draw_superposed(self.surface, (f.boxes[0] + ox, f.boxes[1] + ox), FLOOR_Y + oy, f.facing, body, self.t)
             return f.boxes[0], FLOOR_Y - 60.0
+        if f.action == "attack" and f.move is not None and f.move.kind == "super":
+            drawn = self._super_body(f, body, ox, oy)
+            if drawn is not None:
+                return drawn
         feet = (f.x + ox, FLOOR_Y - f.y + oy)
         pose = self._pose(key, f)
         # a long coat blows out behind her as she moves, and trails in a jump (M-CUTIE's hair:

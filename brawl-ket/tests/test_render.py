@@ -1533,3 +1533,53 @@ def test_a_frozen_rival_glitches_under_its_window_and_the_landing_flashes_blue(s
             flashed = corner == BSOD_BLUE
             break
     assert flashed                                              # the whole screen, for that frame
+
+
+@pytest.mark.parametrize("name", ["ROBERT", "BOHR", "PHOEBE", "ERWIN", "M-CUTIE", "ALICE & BOB"])
+@pytest.mark.parametrize("side", ["p1", "p2"])
+def test_every_super_draws_from_its_call_to_its_end(surface, name, side):
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.superpos import FULL
+    chars = {"p1": CHARACTERS[name], "p2": ROBERT} if side == "p1" else {"p1": ROBERT, "p2": CHARACTERS[name]}
+    fight = Fight(chars, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 260.0, 340.0
+    fight.meters[side].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step({side: FighterInput(a=True, b=True)}))
+    seen = set()
+    for _ in range(220):
+        r.draw_fight(fight, fight.step({}))
+        seen.add(pygame.image.tostring(surface, "RGB")[::997])
+    assert len(seen) > 30                                   # it moves
+
+
+def test_the_beam_is_white_hot_in_the_middle(surface):
+    from brawl_ket.config import SUPER_FREEZE
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import COHERENT_BEAM
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["PHOEBE"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 150.0, 560.0
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}))
+    for _ in range(SUPER_FREEZE + COHERENT_BEAM.startup + 10):
+        r.draw_fight(fight, fight.step({}))
+    assert min(tuple(surface.get_at((400, FLOOR_Y - 55)))[:3]) >= 230     # (the core is 240/255 opaque)
+
+
+def test_the_fridge_lands_gold_on_the_locked_spot(surface):
+    from brawl_ket.config import SUPER_FREEZE
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import DILUTION_FRIDGE
+    from brawl_ket.superart import GOLD_PLATE
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["M-CUTIE"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 150.0, 450.0
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}))
+    for _ in range(SUPER_FREEZE + DILUTION_FRIDGE.startup + 2):
+        r.draw_fight(fight, fight.step({}))
+    area = {tuple(surface.get_at((x, y)))[:3] for x in range(380, 520, 2) for y in range(FLOOR_Y - 200, FLOOR_Y, 2)}
+    assert GOLD_PLATE in area

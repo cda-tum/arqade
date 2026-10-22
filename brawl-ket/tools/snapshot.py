@@ -32,6 +32,8 @@ Writes:
 - screen_select_cutie.png: CHOOSE YOUR FIGHTER on M-CUTIE (P1, ready: the second row) and DOS (P2);
 - super_bar.png, super_call.png, super_bsod_freeze.png, super_bsod_flash.png, super_bsod_crash.png:
   SUPERposition's bar (DOS full, ROBERT a third of purple), the call, and DOS's BLUE SCREEN OF DEATH;
+- super_bloch.png, super_collapse.png, super_beam.png, super_nine.png, super_fridge.png, super_otp.png:
+  each of the six other supers mid-move;
 - screen_select_random.png: CHOOSE YOUR FIGHTER on RANDOM (P1, a silhouette under the "?") and
   ROBERT (P2);
 - screen_select_kids.png: CHOOSE YOUR FIGHTER on ALICE & BOB (P1, ready) and M-CUTIE (P2), and
@@ -323,6 +325,18 @@ def super_frames(out_dir: str) -> None:
             r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
             save(surface, out_dir, "super_bsod_crash.png")
             break
+    # the six others, each in the middle of its move
+    from brawl_ket.moves import CHARACTERS
+    for name, fname, frames in (("ROBERT", "bloch", 12), ("BOHR", "collapse", 34), ("PHOEBE", "beam", 30),
+                                ("ERWIN", "nine", 30), ("M-CUTIE", "fridge", 38), ("ALICE & BOB", "otp", 30)):
+        fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT}, seed=1)
+        fight.fighters["p1"].x, fight.fighters["p2"].x = 220.0, 300.0
+        fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+        r = Renderer(surface)
+        r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}), {"p1": 0, "p2": 0})
+        for _ in range(SUPER_FREEZE + frames):
+            r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
+        save(surface, out_dir, f"super_{fname}.png")
 
 
 def screen_frames(out_dir: str) -> None:

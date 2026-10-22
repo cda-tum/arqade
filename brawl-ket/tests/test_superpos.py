@@ -358,7 +358,6 @@ def test_the_glitch_runs_down_a_frame_at_a_time_and_a_hit_ends_it():
 
 # --- part 2: the twists (lock, remote, hits, follow, warp, flank) ----------------------------------
 
-from brawl_ket.moves import LOW  # noqa: E402
 
 
 def with_super(char, move):
