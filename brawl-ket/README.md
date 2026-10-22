@@ -80,9 +80,12 @@ ROUND 1 / FIGHT! -> rounds -> the result (A: rematch, B: title).
   BRUTAL and playing against the CPU are for later).
 
 - **CHOOSE YOUR FIGHTER** is Street Fighter style: a grid of portraits along the
-  bottom (five to a row, so M-CUTIE and ALICE & BOB make the second; up and down move a row), one cursor
+  bottom (four over four, the second row half a tile to the right: ROBERT, BOHR, PHOEBE, ERWIN,
+  then DOS, M-CUTIE, ALICE & BOB and RANDOM; up and down move a row), one cursor
   per player (P1 blue, P2 red, both on one portrait if they pick the same fighter),
-  blinking until that player presses A. Each player's pick stands big on their side,
+  blinking until that player presses A. RANDOM ("?") shows the fighters flicking past as
+  silhouettes, and rolls one when that player is READY (and again for every rematch); the
+  big preview then shows who it is. Each player's pick stands big on their side,
   facing the middle, with what it is and its three specials. B un-readies, or goes
   back to the title.
 
@@ -143,6 +146,11 @@ Her wave cancels any rival shot it meets. Design:
 All seven share the normals (ALICE & BOB's fitted to their size): A is a jab (standing, crouching, in the air), B a
 heavy, a sweep (knockdown) or a jump-in, and B up close while pushing towards
 the rival is a throw. A chains A, A, B.
+
+**Feel tuning (2026-10-22, after playtests):** every A normal recovers 4 frames longer than
+before, so a mashed or blocked jab can be punished. Everyone walks about 10% faster, and a
+jump carries further than a walk: every forward jump goes at least 135 px and peaks at least
+150 px, so anyone can jump over anyone (DOS lowest and shortest, then BOHR, ERWIN highest).
 
 ## Controls
 

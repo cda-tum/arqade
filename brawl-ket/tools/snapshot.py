@@ -30,6 +30,8 @@ Writes:
   waiting) and coming back;
 - screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
 - screen_select_cutie.png: CHOOSE YOUR FIGHTER on M-CUTIE (P1, ready: the second row) and DOS (P2);
+- screen_select_random.png: CHOOSE YOUR FIGHTER on RANDOM (P1, a silhouette under the "?") and
+  ROBERT (P2);
 - screen_select_kids.png: CHOOSE YOUR FIGHTER on ALICE & BOB (P1, ready) and M-CUTIE (P2), and
   kids_hud.png, their shared bar with Bob's icon, greyed while he is decohered;
 - vs_*.png: the same bot-fight moments as fight_*.png, ROBERT (P1) against BOHR (P2), and
@@ -277,7 +279,8 @@ def select_frame(out_dir: str) -> None:
     surface = pygame.Surface((W, H))
     for picks, ready, name in (({"p1": 3, "p2": 4}, False, "screen_select_erwin_dos.png"),
                                ({"p1": 5, "p2": 4}, True, "screen_select_cutie.png"),
-                               ({"p1": 6, "p2": 5}, True, "screen_select_kids.png")):
+                               ({"p1": 6, "p2": 5}, True, "screen_select_kids.png"),
+                               ({"p1": M.RANDOM_FIGHTER, "p2": 0}, False, "screen_select_random.png")):
         r, m = Renderer(surface), M.Match(random.Random(3))
         m.state, m.picks = M.SELECT, picks
         m.ready = {"p1": ready, "p2": False}

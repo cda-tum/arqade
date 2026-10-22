@@ -1049,8 +1049,8 @@ def test_her_specials_read_in_full_where_they_fit_and_shortened_on_the_select_sc
 def test_the_lists_of_specials_clear_the_two_rows_of_portraits():
     from brawl_ket import match as M
     from brawl_ket.render import LIST_GAP, LIST_W, PORTRAIT, PORTRAIT_GAP, PORTRAIT_Y, SIDE_X, list_top
-    rows = -(-len(M.ROSTER) // M.ROSTER_COLS)
-    assert (len(M.ROSTER), M.ROSTER_COLS, rows) == (7, 5, 2)                 # M-CUTIE starts the second row
+    rows = -(-M.GRID // M.ROSTER_COLS)
+    assert (M.GRID, M.ROSTER_COLS, rows) == (8, 4, 2)                       # DOS starts the second row
     grid_top = PORTRAIT_Y - (rows - 1) * (PORTRAIT + PORTRAIT_GAP) - 4      # its tiles' ink and the cursors
     for c in CHARACTERS.values():
         assert list_top(c) + 2 * LIST_GAP + 8 < grid_top, c.name
@@ -1067,7 +1067,7 @@ def test_choose_your_fighter_shows_m_cutie_in_the_second_row(surface):
     m = M.Match(random.Random(1))
     m.state, m.picks = M.SELECT, {"p1": 5, "p2": 0}
     r.draw(m, [])
-    ring = {tuple(surface.get_at((x, PORTRAIT_Y + PORTRAIT // 2)))[:3] for x in range(150, 230)}
+    ring = {tuple(surface.get_at((x, PORTRAIT_Y + PORTRAIT // 2)))[:3] for x in range(200, 440)}
     assert PLAYER_COLORS["p1"] in ring or P.lighten(PLAYER_COLORS["p1"], 0.6) in ring
 
 
@@ -1398,3 +1398,23 @@ def test_cpu_vs_cpu_names_both_sides_cpu(surface):
     for _ in range(config.ROUND_INTRO_FRAMES + 30):
         r.draw(m, m.update(M.FrameInput()))
     assert m.state == M.FIGHT and r.tags["p1"] == "CPU1"
+
+
+def test_random_shows_a_question_mark_then_whoever_it_rolled(surface):
+    import random
+    from brawl_ket import match as M
+    from brawl_ket.render import silhouette
+    r = Renderer(surface)
+    m = M.Match(random.Random(1))
+    m.state, m.picks = M.SELECT, {"p1": M.RANDOM_FIGHTER, "p2": 0}
+    seen = set()
+    for _ in range(60):                     # the silhouettes flick past
+        r.draw(m, [])
+        seen.add(pygame.image.tostring(surface, "RGB"))
+    assert len(seen) > 1
+    dark = silhouette("ROBERT", 1)
+    assert max(max(dark.get_at((x, y))[:3]) for x in range(0, dark.get_width(), 4)
+               for y in range(0, dark.get_height(), 4)) <= max(P.NIGHT)
+    m._ready("p1")
+    r.draw(m, [])                           # READY: the rolled fighter, as any pick
+    assert m.fighter("p1") in M.ROSTER

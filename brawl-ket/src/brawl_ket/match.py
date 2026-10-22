@@ -37,7 +37,10 @@ ROSTER = tuple(CHARACTERS.values())     # the select screen's order: ROBERT, BOH
 
 TITLE = "title"
 SELECT = "select"
-ROSTER_COLS = 5         # CHOOSE YOUR FIGHTER's portrait grid: this many to a row
+ROSTER_COLS = 4         # CHOOSE YOUR FIGHTER's portrait grid: this many to a row (the second row
+                        # sits half a tile to the right)
+RANDOM_FIGHTER = len(ROSTER)    # the grid's last tile, after the fighters: RANDOM
+GRID = len(ROSTER) + 1
 STAGE_SELECT = "stage_select"
 TUTORIAL = "tutorial"
 ROUND_INTRO = "round_intro"
@@ -91,12 +94,13 @@ class FrameInput:
 
 
 def grid_move(pick: int, dx: int, dy: int) -> int:
-    """CHOOSE YOUR FIGHTER's cursor: left and right go round the whole roster; up and down
-    move a row (ROSTER_COLS portraits), and stop at the grid's edge."""
+    """CHOOSE YOUR FIGHTER's cursor: left and right go round the whole grid (the fighters, then
+    RANDOM); up and down move a row (ROSTER_COLS tiles: down and to the right, up and to the
+    left, as the rows are staggered), and stop at the grid's edge."""
     if dx:
-        return (pick + dx) % len(ROSTER)
+        return (pick + dx) % GRID
     to = pick + dy * ROSTER_COLS
-    return to if 0 <= to < len(ROSTER) else pick
+    return to if 0 <= to < GRID else pick
 
 
 class Match:
@@ -105,7 +109,8 @@ class Match:
         self.state = TITLE
         self.t = 0                  # frames in the current state
         self.idle = 0               # frames without input
-        self.picks = {"p1": 0, "p2": 1}     # indices into ROSTER, kept from match to match
+        self.picks = {"p1": 0, "p2": 1}     # grid tiles (ROSTER indices, or RANDOM_FIGHTER), kept from match to match
+        self.rolled = {p: 0 for p in PLAYERS}   # ... and RANDOM's fighter, rolled at READY and for every rematch
         self.ready = {p: False for p in PLAYERS}
         self.fight: Fight | None = None
         self.round_no = 1
@@ -225,7 +230,7 @@ class Match:
             elif self.ready[p]:
                 continue
             elif inp.confirms[p]:
-                self.ready[p] = True
+                self._ready(p)
                 events.append(Cue("blip"))
             elif inp.nav[p][0] or inp.nav[p][1]:
                 self.picks[p] = grid_move(self.picks[p], *inp.nav[p])
@@ -254,7 +259,7 @@ class Match:
                 events.append(Cue("blip"))
             return
         if inp.confirm:
-            self.ready[picking] = True
+            self._ready(picking)
             events.append(Cue("blip"))
             if self.picking is None:
                 self._set_state(STAGE_SELECT)
@@ -263,6 +268,20 @@ class Match:
         if nav:
             self.picks[picking] = grid_move(self.picks[picking], *nav)
             events.append(Cue("blip"))
+
+    def _ready(self, p: str) -> None:
+        self.ready[p] = True
+        self._roll(p)
+
+    def _roll(self, p: str) -> None:
+        """RANDOM's fighter: rolled when that side is READY, and again for every rematch."""
+        if self.picks[p] == RANDOM_FIGHTER:
+            self.rolled[p] = self.rng.randrange(len(ROSTER))
+
+    def fighter(self, p: str):
+        """The Character a side fights as: its pick, or what RANDOM rolled."""
+        pick = self.picks[p]
+        return ROSTER[self.rolled[p] if pick == RANDOM_FIGHTER else pick]
 
     @property
     def picking(self) -> str | None:
@@ -356,6 +375,8 @@ class Match:
         if inp.confirm:
             events.append(Cue("blip"))
             self._pick_stage()
+            for p in PLAYERS:
+                self._roll(p)
             self._start_match(events)
         elif inp.back:
             events.append(Cue("blip"))
@@ -421,7 +442,7 @@ class Match:
 
     def _start_round(self, events: list) -> None:
         seed = self.rng.randrange(1 << 30)
-        self.fight = Fight({p: ROSTER[self.picks[p]] for p in PLAYERS}, seed)
+        self.fight = Fight({p: self.fighter(p) for p in PLAYERS}, seed)
         self.cpu_bots = {p: Bot(p, seed + i) for i, p in enumerate(PLAYERS) if self.cpu[p]}
         self.round_winner = None
         self.perfect = False

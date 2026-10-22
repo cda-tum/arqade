@@ -220,6 +220,21 @@ def legend_colours(f) -> dict[str, tuple]:
     return {"A": BASIS_BODY[f.basis], "B": BASIS_BODY[basis.hadamard(f.basis)]}
 
 
+RANDOM_FLICK = 6            # frames each fighter shows behind RANDOM's "?"
+SILHOUETTE = (200, 220)     # the layer a fighter's silhouette is drawn in, px
+
+
+@lru_cache(maxsize=32)
+def silhouette(name: str, facing: int) -> pygame.Surface:
+    """A fighter standing, all dark: RANDOM's flicker on CHOOSE YOUR FIGHTER (feet at the
+    layer's bottom middle, less 4 px)."""
+    from .moves import CHARACTERS
+    layer = pygame.Surface(SILHOUETTE, pygame.SRCALPHA)
+    draw_character(layer, CHARACTERS[name], POSES["idle"], (SILHOUETTE[0] / 2, SILHOUETTE[1] - 4), facing, GREEN)
+    layer.fill((*P.NIGHT, 255), special_flags=pygame.BLEND_RGBA_MIN)
+    return layer
+
+
 @lru_cache(maxsize=16)
 def portrait(name: str) -> pygame.Surface:
     """CHOOSE YOUR FIGHTER's portrait: the fighter's head and shoulders, cut from their own
@@ -1527,7 +1542,10 @@ class Renderer:
         surf = self.surface
         self._call("CHOOSE YOUR FIGHTER", P.WHITE, y=16, size=16)
         for key, side in (("p1", -1), ("p2", 1)):
-            self._select_side(key, side, M.ROSTER[match.picks[key]], match.ready[key])
+            if match.picks[key] == M.RANDOM_FIGHTER and not match.ready[key]:
+                self._select_random(key, side)
+            else:                               # (RANDOM, once READY, shows who it rolled)
+                self._select_side(key, side, match.fighter(key), match.ready[key])
         blit_center(surf, outlined("VS", 32, P.GOLD, thick=2), (W / 2, 104))
         self._portraits(match)
         hint = "STICK: CHOOSE   A: READY   B: BACK"
@@ -1565,26 +1583,51 @@ class Renderer:
         if ready:
             self._stamp("READY!", (cx + side * 64, floor - 110), P.GOOD)
 
-    def _portraits(self, match: M.Match) -> None:
-        """The roster as a strip (ROSTER_COLS to a row) of portraits, each fighter's head and
-        shoulders; the players' cursors frame their picks, P1's outside P2's when they share one,
-        each with its 1P / 2P tag, and turn solid once that player is ready."""
+    def _select_random(self, key: str, side: int) -> None:
+        """A player's half while their cursor is on RANDOM: the fighters flicking past as dark
+        silhouettes under a big "?", and the name RANDOM."""
         surf = self.surface
-        n = len(M.ROSTER)
+        color = PLAYER_COLORS[key]
+        cx = W / 2 + side * SIDE_X
+        floor = SIDE_FLOOR
+        tag = outlined(self.tags[key], 8, color)
+        surf.blit(tag, (12 if side < 0 else W - 12 - tag.get_width(), 32))
+        rect = pygame.Rect(0, 0, 60, 10)
+        rect.center = (round(cx), floor + 2)
+        pygame.draw.ellipse(surf, SHADOW, rect)
+        pygame.draw.ellipse(surf, color, rect, 2)
+        char = M.ROSTER[(self.t // RANDOM_FLICK) % len(M.ROSTER)]
+        surf.blit(silhouette(char.name, -side), (round(cx) - SILHOUETTE[0] // 2, floor - SILHOUETTE[1] + 4))
+        blit_center(surf, outlined("?", 64, P.GOLD, thick=3), (cx, floor - 70))
+        blit_center(surf, outlined("RANDOM", 16, color, thick=2), (cx, floor + 18))
+        blit_center(surf, outlined("ANYONE AT ALL", 8, P.MIST), (cx, floor + 34))
+
+    def _portraits(self, match: M.Match) -> None:
+        """The roster as two staggered rows (ROSTER_COLS to a row, the second half a tile to the
+        right) of portraits, each fighter's head and shoulders, with RANDOM's "?" last; the
+        players' cursors frame their picks, P1's outside P2's when they share one, each with
+        its 1P / 2P tag, and turn solid once that player is ready."""
+        surf = self.surface
+        n = M.GRID
         cols = min(n, M.ROSTER_COLS)
         rows = -(-n // M.ROSTER_COLS)
-        width = cols * PORTRAIT + (cols - 1) * PORTRAIT_GAP
+        step = PORTRAIT + PORTRAIT_GAP
+        width = cols * PORTRAIT + (cols - 1) * PORTRAIT_GAP + (step // 2 if rows > 1 else 0)
         x0 = round(W / 2 - width / 2)
-        y0 = PORTRAIT_Y - (rows - 1) * (PORTRAIT + PORTRAIT_GAP)
+        y0 = PORTRAIT_Y - (rows - 1) * step
         tiles = []
-        for i, char in enumerate(M.ROSTER):
-            tile = pygame.Rect(x0 + (i % M.ROSTER_COLS) * (PORTRAIT + PORTRAIT_GAP),
-                               y0 + (i // M.ROSTER_COLS) * (PORTRAIT + PORTRAIT_GAP), PORTRAIT, PORTRAIT)
+        for i in range(n):
+            row = i // M.ROSTER_COLS
+            tile = pygame.Rect(x0 + (i % M.ROSTER_COLS) * step + row * (step // 2), y0 + row * step,
+                               PORTRAIT, PORTRAIT)
             tiles.append(tile)
             picked = [k for k in PLAYERS if match.picks[k] == i]
             pygame.draw.rect(surf, P.INK, tile.inflate(4, 4), border_radius=4)
             pygame.draw.rect(surf, P.SLATE if picked else P.NIGHT, tile, border_radius=3)
-            surf.blit(portrait(char.name), tile)
+            if i == M.RANDOM_FIGHTER:
+                blit_center(surf, outlined("?", 32, P.GOLD, thick=2), tile.center)
+            else:
+                surf.blit(portrait(M.ROSTER[i].name), tile)
         blink = (self.t // 8) % 2
         for key, inset, tag_side in (("p1", 0, -1), ("p2", 3, 1)):
             if match.watching and match.picking not in (None, key) and not match.ready[key]:

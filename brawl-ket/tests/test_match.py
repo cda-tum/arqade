@@ -766,13 +766,15 @@ def test_choose_your_fighter_cycles_through_all_seven_in_order() -> None:
     from brawl_ket.match import ROSTER
     order = ["ROBERT", "BOHR", "PHOEBE", "ERWIN", "DOS", "M-CUTIE", "ALICE & BOB"]
     assert [c.name for c in ROSTER] == order
+    from brawl_ket.match import GRID, RANDOM_FIGHTER
     m = Match(random.Random(1))
     m.update(press("confirm"))
     seen = []
-    for _ in range(len(ROSTER)):
-        seen.append(ROSTER[m.picks["p1"]].name)
+    for _ in range(GRID):
+        pick = m.picks["p1"]
+        seen.append("RANDOM" if pick == RANDOM_FIGHTER else ROSTER[pick].name)
         m.update(press("right", "p1"))
-    assert seen == order and m.picks["p1"] == 0         # and round again
+    assert seen == order + ["RANDOM"] and m.picks["p1"] == 0     # RANDOM last, and round again
 
 
 def test_the_demo_picks_its_fighters_from_all_seven() -> None:
@@ -786,8 +788,8 @@ def test_the_demo_picks_its_fighters_from_all_seven() -> None:
 
 
 def test_the_fighter_cursor_goes_round_the_row_and_stops_at_the_grids_edge() -> None:
-    from brawl_ket.match import ROSTER, ROSTER_COLS, grid_move
-    last = len(ROSTER) - 1
+    from brawl_ket.match import GRID, ROSTER_COLS, grid_move
+    last = GRID - 1
     assert grid_move(0, -1, 0) == last and grid_move(last, 1, 0) == 0      # left and right wrap
     assert grid_move(2, 0, -1) == 2                                         # no row above
     below = 2 + ROSTER_COLS
@@ -815,17 +817,53 @@ def test_m_cutie_starts_every_round_with_no_traps() -> None:
     assert m.state == ROUND_INTRO and m.fight.traps == []
 
 
-def test_m_cutie_is_down_a_row_from_robert_and_back_up() -> None:
-    from brawl_ket.match import ROSTER, grid_move
-    assert ROSTER[5].name == "M-CUTIE"
-    assert grid_move(0, 0, 1) == 5 and grid_move(5, 0, -1) == 0 and grid_move(2, 0, 1) == 2
-    assert grid_move(5, 1, 0) == 6 and grid_move(6, 1, 0) == 0 and grid_move(0, -1, 0) == 6   # and round the roster
+def test_the_second_row_is_dos_m_cutie_alice_and_bob_and_random() -> None:
+    """Four over four, the second row half a tile to the right: down goes down and to the
+    right, up comes back."""
+    from brawl_ket.match import RANDOM_FIGHTER, ROSTER, ROSTER_COLS, grid_move
+    assert ROSTER_COLS == 4 and RANDOM_FIGHTER == 7
+    assert [c.name for c in ROSTER[4:]] == ["DOS", "M-CUTIE", "ALICE & BOB"]
+    for top in range(4):
+        assert grid_move(top, 0, 1) == top + 4 and grid_move(top + 4, 0, -1) == top
+        assert grid_move(top + 4, 0, 1) == top + 4                          # no third row
+    assert grid_move(6, 1, 0) == RANDOM_FIGHTER and grid_move(RANDOM_FIGHTER, 1, 0) == 0
 
 
-def test_alice_and_bob_are_down_a_row_from_bohr() -> None:
-    from brawl_ket.match import ROSTER, grid_move
-    assert ROSTER[6].name == "ALICE & BOB"
-    assert grid_move(1, 0, 1) == 6 and grid_move(6, 0, -1) == 1 and grid_move(2, 0, 1) == 2
+def test_random_rolls_a_fighter_at_ready_and_again_for_a_rematch() -> None:
+    from brawl_ket.match import RANDOM_FIGHTER, ROSTER
+    seen = set()
+    for seed in range(12):
+        m = Match(random.Random(seed))
+        m.update(press("confirm"))
+        m.update(press("left", "p1"))               # round to RANDOM
+        assert m.picks["p1"] == RANDOM_FIGHTER
+        to_ready = [press("confirm", "p1"), press("confirm", "p2")]
+        for inp in to_ready:
+            m.update(inp)
+        assert m.state == STAGE_SELECT and m.fighter("p1") in ROSTER
+        run(m, STAGE_LOCK)
+        m.update(press("confirm"))
+        past_tutorial(m)
+        run(m, config.ROUND_INTRO_FRAMES)
+        first = m.fight.fighters["p1"].char
+        assert first is m.fighter("p1") and m.picks["p1"] == RANDOM_FIGHTER
+        seen.add(first.name)
+        for _ in range(12):                         # rematches: RANDOM rolls again
+            finish(m)
+            m.update(press("confirm"))
+            run(m, config.ROUND_INTRO_FRAMES)
+            seen.add(m.fight.fighters["p1"].char.name)
+    assert len(seen) == len(ROSTER)                 # anyone at all
+
+
+def test_unreadying_random_puts_the_cursor_back_on_it() -> None:
+    from brawl_ket.match import RANDOM_FIGHTER
+    m = Match(random.Random(1))
+    m.update(press("confirm"))
+    m.update(press("left", "p1"))
+    m.update(press("confirm", "p1"))
+    m.update(press("back", "p1"))
+    assert not m.ready["p1"] and m.picks["p1"] == RANDOM_FIGHTER
 
 
 def test_a_pair_starts_every_round_together() -> None:
