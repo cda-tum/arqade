@@ -45,6 +45,7 @@ from .config import (
 from .echo import Echo
 from .fighter import IDLE, STUN_DECAY, Fighter, FighterInput
 from .moves import HIGH, LOW, Box, Character, Move
+from .superpos import Meter
 
 SHOT_SPAWN_OFFSET = 24      # a shot appears this far in front of its owner, px
 LANDING_FRAMES = 4          # how long a landing shockwave stays live
@@ -208,9 +209,12 @@ def can_reach(height: int, target: Fighter) -> bool:
 
 
 class Fight:
-    def __init__(self, chars: dict[str, Character], seed: int = 0) -> None:
+    def __init__(self, chars: dict[str, Character], seed: int = 0,
+                 meters: dict[str, Meter] | None = None) -> None:
         self.seed = seed
         self.rng = random.Random(seed)      # THE BOX's 50/50s
+        # SUPERposition's bars (superpos.py): the match's, so they carry over between rounds
+        self.meters = meters if meters is not None else {"p1": Meter(), "p2": Meter()}
         self.fighters: dict[str, Fighter] = {
             "p1": Fighter(chars["p1"], START_X["p1"], 1),
             "p2": Fighter(chars["p2"], START_X["p2"], -1),
@@ -655,6 +659,7 @@ class Fight:
         attack_basis = st.shot.basis if st.shot is not None else st.trap.basis if st.trap is not None \
             else owner.attack_basis
         error = basis.error_for(m.colour, attack_basis)
+        before = defender.health
         result = defender.take_hit(m, error, st.from_facing)
         if st.trap is not None:             # ION TRAP: it closes round them, hurt or not
             self._close(st.trap, st.defender, events, defender)
@@ -670,6 +675,8 @@ class Fight:
         if defender is self.fighters[st.defender]:
             self._landings.pop(st.defender, None)   # a hit fighter's shockwave is gone
         events.append(Event("hit", st.defender, error, x, y))
+        if before > defender.health and m.kind != "super":
+            self._fill(st.owner, owner, st.defender, defender, before - defender.health, events)
         knocked = defender.action == "knockdown"
         if knocked:
             downed.add(defender)
@@ -686,6 +693,16 @@ class Fight:
                 events.append(Event("switch", st.attacker, None, owner.x, FLOOR_Y - owner.y - 60))
             if m.dive is not None and m.landing is None:
                 owner.bounce()              # a DIVE springs back off what it hit
+
+    def _fill(self, key: str, owner: Fighter, defender_key: str, defender: Fighter, damage: int,
+              events: list[Event]) -> None:
+        """SUPERposition's bars (superpos.py): the attacker's half of the basis it is in (DOS: the
+        hit's colour, the basis of the one it hurt), and the one hit's own half at half the rate."""
+        half = defender.basis if owner.char.fixed_basis is not None else owner.basis
+        for kind in self.meters[key].dealt(half, damage):
+            events.append(Event(f"super_{kind}", key))
+        for kind in self.meters[defender_key].taken(defender.basis, damage):
+            events.append(Event(f"super_{kind}", defender_key))
 
     def _move_strike(
         self, key: str, f: Fighter, rival_key: str, targets: list[Fighter], strikes: list[_Strike],

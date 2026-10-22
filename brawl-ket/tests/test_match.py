@@ -1013,3 +1013,22 @@ def test_a_cpu_rematch_is_cpu_again_and_the_title_clears_it() -> None:
     assert m.state == ROUND_INTRO and m.watching and set(m.cpu_bots) == {"p1", "p2"}
     m._to_title()
     assert not m.watching and m.cpu_bots == {}
+
+
+# --- SUPERposition: one bar per player for a whole match ----------------------------------------
+
+
+def test_the_bars_carry_over_from_round_to_round_and_reset_for_a_new_match() -> None:
+    from brawl_ket.basis import Z_BASIS
+    m = Match(random.Random(1))
+    to_fight(m)
+    m.fight.meters["p1"].fill[Z_BASIS] = 30
+    ko(m, "p2")
+    run(m, config.ROUND_INTRO_FRAMES)
+    assert m.state == FIGHT and m.round_no == 2
+    assert m.fight.meters is m.meters and m.meters["p1"].fill[Z_BASIS] == 30
+    ko(m, "p2")                                 # 2-0: the match is won
+    assert m.state == MATCH_RESULT
+    run(m, config.MATCH_RESULT_LOCK)
+    m.update(press("confirm"))                  # a rematch is a new match
+    assert m.meters["p1"].fill[Z_BASIS] == 0 and m.fight.meters is m.meters

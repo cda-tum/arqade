@@ -71,6 +71,13 @@ BODY_MARGIN = 8          # the push box reaches this far past each fighter's sta
                          # (fight.body_width: 44 between two ROBERTs, 52 between two BOHRs)
 THROW_SLACK = 6          # a throw reaches this far past the push box (px between the fighters' x)
 THROW_RANGE = 50         # two ROBERTs' push box plus THROW_SLACK: a lone Fighter's throw range
+# SUPERposition (superpos.py; docs/superpowers/specs/2026-10-22-brawl-ket-superposition-design.md):
+# a bar of two halves, green and purple, each SUPER_HALF points of damage dealt in that basis
+# (damage taken counts half); full, A and B pressed within SUPER_WINDOW frames fire the super,
+# and the fight freezes SUPER_FREEZE frames for its call
+SUPER_HALF = 40
+SUPER_WINDOW = 3
+SUPER_FREEZE = frames(0.5)
 
 
 # --- Screen transitions and input timing -------------------------------------

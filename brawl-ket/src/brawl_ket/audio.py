@@ -179,6 +179,10 @@ def build_sfx() -> dict[str, list[int]]:
                          noise_wave(0.12, 0.12, decay=18, hold=2, seed=55)),
         "decohere": mix(noise_wave(0.45, 0.16, decay=5, hold=3, seed=57), tone(700, 0.45, 0.08, "saw", decay=5, slide=0.3)),
         "recohere": concat(tone(c("E6"), 0.05, 0.16, "triangle", decay=8), tone(c("B6"), 0.12, 0.16, "triangle", decay=8)),
+        # SUPERposition: a half filling (a rising pair) and the whole bar (a rising chord)
+        "super_half": concat(tone(c("E5"), 0.05, 0.14, "triangle", decay=10), tone(c("A5"), 0.08, 0.14, "triangle", decay=8)),
+        "super_full": concat(tone(c("C5"), 0.05, 0.16, "triangle", decay=8), tone(c("E5"), 0.05, 0.16, "triangle", decay=8),
+                             tone(c("G5"), 0.05, 0.16, "triangle", decay=8), tone(c("C6"), 0.2, 0.18, "triangle", decay=4)),
     }
 
 
@@ -198,6 +202,7 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 # toss and a TELEPORT; a toss taken out in flight sizzles as a LASER on the floor
                 "pass": None, "swap": None, "toss": "toss", "catch": "catch", "key_shot": "key_shot",
                 "intercept": "sizzle", "teleport": "teleport", "anchor": "anchor", "bell_dive": "bell_dive",
+                "super_half": "super_half", "super_full": "super_full",
                 "decohere": "decohere", "recohere": "recohere",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw

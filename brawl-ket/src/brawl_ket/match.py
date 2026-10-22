@@ -30,6 +30,7 @@ from .bot import Bot
 from .fight import Fight
 from .fighter import IDLE
 from .moves import CHARACTERS
+from .superpos import Meter
 from .tutorial import Lesson
 
 PLAYERS = ("p1", "p2")
@@ -115,6 +116,7 @@ class Match:
         self.fight: Fight | None = None
         self.round_no = 1
         self.wins = {p: 0 for p in PLAYERS}
+        self.meters = {p: Meter() for p in PLAYERS}     # SUPERposition's bars: a whole match's
         self.round_winner: str | None = None    # of the round just ended (None: a draw)
         self.perfect = False
         self.ko = False                         # the round just ended on a K.O. (not on time)
@@ -435,6 +437,7 @@ class Match:
 
     def _start_match(self, events: list) -> None:
         self.wins = {p: 0 for p in PLAYERS}
+        self.meters = {p: Meter() for p in PLAYERS}
         self.winner = None
         self.round_no = 1
         self.hint = True            # a match's first round intro teaches the rule
@@ -442,7 +445,7 @@ class Match:
 
     def _start_round(self, events: list) -> None:
         seed = self.rng.randrange(1 << 30)
-        self.fight = Fight({p: self.fighter(p) for p in PLAYERS}, seed)
+        self.fight = Fight({p: self.fighter(p) for p in PLAYERS}, seed, self.meters)
         self.cpu_bots = {p: Bot(p, seed + i) for i, p in enumerate(PLAYERS) if self.cpu[p]}
         self.round_winner = None
         self.perfect = False

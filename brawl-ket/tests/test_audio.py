@@ -115,3 +115,9 @@ def test_teleport_shimmers_at_both_ends() -> None:
 
 def test_her_wave_replaces_the_photons_sound() -> None:
     assert audio.sounds_for([Event("projectile", "p1"), Event("wave3", "p1")]) == ["wave3"]
+
+
+def test_the_super_has_its_sounds() -> None:
+    sfx = audio.build_sfx()
+    for kind in ("super_half", "super_full"):
+        assert audio.EVENT_SOUNDS.get(kind) in sfx, kind

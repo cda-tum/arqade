@@ -213,7 +213,9 @@ def test_the_bars_carry_over_from_round_to_round_and_reset_for_a_new_match() -> 
     run(m, config.ROUND_INTRO_FRAMES)
     assert m.state == FIGHT and m.round_no == 2
     assert m.fight.meters is m.meters and m.meters["p1"].fill[Z_BASIS] == 30
-    finish(m)
+    ko(m, "p2")                                 # 2-0: the match is won
+    assert m.state == MATCH_RESULT
+    run(m, config.MATCH_RESULT_LOCK)
     m.update(press("confirm"))                  # a rematch is a new match
     assert m.meters["p1"].fill[Z_BASIS] == 0 and m.fight.meters is m.meters
 ```
