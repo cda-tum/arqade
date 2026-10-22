@@ -204,7 +204,8 @@ from `brawl-ket/` with an output path; it draws variant A on the left, B on the 
 - **Looks first.** As for the fighters, each super's look is drawn as a mockup over a real
   fight frame and shown to the user before it is built in. The BSOD's look is agreed
   (section 4); the six others need a sheet each (the freeze and call, and two or three beats of
-  the move).
+  the move). Their first sheets (2026-10-22, for the user to review):
+  `2026-10-22-brawl-ket-superposition-looks.py`, beside this spec, three beats and the dodge each.
 - **Engine:** the bar is fight state per player (`Fight`), filled where damage is applied. A
   super is a `Move` with `kind="super"` in each Character's `extra` (its look, its frame data,
   its twists as new Move fields where a twist is new: a lock-on, a rolling sphere, a hold then
