@@ -43,6 +43,7 @@ CHARGE_WAIT = frames(0.25)  # ... and fires this long after her last X press (15
 TRAP_REACH = 70          # ION TRAP: she sets it this far in front of her, px
 TRAP_ARM = frames(0.3)   # ... it arms this long after it is set (18 frames)
 TRAP_LIFE = frames(10.0)  # ... and is gone this long after (600 frames), if nobody stepped in
+TRAP_GRACE = frames(0.3)  # a rival released from a trap's hold can't be caught by any trap for this long (18 frames)
 TRAP_MAX = 2             # ... at most this many of hers at once: one more replaces the oldest
 ROUNDS_TO_WIN = 2
 HITSTOP = 5

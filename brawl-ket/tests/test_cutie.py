@@ -10,7 +10,7 @@ import pytest
 
 from brawl_ket import basis
 from brawl_ket.basis import X_BASIS, Z_BASIS
-from brawl_ket.config import CHARGE_CAP, CHARGE_WAIT, STAGE_RIGHT, TRAP_ARM, TRAP_LIFE, TRAP_MAX, TRAP_REACH
+from brawl_ket.config import CHARGE_CAP, CHARGE_WAIT, STAGE_RIGHT, TRAP_ARM, TRAP_GRACE, TRAP_LIFE, TRAP_MAX, TRAP_REACH
 from brawl_ket.fight import Fight, Shot, Trap
 from brawl_ket.fighter import IDLE, FighterInput
 from brawl_ket.moves import AMP_STEPS, AMP_WAVES, BOHR, DOS, ERWIN, M_CUTIE, PHOEBE, ROBERT, TRAP_HOLD
@@ -524,3 +524,34 @@ def test_the_stage_edge_stops_her_trap():
     for _ in range(TRAP.startup):
         step(fight, FighterInput(down=True))
     assert fight.traps[0].x == STAGE_RIGHT - 30.0 - TRAP_REACH
+
+
+def test_a_rival_let_go_of_a_hold_has_a_grace_before_the_next_trap_catches_them():
+    fight = versus(M_CUTIE, ROBERT, 300)
+    rival = fight.fighters["p2"]
+    first = set_trap(fight)
+    fight.traps.append(Trap("p1", TRAP_HOLD, first.x, first.basis, age=TRAP_ARM))   # a second, stacked and armed
+    second = fight.traps[1]
+    rival.x = first.x
+    caught = []
+    for _ in range(TRAP_HOLD.hitstun + TRAP_GRACE + 30):
+        ev = step(fight)
+        if "trap_close" in kinds(ev):
+            caught.append(fight.frames_left)
+    assert len(caught) == 2 and caught[0] - caught[1] >= TRAP_HOLD.hitstun + TRAP_GRACE
+    assert second.state == "closed"
+
+
+def test_the_grace_ends_with_the_hold_plus_0_3_s_and_lets_them_walk_out():
+    fight = versus(M_CUTIE, ROBERT, 300)
+    rival = fight.fighters["p2"]
+    first = set_trap(fight)
+    fight.traps.append(Trap("p1", TRAP_HOLD, first.x, first.basis, age=TRAP_ARM))
+    rival.x = first.x
+    while first in fight.traps:
+        step(fight)
+    assert rival.action in ("hitstun", "idle")
+    for _ in range(TRAP_GRACE - 2):
+        events = step(fight, IDLE, FighterInput(dx=1))
+        assert "trap_close" not in kinds(events)
+    assert fight.traps[0].armed and fight.traps[0].held is None and rival.x > first.x

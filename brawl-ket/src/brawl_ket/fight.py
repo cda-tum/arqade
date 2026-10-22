@@ -32,6 +32,7 @@ from .config import (
     START_X,
     THROW_SLACK,
     TRAP_ARM,
+    TRAP_GRACE,
     TRAP_LIFE,
     TRAP_MAX,
     TRAP_REACH,
@@ -190,6 +191,7 @@ class Fight:
             f.rng = self.rng
         self.shots: list[Shot] = []
         self.traps: list[Trap] = []         # M-CUTIE's, oldest first
+        self.trap_grace: dict[str, int] = {}    # a rival just let go of a hold: frames no trap can catch them
         self.frames_left = ROUND_FRAMES
         self.hitstop = 0
         self.over = False
@@ -312,6 +314,7 @@ class Fight:
     def _step_traps(self) -> None:
         """Traps age; a closed one shows for its hold, then goes; all of a knocked-down owner's
         go at once, and an open one after TRAP_LIFE frames."""
+        self.trap_grace = {k: n - 1 for k, n in self.trap_grace.items() if n > 1}
         kept = []
         for t in self.traps:
             if self.fighters[t.owner].action == "knockdown":
@@ -320,6 +323,8 @@ class Fight:
             if t.closed:
                 t.closed -= 1
                 if t.closed == 0:
+                    if t.held is not None:      # let go: a moment to get away before any trap can close
+                        self.trap_grace[t.held] = TRAP_GRACE
                     continue
             elif t.age >= TRAP_LIFE:
                 continue
@@ -389,7 +394,7 @@ class Fight:
             # a rival on the ground and free to move (one reeling across it is caught once they
             # come to rest in it); not one tunnelling, getting up or knocked down
             if not t.armed or rival_key in caught or target.y > 0 or target.action in _STUNNED \
-                    or target.wakeup or target.intangible:
+                    or target.wakeup or target.intangible or self.trap_grace.get(rival_key):
                 continue
             touch = self._touch(t.box, target)
             if touch is not None:
