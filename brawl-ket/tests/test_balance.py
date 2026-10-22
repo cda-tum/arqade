@@ -76,6 +76,11 @@ OVER_THE_BAR.update({
     ("PHOEBE", "DOS"): "PHOEBE wins about 64% against DOS: for the user to decide",
     ("ERWIN", "DOS"): "ERWIN wins about 64% against DOS: for the user to decide",
 })
+# ... and with a super's startup untouchable (2026-10-22: a jab used to knock BOHR out of his 36
+# frames of WAVEFUNCTION COLLAPSE, wasting the bar), over 200 rounds
+OVER_THE_BAR.update({
+    ("BOHR", "DOS"): "BOHR wins about 63% against DOS: for the user to decide",
+})
 CASES = [pytest.param(p, id="-".join(p), marks=[pytest.mark.xfail(reason=OVER_THE_BAR[p], strict=False)]
                       if p in OVER_THE_BAR else []) for p in PAIRS]
 

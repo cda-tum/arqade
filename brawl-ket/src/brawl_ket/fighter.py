@@ -154,12 +154,14 @@ class Fighter:
     @property
     def intangible(self) -> bool:
         """TUNNEL: from the end of its exposed frames until it re-forms, she has no hurtbox:
-        nothing can touch her, shots and hits pass through."""
+        nothing can touch her, shots and hits pass through. A super's startup too (SUPERposition):
+        once fired it can't be knocked out of before it comes out, or a jab would waste the bar."""
         m = self.move
-        return (
-            self.action == "attack" and m is not None and m.tunnel
-            and TUNNEL_EXPOSED <= self.frame < self.startup + m.active
-        )
+        if self.action != "attack" or m is None:
+            return False
+        if m.kind == "super" and self.slot == "super" and self.phase == "startup":
+            return True
+        return m.tunnel and TUNNEL_EXPOSED <= self.frame < self.startup + m.active
 
     @property
     def hovering(self) -> bool:

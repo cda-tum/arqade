@@ -598,3 +598,16 @@ def test_one_time_pad_holds_the_rival_between_them_for_25():
 def test_one_time_pad_misses_out_of_reach_or_in_the_air():
     fight = landed("ALICE & BOB", gap=ONE_TIME_PAD.lock_range + 30.0)
     assert fight.fighters["p2"].health == ROBERT.health
+
+
+def test_a_supers_startup_cant_be_hit_so_a_jab_never_wastes_the_bar():
+    fight = fight_of(CHARACTERS["BOHR"], ROBERT, gap=50.0)
+    fire(fight)
+    bohr = fight.fighters["p1"]
+    assert bohr.intangible
+    for _ in range(10):
+        fight.step({"p2": A})
+        run(fight, 3)
+    assert bohr.health == CHARACTERS["BOHR"].health and bohr.move is not None
+    run(fight, WAVE_COLLAPSE.startup)
+    assert fight.fighters["p2"].health < ROBERT.health      # and it lands
