@@ -237,3 +237,120 @@ def test_bob_never_echoes_a_supers_a_and_b():
     for _ in range(SUPER_FREEZE + 30):
         fight.step({})
         assert bob.action != "attack"
+
+
+# --- DOS: BLUE SCREEN OF DEATH -------------------------------------------------------------------
+
+from brawl_ket.config import CRASH_HOLD, CRASH_LEAP, CRASH_REACH  # noqa: E402
+from brawl_ket.moves import BLUE_SCREEN, BSOD_HOLD, ERWIN  # noqa: E402
+
+STARTUP = BLUE_SCREEN.startup
+
+
+def bsod(rival=ROBERT, gap: float = 150.0) -> Fight:
+    """DOS with a full bar fires; the call is skipped and the startup run."""
+    fight = fight_of(DOS, rival, gap)
+    full(fight)
+    fight.step({"p1": AB})
+    for _ in range(SUPER_FREEZE):
+        fight.step({})
+    return fight
+
+
+def run(fight: Fight, frames: int, inp: dict | None = None) -> list:
+    events = []
+    for _ in range(frames):
+        events += fight.step(inp or {})
+    return events
+
+
+def test_dos_has_it_and_it_is_both_colours():
+    assert DOS.extra["super"] is BLUE_SCREEN
+    assert BLUE_SCREEN.kind == "super" and BLUE_SCREEN.colour == BOTH and BLUE_SCREEN.name == "BLUE SCREEN OF DEATH"
+    assert BLUE_SCREEN.crash is BSOD_HOLD and BSOD_HOLD.hold and BSOD_HOLD.damage == 0
+    assert BLUE_SCREEN.seek == CRASH_LEAP and BSOD_HOLD.hitstun == CRASH_HOLD
+
+
+def test_it_freezes_a_rival_on_the_ground_in_reach():
+    fight = bsod(gap=150.0)
+    events = run(fight, STARTUP)
+    rival = fight.fighters["p2"]
+    crash = [e for e in events if e.kind == "crash"]
+    assert crash and crash[0].player == "p2"
+    assert rival.action == "hitstun" and rival.glitch > 0 and rival.vx == 0.0
+    assert rival.health == ROBERT.health                # the freeze itself does no damage
+
+
+def test_then_he_comes_down_on_them_for_25_whatever_their_colour():
+    for colour in (Z, X):
+        fight = bsod(gap=150.0)
+        fight.fighters["p2"].basis = colour
+        events = run(fight, STARTUP + CRASH_LEAP + 20)     # (the hit's hitstop holds the landing back)
+        rival = fight.fighters["p2"]
+        assert rival.health == ROBERT.health - 25 and rival.action == "knockdown"
+        assert rival.glitch == 0
+        assert any(e.kind == "bsod_land" for e in events)
+
+
+def test_he_lands_about_crash_leap_frames_after_the_crash():
+    fight = bsod(gap=CRASH_REACH + 20)                  # nobody frozen, so no hit and no hitstop
+    dos = fight.fighters["p1"]
+    run(fight, STARTUP)
+    landed = None
+    for n in range(1, CRASH_LEAP + 10):
+        if any(e.kind == "bsod_land" for e in fight.step({})):
+            landed = n
+            break
+    assert landed is not None and CRASH_LEAP - 3 <= landed <= CRASH_LEAP + 1
+    assert dos.phase == "recovery"
+
+
+def test_a_rival_in_the_air_is_not_frozen_and_he_drops_where_he_stands():
+    fight = fight_of(DOS, ROBERT, 150.0)
+    full(fight)
+    fight.step({"p1": AB})
+    for _ in range(SUPER_FREEZE):
+        fight.step({})
+    fight.step({"p2": FighterInput(up=True)})           # up in its startup
+    events = run(fight, STARTUP - 1)
+    assert [e.player for e in events if e.kind == "crash"] == [None]
+    x = fight.fighters["p1"].x
+    run(fight, CRASH_LEAP + 4)
+    assert fight.fighters["p1"].x == x
+
+
+def test_a_rival_out_of_reach_is_not_frozen():
+    fight = bsod(gap=CRASH_REACH + 20)
+    events = run(fight, STARTUP + CRASH_LEAP + 4)
+    assert [e.player for e in events if e.kind == "crash"] == [None]
+    assert fight.fighters["p2"].health == ROBERT.health
+
+
+def test_the_box_dodges_it():
+    fight = fight_of(DOS, ERWIN, 150.0)
+    fight.fighters["p2"].action = "boxed"
+    fight.fighters["p2"].boxes = (450.0, 450.0)
+    full(fight)
+    fight.step({"p1": AB})
+    for _ in range(SUPER_FREEZE):
+        fight.step({})
+    events = run(fight, STARTUP)
+    assert [e.player for e in events if e.kind == "crash"] == [None]
+
+
+def test_both_of_alice_and_bob_in_reach_are_frozen():
+    fight = bsod(ALICE_BOB, gap=120.0)
+    events = run(fight, STARTUP)
+    assert [e.player for e in events if e.kind == "crash"] == ["p2", "p2"]
+    assert fight.echoes["p2"].glitch > 0 and fight.fighters["p2"].glitch > 0
+
+
+def test_the_glitch_runs_down_a_frame_at_a_time_and_a_hit_ends_it():
+    fight = fight_of()
+    rival = fight.fighters["p2"]
+    rival.glitch = 3
+    run(fight, 3)
+    assert rival.glitch == 0
+    rival.glitch = 30
+    until(fight, "hit", {"p1": A})
+    assert rival.glitch == 0

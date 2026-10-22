@@ -78,6 +78,11 @@ THROW_RANGE = 50         # two ROBERTs' push box plus THROW_SLACK: a lone Fighte
 SUPER_HALF = 40
 SUPER_WINDOW = 3
 SUPER_FREEZE = frames(0.5)
+# DOS's BLUE SCREEN OF DEATH: every rival on the ground within CRASH_REACH px is frozen for
+# CRASH_HOLD frames, and DOS comes down on them in a leap CRASH_LEAP frames long
+CRASH_REACH = 200
+CRASH_HOLD = 50
+CRASH_LEAP = 40
 
 
 # --- Screen transitions and input timing -------------------------------------

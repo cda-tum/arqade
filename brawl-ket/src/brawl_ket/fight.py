@@ -21,6 +21,7 @@ from . import basis
 from .config import (
     BLOCK_HITSTOP,
     BODY_MARGIN,
+    CRASH_REACH,
     DRIVE_SLOT_Y,
     FLOOR_Y,
     HITSTOP,
@@ -343,6 +344,8 @@ class Fight:
                 self.tosses.append(Toss(key, data["move"].toss, f.attack_basis, x0, y0, x=x0, y=y0))
             elif kind == "super":
                 self._fire(key, events)
+            elif kind == "crash":
+                self._crash(key, f, data["move"], events)
             elif kind == "swap":
                 self._teleport(key, events)
             else:
@@ -352,6 +355,8 @@ class Fight:
                     self._landings[key] = _Landing(f.move)
                     error = basis.error_for(f.move.landing_colour, f.attack_basis)
                     events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
+                if kind == "land" and f.action == "attack" and f.move is not None and f.move.crash is not None:
+                    events.append(Event("bsod_land", key, None, f.x, FLOOR_Y))
 
     def _fire(self, key: str, events: list[Event]) -> None:
         """SUPERposition: the bar empties and the fight freezes SUPER_FREEZE frames for the call
@@ -361,6 +366,23 @@ class Fight:
         self.freeze = SUPER_FREEZE
         self._fired.add(key)
         events.append(Event("super", key))
+
+    def _crash(self, key: str, f: Fighter, hold: Move, events: list[Event]) -> None:
+        """BLUE SCREEN OF DEATH: every rival body on the ground within CRASH_REACH is frozen (the
+        hold: no damage, no push) and glitches; one in the air, beyond it, down, getting up or
+        out of reach (TUNNEL, THE BOX) is not. With nobody frozen, DOS comes down where he stands."""
+        frozen = False
+        for body in self.bodies(_other(key)):
+            if body.y > 0 or abs(body.x - f.x) > CRASH_REACH or body.action == "knockdown" \
+                    or body.wakeup or body.intangible or body.boxed:
+                continue
+            body.take_hit(hold, basis.Y, f.facing)
+            body.glitch = hold.hitstun
+            frozen = True
+            events.append(Event("crash", _other(key), None, body.x, FLOOR_Y - 140))
+        if not frozen:
+            f.vx = 0.0
+            events.append(Event("crash", None, None, f.x, FLOOR_Y))
 
     def _teleport(self, key: str, events: list[Event]) -> None:
         """Down + X, in two steps. With Bob following, it ANCHORS him: he stays where he stands

@@ -13,7 +13,7 @@ from types import MappingProxyType
 
 from . import config
 from .basis import BOTH, OPPOSITE, OWN, Z_BASIS
-from .config import DRIVE_SLOT_Y
+from .config import CRASH_HOLD, CRASH_LEAP, DRIVE_SLOT_Y
 
 HIGH, MID, LOW = 0, 1, 2     # a move's height: a crouch ducks HIGH, a jump clears LOW
 HEIGHTS = ("HIGH", "MID", "LOW")
@@ -100,6 +100,11 @@ class Move:
     toss: Move | None = None            # KEY EXCHANGE: a photon tossed back to Bob, who fires this move
     alone: Move | None = None           # ... and the move a press makes instead while Bob is decohered
     swap: bool = False                  # TELEPORT: Alice and Bob swap places (not while he is gone)
+    # SUPERposition's twists (fight.py, fighter.py):
+    crash: Move | None = None           # BLUE SCREEN OF DEATH: on its first active frame every rival body
+                                        # on the ground within CRASH_REACH is held by this move
+    seek: int = 0                       # > 0: on its first active frame a leap that comes down on the
+                                        # rival this many frames later
 
 
 @dataclass(frozen=True)
@@ -429,6 +434,21 @@ ERWIN = Character(
     }),
 )
 
+# DOS's super, BLUE SCREEN OF DEATH (SUPERposition, docs/superpowers/specs/2026-10-22-brawl-ket-superposition-
+# design.md, 4): every rival on the ground within CRASH_REACH is frozen (a hold, no damage) while an
+# error window pops up over them; then he leaps and comes down on them with a giant CRT DROP: MID, 25,
+# a knockdown, in either colour. Nobody frozen, he comes down where he stands.
+BSOD_HOLD = Move(
+    "BLUE SCREEN", 0, 1, 1, None, BOTH, MID,
+    damage=0, hitstun=CRASH_HOLD, knockback=0.0, hold=True,
+)
+BLUE_SCREEN = Move(
+    "BLUE SCREEN OF DEATH", 8, CRASH_LEAP + 4, 30, Box(-44, -10, 88, 40), BOTH, MID,
+    damage=25, hitstun=30, knockback=3.0, knockdown=True,
+    kind="super", crash=BSOD_HOLD, seek=CRASH_LEAP, floor_recovery=True,
+    poses=("crouch", "stomp", "crouch"),
+)
+
 DOS = Character(
     name="DOS",
     build="dos",
@@ -525,6 +545,7 @@ DOS = Character(
             damage=0, hitstun=1, knockback=0.0, kind="special", paste=True, cue="paste",
             poses=("cast_wind", "eject", "eject"),
         ),
+        "super": BLUE_SCREEN,
     }),
 )
 

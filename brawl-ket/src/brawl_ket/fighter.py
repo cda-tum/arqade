@@ -116,6 +116,7 @@ class Fighter:
         self.charge_wait = 0            # ... frames since the last step's press
         self.paired = False             # ALICE & BOB: Bob is here (the fight sets it every frame)
         self.super_ready = False        # SUPERposition: the bar is full (the fight sets it every frame)
+        self.glitch = 0                 # BLUE SCREEN OF DEATH: frames left of the frozen, glitching look
 
     # --- derived state ----------------------------------------------------------------
 
@@ -221,6 +222,8 @@ class Fighter:
             self.switch_lock -= 1
         if self.wakeup > 0:
             self.wakeup -= 1
+        if self.glitch > 0:
+            self.glitch -= 1
         if not self.char.copy_paste and (inp.y or self.switch_pending):
             self.switch_pending = False
             self.switch()
@@ -265,6 +268,7 @@ class Fighter:
         and its state unchanged, but (GAME RULE) block-stun for the move's hitstun and a
         pushback, never a knockdown."""
         hurt = basis.hurts(error, self.basis)
+        self.glitch = 0                 # (a BSOD freeze ends with the next hit; the fight sets it after its hold)
         was_down = self.action == "knockdown"
         if hurt:
             self.health = max(0, self.health - move.damage)
@@ -430,6 +434,11 @@ class Fighter:
                     return
                 if m.leap is not None:  # POUNCE: off along an arc; gravity does the rest
                     self.vx, self.vy = m.leap[0] * self.facing, m.leap[1]
+                if m.seek:              # BLUE SCREEN OF DEATH: up, to come down on the rival m.seek frames later
+                    self.vx = (self.rival_x - self.x) / m.seek
+                    self.vy = self.char.gravity * m.seek / 2
+                if m.crash is not None:     # ... and the fight freezes whoever it reaches
+                    events.append(("crash", {"move": m.crash}))
                 if m.kind == "projectile":
                     events.append(("projectile", {"move": m}))
                 if m.trap is not None:  # ION TRAP: the fight sets it on the floor

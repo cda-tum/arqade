@@ -356,7 +356,7 @@ def test_dos_stats():
     assert (d.build, d.health, d.walk, d.jump_vy, d.gravity) == ("dos", 125, 1.75, 12.85, 0.55)
     others = [c for c in CHARACTERS.values() if c is not d]
     assert apex(d) < min(apex(c) for c in others) and d.health > max(c.health for c in others)
-    assert d.fixed_basis == Z_BASIS and d.copy_paste and set(d.extra) == {"copy", "paste"}
+    assert d.fixed_basis == Z_BASIS and d.copy_paste and set(d.extra) == {"copy", "paste", "super"}
     assert all(not c.copy_paste and c.fixed_basis is None for c in others)
 
 

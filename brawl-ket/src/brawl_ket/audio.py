@@ -186,6 +186,9 @@ def build_sfx() -> dict[str, list[int]]:
         # the call's hit: a low boom and a high shimmer
         "super": mix(tone(70, 0.6, 0.3, "square", decay=4, slide=0.6),
                      tone(1200, 0.5, 0.08, "triangle", decay=5, slide=1.5)),
+        # BLUE SCREEN OF DEATH: the error chord as it freezes, and the crash as he lands
+        "crash": concat(tone(c("A4"), 0.12, 0.18, "square", decay=6), tone(c("E4"), 0.25, 0.18, "square", decay=5)),
+        "bsod_land": mix(noise_wave(0.5, 0.3, decay=6, hold=2, seed=59), tone(60, 0.5, 0.3, "square", decay=6, slide=0.5)),
     }
 
 
@@ -206,6 +209,7 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 "pass": None, "swap": None, "toss": "toss", "catch": "catch", "key_shot": "key_shot",
                 "intercept": "sizzle", "teleport": "teleport", "anchor": "anchor", "bell_dive": "bell_dive",
                 "super_half": "super_half", "super_full": "super_full", "super": "super",
+                "crash": "crash", "bsod_land": "bsod_land",
                 "decohere": "decohere", "recohere": "recohere",
                 "land": None, "ko": None, "timeout": None}   # ko/timeout: the cues play those
 SUPERSEDES = {"measure": "hit",     # MEASURE's zap replaces the thump of its own throw
