@@ -627,6 +627,18 @@ def nine_ghosts(m, into: int, target: float) -> list[tuple[float, int, int]]:
     return out
 
 
+def linger_rect(lg, ox: int) -> pygame.Rect:
+    """Where a lingering art draws (with its glow), so a fade clears and blits only that."""
+    x = round(lg.x) + ox
+    if lg.kind == "fridge":
+        return pygame.Rect(x - 190, 0, 380, FLOOR_Y + 40)
+    if lg.kind == "padlock":
+        return pygame.Rect(x - 70, FLOOR_Y - 215, 140, 175)
+    if lg.kind == "h_gate":
+        return pygame.Rect(x - 160, FLOOR_Y - 275, 320, 180)
+    return pygame.Rect(x - 40, FLOOR_Y - 220, 160, 200)      # the claws and 9/9
+
+
 @dataclass
 class Linger:
     """A super's art left on screen after its last hit (the pillar, the fridge, the H gate, the
@@ -1227,7 +1239,8 @@ class Renderer:
             if lg.kind == "pillar":             # it narrows away
                 SA.pillar(self.surface, x, lg.colour, k=max(0.05, fade))
             else:
-                self._faded(lambda surf, lg=lg, x=x: self._linger_art(surf, lg, x, oy), round(255 * fade))
+                self._faded(lambda surf, lg=lg, x=x: self._linger_art(surf, lg, x, oy), round(255 * fade),
+                            linger_rect(lg, ox).move(0, oy))
             lg.age += self._dt
             kept.append(lg)
         self.lingers = kept
@@ -1248,16 +1261,18 @@ class Renderer:
                 pygame.draw.line(surf, P.WHITE, a, b, 3)
             SA.counter(surf, (x, FLOOR_Y - 190 + oy), "9/9")
 
-    def _faded(self, draw, alpha: int) -> None:
-        """Draw straight onto the screen, or (fading) onto a see-through layer blitted at `alpha`."""
+    def _faded(self, draw, alpha: int, rect: pygame.Rect) -> None:
+        """Draw straight onto the screen, or (fading) onto a see-through layer blitted at `alpha`;
+        only `rect` (the art's bounds) of the layer is cleared and blitted."""
         if alpha >= 255:
             draw(self.surface)
             return
         layer = self._fade_layer
-        layer.fill((0, 0, 0, 0))
+        rect = rect.clip(layer.get_rect())
+        layer.fill((0, 0, 0, 0), rect)
         draw(layer)
         layer.set_alpha(alpha)
-        self.surface.blit(layer, (0, 0))
+        self.surface.blit(layer, rect.topleft, rect)
 
     def _ghost(self, x: float, facing: int, colour, alpha: int = 150) -> None:
         """One of NINE LIVES' ghost ERWINs, pouncing: see-through and pale."""

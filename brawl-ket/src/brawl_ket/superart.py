@@ -144,6 +144,14 @@ def lock_ring(surf, x, colour=P.WHITE) -> None:
             pygame.draw.lines(surf, colour, False, [(cx, cy - sy * 12), (cx, cy), (cx - sx * 12, cy)], 2)
 
 
+@lru_cache(maxsize=64)
+def _column(w: int, colour, alpha: int) -> pygame.Surface:
+    """A see-through column of light, floor-high: the pillars blit the part they need (built once)."""
+    col = pygame.Surface((w, FLOOR_Y), pygame.SRCALPHA)
+    col.fill((*colour, alpha))
+    return col
+
+
 def pillar(surf, x, colour, top=40, k=1.0) -> None:
     """The collapse: a pillar of light on the locked spot (`k`: how much of it is left), dots
     sucked inward, a ring on the floor."""
@@ -151,9 +159,7 @@ def pillar(surf, x, colour, top=40, k=1.0) -> None:
     glow(surf, (x, FLOOR_Y - 40), 70, colour, round(90 * k))
     for w, a, c in ((70, 110, colour), (46, 170, P.lighten(colour, 0.4)), (18, 240, P.WHITE)):
         w = max(2, round(w * k))
-        col = pygame.Surface((w, FLOOR_Y - top), pygame.SRCALPHA)
-        col.fill((*c, a))
-        surf.blit(col, (x - w // 2, top))
+        surf.blit(_column(w, tuple(c), a), (x - w // 2, top), (0, 0, w, FLOOR_Y - top))
     for sx in (-1, 1):
         edge = x + sx * round(35 * k)
         pygame.draw.line(surf, P.INK, (edge, top), (edge, FLOOR_Y), 2)
@@ -177,9 +183,7 @@ def falling_pillar(surf, x, bottom, colour) -> None:
         return
     glow(surf, (x, bottom - 30), 60, colour, 80)
     for w, a, c in ((60, 110, colour), (40, 170, P.lighten(colour, 0.4)), (16, 240, P.WHITE)):
-        col = pygame.Surface((w, bottom - max(0, top)), pygame.SRCALPHA)
-        col.fill((*c, a))
-        surf.blit(col, (x - w // 2, max(0, top)))
+        surf.blit(_column(w, tuple(c), a), (x - w // 2, max(0, top)), (0, 0, w, bottom - max(0, top)))
     glow(surf, (x, bottom), 26, P.WHITE, 200)
     for dx in (-42, -26, 26, 42):
         pygame.draw.line(surf, P.lighten(colour, 0.5), (x + dx, bottom - 120), (x + dx, bottom - 40), 1)

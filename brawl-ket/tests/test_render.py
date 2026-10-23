@@ -1963,3 +1963,27 @@ def test_robert_rolling_is_hurt_where_his_sphere_is_drawn():
     from brawl_ket.render import BLOCH_R
     hurt = BLOCH_SPHERE.hurt_active
     assert (hurt.x, hurt.y, hurt.w, hurt.h) == (-BLOCH_R, 0, 2 * BLOCH_R, 2 * BLOCH_R)
+
+
+def test_a_fading_linger_touches_only_its_own_rect(surface):
+    """(Frame budget: the fade layer is cleared and blitted over the art's rect, not the screen.)"""
+    from brawl_ket.render import Linger, linger_rect
+    r = Renderer(surface)
+    r.draw_fight(Fight({"p1": ROBERT, "p2": ROBERT}), [])
+    surface.fill((10, 20, 30))
+    rect = pygame.Rect(100, 100, 50, 50)
+    r._faded(lambda surf: surf.fill((255, 255, 255)), 128, rect)        # it paints everywhere ...
+    assert tuple(surface.get_at((99, 99)))[:3] == (10, 20, 30)           # ... but shows only in rect
+    assert tuple(surface.get_at((120, 120)))[:3] != (10, 20, 30)
+    for kind in ("fridge", "padlock", "h_gate", "claws"):
+        assert linger_rect(Linger(kind, 320.0, (0, 200, 0)), 0).w < INTERNAL_WIDTH, kind
+
+
+def test_the_falling_pillar_reuses_its_columns(surface):
+    from brawl_ket import superart as SA
+    SA._column.cache_clear()
+    for bottom in range(60, 300, 4):
+        SA.falling_pillar(surface, 320, bottom, (0, 200, 0))
+        SA.pillar(surface, 320, (0, 200, 0))
+    info = SA._column.cache_info()
+    assert info.currsize <= 6 and info.hits > 100
