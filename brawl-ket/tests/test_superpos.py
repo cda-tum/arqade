@@ -315,13 +315,14 @@ def test_it_freezes_a_rival_on_the_ground_in_reach():
     assert rival.health == ROBERT.health                # the freeze itself does no damage
 
 
-def test_then_he_comes_down_on_them_for_25_whatever_their_colour():
+def test_then_he_comes_down_on_them_for_30_whatever_their_colour():
     for colour in (Z, X):
         fight = bsod(gap=150.0)
         fight.fighters["p2"].basis = colour
         events = run(fight, STARTUP + CRASH_LEAP + 20)     # (the hit's hitstop holds the landing back)
         rival = fight.fighters["p2"]
-        assert rival.health == ROBERT.health - 25 and rival.action == "knockdown"
+        assert rival.health == ROBERT.health - BLUE_SCREEN.damage and rival.action == "knockdown"
+        assert BLUE_SCREEN.damage == 30
         assert rival.glitch == 0
         assert any(e.kind == "bsod_land" for e in events)
 
@@ -567,13 +568,16 @@ def total(m) -> int:
     return n
 
 
-def test_each_is_about_25_in_all():
+def test_each_is_about_30_in_all():
+    """Section 9: every super hits harder, about 30 in all (it was 25)."""
     for name in ALL_SUPERS:
         m = CHARACTERS[name].extra["super"]
-        if m.name == "DILUTION FRIDGE":
-            assert total(m) == 25                   # the fridge and the frost don't both land on one rival
-        else:
-            assert total(m) == 25, name
+        assert total(m) == 30, name                 # (DILUTION FRIDGE: the fridge and the frost, which
+                                                    # don't both land on one rival)
+
+
+def test_the_freeze_and_call_last_45_frames():
+    assert SUPER_FREEZE == 45
 
 
 def landed(name: str, rival=ROBERT, gap=60.0, frames=200, setup=None) -> Fight:
@@ -587,7 +591,7 @@ def landed(name: str, rival=ROBERT, gap=60.0, frames=200, setup=None) -> Fight:
 
 def test_bloch_sphere_rolls_in_for_4_hits_then_the_uppercut_and_he_switches():
     fight = landed("ROBERT", gap=200.0)
-    assert fight.fighters["p2"].health == ROBERT.health - 25
+    assert fight.fighters["p2"].health == ROBERT.health - total(BLOCH_SPHERE)
     assert fight.fighters["p1"].basis == X
 
 
@@ -607,7 +611,7 @@ def test_bloch_sphere_rolls_six_px_a_frame_and_a_jump_clears_it():
 
 def test_wavefunction_collapse_falls_where_they_stood_at_the_lock():
     fight = landed("BOHR", gap=300.0)
-    assert fight.fighters["p2"].health == ROBERT.health - 25
+    assert fight.fighters["p2"].health == ROBERT.health - total(WAVE_COLLAPSE)
     fight = fight_of(CHARACTERS["BOHR"], ROBERT, 300.0)
     fire(fight)
     run(fight, WAVE_COLLAPSE.startup - WAVE_COLLAPSE.lock + 1)
@@ -618,15 +622,15 @@ def test_wavefunction_collapse_falls_where_they_stood_at_the_lock():
 
 def test_coherent_beam_hits_five_times_crouching_or_not_and_its_top_is_110_px():
     fight = landed("PHOEBE", gap=300.0, setup=lambda f: setattr(f.fighters["p2"], "crouching", True))
-    assert fight.fighters["p2"].health == ROBERT.health - 25
+    assert fight.fighters["p2"].health == ROBERT.health - total(COHERENT_BEAM)
     phoebe = fight.fighters["p1"]
     _, top, _, h = phoebe.world_box(COHERENT_BEAM.hitbox)
     assert top + h == FLOOR_Y and h == 110
 
 
 def test_nine_lives_eight_pounces_then_the_swipe_from_right_in_front():
-    fight = landed("ERWIN", gap=120.0)
-    assert fight.fighters["p2"].health == ROBERT.health - 25
+    fight = landed("ERWIN", gap=120.0, frames=300)
+    assert fight.fighters["p2"].health == ROBERT.health - total(NINE_LIVES)
     fight = fight_of(CHARACTERS["ERWIN"], ROBERT, 120.0)
     fire(fight)
     for _ in range(200):                            # (the pounces' hitstop holds the frames back)
@@ -644,19 +648,19 @@ def test_nine_lives_misses_a_rival_out_of_its_reach():
 
 def test_dilution_fridge_crushes_who_stays_and_frosts_who_got_out_but_not_who_jumps():
     fight = landed("M-CUTIE", gap=300.0)
-    assert fight.fighters["p2"].health == ROBERT.health - 20
+    assert fight.fighters["p2"].health == ROBERT.health - DILUTION_FRIDGE.damage
     fight = fight_of(CHARACTERS["M-CUTIE"], ROBERT, 300.0)
     fire(fight)
     run(fight, DILUTION_FRIDGE.startup - DILUTION_FRIDGE.lock + 1)
     fight.fighters["p2"].x -= 90                    # out of the shadow, into the frost
     run(fight, 60)
-    assert fight.fighters["p2"].health == ROBERT.health - 5
+    assert fight.fighters["p2"].health == ROBERT.health - DILUTION_FRIDGE.follow.damage
 
 
-def test_one_time_pad_holds_the_rival_between_them_for_25():
+def test_one_time_pad_holds_the_rival_between_them_for_all_of_it():
     fight = landed("ALICE & BOB", gap=80.0)
     rival, alice, bob = fight.fighters["p2"], fight.fighters["p1"], fight.echoes["p1"]
-    assert rival.health == ROBERT.health - 25
+    assert rival.health == ROBERT.health - total(ONE_TIME_PAD)
     assert alice.x < rival.x < bob.x or bob.x < rival.x < alice.x
 
 
