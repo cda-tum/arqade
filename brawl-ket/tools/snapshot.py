@@ -30,10 +30,16 @@ Writes:
   waiting) and coming back;
 - screen_select_erwin_dos.png: CHOOSE YOUR FIGHTER on ERWIN (P1) and DOS (P2);
 - screen_select_cutie.png: CHOOSE YOUR FIGHTER on M-CUTIE (P1, ready: the second row) and DOS (P2);
-- super_bar.png, super_call.png, super_bsod_freeze.png, super_bsod_flash.png, super_bsod_crash.png:
-  SUPERposition's bar (DOS full, ROBERT a third of purple), the call, and DOS's BLUE SCREEN OF DEATH;
-- super_bloch.png, super_collapse.png, super_beam.png, super_nine.png, super_fridge.png, super_otp.png:
-  each of the six other supers mid-move;
+- super_bar.png, super_bar_dos_full.png: SUPERposition's bars (DOS's one green bar half full, then
+  full; ROBERT a green half and a third of purple); super_call.png, the call;
+- super_bsod_freeze.png, super_bsod_blue.png, super_bsod_crash.png: DOS's BLUE SCREEN OF DEATH from
+  up close: the error window over the frozen rival mid-leap, the full blue screen, CRASH!;
+- super_bloch.png (the 100 px sphere rolling in), super_collapse_fall.png and super_collapse_linger.png
+  (the pillar mid-fall, then standing where it fell), super_beam.png, super_nine_wait.png,
+  super_nine_dash.png and super_nine_claws.png (a ghost waiting on its side, one dashing in, the
+  lingering claws), super_fridge_fall.png and super_fridge_linger.png, super_otp_pass.png,
+  super_otp_padlock.png, super_otp_linger.png (a key pass, the padlock, still there after) and
+  super_otp_whiff.png (out of reach: the kids flash);
 - screen_select_random.png: CHOOSE YOUR FIGHTER on RANDOM (P1, a silhouette under the "?") and
   ROBERT (P2);
 - screen_select_kids.png: CHOOSE YOUR FIGHTER on ALICE & BOB (P1, ready) and M-CUTIE (P2), and
@@ -294,49 +300,98 @@ def select_frame(out_dir: str) -> None:
 
 
 def super_frames(out_dir: str) -> None:
-    """SUPERposition: the HUD bar half full and full, the call, and DOS's BLUE SCREEN OF DEATH
-    (the freeze, and the frame his drop lands)."""
+    """SUPERposition: the HUD bars, the call, and every super at its key beats (section 9 of the
+    spec: what changed after the first playtest)."""
     from brawl_ket import basis
-    from brawl_ket.config import SUPER_FREEZE
     from brawl_ket.fight import Fight
     from brawl_ket.fighter import FighterInput
-    from brawl_ket.moves import BLUE_SCREEN
+    from brawl_ket.moves import (BLOCH_SPHERE, CHARACTERS, DILUTION_FRIDGE, NINE_LIVES, ONE_TIME_PAD,
+                                 WAVE_COLLAPSE)
+    from brawl_ket.render import FALL_FRAMES, LINGER_STAY
     from brawl_ket.superpos import FULL
     surface = pygame.Surface((W, H))
-    r = Renderer(surface)
-    fight = Fight({"p1": DOS, "p2": ROBERT}, seed=1)
-    fight.fighters["p1"].x, fight.fighters["p2"].x = 250.0, 400.0
+    ab = FighterInput(a=True, b=True)
+
+    def fight_of(name: str, x: float, rival_x: float) -> tuple[Fight, Renderer]:
+        fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT}, seed=1)
+        fight.fighters["p1"].x, fight.fighters["p2"].x = x, rival_x
+        fight.meters["p1"].fill = {b: FULL for b in fight.meters["p1"].fill}
+        return fight, Renderer(surface)
+
+    def play(fight, r, shots: dict) -> None:
+        """Fire, then run on, saving a frame for each (name: when(n, events, fight)) at its first match."""
+        r.draw_fight(fight, fight.step({"p1": ab}), {"p1": 0, "p2": 0})
+        todo = dict(shots)
+        for n in range(1, 400):
+            events = fight.step({})
+            r.draw_fight(fight, events, {"p1": 0, "p2": 0})
+            for name, when in list(todo.items()):
+                if when(n, events, fight):
+                    save(surface, out_dir, name)
+                    del todo[name]
+            if not todo:
+                return
+        print("not reached:", sorted(todo))
+
+    # the bars: DOS's one green bar, half full and full; ROBERT a full green half and a third of purple
+    fight, r = fight_of("DOS", 250.0, 400.0)
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL // 2}
     fight.meters["p2"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL // 3}
-    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
     r.draw_fight(fight, [], {"p1": 0, "p2": 0})
     save(surface, out_dir, "super_bar.png")
-    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}), {"p1": 0, "p2": 0})
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL}
     for _ in range(12):
-        r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
-    save(surface, out_dir, "super_call.png")
-    for _ in range(SUPER_FREEZE - 12 + BLUE_SCREEN.startup + 6):
-        r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
-    save(surface, out_dir, "super_bsod_freeze.png")
-    for _ in range(60):
-        events = fight.step({})
-        r.draw_fight(fight, events, {"p1": 0, "p2": 0})
-        if any(e.kind == "bsod_land" for e in events):
-            save(surface, out_dir, "super_bsod_flash.png")
-            r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
-            save(surface, out_dir, "super_bsod_crash.png")
-            break
-    # the six others, each in the middle of its move
-    from brawl_ket.moves import CHARACTERS
-    for name, fname, frames in (("ROBERT", "bloch", 12), ("BOHR", "collapse", 34), ("PHOEBE", "beam", 30),
-                                ("ERWIN", "nine", 30), ("M-CUTIE", "fridge", 38), ("ALICE & BOB", "otp", 30)):
-        fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT}, seed=1)
-        fight.fighters["p1"].x, fight.fighters["p2"].x = 220.0, 300.0
-        fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
-        r = Renderer(surface)
-        r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}), {"p1": 0, "p2": 0})
-        for _ in range(SUPER_FREEZE + frames):
-            r.draw_fight(fight, fight.step({}), {"p1": 0, "p2": 0})
-        save(surface, out_dir, f"super_{fname}.png")
+        r.draw_fight(fight, [], {"p1": 0, "p2": 0})
+    save(surface, out_dir, "super_bar_dos_full.png")
+
+    def phase(move, ph, frame=None):
+        return lambda n, e, f: f.fighters["p1"].move is move and f.fighters["p1"].phase == ph \
+            and (frame is None or f.fighters["p1"].frame == frame)
+
+    def after(kind, frames):
+        seen = {}
+
+        def when(n, e, f):
+            if kind not in seen and any(ev.kind == kind for ev in e):
+                seen[kind] = n
+            return kind in seen and n - seen[kind] == frames
+        return when
+
+    # the call; the BLUE SCREEN OF DEATH from up close: the window over the frozen rival all through
+    # the leap, the 30 frames of blue, and CRASH!
+    fight, r = fight_of("DOS", 250.0, 310.0)
+    play(fight, r, {"super_call.png": lambda n, e, f: n == 14,
+                    "super_bsod_freeze.png": lambda n, e, f: f.fighters["p2"].glitch > 0 and f.fighters["p1"].y > 60,
+                    "super_bsod_blue.png": after("bsod_land", 12),
+                    "super_bsod_crash.png": after("bsod_land", 34)})
+    # BLOCH SPHERE, 100 px, rolling in
+    fight, r = fight_of("ROBERT", 150.0, 420.0)
+    play(fight, r, {"super_bloch.png": phase(BLOCH_SPHERE, "active", BLOCH_SPHERE.startup + 14)})
+    # WAVEFUNCTION COLLAPSE: the pillar mid-fall, then standing where it fell
+    fight, r = fight_of("BOHR", 150.0, 420.0)
+    play(fight, r, {"super_collapse_fall.png": phase(WAVE_COLLAPSE, "startup", WAVE_COLLAPSE.startup - FALL_FRAMES // 2),
+                    "super_collapse_linger.png": after("collapse", LINGER_STAY - 6)})
+    # COHERENT BEAM
+    fight, r = fight_of("PHOEBE", 150.0, 420.0)
+    play(fight, r, {"super_beam.png": lambda n, e, f: n == 45 + 30})
+    # NINE LIVES: a ghost waiting on its side, and one dashing in
+    fight, r = fight_of("ERWIN", 220.0, 330.0)
+    play(fight, r, {"super_nine_wait.png": phase(NINE_LIVES, "active", NINE_LIVES.startup + 2 * 14 - 10),
+                    "super_nine_dash.png": phase(NINE_LIVES, "active", NINE_LIVES.startup + 3 * 14 - 3),
+                    "super_nine_claws.png": after("swipe", 20)})
+    # DILUTION FRIDGE: mid-fall over its shadow, then standing where it fell
+    fight, r = fight_of("M-CUTIE", 150.0, 420.0)
+    play(fight, r, {"super_fridge_fall.png": phase(DILUTION_FRIDGE, "startup",
+                                                   DILUTION_FRIDGE.startup - FALL_FRAMES // 2),
+                    "super_fridge_linger.png": after("fridge", LINGER_STAY - 6)})
+    # ONE-TIME PAD: caught from 90 px, a key pass, and the padlock, closed and lingering
+    fight, r = fight_of("ALICE & BOB", 220.0, 310.0)
+    play(fight, r, {"super_otp_pass.png": phase(ONE_TIME_PAD, "active", ONE_TIME_PAD.startup + 25),
+                    "super_otp_padlock.png": after("padlock", 10),
+                    "super_otp_linger.png": after("padlock", LINGER_STAY - 6)})
+    # ... and out of reach: the kids flash and nothing plays
+    fight, r = fight_of("ALICE & BOB", 150.0, 420.0)
+    play(fight, r, {"super_otp_whiff.png": after("lock_miss", 1)})
 
 
 def screen_frames(out_dir: str) -> None:
