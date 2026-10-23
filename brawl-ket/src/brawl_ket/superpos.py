@@ -55,6 +55,8 @@ class Meter:
         self.fill[b] = min(cap, before + half_points)
         if before >= cap or self.fill[b] < cap:
             return []
+        if len(self.fill) == 1:         # one colour: its one half is the whole bar
+            return ["full"]
         return ["half", "full"] if self.full else ["half"]
 
     @property

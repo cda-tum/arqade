@@ -98,7 +98,7 @@ def test_dos_is_full_when_his_green_bar_is_and_taking_hits_fills_it_at_half_rate
     m.one_colour(Z)
     assert m.cap == 2 * FULL                    # the user's ruling: as much as a whole two-half bar
     assert m.dealt(Z, 79) == [] and not m.full and m.share(Z) == 158 / 160
-    assert "full" in m.dealt(X, 1) and m.full  # a purple hit fills the green bar too
+    assert m.dealt(X, 1) == ["full"] and m.full    # a purple hit fills the green bar too; no "half" chord
     m.empty()
     assert m.fill == {Z: 0}
 
