@@ -1897,3 +1897,14 @@ def test_nobody_can_act_under_the_blue_screen(surface):
         elif blue:
             break
     assert blue >= 25
+
+
+def test_lingering_art_is_drawn_under_the_fighters(surface, monkeypatch):
+    """The standing fridge or pillar must not hide the rival it knocked down."""
+    calls = []
+    real_lingers, real_fighter = Renderer._draw_lingers, Renderer._fighter
+    monkeypatch.setattr(Renderer, "_draw_lingers", lambda self, *a: (calls.append("lingers"), real_lingers(self, *a))[1])
+    monkeypatch.setattr(Renderer, "_fighter", lambda self, *a: (calls.append("fighter"), real_fighter(self, *a))[1])
+    r = Renderer(surface)
+    r.draw_fight(Fight({"p1": ROBERT, "p2": ROBERT}), [])
+    assert calls.index("lingers") < calls.index("fighter")

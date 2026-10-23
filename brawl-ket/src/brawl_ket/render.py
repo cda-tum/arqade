@@ -765,6 +765,7 @@ class Renderer:
             self._shadow(p, fight.fighters[p], ox, oy)
         for p, age in self.teleported.items():  # TELEPORT's columns of light, behind the two
             self._teleport_flash(fight, p, age, ox, oy)
+        self._draw_lingers(ox, oy)            # a super's lingering art: under the bodies it fell on
         heads = {}
         for p in order:
             if p in fight.echoes:               # Bob first: he stands behind her
@@ -782,7 +783,6 @@ class Renderer:
         for s in fight.shots:
             self._shot(s, ox, oy)
         self._super_art(fight, ox, oy)
-        self._draw_lingers(ox, oy)
         if self.bsod_crash[1] and not self.bsod_flash:      # the blue screen is over: CRASH!
             self.effects.append(Effect("popup", self.bsod_crash[0] + 50, FLOOR_Y - 150, POPUP_FRAMES,
                                        POPUP_FRAMES, P.WHITE, "CRASH!"))
