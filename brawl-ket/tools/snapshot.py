@@ -38,8 +38,10 @@ Writes:
   (the pillar mid-fall, then standing where it fell), super_beam.png, super_nine_wait.png,
   super_nine_dash.png and super_nine_claws.png (a ghost waiting on its side, one dashing in, the
   lingering claws), super_fridge_fall.png and super_fridge_linger.png, super_otp_pass.png,
-  super_otp_padlock.png, super_otp_linger.png (a key pass, the padlock, still there after) and
-  super_otp_whiff.png (out of reach: the kids flash);
+  super_otp_padlock.png, super_otp_linger.png, super_otp_fading.png (a key pass, the padlock, still
+  there after, fading out) and super_otp_whiff.png (out of reach: the kids flash); super_bsod_air.png
+  and super_bsod_air_drop.png (a rival who held up through the call, frozen in the air, and the drop
+  on them) and super_bloch_hop.png (the sphere hopping at such a rival);
 - screen_select_random.png: CHOOSE YOUR FIGHTER on RANDOM (P1, a silhouette under the "?") and
   ROBERT (P2);
 - screen_select_kids.png: CHOOSE YOUR FIGHTER on ALICE & BOB (P1, ready) and M-CUTIE (P2), and
@@ -318,12 +320,13 @@ def super_frames(out_dir: str) -> None:
         fight.meters["p1"].fill_up()
         return fight, Renderer(surface)
 
-    def play(fight, r, shots: dict) -> None:
-        """Fire, then run on, saving a frame for each (name: when(n, events, fight)) at its first match."""
+    def play(fight, r, shots: dict, rival=None) -> None:
+        """Fire, then run on, saving a frame for each (name: when(n, events, fight)) at its first match;
+        the rival holds `rival` from the press on (None: nothing)."""
         r.draw_fight(fight, fight.step({"p1": ab}), {"p1": 0, "p2": 0})
         todo = dict(shots)
         for n in range(1, 400):
-            events = fight.step({})
+            events = fight.step({"p2": rival} if rival is not None else {})
             r.draw_fight(fight, events, {"p1": 0, "p2": 0})
             for name, when in list(todo.items()):
                 if when(n, events, fight):
@@ -364,9 +367,18 @@ def super_frames(out_dir: str) -> None:
                     "super_bsod_freeze.png": lambda n, e, f: f.fighters["p2"].glitch > 0 and f.fighters["p1"].y > 60,
                     "super_bsod_blue.png": after("bsod_land", 12),
                     "super_bsod_crash.png": after("bsod_land", 34)})
+    # ... and on a rival who held up through the call: frozen in the air, beside its window, and the drop
+    fight, r = fight_of("DOS", 200.0, 320.0)
+    play(fight, r, {"super_bsod_air.png": lambda n, e, f: f.fighters["p2"].glitch > 0 and n > 60,
+                    "super_bsod_air_drop.png": lambda n, e, f: any(ev.kind == "hit" for ev in e)},
+         rival=FighterInput(up=True))
     # BLOCH SPHERE, 100 px, rolling in
     fight, r = fight_of("ROBERT", 150.0, 420.0)
     play(fight, r, {"super_bloch.png": phase(BLOCH_SPHERE, "active", BLOCH_SPHERE.startup + 14)})
+    # ... and hopping at a rival who held up through the call
+    fight, r = fight_of("ROBERT", 200.0, 350.0)
+    play(fight, r, {"super_bloch_hop.png": lambda n, e, f: f.fighters["p1"].move is BLOCH_SPHERE
+                    and f.fighters["p1"].y > 30}, rival=FighterInput(up=True))
     # WAVEFUNCTION COLLAPSE: the pillar mid-fall, then standing where it fell
     fight, r = fight_of("BOHR", 150.0, 420.0)
     play(fight, r, {"super_collapse_fall.png": phase(WAVE_COLLAPSE, "startup", WAVE_COLLAPSE.startup - FALL_FRAMES // 2),
@@ -388,7 +400,8 @@ def super_frames(out_dir: str) -> None:
     fight, r = fight_of("ALICE & BOB", 220.0, 310.0)
     play(fight, r, {"super_otp_pass.png": phase(ONE_TIME_PAD, "active", ONE_TIME_PAD.startup + 25),
                     "super_otp_padlock.png": after("padlock", 10),
-                    "super_otp_linger.png": after("padlock", LINGER_STAY - 6)})
+                    "super_otp_linger.png": after("padlock", LINGER_STAY - 6),
+                    "super_otp_fading.png": after("padlock", LINGER_STAY + 6)})
     # ... and out of reach: the kids flash and nothing plays
     fight, r = fight_of("ALICE & BOB", 150.0, 420.0)
     play(fight, r, {"super_otp_whiff.png": after("lock_miss", 1)})
