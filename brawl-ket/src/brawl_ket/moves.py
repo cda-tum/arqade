@@ -390,6 +390,9 @@ PHOEBE = Character(
 )
 
 NORMALS = ("stand.A", "stand.B", "crouch.A", "crouch.B", "air.A", "air.B", "throw")
+# ... ERWIN's, M-CUTIE's and (fitted to their size) ALICE & BOB's: ROBERT's as they were before his
+# own buff (ROBERT_OWN, below)
+SHARED_NORMALS = MappingProxyType({slot: ROBERT.moves[slot] for slot in NORMALS})
 
 # THE BOX's two boxes, each around its own x: the drawn box (70 px wide, 48 tall) and his ears
 # over its rim. Every standing normal, PHOTON and FLOPPY touch it.
@@ -414,7 +417,7 @@ ERWIN = Character(
     hurt_stand=Box(-14, 0, 28, 120),    # ROBERT's height
     hurt_crouch=Box(-16, 0, 32, 100),
     moves=MappingProxyType({
-        **{slot: ROBERT.moves[slot] for slot in NORMALS},   # the shared normals, as ROBERT's
+        **SHARED_NORMALS,                                   # the shared normals
         # One cat, two places: he ducks into a box (startup, hittable), and on the first active
         # frame it splits into two (fighter.py, _split). Collapsed by him (a press, a new stick
         # direction, or BOX_FRAMES) he pops out with BOX_SWIPE; by the rival, it's a measurement
@@ -599,7 +602,7 @@ M_CUTIE = Character(
     hurt_stand=Box(-16, 0, 32, 116),    # a little shorter than ROBERT, and wider: her cage skirt
     hurt_crouch=Box(-18, 0, 36, 92),    # is 60 px across at its hem
     moves=MappingProxyType({
-        **{slot: ROBERT.moves[slot] for slot in NORMALS},   # the shared normals, as ROBERT's
+        **SHARED_NORMALS,                                   # the shared normals
         # Each X press is a step: the first starts the charge, she stands still, and the wave
         # fires CHARGE_WAIT frames after the last press or at once at CHARGE_CAP. A hit loses it.
         # The slot's own numbers are the 1-step wave's.
@@ -631,7 +634,7 @@ KID_BOXES = {
     "crouch.B": Box(8, 4, 44, 12), "air.A": Box(8, 30, 24, 16), "air.B": Box(6, 18, 28, 20),
     "throw": Box(0, 30, 40, 44),
 }
-KID_NORMALS = MappingProxyType({slot: replace(ROBERT.moves[slot], hitbox=box) for slot, box in KID_BOXES.items()})
+KID_NORMALS = MappingProxyType({slot: replace(SHARED_NORMALS[slot], hitbox=box) for slot, box in KID_BOXES.items()})
 
 # KEY EXCHANGE's shot, as Bob fires it once he has caught Alice's toss (fight.py, Toss): one strong
 # photon, a little faster than PHOTON and bigger, from his throwing hand, in the colour it was
@@ -793,6 +796,15 @@ def _with_super(char: Character, move: Move) -> Character:
     return replace(char, extra=MappingProxyType({**char.extra, "super": move}))
 
 
+# ROBERT's own numbers (the user's ruling, 2026-10-23: a jab that can't chain into a jab cost his
+# jab strings most; this buys some of it back). ERWIN, M-CUTIE and ALICE & BOB were given his
+# normals above, before this, and keep them as they were.
+ROBERT_OWN = {
+    "stand.B": replace(ROBERT.moves["stand.B"], startup=8),        # his heavy 2 frames faster (10)
+    "stand.A": replace(ROBERT.moves["stand.A"], recovery=10),      # his jabs 2 frames back of the feel
+    "crouch.A": replace(ROBERT.moves["crouch.A"], recovery=11),    # tuning's +4 (12 and 13)
+}
+ROBERT = replace(ROBERT, moves=MappingProxyType({**ROBERT.moves, **ROBERT_OWN}))
 ROBERT = _with_super(ROBERT, BLOCH_SPHERE)
 BOHR = _with_super(BOHR, WAVE_COLLAPSE)
 PHOEBE = _with_super(PHOEBE, COHERENT_BEAM)

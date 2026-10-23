@@ -126,7 +126,7 @@ def test_a_press_starts_a_jab_and_it_runs_its_frames():
     assert phases == (
         ["startup"] * JAB.startup + ["active"] * JAB.active + ["recovery"] * JAB.recovery
     )
-    assert phases == ["startup"] * 4 + ["active"] * 3 + ["recovery"] * 12
+    assert phases == ["startup"] * 4 + ["active"] * 3 + ["recovery"] * 10     # (ROBERT's own: moves.ROBERT_OWN)
     run(f)
     assert f.action == "idle" and f.phase is None and f.move is None
 
@@ -391,9 +391,9 @@ def test_cooldown_blocks_a_slot_until_it_expires():
     assert f.cooldowns["stand.A"] == 34
     run(f, IDLE, JAB_TOTAL)                          # move over, still cooling down
     assert f.action == "idle"
-    ev = run(f, tap("a"))                            # step 21
+    ev = run(f, tap("a"))                            # step JAB_TOTAL + 2
     assert "attack" not in names(ev) and f.action == "idle"
-    ev = run(f, IDLE, 12)                            # steps 22..33
+    ev = run(f, IDLE, 33 - (JAB_TOTAL + 2))          # ... up to step 33
     assert "attack" not in names(ev)
     # the cooldown reaches 0 on step 35; a press buffered at step 34 comes out then
     ev = run(f, tap("a"))                            # step 34
@@ -569,7 +569,7 @@ def test_a_neutral_heavy_takes_its_own_startup():
     f = make()
     run(f, tap("b"))
     assert f.slot == "stand.B" and f.chain == 1
-    assert f.startup == HEAVY.startup == 10
+    assert f.startup == HEAVY.startup == 8
     assert phases_of(f) == (
         ["startup"] * HEAVY.startup + ["active"] * HEAVY.active + ["recovery"] * HEAVY.recovery
     )

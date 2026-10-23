@@ -6,7 +6,8 @@ from brawl_ket import config
 from brawl_ket.fight import SHOT_SPAWN_OFFSET
 from brawl_ket.basis import BOTH, OPPOSITE, OWN, Z_BASIS
 from brawl_ket.moves import HIGH, LOW, MID
-from brawl_ket.moves import AMP_WAVES, CHARACTERS, DOS, ERWIN, M_CUTIE, NORMALS, PHOEBE, ROBERT, SLOTS, TRAP_HOLD, Box
+from brawl_ket.moves import (AMP_WAVES, CHARACTERS, DOS, ERWIN, M_CUTIE, NORMALS, PHOEBE, ROBERT, SHARED_NORMALS, SLOTS,
+                             TRAP_HOLD, Box)
 
 
 def all_moves():
@@ -59,7 +60,8 @@ def test_heavies_are_fast():
         a, b, chained = STARTUPS[c.name]
         for light, heavy in (("stand.A", "stand.B"), ("crouch.A", "crouch.B")):
             assert c.moves[light].startup == a, (c.name, light)
-            assert (c.moves[heavy].startup, c.moves[heavy].chain_startup) == (b, chained), (c.name, heavy)
+            own = 8 if (c.name, heavy) == ("ROBERT", "stand.B") else b     # his own heavy: moves.ROBERT_OWN
+            assert (c.moves[heavy].startup, c.moves[heavy].chain_startup) == (own, chained), (c.name, heavy)
 
 
 def test_bohr_winds_up_slower_than_robert():
@@ -332,7 +334,7 @@ def test_erwin_stats():
     others = [c for c in CHARACTERS.values() if c is not e]
     assert apex(e) > max(apex(c) for c in others) and e.health < min(c.health for c in others)
     for slot in NORMALS:
-        assert e.moves[slot] is ROBERT.moves[slot], slot
+        assert e.moves[slot] is SHARED_NORMALS[slot], slot
 
 
 def test_erwin_specials():
@@ -390,7 +392,7 @@ def test_m_cutie_stats():
     apexes = sorted(apex(c) for c in CHARACTERS.values())
     assert healths[0] < m.health < healths[-1] and apexes[0] < apex(m) < apexes[-1]    # in the middle
     for slot in NORMALS:
-        assert m.moves[slot] is ROBERT.moves[slot], slot
+        assert m.moves[slot] is SHARED_NORMALS[slot], slot
 
 
 def test_m_cutie_specials():
@@ -440,3 +442,16 @@ def test_no_jab_chains_into_a_jab():
                 assert not set(m.cancels) & set(JABS), (c.name, slot, m.cancels)
     for c in CHARACTERS.values():
         assert "stand.B" in c.moves["stand.A"].cancels, c.name          # a jab still chains into a heavy
+
+
+def test_robert_is_the_shared_normals_but_his_own_buff():
+    """The user's ruling (2026-10-23): ROBERT is buffed on his own numbers only, after the jab change;
+    ERWIN, M-CUTIE and ALICE & BOB keep the shared normals."""
+    from brawl_ket.moves import ROBERT_OWN
+    assert set(ROBERT_OWN) == {"stand.A", "crouch.A", "stand.B"}
+    for slot in NORMALS:
+        ours, shared = ROBERT.moves[slot], SHARED_NORMALS[slot]
+        assert (ours is shared) == (slot not in ROBERT_OWN), slot
+    assert ROBERT.moves["stand.B"].startup == SHARED_NORMALS["stand.B"].startup - 2
+    assert ROBERT.moves["stand.A"].recovery == SHARED_NORMALS["stand.A"].recovery - 2
+    assert ROBERT.moves["crouch.A"].recovery == SHARED_NORMALS["crouch.A"].recovery - 2

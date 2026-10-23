@@ -17,7 +17,7 @@ from brawl_ket.config import (
 from brawl_ket.echo import Echo
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import IDLE, FighterInput
-from brawl_ket.moves import ALICE_BOB, BOB, BOHR, KID_NORMALS, MID, NORMALS, ROBERT
+from brawl_ket.moves import ALICE_BOB, BOB, BOHR, KID_NORMALS, MID, NORMALS, ROBERT, SHARED_NORMALS
 
 A = FighterInput(a=True)
 B = FighterInput(b=True)
@@ -69,7 +69,7 @@ def test_the_pair_is_two_kids_with_one_bar():
 def test_their_normals_are_the_shared_ones_fitted_to_their_size():
     assert set(KID_NORMALS) == set(NORMALS)
     for slot in NORMALS:
-        ours, roberts = KID_NORMALS[slot], ROBERT.moves[slot]
+        ours, roberts = KID_NORMALS[slot], SHARED_NORMALS[slot]
         assert ours.name == roberts.name and ours.hitbox != roberts.hitbox
         assert (ours.startup, ours.active, ours.recovery, ours.damage, ours.colour, ours.height) == \
             (roberts.startup, roberts.active, roberts.recovery, roberts.damage, roberts.colour, roberts.height)
