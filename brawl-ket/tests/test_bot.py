@@ -57,15 +57,12 @@ def test_bots_are_deterministic(pairing):
         assert e1 == e2
 
 
-# Since a jab can't chain into a jab (2026-10-23), ERWIN beats ROBERT in about 85% of bot rounds, so
-# 10 seeds a side can all go his way: a character's edge, not a side's, for the user to decide
-LOPSIDED = {("ROBERT", "ERWIN"): "ERWIN wins about 85% against ROBERT", ("ERWIN", "ROBERT"): "ERWIN wins about 85% against ROBERT",
-            ("DOS", "ALICE & BOB"): "DOS wins about 79% against ALICE & BOB",
-            ("ALICE & BOB", "DOS"): "DOS wins about 79% against ALICE & BOB",
-            ("PHOEBE", "DOS"): "DOS's BLUE SCREEN, which a jump no longer dodges",
-            ("DOS", "PHOEBE"): "DOS's BLUE SCREEN, which a jump no longer dodges",
-            ("M-CUTIE", "DOS"): "DOS's BLUE SCREEN, which a jump no longer dodges",
-            ("DOS", "M-CUTIE"): "DOS's BLUE SCREEN, which a jump no longer dodges"}
+# DOS wins most bot rounds against PHOEBE, M-CUTIE and ALICE & BOB (2026-10-23: about 78%, 76% and 84%
+# over 100 rounds, tests/test_balance.py), since his BLUE SCREEN freezes jumps too, so 10 seeds a side
+# can all go his way from one side: a character's edge, not a side's, for the user to decide
+LOPSIDED = {("PHOEBE", "DOS"): "DOS wins about 78% against PHOEBE",
+            ("M-CUTIE", "DOS"): "DOS wins about 76% against M-CUTIE",
+            ("ALICE & BOB", "DOS"): "DOS wins about 84% against ALICE & BOB"}
 SIDE_CASES = [pytest.param(p, marks=[pytest.mark.xfail(reason=LOPSIDED[p], strict=False)]
                            if p in LOPSIDED else []) for p in PAIRINGS]
 

@@ -48,56 +48,28 @@ def test_every_new_pairing_is_checked():
     assert len(PAIRS) == 18         # all 21 pairings of seven but the older three's among themselves
 
 
-# Over the bar, for the user to decide: with the health and walk the spec fixes, M-CUTIE plays
-# PHOEBE as ROBERT does (60%) with 5 more health; about 65% over 400 rounds, whatever her bot does
-# (docs/superpowers/plans/2026-10-21-brawl-ket-m-cutie.md, Task 4).
-OVER_THE_BAR = {("PHOEBE", "M-CUTIE"): "M-CUTIE wins about 65% against PHOEBE: for the user to decide"}
-# ... and ALICE & BOB's two outside the bar, both measured over 400 rounds in their plan's Task 6
-# (docs/superpowers/plans/2026-10-22-brawl-ket-alice-bob.md): BOHR wins about 67% against them
-# (MEASURE, 12 and a knockdown from 130 px, and CHARGE NOISE, which hits each body inside it), and
-# they win about 63% against PHOEBE (with ROBERT's normals: ROBERT himself wins 60% against her).
-# After the playtest's singlet colours and ANCHOR, over 200 rounds: BOHR about 72%, them about 63%
-OVER_THE_BAR.update({
-    ("BOHR", "ALICE & BOB"): "BOHR wins about 80% against ALICE & BOB: for the user to decide",
-    ("PHOEBE", "ALICE & BOB"): "ALICE & BOB win about 62% against PHOEBE: for the user to decide",
-})
-# ... and after the user's feel tuning (2026-10-22: every A normal 4 frames more recovery, faster
-# walks, and jumps long and high enough to clear anyone), over 200 rounds: ROBERT, whose jab
-# strings carried him, loses ground; BOHR's MEASURE and CHARGE NOISE catch the longer jumps
-OVER_THE_BAR.update({
-    ("ROBERT", "ERWIN"): "ERWIN wins about 68% against ROBERT: for the user to decide",
-    ("ROBERT", "DOS"): "ROBERT wins about 63% against DOS: for the user to decide",
-})
-# ... and with SUPERposition, all seven supers (2026-10-22, docs/superpowers/plans/2026-10-22-brawl-ket-
-# superposition-supers.md, Task 4), over 200 rounds: DOS, the slowest, gets caught by PHOEBE's beam
-# and ERWIN's pounces (DOS against ALICE & BOB, BOHR against ERWIN and ROBERT against ALICE & BOB came
-# back inside the bar)
-OVER_THE_BAR.update({
-    ("PHOEBE", "DOS"): "PHOEBE wins about 64% against DOS: for the user to decide",
-    ("ERWIN", "DOS"): "ERWIN wins about 64% against DOS: for the user to decide",
-})
-# ... and with a super's startup untouchable (2026-10-22: a jab used to knock BOHR out of his 36
-# frames of WAVEFUNCTION COLLAPSE, wasting the bar), over 200 rounds
-OVER_THE_BAR.update({
-    ("BOHR", "DOS"): "BOHR wins about 63% against DOS: for the user to decide",
-})
-# ... and with DOS's bar green only (2026-10-23, section 9 of the SUPERposition spec): it fills about
-# twice as fast, and his BLUE SCREEN, which freezes both kids, comes round twice as often
-OVER_THE_BAR.update({
-    ("DOS", "ALICE & BOB"): "DOS wins about 83% against ALICE & BOB: for the user to decide",
-})
-# ... and with every super's freeze 45 frames and its damage about 30 (section 9), over 100 rounds
-OVER_THE_BAR.update({
-    ("DOS", "M-CUTIE"): "DOS wins about 64% against M-CUTIE: for the user to decide",
-})
-# ... and since a jab can't chain into a jab (2026-10-23, the same playtest), over 100 rounds:
-# ROBERT and BOHR, whose jab strings carried them, lose ground
-OVER_THE_BAR.update({
-    ("ROBERT", "M-CUTIE"): "M-CUTIE wins about 63% against ROBERT: for the user to decide",
-    ("ROBERT", "ALICE & BOB"): "ALICE & BOB win about 69% against ROBERT: for the user to decide",
+# Over the bar, for the user to decide, as measured here (100 rounds a pairing) on 2026-10-23, after
+# SUPERposition's playtest changes, a jab that can't chain into a jab, DOS's one green bar holding a
+# whole two-half bar, a BLUE SCREEN that freezes jumps too, the hopping BLOCH SPHERE and ROBERT's own
+# buff. (How each got there: earlier versions of this file, and the plans and specs in
+# docs/superpowers.)
+# - DOS: his BLUE SCREEN, which only distance dodges now, comes down on every rival in reach.
+# - BOHR: MEASURE (12 and a knockdown from 130 px) and CHARGE NOISE, which hits each of ALICE & BOB's
+#   bodies inside it, carry him; no change of ROBERT's own numbers moved ROBERT against him much.
+# - ERWIN against ROBERT, M-CUTIE and ALICE & BOB against PHOEBE: older edges, near where they were.
+OVER_THE_BAR = {
+    ("ROBERT", "ERWIN"): "ERWIN wins about 64% against ROBERT: for the user to decide",
+    ("ROBERT", "DOS"): "DOS wins about 66% against ROBERT: for the user to decide",
     ("BOHR", "ERWIN"): "BOHR wins about 70% against ERWIN: for the user to decide",
     ("BOHR", "M-CUTIE"): "BOHR wins about 67% against M-CUTIE: for the user to decide",
-})
+    ("BOHR", "ALICE & BOB"): "BOHR wins about 75% against ALICE & BOB: for the user to decide",
+    ("PHOEBE", "DOS"): "DOS wins about 78% against PHOEBE: for the user to decide",
+    ("PHOEBE", "M-CUTIE"): "M-CUTIE wins about 66% against PHOEBE: for the user to decide",
+    ("PHOEBE", "ALICE & BOB"): "ALICE & BOB win about 71% against PHOEBE: for the user to decide",
+    ("ERWIN", "DOS"): "DOS wins about 66% against ERWIN: for the user to decide",
+    ("DOS", "M-CUTIE"): "DOS wins about 76% against M-CUTIE: for the user to decide",
+    ("DOS", "ALICE & BOB"): "DOS wins about 84% against ALICE & BOB: for the user to decide",
+}
 CASES = [pytest.param(p, id="-".join(p), marks=[pytest.mark.xfail(reason=OVER_THE_BAR[p], strict=False)]
                       if p in OVER_THE_BAR else []) for p in PAIRS]
 
