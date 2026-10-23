@@ -827,7 +827,9 @@ class Renderer:
             elif e.kind == "lock_miss" and e.player:     # a super's lock found nobody: they flash
                 for body in (e.player, f"{e.player}/bob"):
                     self.body_flash[body] = (P.WHITE, SWITCH_FLASH_FRAMES)
-            elif e.kind == "bsod_land":
+            elif e.kind == "bsod_land":             # a whiff: one blue frame
+                self.bsod_flash = max(self.bsod_flash, 1)
+            elif e.kind == "bsod_crash":            # on someone: the whole blue screen, then CRASH!
                 rival = (self._fight.fighters["p2" if e.player == "p1" else "p1"]
                          if self._fight is not None and e.player else None)
                 self.bsod_flash = BSOD_SCREEN_FRAMES

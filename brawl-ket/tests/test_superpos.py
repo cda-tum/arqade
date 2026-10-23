@@ -406,6 +406,17 @@ def test_the_frozen_rival_stays_frozen_until_dos_comes_down_on_them(side, gap):
     assert rival.health == ROBERT.health - total(BLUE_SCREEN) and rival.action == "knockdown"
 
 
+def test_only_a_drop_that_hit_reports_the_crash():
+    """The renderer shows its full blue screen on "bsod_crash" only: a whiff (nobody frozen) lands
+    with "bsod_land" alone."""
+    fight = bsod(gap=150.0)
+    events = run(fight, STARTUP + CRASH_LEAP + 20)
+    assert "bsod_land" in kinds(events) and "bsod_crash" in kinds(events)
+    fight = bsod(gap=CRASH_REACH + 20)
+    events = run(fight, STARTUP + CRASH_LEAP + 20)
+    assert "bsod_land" in kinds(events) and "bsod_crash" not in kinds(events)
+
+
 def test_both_of_alice_and_bob_in_reach_are_frozen():
     fight = bsod(ALICE_BOB, gap=120.0)
     events = run(fight, STARTUP)

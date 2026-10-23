@@ -1863,3 +1863,37 @@ def test_nine_lives_draws_its_ghosts_from_the_startup(surface, monkeypatch):
     with_ghost = region()
     monkeypatch.setattr(R, "nine_ghosts", lambda *a: [])
     assert region() != with_ghost                   # the first ghost, waiting on its side
+
+
+def test_a_missed_blue_screen_flashes_one_frame_only(surface):
+    from brawl_ket.dos import BSOD_BLUE
+    fight, ab = bsod_fight(260.0)                       # out of reach: nobody frozen
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step(ab))
+    blue = 0
+    for _ in range(200):
+        r.draw_fight(fight, fight.step({}))
+        blue += tuple(surface.get_at((INTERNAL_WIDTH - 5, INTERNAL_HEIGHT - 5)))[:3] == BSOD_BLUE
+    assert blue <= 1
+
+
+def test_nobody_can_act_under_the_blue_screen(surface):
+    """While the screen is blue, DOS is still in his drop's recovery and the rival still down."""
+    from brawl_ket.dos import BSOD_BLUE
+    from brawl_ket.moves import BLUE_SCREEN
+    from brawl_ket.render import BSOD_SCREEN_FRAMES
+    assert BLUE_SCREEN.recovery >= BSOD_SCREEN_FRAMES
+    fight, ab = bsod_fight(150.0)
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step(ab))
+    blue = 0
+    for _ in range(300):
+        r.draw_fight(fight, fight.step({}))
+        if tuple(surface.get_at((INTERNAL_WIDTH - 5, INTERNAL_HEIGHT - 5)))[:3] == BSOD_BLUE:
+            blue += 1
+            dos, rival = fight.fighters["p1"], fight.fighters["p2"]
+            assert dos.action == "attack" and dos.move is not None, blue
+            assert rival.action == "knockdown", blue
+        elif blue:
+            break
+    assert blue >= 25

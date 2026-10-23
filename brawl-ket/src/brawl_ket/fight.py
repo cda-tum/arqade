@@ -372,6 +372,8 @@ class Fight:
                     events.append(Event("shockwave", key, error, f.x, FLOOR_Y))
                 if kind == "land" and f.action == "attack" and f.move is not None and f.move.crash is not None:
                     events.append(Event("bsod_land", key, None, f.x, FLOOR_Y))
+                    if f.move_hit:              # ... on someone: the full blue screen (render.py)
+                        events.append(Event("bsod_crash", key, None, f.x, FLOOR_Y))
 
     def _fire(self, key: str, events: list[Event]) -> None:
         """SUPERposition: the bar empties and the fight freezes SUPER_FREEZE frames for the call
