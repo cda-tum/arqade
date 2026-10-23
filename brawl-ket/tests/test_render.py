@@ -1828,3 +1828,38 @@ def test_the_beam_narrows_away_after_its_last_hit(surface):
             break
     assert seen and seen[0] > 20 and seen[len(seen) // 2] > 0       # still there well into the recovery
     assert seen == sorted(seen, reverse=True)                       # and narrowing
+
+
+def test_each_nine_lives_ghost_shows_before_it_dashes_in():
+    """Section 9: each ghost is visible on its side before it pounces: it appears GHOST_WAIT frames
+    out at GHOST_OFF px, then dashes onto the rival as its hit lands."""
+    from brawl_ket.moves import NINE_LIVES
+    from brawl_ket.render import GHOST_OFF, GHOST_WAIT, nine_ghosts
+    target = 300.0
+    every = NINE_LIVES.hit_every
+    assert GHOST_WAIT >= 4 and GHOST_OFF >= 70
+    for k in range(NINE_LIVES.hits):
+        lands = k * every                               # the frame into the active ones its hit lands
+        side = 1 if k % 2 else -1
+        for into in range(lands - every + 1, lands - every + 1 + GHOST_WAIT):
+            xs = [x for x, _, n in nine_ghosts(NINE_LIVES, into, target) if n == k]
+            assert xs and abs(xs[0] - (target + side * GHOST_OFF)) < 1, (k, into)     # waiting, out there
+        (x, facing, _), = [g for g in nine_ghosts(NINE_LIVES, lands, target) if g[2] == k]
+        assert abs(x - target) <= 12 and facing == -side                             # on them as it lands
+    assert nine_ghosts(NINE_LIVES, NINE_LIVES.hits * every + 20, target) == []
+
+
+def test_nine_lives_draws_its_ghosts_from_the_startup(surface, monkeypatch):
+    from brawl_ket import render as R
+    from brawl_ket.moves import NINE_LIVES
+
+    def region():
+        for n, events, fight in super_run(surface, "ERWIN", rival_x=270.0):
+            f = fight.fighters["p1"]
+            if f.move is NINE_LIVES and f.phase == "startup" and f.frame == f.startup - 2:
+                x = round(fight.fighters["p2"].x) - R.GHOST_OFF
+                return pygame.image.tostring(surface.subsurface((x - 30, FLOOR_Y - 120, 60, 120)), "RGB")
+        raise AssertionError("no startup frame")
+    with_ghost = region()
+    monkeypatch.setattr(R, "nine_ghosts", lambda *a: [])
+    assert region() != with_ghost                   # the first ghost, waiting on its side

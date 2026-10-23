@@ -744,15 +744,15 @@ COHERENT_BEAM = Move(
     cue="beam", poses=("throw_reach", "throw_reach", "throw_reach"),
 )
 # ERWIN: NINE LIVES. Into THE BOX, which splits into nine ERWINs round a rival within 160 px:
-# eight ghost pounces, LOW, 2 each; then the real one warps in and swipes (14, a knockdown).
+# eight ghost pounces, LOW, 2 each, one every 14 frames (section 9: every 8 didn't read); then the real one warps in and swipes (14, a knockdown).
 NINE_SWIPE = Move(
     "NINE LIVES", 2, 6, 30, Box(10, 20, 60, 90), BOTH, MID,
     damage=14, hitstun=30, knockback=3.0, knockdown=True, kind="super", warp=40,
     cue="swipe", poses=("swipe", "swipe", "idle"),
 )
 NINE_LIVES = Move(
-    "NINE LIVES", 10, 64, 1, Box(-40, 0, 80, 40), BOTH, LOW,
-    damage=2, hitstun=14, knockback=0.0, kind="super", hit_every=8, hits=8,
+    "NINE LIVES", 10, 8 * 14, 1, Box(-40, 0, 80, 40), BOTH, LOW,
+    damage=2, hitstun=14, knockback=0.0, kind="super", hit_every=14, hits=8,
     lock=0, lock_range=160, remote=True, follow=NINE_SWIPE, cue="ghosts",
     poses=("box_duck", "box_duck", "box_duck"),
 )

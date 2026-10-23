@@ -145,6 +145,9 @@ FALL_FROM = 56              # ... their lowest end from just under the HUD (the 
 LINGER_STAY = 40            # a super's last art stays this long after it lands (section 9) ...
 LINGER_FADE = 12            # ... then fades out over this long
 LINGERS = {"collapse": "pillar", "fridge": "fridge", "h_gate": "h_gate", "swipe": "claws", "padlock": "padlock"}
+GHOST_OFF = 90              # NINE LIVES: each ghost shows up this far out on its side of the rival ...
+GHOST_WAIT = 6              # ... waits there this long, then dashes in, landing as its hit does ...
+GHOST_PAST = 4              # ... and carries on through them this long
 BLOCH_R = 50                # BLOCH SPHERE's radius: its hitbox is 100 px across and tall
 BSOD_SCREEN_FRAMES = 30     # the BLUE SCREEN's drop: the whole screen blue this long, then CRASH!
 SWITCH_FLASH_FRAMES = 8     # a switch (an H): the body flashes white as its colour changes
@@ -604,6 +607,23 @@ class Effect:
     color: tuple = P.WHITE
     text: str = ""
     facing: int = 1
+
+
+def nine_ghosts(m, into: int, target: float) -> list[tuple[float, int, int]]:
+    """NINE LIVES' ghosts on screen `into` frames into its active ones (< 0: its startup), round a
+    rival at `target`: (x, facing, which pounce). Pounce n lands n * hit_every frames in, from
+    alternating sides; it shows up hit_every - 1 frames before, waits GHOST_WAIT frames out at
+    GHOST_OFF px, then dashes in and through."""
+    every, dash = m.hit_every, m.hit_every - 1 - GHOST_WAIT
+    out = []
+    for n in range(m.hits):
+        t = into - ((n - 1) * every + 1)                # frames since it showed up
+        if not 0 <= t <= every - 1 + GHOST_PAST:
+            continue
+        side = 1 if n % 2 else -1
+        off = GHOST_OFF if t < GHOST_WAIT else GHOST_OFF * (1 - (t - GHOST_WAIT) / dash)
+        out.append((target + side * off, -side, n))
+    return out
 
 
 @dataclass
@@ -1128,10 +1148,12 @@ class Renderer:
                         SA.beam(surf, hands[0], f.facing, colour, t=self.t, k=k)
                         SA.flare(surf, hands, round(34 * k), colour)
             elif m.name == "NINE LIVES" and m.hits:
+                on = rival.x + ox if target is None else target    # (the lock comes as the box splits)
+                if f.phase == "startup" or target is not None:
+                    for x, facing, n in nine_ghosts(m, into, on):
+                        t = into - ((n - 1) * m.hit_every + 1)      # frames since it showed up
+                        self._ghost(x, facing, colour, alpha=min(150, 60 + 18 * t))
                 if f.phase == "active" and target is not None:
-                    side = 1 if (into // m.hit_every) % 2 else -1
-                    gx = target + side * (70 - (into % m.hit_every) * 6)
-                    self._ghost(gx, -side, colour)
                     SA.counter(surf, (target, FLOOR_Y - 180 + oy), f"{min(f.hit_count + 1, 8)}/9")
             elif m.name == "DILUTION FRIDGE" and m.follow is not None:
                 if f.phase == "startup" and target is None:
@@ -1222,13 +1244,13 @@ class Renderer:
         layer.set_alpha(alpha)
         self.surface.blit(layer, (0, 0))
 
-    def _ghost(self, x: float, facing: int, colour) -> None:
+    def _ghost(self, x: float, facing: int, colour, alpha: int = 150) -> None:
         """One of NINE LIVES' ghost ERWINs, pouncing: see-through and pale."""
         layer = self._ghost_layer
         layer.fill((0, 0, 0, 0))
         draw_puppet(layer, POSES["pounce"], "cat", (160, 300), facing, P.lighten(colour, 0.45),
                     ACCENT.get("ERWIN", P.CREAM), 0.0)
-        layer.set_alpha(150)
+        layer.set_alpha(alpha)
         self.surface.blit(layer, (round(x) - 160, FLOOR_Y - 300))
 
     def _fighter(self, key: str, f: Fighter, ox: int, oy: int) -> tuple[float, float]:

@@ -655,6 +655,21 @@ def test_nine_lives_eight_pounces_then_the_swipe_from_right_in_front():
     assert abs(fight.fighters["p1"].x - (420.0 - NINE_SWIPE.warp)) <= 4     # (the push box nudges)
 
 
+def test_nine_lives_pounces_every_14_frames():
+    """Section 9: slower, so every ghost pounce reads (it was every 8)."""
+    assert NINE_LIVES.hit_every == 14 and NINE_LIVES.hits == 8
+    assert NINE_LIVES.active >= NINE_LIVES.hit_every * (NINE_LIVES.hits - 1) + 1
+    fight = fight_of(CHARACTERS["ERWIN"], ROBERT, 120.0)
+    fire(fight)
+    erwin = fight.fighters["p1"]
+    frames = []
+    for _ in range(300):
+        events = fight.step({})
+        if erwin.move is NINE_LIVES and any(e.kind == "hit" and e.player == "p2" for e in events):
+            frames.append(erwin.frame)
+    assert len(frames) == 8 and {b - a for a, b in zip(frames, frames[1:])} == {14}
+
+
 def test_nine_lives_misses_a_rival_out_of_its_reach():
     fight = landed("ERWIN", gap=NINE_LIVES.lock_range + 30.0)
     assert fight.fighters["p2"].health == ROBERT.health
