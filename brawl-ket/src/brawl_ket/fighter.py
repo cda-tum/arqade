@@ -118,6 +118,9 @@ class Fighter:
         self.super_ready = False        # SUPERposition: the bar is full (the fight sets it every frame)
         self.glitch = 0                 # BLUE SCREEN OF DEATH: frames left of the frozen, glitching look
         self.target_x: float | None = None  # a super's lock: where the rival stood (None: none, or a miss)
+        self.seek_x: float | None = None    # BLUE SCREEN OF DEATH on a rival frozen in the air: the x his
+                                            # leap stops over, to drop straight down on them ...
+        self.drop_air = False               # ... and then the drop is live all the way down
         self.hit_count = 0                  # times the move in progress has hit (the fight counts)
 
     # --- derived state ----------------------------------------------------------------
@@ -436,6 +439,8 @@ class Fighter:
     def _move_effects(self, m: Move, events: list) -> None:
         if m.lock >= 0 and self.frame == self.startup - m.lock:     # a super locks on: the fight decides
             events.append(("lock", {"move": m}))
+        if m.seek and self.seek_x is not None and self.vx and (self.x - self.seek_x) * self.vx >= 0:
+            self.x, self.vx = self.seek_x, 0.0      # over the frozen rival: straight down from here
         if self.phase == "active":
             if self.frame == self.startup:
                 if m.superpose:         # THE BOX: one cat, two boxes
@@ -596,6 +601,7 @@ class Fighter:
         self.move_hit = False
         self.hit_count = 0
         self.target_x = None
+        self.seek_x, self.drop_air = None, False
         self.bounced = False
         self.buffer = []            # an older press must not fire a cancel nobody made
         self.chain = self.chain + 1 if cancel else 1
@@ -700,6 +706,9 @@ class Fighter:
             self.collapse(0 if self.rng.random() < 0.5 else 1, True, events)
 
     def _physics(self, events: list) -> None:
+        if self.glitch > 0:             # frozen by a BLUE SCREEN: where it stands, or hangs in the air
+            self.vx = self.vy = 0.0
+            return
         landed = False
         if self.hovering:               # LASER: she hangs in the air while she aims and fires
             self.vy = 0.0

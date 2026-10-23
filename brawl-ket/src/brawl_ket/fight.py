@@ -415,21 +415,32 @@ class Fight:
             body.take_hit(m.lock_hold, basis.Y, f.facing)
 
     def _crash(self, key: str, f: Fighter, hold: Move, events: list[Event]) -> None:
-        """BLUE SCREEN OF DEATH: every rival body on the ground within CRASH_REACH is frozen (the
-        hold: no damage, no push) and glitches; one in the air, beyond it, down, getting up or
-        out of reach (TUNNEL, THE BOX) is not. With nobody frozen, DOS comes down where he stands."""
-        frozen = False
+        """BLUE SCREEN OF DEATH: every rival body within CRASH_REACH is frozen (the hold: no damage,
+        no push) and glitches, on the ground or in the air (the user's ruling: a crash stops
+        everything; one frozen in the air hangs there); one beyond it, down, getting up or out of
+        reach (TUNNEL, THE BOX) is not. DOS's leap is re-aimed over the highest body frozen in the
+        air, to drop straight down on it. With nobody frozen, he comes down where he stands."""
+        frozen: list[Fighter] = []
         for body in self.bodies(_other(key)):
-            if body.y > 0 or abs(body.x - f.x) > CRASH_REACH or body.action == "knockdown" \
+            if abs(body.x - f.x) > CRASH_REACH or body.action == "knockdown" \
                     or body.wakeup or body.intangible or body.boxed:
                 continue
             body.take_hit(hold, basis.Y, f.facing)
+            body.vx = body.vy = 0.0
             body.glitch = hold.hitstun
-            frozen = True
-            events.append(Event("crash", _other(key), None, body.x, FLOOR_Y - 140))
+            frozen.append(body)
+            events.append(Event("crash", _other(key), None, body.x, FLOOR_Y - body.y - 140))
         if not frozen:
             f.vx = 0.0
             events.append(Event("crash", None, None, f.x, FLOOR_Y))
+        aloft = [b for b in frozen if b.y > 0]
+        if aloft:
+            b = max(aloft, key=lambda b: b.y)
+            g = f.char.gravity
+            rise = max(20.0, b.y + 30 - f.y)        # his drop meets their legs (and he stays on screen)
+            f.vy = (2 * g * rise) ** 0.5
+            f.vx = (b.x - f.x) * g / f.vy           # at them at the top of the leap ...
+            f.seek_x, f.drop_air = b.x, True        # ... then straight down (Fighter._move_effects)
 
     def _lock(self, key: str, f: Fighter, m: Move, events: list[Event]) -> None:
         """A super locks on: its target is where the rival stands now, unless the rival is out of
@@ -844,8 +855,8 @@ class Fight:
             return
         if m.remote and f.target_x is None:         # a super's lock that missed: nothing to hit
             return
-        if m.seek and f.frame < f.startup + m.seek - 1 - CRASH_LIVE:    # a leap's drop: only as it comes down
-            return
+        if m.seek and (f.vy >= 0 if f.drop_air else f.frame < f.startup + m.seek - 1 - CRASH_LIVE):
+            return          # a leap's drop: only as it comes down (on the ground, its last frames)
         for rival in targets:
             if rival.action == "knockdown" or rival.wakeup or rival.intangible:   # downed, getting up, gone
                 continue

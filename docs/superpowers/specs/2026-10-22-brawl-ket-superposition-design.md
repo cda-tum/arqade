@@ -127,8 +127,9 @@ from `brawl-ket/` with an output path; it draws variant A on the left, B on the 
 
 - **The crash:** startup 8. The stage stays as it is. A blue strip runs along the floor about
   200 px either side of DOS, his reach.
-  - Every rival on the ground inside it is **frozen** for 40 frames: tinted blue-white, sliced
-    into rows that jitter sideways.
+  - Every rival inside it is **frozen** for 40 frames: tinted blue-white, sliced into rows that
+    jitter sideways. Since the second playtest (section 9), one in the air is frozen too, hanging
+    where it was.
   - A small classic error window pops up over the frozen rival's head: a grey title bar
     **FATAL EXCEPTION**, then white on blue `ROBERT.EXE has` / `stopped responding` (their
     name), and an **OK** button.
@@ -137,7 +138,8 @@ from `brawl-ket/` with an output path; it draws variant A on the left, B on the 
   frame 40: 25, MID, a knockdown. The moment it lands, the **whole screen flashes BSOD blue
   for one frame**, then a white CRASH! burst.
 - If no one was frozen, DOS does the leap and drop in place (a whiff).
-- **Dodge:** be in the air when the screen strip appears, or further than 200 px away.
+- **Dodge:** be further than 200 px away (since the second playtest, section 9: a jump is frozen
+  too, and the drop comes down on it).
 - Recovery 30, his long landing.
 - It is also the BLUE SCREEN idea cut from his first kit (`2026-10-21-brawl-ket-erwin-dos-design.md`).
 
@@ -254,3 +256,12 @@ the bots and the look.
   about three sure hits with little the rival could do about it, because every jab (stand.A and
   crouch.A) cancelled into a jab. Now a jab never cancels into a jab, standing or crouching; a
   landed jab still cancels into a heavy (B), and into anything else it cancelled into before.
+
+### The second playtest (2026-10-23)
+
+The user found two supers trivially dodged by holding up through the 45-frame call: the held stick
+jumps the rival on the call's first frame after.
+
+- **BLUE SCREEN OF DEATH: a crash stops everything.** Anyone within its 200 px reach is frozen, in
+  the air too: frozen mid-jump, they hang where they were (glitched, under the window), and DOS's
+  leap is re-aimed over them to drop straight down on them. The only dodge is distance.

@@ -1987,3 +1987,11 @@ def test_the_falling_pillar_reuses_its_columns(surface):
         SA.pillar(surface, 320, (0, 200, 0))
     info = SA._column.cache_info()
     assert info.currsize <= 6 and info.hits > 100
+
+
+def test_an_error_window_never_goes_under_the_hud():
+    from brawl_ket.dos import WINDOW_H
+    from brawl_ket.render import WINDOW_TOP, window_at
+    assert window_at(300.0, 200.0) == (300.0, 200.0)                # over the head, as ever
+    x, bottom = window_at(300.0, FLOOR_Y - 120 - 140)               # one frozen high in the air
+    assert bottom - WINDOW_H >= WINDOW_TOP and x != 300.0

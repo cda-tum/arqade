@@ -61,7 +61,11 @@ def test_bots_are_deterministic(pairing):
 # 10 seeds a side can all go his way: a character's edge, not a side's, for the user to decide
 LOPSIDED = {("ROBERT", "ERWIN"): "ERWIN wins about 85% against ROBERT", ("ERWIN", "ROBERT"): "ERWIN wins about 85% against ROBERT",
             ("DOS", "ALICE & BOB"): "DOS wins about 79% against ALICE & BOB",
-            ("ALICE & BOB", "DOS"): "DOS wins about 79% against ALICE & BOB"}
+            ("ALICE & BOB", "DOS"): "DOS wins about 79% against ALICE & BOB",
+            ("PHOEBE", "DOS"): "DOS's BLUE SCREEN, which a jump no longer dodges",
+            ("DOS", "PHOEBE"): "DOS's BLUE SCREEN, which a jump no longer dodges",
+            ("M-CUTIE", "DOS"): "DOS's BLUE SCREEN, which a jump no longer dodges",
+            ("DOS", "M-CUTIE"): "DOS's BLUE SCREEN, which a jump no longer dodges"}
 SIDE_CASES = [pytest.param(p, marks=[pytest.mark.xfail(reason=LOPSIDED[p], strict=False)]
                            if p in LOPSIDED else []) for p in PAIRINGS]
 
@@ -436,7 +440,7 @@ def test_not_with_the_rival_out_of_reach_or_in_the_air():
         assert not (inp.a and inp.b)
 
 
-def test_a_bot_jumps_away_from_a_blue_screen_winding_up_in_reach(monkeypatch):
+def test_a_bot_walks_out_of_a_blue_screens_reach(monkeypatch):
     import brawl_ket.bot as bot_module
     from brawl_ket.moves import BLUE_SCREEN, CHARACTERS
     monkeypatch.setattr(bot_module, "SUPER_DODGE_ODDS", 1.0)
@@ -445,7 +449,7 @@ def test_a_bot_jumps_away_from_a_blue_screen_winding_up_in_reach(monkeypatch):
     dos = fight.fighters["p2"]
     dos.action, dos.move, dos.slot, dos.frame = "attack", BLUE_SCREEN, "super", 1
     inp = Bot("p1", 1).input(fight)
-    assert inp.up and inp.dx == -1
+    assert not inp.up and inp.dx == -1      # (a jump is frozen too: only distance dodges it)
 
 
 @pytest.mark.parametrize("name,gap", [("ROBERT", 150.0), ("BOHR", 400.0), ("PHOEBE", 300.0),

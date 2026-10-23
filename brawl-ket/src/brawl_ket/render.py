@@ -639,6 +639,19 @@ def linger_rect(lg, ox: int) -> pygame.Rect:
     return pygame.Rect(x - 40, FLOOR_Y - 220, 160, 200)      # the claws and 9/9
 
 
+WINDOW_TOP = 58             # the BLUE SCREEN's error windows stay below the HUD
+
+
+def window_at(x: float, bottom: float) -> tuple[float, float]:
+    """Where a frozen body's error window goes (its midbottom): over its head, or, for one frozen
+    high in the air, beside it, towards the middle, so the HUD never covers it."""
+    from .dos import WINDOW_H, WINDOW_W
+    if bottom - WINDOW_H >= WINDOW_TOP:
+        return x, bottom
+    side = 1 if x < W / 2 else -1
+    return x + side * (WINDOW_W // 2 + 30), WINDOW_TOP + WINDOW_H
+
+
 @dataclass
 class Linger:
     """A super's art left on screen after its last hit (the pillar, the fridge, the H gate, the
@@ -1107,7 +1120,7 @@ class Renderer:
         rect.midbottom = (round(f.x), FLOOR_Y - round(f.y) + 8)
         rect = rect.clip(self._glitch.get_rect())
         self.surface.blit(glitch_layer(self._glitch, rect, self.t), rect)
-        self._windows.append((f.x, FLOOR_Y - f.y - 140, exe_name(f)))    # over everyone: drawn after the bodies
+        self._windows.append((*window_at(f.x, FLOOR_Y - f.y - 140), exe_name(f)))  # over everyone: after the bodies
         return out
 
     def _super_body(self, f: Fighter, body, ox: int, oy: int):

@@ -343,7 +343,8 @@ def test_he_lands_about_crash_leap_frames_after_the_crash():
     assert dos.phase == "recovery"
 
 
-def test_a_rival_in_the_air_is_not_frozen_and_he_drops_where_he_stands():
+def test_a_rival_in_the_air_is_frozen_where_they_hang_and_the_drop_comes_down_on_them():
+    """The user's ruling (second playtest): a crash stops everything, mid-jump too."""
     fight = fight_of(DOS, ROBERT, 150.0)
     full(fight)
     fight.step({"p1": AB})
@@ -351,10 +352,14 @@ def test_a_rival_in_the_air_is_not_frozen_and_he_drops_where_he_stands():
         fight.step({})
     fight.step({"p2": FighterInput(up=True)})           # up in its startup
     events = run(fight, STARTUP - 1)
-    assert [e.player for e in events if e.kind == "crash"] == [None]
-    x = fight.fighters["p1"].x
-    run(fight, CRASH_LEAP + 4)
-    assert fight.fighters["p1"].x == x
+    rival = fight.fighters["p2"]
+    assert [e.player for e in events if e.kind == "crash"] == ["p2"] and rival.y > 20
+    y, x = rival.y, rival.x
+    for _ in range(10):
+        fight.step({})
+        assert (rival.y, rival.x) == (y, x) and rival.glitch > 0      # hanging there, frozen
+    events = run(fight, CRASH_LEAP + 30)
+    assert rival.health == ROBERT.health - BLUE_SCREEN.damage and "bsod_crash" in kinds(events)
 
 
 def test_a_rival_out_of_reach_is_not_frozen():
@@ -817,3 +822,39 @@ def test_filling_a_bar_up_keeps_its_halves():
     for m, halves in ((two, (Z, X)), (one, (Z,))):
         m.fill_up()
         assert m.full and m.halves == halves
+
+
+# --- the second playtest (2026-10-23): a rival holding up through the call dodged both -------------
+
+
+def held_up_through_the_call(name: str, side: str, gap: float) -> tuple[Fight, list]:
+    """`name` fires on `side`; the rival holds up from the press on, as the playtest's did (the call
+    drops their input, the held stick jumps them on its first frame after, and again on landing)."""
+    other = "p2" if side == "p1" else "p1"
+    fight = Fight({side: CHARACTERS[name], other: ROBERT}, seed=1)
+    fight.fighters[side].x = 200.0 if side == "p1" else 440.0
+    fight.fighters[other].x = fight.fighters[side].x + (gap if side == "p1" else -gap)
+    fight.meters[side].fill_up()
+    events = fight.step({side: AB})
+    for _ in range(SUPER_FREEZE + 160):
+        events += fight.step({other: FighterInput(up=True)})
+    return fight, events
+
+
+@pytest.mark.parametrize("side", ["p1", "p2"])
+@pytest.mark.parametrize("gap", [100.0, 180.0])
+def test_holding_up_through_the_call_doesnt_dodge_the_blue_screen(side, gap):
+    """The user's ruling: a crash stops everything, so anyone within its reach is frozen, in the air
+    too, and the drop comes down on them where they hang."""
+    fight, events = held_up_through_the_call("DOS", side, gap)
+    other = "p2" if side == "p1" else "p1"
+    assert [e.player for e in events if e.kind == "crash"] == [other]
+    assert fight.fighters[other].health == ROBERT.health - BLUE_SCREEN.damage
+    assert "bsod_crash" in kinds(events)
+
+
+@pytest.mark.parametrize("side", ["p1", "p2"])
+def test_only_distance_dodges_the_blue_screen(side):
+    fight, events = held_up_through_the_call("DOS", side, CRASH_REACH + 30.0)
+    other = "p2" if side == "p1" else "p1"
+    assert fight.fighters[other].health == ROBERT.health

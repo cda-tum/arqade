@@ -288,8 +288,8 @@ class Bot:
             and not rival.intangible and rival.action != "knockdown"
 
     def _dodge_super(self, me, rival, toward: int, dist: float) -> FighterInput | None:
-        """Get out of a rival's super, the way each one is dodged (a chance a frame): jump away from
-        a BLUE SCREEN winding up, jump the BLOCH SPHERE rolling in (waiting until it is close enough
+        """Get out of a rival's super, the way each one is dodged (a chance a frame): walk away from
+        a BLUE SCREEN winding up (only distance dodges it), jump the BLOCH SPHERE rolling in (waiting until it is close enough
         that the jump's top meets it) and the COHERENT BEAM as it
         fires, walk off a WAVEFUNCTION COLLAPSE's or DILUTION FRIDGE's locked ring, back off from
         NINE LIVES and ONE-TIME PAD winding up."""
@@ -303,7 +303,7 @@ class Bot:
         if self.rng.random() >= SUPER_DODGE_ODDS * self.dodge:
             return None
         if m.crash is not None and rival.phase == "startup" and dist <= CRASH_REACH + 10:
-            return FighterInput(up=True, dx=-toward)
+            return FighterInput(dx=-toward)     # out of its reach: a jump is frozen too
         if m.name == "COHERENT BEAM" and rival.phase == "startup" and rival.frame >= rival.startup - 3:
             return FighterInput(up=True)
         if m.remote and m.lock > 0 and rival.target_x is not None and rival.phase == "startup" \
