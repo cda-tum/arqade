@@ -726,7 +726,7 @@ H_UPPERCUT = Move(
 BLOCH_SPHERE = Move(
     "BLOCH SPHERE", 8, 50, 1, Box(-50, 0, 100, 100), BOTH, MID,
     damage=5, hitstun=16, knockback=1.0, kind="super", hit_every=6, hits=4, lunge=6.0,
-    hurt_active=Box(-30, 0, 60, 60), follow=H_UPPERCUT, cue="bloch",
+    hurt_active=Box(-50, 0, 100, 100), follow=H_UPPERCUT, cue="bloch",
     poses=("brace", "crouch", "crouch"),
 )
 # BOHR: WAVEFUNCTION COLLAPSE. A probability cloud spreads over the floor; 12 frames before it

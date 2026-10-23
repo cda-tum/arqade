@@ -1956,3 +1956,10 @@ def test_the_h_gate_lingers_only_when_the_uppercut_lands(surface, jump_at, linge
         r.draw_fight(fight, fight.step({"p2": FighterInput(up=t == jump_at)}))
         kinds_seen |= {lg.kind for lg in r.lingers}
     assert ("h_gate" in kinds_seen) == lingers
+
+
+def test_robert_rolling_is_hurt_where_his_sphere_is_drawn():
+    from brawl_ket.moves import BLOCH_SPHERE
+    from brawl_ket.render import BLOCH_R
+    hurt = BLOCH_SPHERE.hurt_active
+    assert (hurt.x, hurt.y, hurt.w, hurt.h) == (-BLOCH_R, 0, 2 * BLOCH_R, 2 * BLOCH_R)
