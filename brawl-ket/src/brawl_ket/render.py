@@ -144,7 +144,8 @@ FALL_FRAMES = 20            # WAVEFUNCTION COLLAPSE's pillar and DILUTION FRIDGE
 FALL_FROM = 56              # ... their lowest end from just under the HUD (the rest still above the screen)
 LINGER_STAY = 40            # a super's last art stays this long after it lands (section 9) ...
 LINGER_FADE = 12            # ... then fades out over this long
-LINGERS = {"collapse": "pillar", "fridge": "fridge", "h_gate": "h_gate", "swipe": "claws", "padlock": "padlock"}
+LINGERS = {"collapse": "pillar", "fridge": "fridge", "swipe": "claws", "padlock": "padlock"}   # by cue
+LINGER_ON_HIT = {"H-GATE UPPERCUT": "h_gate"}       # ... and these only when they land
 GHOST_OFF = 90              # NINE LIVES: each ghost shows up this far out on its side of the rival ...
 GHOST_WAIT = 6              # ... waits there this long, then dashes in, landing as its hit does ...
 GHOST_PAST = 4              # ... and carries on through them this long
@@ -809,6 +810,7 @@ class Renderer:
         older = [fx for fx in self.effects if fx.kind == "popup"]     # from earlier frames
         for e in events:
             if e.kind == "hit":
+                self._linger_on_hit(e)
                 color = ERROR_COLOUR.get(e.error or basis.X, P.WHITE)
                 self.effects.append(Effect("spark", e.x, e.y, SPARK_FRAMES, SPARK_FRAMES, color))
                 # the newest wins: an older pop-up still rising here would sit over this one
@@ -1202,9 +1204,17 @@ class Renderer:
         kind = LINGERS.get(e.kind)
         if m is None or kind is None or m.kind != "super" or m.cue != e.kind:
             return
-        x = f.x if kind == "h_gate" else f.target_x
-        if x is not None:
-            self.lingers.append(Linger(kind, x, BASIS_BODY[f.basis], f.facing))
+        if f.target_x is not None:
+            self.lingers.append(Linger(kind, f.target_x, BASIS_BODY[f.basis], f.facing))
+
+    def _linger_on_hit(self, e) -> None:
+        """The H gate stays on only when the uppercut lands (e.player: the one it hit)."""
+        if self._fight is None or not e.player:
+            return
+        f = self._fight.fighters["p2" if e.player == "p1" else "p1"]
+        kind = LINGER_ON_HIT.get(f.move.name) if f.move is not None and f.move.kind == "super" else None
+        if kind is not None:
+            self.lingers.append(Linger(kind, f.x, BASIS_BODY[f.basis], f.facing))
 
     def _draw_lingers(self, ox: int, oy: int) -> None:
         """The lingering art: LINGER_STAY frames as it was, then LINGER_FADE frames fading out."""

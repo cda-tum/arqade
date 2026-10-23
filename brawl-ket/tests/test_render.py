@@ -1937,3 +1937,22 @@ def test_lingers_and_the_blue_screen_wait_while_the_fight_does(surface):
     f.hitstop = 5
     f.step({})
     assert f.ticks == ticks                             # a hitstop frame is no fight frame
+
+
+@pytest.mark.parametrize("jump_at,lingers", [(None, True), (20, False)])
+def test_the_h_gate_lingers_only_when_the_uppercut_lands(surface, jump_at, lingers):
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["ROBERT"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 300.0, 550.0
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}))
+    from brawl_ket.config import SUPER_FREEZE
+    for _ in range(SUPER_FREEZE):
+        r.draw_fight(fight, fight.step({}))
+    kinds_seen = set()
+    for t in range(200):
+        r.draw_fight(fight, fight.step({"p2": FighterInput(up=t == jump_at)}))
+        kinds_seen |= {lg.kind for lg in r.lingers}
+    assert ("h_gate" in kinds_seen) == lingers
