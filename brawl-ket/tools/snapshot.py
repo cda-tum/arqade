@@ -315,7 +315,7 @@ def super_frames(out_dir: str) -> None:
     def fight_of(name: str, x: float, rival_x: float) -> tuple[Fight, Renderer]:
         fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT}, seed=1)
         fight.fighters["p1"].x, fight.fighters["p2"].x = x, rival_x
-        fight.meters["p1"].fill = {b: fight.meters["p1"].cap for b in fight.meters["p1"].fill}
+        fight.meters["p1"].fill_up()
         return fight, Renderer(surface)
 
     def play(fight, r, shots: dict) -> None:

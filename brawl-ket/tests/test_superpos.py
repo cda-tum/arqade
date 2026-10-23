@@ -786,3 +786,12 @@ def test_a_supers_startup_cant_be_hit_so_a_jab_never_wastes_the_bar():
     assert bohr.health == CHARACTERS["BOHR"].health and bohr.move is not None
     run(fight, WAVE_COLLAPSE.startup)
     assert fight.fighters["p2"].health < ROBERT.health      # and it lands
+
+
+def test_filling_a_bar_up_keeps_its_halves():
+    """(tools/benchmark.py and tools/snapshot.py fill bars this way: DOS's stays one colour.)"""
+    two, one = Meter(), Meter()
+    one.one_colour(Z)
+    for m, halves in ((two, (Z, X)), (one, (Z,))):
+        m.fill_up()
+        assert m.full and m.halves == halves

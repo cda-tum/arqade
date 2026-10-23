@@ -62,15 +62,13 @@ def main(argv: list[str]) -> None:
                 times.append(time.perf_counter() - t)
             report(f"{c1.name} v {c2.name}", times[60:])     # the first second warms the text caches
     # SUPERposition: every fighter's super over and over (their bar refilled every frame)
-    from brawl_ket.basis import X_BASIS, Z_BASIS
-    from brawl_ket.superpos import FULL
     for c in chars:
         fight, times = None, []
         for i in range(FRAMES // 3):
             if fight is None or fight.over:
                 fight = Fight({"p1": c, "p2": CHARACTERS["ROBERT"]})
                 bots = {p: Bot(p, i + k) for k, p in enumerate(PLAYERS)}
-            fight.meters["p1"].fill = {Z_BASIS: FULL, X_BASIS: FULL}
+            fight.meters["p1"].fill_up()        # its real halves: DOS's one green bar stays one
             t = time.perf_counter()
             events = fight.step({p: b.input(fight) for p, b in bots.items()})
             renderer.draw_fight(fight, events, {"p1": 0, "p2": 0})

@@ -67,6 +67,11 @@ class Meter:
         """How full b's half is, 0 to 1."""
         return self.fill[b] / self.cap
 
+    def fill_up(self) -> None:
+        """Every half full (the tools' and the tests' shortcut), one colour or two."""
+        for b in self.fill:
+            self.fill[b] = self.cap
+
     def empty(self) -> None:
         for b in self.fill:
             self.fill[b] = 0
