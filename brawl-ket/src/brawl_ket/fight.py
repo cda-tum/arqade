@@ -218,6 +218,9 @@ class Fight:
         self.rng = random.Random(seed)      # THE BOX's 50/50s
         # SUPERposition's bars (superpos.py): the match's, so they carry over between rounds
         self.meters = meters if meters is not None else {"p1": Meter(), "p2": Meter()}
+        for key, char in chars.items():
+            if char.fixed_basis is not None:    # DOS: one green bar
+                self.meters[key].one_colour(char.fixed_basis)
         self.fighters: dict[str, Fighter] = {
             "p1": Fighter(chars["p1"], START_X["p1"], 1),
             "p2": Fighter(chars["p2"], START_X["p2"], -1),
@@ -815,10 +818,9 @@ class Fight:
 
     def _fill(self, key: str, owner: Fighter, defender_key: str, defender: Fighter, damage: int,
               events: list[Event]) -> None:
-        """SUPERposition's bars (superpos.py): the attacker's half of the basis it is in (DOS: the
-        hit's colour, the basis of the one it hurt), and the one hit's own half at half the rate."""
-        half = defender.basis if owner.char.fixed_basis is not None else owner.basis
-        for kind in self.meters[key].dealt(half, damage):
+        """SUPERposition's bars (superpos.py): the attacker's half of the basis it is in (DOS: his one
+        green bar), and the one hit's own half at half the rate."""
+        for kind in self.meters[key].dealt(owner.basis, damage):
             events.append(Event(f"super_{kind}", key))
         for kind in self.meters[defender_key].taken(defender.basis, damage):
             events.append(Event(f"super_{kind}", defender_key))

@@ -81,6 +81,11 @@ OVER_THE_BAR.update({
 OVER_THE_BAR.update({
     ("BOHR", "DOS"): "BOHR wins about 63% against DOS: for the user to decide",
 })
+# ... and with DOS's bar green only (2026-10-23, section 9 of the SUPERposition spec): it fills about
+# twice as fast, and his BLUE SCREEN, which freezes both kids, comes round twice as often
+OVER_THE_BAR.update({
+    ("DOS", "ALICE & BOB"): "DOS wins about 83% against ALICE & BOB: for the user to decide",
+})
 CASES = [pytest.param(p, id="-".join(p), marks=[pytest.mark.xfail(reason=OVER_THE_BAR[p], strict=False)]
                       if p in OVER_THE_BAR else []) for p in PAIRS]
 

@@ -1596,15 +1596,17 @@ class Renderer:
         pygame.draw.rect(surf, P.INK, frame.inflate(4, 4), border_radius=2)
         pygame.draw.rect(surf, P.NIGHT, frame)
         shine = meter.full and (self.t // 6) % 2
-        for i, b in enumerate((basis.Z_BASIS, basis.X_BASIS)):
-            half = pygame.Rect(x0 + i * (SUPER_HALF_W + 2), SUPER_BAR_Y, SUPER_HALF_W, SUPER_BAR_H)
-            fill = round(SUPER_HALF_W * meter.share(b))
+        halves = meter.halves
+        half_w = SUPER_HALF_W if len(halves) > 1 else width    # DOS: one green bar, the whole width
+        for i, b in enumerate(halves):
+            half = pygame.Rect(x0 + i * (SUPER_HALF_W + 2), SUPER_BAR_Y, half_w, SUPER_BAR_H)
+            fill = round(half_w * meter.share(b))
             if fill <= 0:
                 continue
             part = pygame.Rect(half.x, half.y, fill, SUPER_BAR_H)
             if side > 0:
                 part.right = half.right
-            colour = (P.WHITE if i == 0 else P.GOLD) if shine else BASIS_BODY[b]
+            colour = (P.WHITE if i == 0 and len(halves) > 1 else P.GOLD) if shine else BASIS_BODY[b]
             surf.fill(colour, part)
             surf.fill(P.lighten(colour, 0.5), (part.x, part.y, part.w, 1))
         if meter.full and "super" in f.char.extra and (self.t // 12) % 2 == 0:

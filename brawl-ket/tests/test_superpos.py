@@ -78,13 +78,45 @@ def test_the_half_is_the_attackers_basis_not_the_colour_of_the_hit():
     assert fight.meters["p2"].fill == {Z: 8, X: 0}
 
 
-def test_dos_fills_the_half_of_the_hits_colour():
+def test_dos_has_one_green_bar_that_every_hit_he_deals_fills():
+    """Section 9: he is always green, so his bar is one green bar, full when it is (a purple half
+    he could only fill by being hit made it far too slow)."""
     fight = fight_of(DOS, ROBERT, gap=60.0)
+    assert fight.meters["p1"].halves == (Z,) and fight.meters["p2"].halves == (Z, X)
     fight.fighters["p2"].basis = X                  # DOS's B is purple: it hurts purple ROBERT
     until(fight, "hit", {"p1": B})
     dealt = ROBERT.health - fight.fighters["p2"].health
     assert dealt > 0
-    assert fight.meters["p1"].fill == {Z: 0, X: 2 * dealt}
+    assert fight.meters["p1"].fill == {Z: 2 * dealt}
+
+
+def test_dos_is_full_when_his_green_bar_is_and_taking_hits_fills_it_at_half_rate():
+    fight = fight_of(ROBERT, DOS, gap=50.0)
+    until(fight, "hit", {"p1": A})                  # green ROBERT jabs green DOS: 4
+    assert fight.meters["p2"].fill == {Z: 4}
+    m = Meter()
+    m.one_colour(Z)
+    assert m.dealt(Z, 39) == [] and not m.full
+    assert m.dealt(X, 1) == ["half", "full"] and m.full     # a purple hit fills the green bar too
+    m.empty()
+    assert m.fill == {Z: 0}
+
+
+def test_dos_fires_with_only_his_green_bar_full():
+    fight = fight_of(DOS, ROBERT, gap=150.0)
+    fight.meters["p1"].fill[Z] = FULL
+    assert fight.meters["p1"].full
+    assert "super" in kinds(fight.step({"p1": FighterInput(a=True, b=True)}))
+    assert fight.meters["p1"].fill == {Z: 0}
+
+
+def test_a_match_keeps_dos_green_only_bar_from_round_to_round():
+    meters = {"p1": Meter(), "p2": Meter()}
+    meters["p1"].fill[Z] = 30
+    Fight({"p1": DOS, "p2": ROBERT}, seed=1, meters=meters)
+    assert meters["p1"].fill == {Z: 30}
+    Fight({"p1": DOS, "p2": ROBERT}, seed=2, meters=meters)
+    assert meters["p1"].fill == {Z: 30} and meters["p2"].halves == (Z, X)
 
 
 def test_a_blocked_hit_fills_nothing():

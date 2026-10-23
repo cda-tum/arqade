@@ -1441,6 +1441,21 @@ def test_the_super_bar_shows_each_half_in_its_colour(surface):
     assert SUPER_HALF_W // 2 - 4 <= row.count(PURPLE) <= SUPER_HALF_W // 2 + 4    # half the purple
 
 
+def test_dos_bar_is_one_green_bar(surface):
+    from brawl_ket.fight import Fight
+    from brawl_ket.moves import CHARACTERS
+    from brawl_ket.render import SUPER_BAR_H, SUPER_BAR_Y, SUPER_HALF_W
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["DOS"], "p2": ROBERT})
+    fight.meters["p1"].fill[basis.Z_BASIS] = FULL // 2
+    r = Renderer(surface)
+    r.draw_fight(fight, [], {"p1": 0, "p2": 0})
+    y = SUPER_BAR_Y + SUPER_BAR_H // 2
+    row = [tuple(surface.get_at((x, y)))[:3] for x in range(0, INTERNAL_WIDTH // 2)]
+    assert SUPER_HALF_W - 4 <= row.count(GREEN) <= SUPER_HALF_W + 4    # half of the whole width, green
+    assert PURPLE not in row
+
+
 def test_a_full_bar_says_a_plus_b_for_a_fighter_with_a_super(surface):
     from brawl_ket.fight import Fight
     from brawl_ket.moves import CHARACTERS
