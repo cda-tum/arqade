@@ -452,6 +452,28 @@ def test_every_bot_fires_its_super_when_it_will_land(name, gap):
     assert inp.a and inp.b
 
 
+@pytest.mark.parametrize("gap", [200.0, 300.0])
+def test_a_bot_times_its_jump_over_the_bloch_sphere(monkeypatch, gap):
+    """It is 100 px tall and MID: a bot that always dodges jumps late enough to be over it."""
+    import brawl_ket.bot as bot_module
+    from brawl_ket import basis
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import BLOCH_SPHERE, CHARACTERS
+    from brawl_ket.superpos import FULL
+    monkeypatch.setattr(bot_module, "SUPER_DODGE_ODDS", 1.0)
+    fight = Fight({"p1": CHARACTERS["ROBERT"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 150.0, 150.0 + gap
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    bot = Bot("p2", 1)
+    fight.step({"p1": FighterInput(a=True, b=True)})
+    rolls = 0
+    for _ in range(160):
+        events = fight.step({"p2": bot.input(fight)})
+        robert = fight.fighters["p1"]
+        rolls += sum(1 for e in events if e.kind == "hit" and e.player == "p2" and robert.move is BLOCH_SPHERE)
+    assert rolls == 0
+
+
 def test_a_bot_walks_off_a_locked_ring(monkeypatch):
     import brawl_ket.bot as bot_module
     from brawl_ket.moves import CHARACTERS, WAVE_COLLAPSE

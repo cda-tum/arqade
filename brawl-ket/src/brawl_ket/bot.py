@@ -80,6 +80,9 @@ KIDS_STRIKE_ODDS = 0.017
 # away from a BLUE SCREEN OF DEATH winding up in reach, a chance a frame of its startup; and it
 # feints (switches at range) a little more often while one half is full and the other isn't
 SUPER_DODGE_ODDS = 0.1
+BLOCH_JUMP = 135        # ... jumping the BLOCH SPHERE (100 px, MID) this far off: 6 px a frame, it reaches
+                        # the body about 12 frames later, as the jump's feet clear 100 px, and is past
+                        # before they come down
 LOPSIDED_FEINT = 0.06
 # ... and where each super lands: the rival on the ground within this many px
 SUPER_REACH = {"BLUE SCREEN OF DEATH": CRASH_REACH - 20, "BLOCH SPHERE": 260, "WAVEFUNCTION COLLAPSE": 2000,
@@ -284,16 +287,20 @@ class Bot:
 
     def _dodge_super(self, me, rival, toward: int, dist: float) -> FighterInput | None:
         """Get out of a rival's super, the way each one is dodged (a chance a frame): jump away from
-        a BLUE SCREEN winding up, jump the BLOCH SPHERE rolling in and the COHERENT BEAM as it
+        a BLUE SCREEN winding up, jump the BLOCH SPHERE rolling in (waiting until it is close enough
+        that the jump's top meets it) and the COHERENT BEAM as it
         fires, walk off a WAVEFUNCTION COLLAPSE's or DILUTION FRIDGE's locked ring, back off from
         NINE LIVES and ONE-TIME PAD winding up."""
         m = rival.move
-        if rival.action != "attack" or m is None or m.kind != "super" or me.action not in ("idle", "walk", "crouch") \
-                or self.rng.random() >= SUPER_DODGE_ODDS * self.dodge:
+        if rival.action != "attack" or m is None or m.kind != "super" or me.action not in ("idle", "walk", "crouch"):
+            return None
+        if m.name == "BLOCH SPHERE" and dist > BLOCH_JUMP:
+            return FighterInput()       # wait for it: a jump too early comes down into it
+        if self.rng.random() >= SUPER_DODGE_ODDS * self.dodge:
             return None
         if m.crash is not None and rival.phase == "startup" and dist <= CRASH_REACH + 10:
             return FighterInput(up=True, dx=-toward)
-        if m.name == "BLOCH SPHERE" and rival.phase == "active" and dist <= 120:
+        if m.name == "BLOCH SPHERE" and rival.phase == "active" and dist <= BLOCH_JUMP:
             return FighterInput(up=True)
         if m.name == "COHERENT BEAM" and rival.phase == "startup" and rival.frame >= rival.startup - 3:
             return FighterInput(up=True)

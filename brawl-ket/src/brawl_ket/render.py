@@ -140,6 +140,7 @@ POPUP_ROOM = 40             # a new pop-up replaces any older one this close acr
 WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the floor
 WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
 HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
+BLOCH_R = 50                # BLOCH SPHERE's radius: its hitbox is 100 px across and tall
 BSOD_SCREEN_FRAMES = 30     # the BLUE SCREEN's drop: the whole screen blue this long, then CRASH!
 SWITCH_FLASH_FRAMES = 8     # a switch (an H): the body flashes white as its colour changes
 MEASURE_FLASH_FRAMES = 12   # MEASURE: the rival flashes in BOHR's colour as it collapses
@@ -1053,11 +1054,12 @@ class Renderer:
         sphere, ERWIN in his box while his ghosts pounce. None: draw them as ever."""
         m = f.move
         if m.name == "BLOCH SPHERE" and f.phase == "active":
-            c = (f.x + ox, FLOOR_Y - 36 + oy)
+            r = BLOCH_R
+            c = (f.x + ox, FLOOR_Y - r + oy)
             curl = SA.curled(body, f.facing)
-            self.surface.blit(curl, curl.get_rect(center=(round(c[0]), round(c[1]) + 4)))
-            SA.bloch(self.surface, c, 36, body, up=True, spin=(f.frame - f.startup) * 0.35, fill=70)
-            return f.x, FLOOR_Y - 72.0
+            self.surface.blit(curl, curl.get_rect(center=(round(c[0]), round(c[1]) + 6)))
+            SA.bloch(self.surface, c, r, body, up=True, spin=(f.frame - f.startup) * 0.35, fill=70)
+            return f.x, FLOOR_Y - 2.0 * r
         if m.name == "NINE LIVES" and m.hits and f.phase in ("startup", "active"):
             erwin_box(self.surface, round(f.x) + ox, 70, 48, f.facing, body, FLOOR_Y + oy)
             return f.x, FLOOR_Y - 60.0
@@ -1078,7 +1080,8 @@ class Renderer:
             rival = fight.fighters["p2" if key == "p1" else "p1"]
             if m.name == "BLOCH SPHERE" and f.phase == "startup":
                 k = (f.frame + 1) / f.startup
-                SA.bloch(surf, (f.x + ox, FLOOR_Y - 66 + oy), round(20 + 52 * k), colour, spin=0.9, fill=34)
+                SA.bloch(surf, (f.x + ox, FLOOR_Y - BLOCH_R + oy), round(20 + (BLOCH_R - 20) * k), colour,
+                         spin=0.9, fill=34)
             elif m.name == "H-GATE UPPERCUT" and f.frame < 18:
                 SA.h_gate(surf, (f.x + ox + f.facing * 12, FLOOR_Y - f.y - 190 + oy))
                 SA.bloch(surf, (f.x + ox - f.facing * 80, FLOOR_Y - 190 + oy), 52, colour, up=False, spin=1.2, fill=30)

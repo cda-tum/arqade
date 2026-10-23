@@ -1695,3 +1695,24 @@ def test_the_drop_turns_the_whole_screen_blue_with_the_crash_text_then_crash(sur
             break
     assert BSOD_SCREEN_FRAMES - 2 <= blue <= BSOD_SCREEN_FRAMES
     assert any(fx.text == "CRASH!" for fx in r.effects)    # and then the burst
+
+
+def test_the_bloch_sphere_is_drawn_100_px_across(surface):
+    from brawl_ket.config import SUPER_FREEZE
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import BLOCH_SPHERE
+    from brawl_ket.render import BLOCH_R
+    from brawl_ket.superpos import FULL
+    assert 2 * BLOCH_R == BLOCH_SPHERE.hitbox.h
+    fight = Fight({"p1": CHARACTERS["ROBERT"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 150.0, 560.0
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}))
+    for _ in range(SUPER_FREEZE + BLOCH_SPHERE.startup + 4):
+        r.draw_fight(fight, fight.step({}))
+    x = round(fight.fighters["p1"].x)
+    light = P.lighten(BASIS_BODY[fight.fighters["p1"].basis], 0.55)
+    rim = [y for dx in range(-30, 31, 2) for y in range(FLOOR_Y - 130, FLOOR_Y)
+           if tuple(surface.get_at((x + dx, y)))[:3] == light]
+    assert rim and FLOOR_Y - min(rim) >= 2 * BLOCH_R - 4         # its rim, about 100 px up

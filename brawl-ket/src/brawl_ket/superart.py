@@ -90,11 +90,11 @@ def bloch(surf, c, r, colour, up=True, spin=0.4, fill=40) -> None:
 
 @lru_cache(maxsize=8)
 def curled(colour, facing: int) -> pygame.Surface:
-    """ROBERT tucked into a ball, half size, for the inside of the rolling sphere."""
+    """ROBERT tucked into a ball, at 0.7, for the inside of the rolling sphere."""
     from .render import draw_puppet
     layer = pygame.Surface((160, 160), pygame.SRCALPHA)
     draw_puppet(layer, POSES["crouch"], "lean", (80, 150), facing, colour, P.CREAM, 0.0)
-    return pygame.transform.scale_by(layer, 0.5)
+    return pygame.transform.scale_by(layer, 0.7)
 
 
 def h_gate(surf, c, size=28) -> None:

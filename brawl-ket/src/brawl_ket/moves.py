@@ -716,15 +716,15 @@ ALICE_BOB = Character(
 # --- SUPERposition: the six other supers (docs/superpowers/specs/2026-10-22-brawl-ket-superposition-design.md,
 # 4; their look: 2026-10-22-brawl-ket-superposition-looks.py). All BOTH: they hurt either colour.
 
-# ROBERT: BLOCH SPHERE. A Bloch sphere forms round him and he rolls in inside it, LOW (a jump
-# clears it), 4 hits of 5; then an H-gate uppercut (10) flips its arrow to |1>, and him with it.
+# ROBERT: BLOCH SPHERE. A Bloch sphere 100 px across forms round him and he rolls in inside it, MID
+# (section 9: only a jump whose top clears 100 px gets over it), 4 hits of 5; then an H-gate uppercut (10) flips its arrow to |1>, and him with it.
 H_UPPERCUT = Move(
     "H-GATE UPPERCUT", 4, 6, 24, Box(6, 50, 36, 80), BOTH, MID,
     damage=10, hitstun=30, knockback=3.0, knockdown=True, kind="super", switch_self_on_hit=True,
     cue="h_gate", poses=("crouch", "slam", "slam"),
 )
 BLOCH_SPHERE = Move(
-    "BLOCH SPHERE", 8, 50, 1, Box(-33, 0, 66, 66), BOTH, LOW,
+    "BLOCH SPHERE", 8, 50, 1, Box(-50, 0, 100, 100), BOTH, MID,
     damage=5, hitstun=16, knockback=1.0, kind="super", hit_every=6, hits=4, lunge=6.0,
     hurt_active=Box(-30, 0, 60, 60), follow=H_UPPERCUT, cue="bloch",
     poses=("brace", "crouch", "crouch"),

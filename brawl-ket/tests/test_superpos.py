@@ -538,7 +538,6 @@ from brawl_ket.moves import (  # noqa: E402
     BLOCH_SPHERE,
     COHERENT_BEAM,
     DILUTION_FRIDGE,
-    H_UPPERCUT,
     NINE_LIVES,
     NINE_SWIPE,
     ONE_TIME_PAD,
@@ -595,18 +594,33 @@ def test_bloch_sphere_rolls_in_for_4_hits_then_the_uppercut_and_he_switches():
     assert fight.fighters["p1"].basis == X
 
 
-def test_bloch_sphere_rolls_six_px_a_frame_and_a_jump_clears_it():
+def test_bloch_sphere_rolls_six_px_a_frame():
     fight = fight_of(CHARACTERS["ROBERT"], ROBERT, 300.0)
     fire(fight)
     x = fight.fighters["p1"].x
     run(fight, BLOCH_SPHERE.startup + 5)               # its first active frame is the startup's last
     assert fight.fighters["p1"].x == x + 6 * 6
-    fight = fight_of(CHARACTERS["ROBERT"], ROBERT, 150.0)
+
+
+def bloch_jumped_at(frame: int | None, crouch: bool = False) -> int:
+    """How much a ROBERT 250 px off loses to the BLOCH SPHERE, jumping `frame` frames after the
+    call (None: never), or crouching all through it."""
+    fight = fight_of(CHARACTERS["ROBERT"], ROBERT, 250.0)
     fire(fight)
-    run(fight, BLOCH_SPHERE.startup + 8)
-    fight.step({"p2": FighterInput(up=True)})
-    run(fight, 14)
-    assert fight.fighters["p2"].health >= ROBERT.health - H_UPPERCUT.damage    # the roll passed under
+    for t in range(200):
+        fight.step({"p2": FighterInput(up=t == frame, down=crouch)})
+    return ROBERT.health - fight.fighters["p2"].health
+
+
+def test_bloch_sphere_is_100_px_mid_so_only_a_well_timed_jump_clears_it():
+    """Section 9: about 100 px tall and MID, so it can't be crouched, and a jump only clears it if
+    the sphere rolls under its top (every jump peaks at 150 px or more)."""
+    _, _, w, h = fight_of().fighters["p1"].world_box(BLOCH_SPHERE.hitbox)
+    assert (w, h) == (100, 100) and BLOCH_SPHERE.height == MID
+    assert bloch_jumped_at(None, crouch=True) == total(BLOCH_SPHERE)     # it can't be ducked
+    assert bloch_jumped_at(0) >= 2 * BLOCH_SPHERE.damage                 # a jump too early lands in it
+    assert bloch_jumped_at(36) >= 2 * BLOCH_SPHERE.damage                # ... and one too late
+    assert bloch_jumped_at(20) == 0                                      # over it at the top of the jump
 
 
 def test_wavefunction_collapse_falls_where_they_stood_at_the_lock():
