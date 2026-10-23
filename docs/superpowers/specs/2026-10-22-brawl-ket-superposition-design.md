@@ -250,3 +250,7 @@ the bots and the look.
     big crash text, before the CRASH! burst.
 - **ALICE & BOB, ONE-TIME PAD: doesn't work in the build.** Find out why and fix it, so that a
   rival in range on the ground is caught and the six key passes and the padlock play.
+- **A jab no longer chains into a jab** (the same playtest, for every fighter). Mashing A gave
+  about three sure hits with little the rival could do about it, because every jab (stand.A and
+  crouch.A) cancelled into a jab. Now a jab never cancels into a jab, standing or crouching; a
+  landed jab still cancels into a heavy (B), and into anything else it cancelled into before.

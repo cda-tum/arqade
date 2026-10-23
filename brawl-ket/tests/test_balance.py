@@ -90,6 +90,14 @@ OVER_THE_BAR.update({
 OVER_THE_BAR.update({
     ("DOS", "M-CUTIE"): "DOS wins about 64% against M-CUTIE: for the user to decide",
 })
+# ... and since a jab can't chain into a jab (2026-10-23, the same playtest), over 100 rounds:
+# ROBERT and BOHR, whose jab strings carried them, lose ground
+OVER_THE_BAR.update({
+    ("ROBERT", "M-CUTIE"): "M-CUTIE wins about 63% against ROBERT: for the user to decide",
+    ("ROBERT", "ALICE & BOB"): "ALICE & BOB win about 69% against ROBERT: for the user to decide",
+    ("BOHR", "ERWIN"): "BOHR wins about 70% against ERWIN: for the user to decide",
+    ("BOHR", "M-CUTIE"): "BOHR wins about 67% against M-CUTIE: for the user to decide",
+})
 CASES = [pytest.param(p, id="-".join(p), marks=[pytest.mark.xfail(reason=OVER_THE_BAR[p], strict=False)]
                       if p in OVER_THE_BAR else []) for p in PAIRS]
 

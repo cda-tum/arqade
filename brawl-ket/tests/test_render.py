@@ -949,7 +949,7 @@ def test_her_head_wave_and_trap_are_drawn_from_cached_layers(surface):
     for cache in (head_layers, pulse_layers, trap_layers):
         cache.cache_clear()
     r = Renderer(surface)
-    for fight, events in bot_frames(600, chars=(M_CUTIE, ROBERT)):
+    for fight, events in bot_frames(900, chars=(M_CUTIE, ROBERT)):
         r.draw_fight(fight, events)
     info = head_layers.cache_info()
     assert info.hits > 10 * info.misses

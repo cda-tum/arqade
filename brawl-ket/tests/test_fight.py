@@ -153,11 +153,13 @@ def test_hit_event_is_where_the_boxes_overlap():
     assert 200 <= hit.y <= 240      # screen px, y down: the jab is 70..84 up from the floor
 
 
-def test_two_jabs_both_hurt():
+def test_a_jab_pressed_as_the_first_lands_does_not_cancel_into_a_second():
+    """A jab doesn't chain into a jab (the user's playtest, 2026-10-23): the A pressed on the hit
+    is lost, so the rival is out of the jab's hitstun before anything else can land."""
     fight = new()
     events = script(fight, 40, p1={0: A, JAB_HIT_STEP: A})
-    assert kinds(of(events, "hit", "block")) == ["hit", "hit"]
-    assert fight.fighters["p2"].health == 100 - 2 * JAB.damage
+    assert kinds(of(events, "hit", "block")) == ["hit"]
+    assert fight.fighters["p2"].health == 100 - JAB.damage
 
 
 def test_a_throw_hurts_either_colour_and_knocks_down():
@@ -277,10 +279,10 @@ def test_presses_in_hitstop_are_buffered_so_the_chain_cancel_comes_out():
     events = []
     for i in range(80):
         done = len(of(events, "hit")) >= 2
-        inp = A if not done and (i == 0 or fight.hitstop > 0) else IDLE   # A on every hitstop frame
+        inp = A if i == 0 else FighterInput(b=True) if not done and fight.hitstop > 0 else IDLE   # B in the hitstop
         events += fight.step({"p1": inp, "p2": IDLE})
-    assert kinds(of(events, "hit", "block")) == ["hit", "hit"]   # the second jab came out and landed
-    assert fight.fighters["p2"].health == 100 - 2 * JAB.damage
+    assert kinds(of(events, "hit", "block")) == ["hit", "block"]  # the heavy came out (and bounced off green)
+    assert fight.fighters["p1"].chain == 2
 
 
 def test_a_press_in_hitstop_does_not_age():
@@ -1003,7 +1005,7 @@ def jab_reach(c1, c2, crouch=False):
 def test_a_chain_that_starts_with_a_hit_lands_every_hit(c1, c2, crouch):
     lo = round(body_width(c1, c2))
     for gap in range(lo, jab_reach(c1, c2, crouch) + 1, 2):
-        for buttons in (["a", "b"], ["a", "a", "b"]):
+        for buttons in (["a", "b"],):            # (a jab no longer chains into a jab)
             assert run_chain(c1, c2, gap, buttons, crouch) == len(buttons), (gap, buttons)
 
 
@@ -1066,16 +1068,18 @@ def test_switching_is_always_possible():
     assert p1.basis == X_BASIS
 
 
-def test_switching_in_hitstun_turns_the_rest_of_a_string_away():
-    # p2 switches after the first jab of an A, A string: the second (green) jab bounces
+def test_switching_in_hitstun_changes_what_the_rest_of_a_string_does():
+    # p2 switches after the jab of an A, B string: the (purple) heavy that would have bounced off
+    # green now lands
     fight = new()
     p2 = fight.fighters["p2"]
     events = []
     for i in range(60):
         hit_before = len(of(events, "hit"))
         p2_in = Y if hit_before == 1 and p2.basis == Z_BASIS else IDLE
-        events += fight.step({"p1": A if i in (0, JAB_HIT_STEP) else IDLE, "p2": p2_in})
-    assert kinds(of(events, "hit", "block")) == ["hit", "block"]
+        p1_in = A if i == 0 else FighterInput(b=True) if i == JAB_HIT_STEP else IDLE
+        events += fight.step({"p1": p1_in, "p2": p2_in})
+    assert kinds(of(events, "hit", "block")) == ["hit", "hit"]
 
 
 def test_an_attacks_colour_is_fixed_when_it_starts():
@@ -1262,3 +1266,23 @@ def test_mashing_a_normal_is_never_an_infinite(c1, c2):
             for every in (1, 2, 3, 5):
                 best = longest_string(c1, c2, button, crouch, every)
                 assert 1 <= best <= CHAIN_MAX, (button, crouch, every, best)
+
+
+@pytest.mark.parametrize("name", list(CHARACTERS))
+def test_mashing_a_after_a_landed_jab_lands_no_second_jab_before_the_rival_can_act(name):
+    """A jab doesn't cancel into a jab: mashed A comes out again only once the jab is over, and by
+    then the rival is out of its hitstun (ALICE & BOB: Alice's own jabs; Bob's echo is his)."""
+    fight = versus(CHARACTERS[name], ROBERT, 45.0)
+    me, rival = fight.fighters["p1"], fight.fighters["p2"]
+    hits, free_since = 0, True
+    for _ in range(120):
+        was = me.move_hit and me.slot in ("stand.A", "crouch.A")
+        fight.step({"p1": FighterInput(a=True)})
+        if rival.action not in ("hitstun", "knockdown"):
+            free_since = True
+        if me.move_hit and not was and me.slot in ("stand.A", "crouch.A"):
+            assert free_since, (name, hits)             # the rival could act before this one
+            assert me.chain == 1                        # it started from neutral, not as a cancel
+            hits += 1
+            free_since = False
+    assert hits >= 2

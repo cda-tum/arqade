@@ -160,7 +160,7 @@ ROBERT = Character(
         "stand.A": Move(
             "jab", 4, 3, 12, Box(14, 70, 44, 14), OWN, HIGH,
             damage=4, hitstun=12, knockback=0.8, lunge=1.5,
-            cancels=("stand.A", "stand.B", "crouch.A"),
+            cancels=("stand.B",),
             poses=("jab_wind", "jab_hit", "jab_wind"),
         ),
         "stand.B": Move(
@@ -171,7 +171,7 @@ ROBERT = Character(
         "crouch.A": Move(
             "low jab", 4, 3, 13, Box(12, 20, 44, 12), OWN, LOW,
             damage=4, hitstun=12, knockback=0.8, lunge=1.5,
-            cancels=("crouch.A", "crouch.B", "stand.B"),
+            cancels=("crouch.B", "stand.B"),
             poses=("low_wind", "low_hit", "low_wind"),
         ),
         "crouch.B": Move(
@@ -237,7 +237,7 @@ BOHR = Character(
         "stand.A": Move(
             "jab", 6, 3, 14, Box(16, 76, 46, 16), OWN, HIGH,
             damage=4, hitstun=17, knockback=1.0, lunge=1.5,
-            cancels=("stand.A", "stand.B"),
+            cancels=("stand.B",),
             poses=("jab_wind", "jab_hit", "jab_wind"),
         ),
         "stand.B": Move(
@@ -248,7 +248,7 @@ BOHR = Character(
         "crouch.A": Move(
             "low jab", 6, 3, 15, Box(14, 22, 46, 14), OWN, LOW,
             damage=4, hitstun=16, knockback=1.0, lunge=1.5,
-            cancels=("crouch.A", "crouch.B"),
+            cancels=("crouch.B",),
             poses=("low_wind", "low_hit", "low_wind"),
         ),
         "crouch.B": Move(
@@ -324,7 +324,7 @@ PHOEBE = Character(
         "stand.A": Move(
             "jab", 5, 3, 13, Box(14, 84, 60, 14), OWN, HIGH,
             damage=4, hitstun=13, knockback=0.8, lunge=1.5,
-            cancels=("stand.A", "stand.B", "crouch.A"),
+            cancels=("stand.B",),
             poses=("jab_wind", "poke_hit", "jab_wind"),
         ),
         "stand.B": Move(
@@ -335,7 +335,7 @@ PHOEBE = Character(
         "crouch.A": Move(
             "low jab", 5, 3, 14, Box(12, 22, 52, 12), OWN, LOW,
             damage=4, hitstun=13, knockback=0.8, lunge=1.5,
-            cancels=("crouch.A", "crouch.B", "stand.B"),
+            cancels=("crouch.B", "stand.B"),
             poses=("low_wind", "low_hit", "low_wind"),
         ),
         "crouch.B": Move(
@@ -478,7 +478,7 @@ DOS = Character(
         "stand.A": Move(
             "jab", 8, 3, 14, Box(20, 58, 50, 16), OWN, HIGH,
             damage=4, hitstun=17, knockback=1.0, lunge=1.5,
-            cancels=("stand.A", "stand.B"),
+            cancels=("stand.B",),
             poses=("jab_wind", "jab_hit", "jab_wind"),
         ),
         "stand.B": Move(
@@ -489,7 +489,7 @@ DOS = Character(
         "crouch.A": Move(
             "low jab", 8, 3, 15, Box(18, 20, 48, 14), OWN, LOW,
             damage=4, hitstun=16, knockback=1.0, lunge=1.5,
-            cancels=("crouch.A", "crouch.B"),
+            cancels=("crouch.B",),
             poses=("low_wind", "low_hit", "low_wind"),
         ),
         "crouch.B": Move(

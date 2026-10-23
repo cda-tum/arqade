@@ -496,23 +496,25 @@ def test_can_cancel_requires_a_hit_the_right_slot_and_chain_room():
     f = make()
     start_jab(f)
     run(f, IDLE, JAB.startup - 1)
-    assert f.phase == "startup" and not f.can_cancel("stand.A")      # not yet active
+    assert f.phase == "startup" and not f.can_cancel("stand.B")      # not yet active
     run(f)
     assert f.phase == "active"
-    assert not f.can_cancel("stand.A")                               # has not hit
+    assert not f.can_cancel("stand.B")                               # has not hit
     f.move_hit = True
-    assert f.can_cancel("stand.A") and f.can_cancel("stand.B") and f.can_cancel("crouch.A")
+    assert f.can_cancel("stand.B")
+    assert not f.can_cancel("stand.A") and not f.can_cancel("crouch.A")     # a jab never chains into a jab
     assert not f.can_cancel("stand.X")                               # not in cancels
     f.chain = CHAIN_MAX
-    assert not f.can_cancel("stand.A")
+    assert not f.can_cancel("stand.B")
     f.chain = CHAIN_MAX - 1
-    assert f.can_cancel("stand.A")
+    assert f.can_cancel("stand.B")
     g = make()
-    assert not g.can_cancel("stand.A")                               # no move at all
+    assert not g.can_cancel("stand.B")                               # no move at all
 
 
 def test_cancelling_chains_up_to_the_cap():
-    f = make()
+    chainy = replace(JAB, cancels=("stand.A", "stand.B"))     # (no jab of the cast chains into one now)
+    f = Fighter(replace(ROBERT, moves=MappingProxyType({**ROBERT.moves, "stand.A": chainy})), 300.0, 1)
     start_jab(f)
     run(f, IDLE, JAB.startup - 1)
     for expected in range(2, CHAIN_MAX + 1):
@@ -538,11 +540,11 @@ def test_a_move_started_from_neutral_resets_the_chain():
 
 def test_cancel_with_the_press_held_and_move_hit_set_on_the_first_active_frame():
     f = make()
-    start_jab(f)                                      # step 1; the player now holds A
+    start_jab(f)                                      # step 1; the player now holds B
     cancelled_at = None
     for step in range(2, 1 + JAB.active + JAB.recovery + JAB.startup):
-        ev = f.step(tap("a"), FAR)
-        if ("attack", {"slot": "stand.A"}) in ev:
+        ev = f.step(tap("b"), FAR)
+        if ("attack", {"slot": "stand.B"}) in ev:
             cancelled_at = step
             break
         if f.phase == "active" and not f.move_hit:

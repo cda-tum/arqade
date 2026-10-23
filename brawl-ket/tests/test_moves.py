@@ -212,8 +212,8 @@ def test_bohr_frame_data():
 
 def test_bohr_specials():
     moves = CHARACTERS["BOHR"].moves
-    assert moves["stand.A"].cancels == ("stand.A", "stand.B")
-    assert moves["crouch.A"].cancels == ("crouch.A", "crouch.B")
+    assert moves["stand.A"].cancels == ("stand.B",)
+    assert moves["crouch.A"].cancels == ("crouch.B",)
     assert moves["crouch.B"].knockdown and moves["throw"].knockdown
     grab = moves["stand.X"]
     assert (grab.kind, grab.lunge, grab.knockdown) == ("throw", 6.0, True)
@@ -424,3 +424,19 @@ def test_anyone_can_jump_over_anyone():
         assert c.air >= c.walk, c.name
     assert min(reach, key=reach.get) in ("BOHR", "DOS")
     assert min(chars, key=apex).name == "DOS" and max(chars, key=apex).name == "ERWIN"
+
+
+JABS = ("stand.A", "crouch.A", "air.A")
+
+
+def test_no_jab_chains_into_a_jab():
+    """The user's playtest (2026-10-23): mashing A gave about 3 sure hits with little to do about
+    it, because every jab cancelled into a jab. A landed jab still cancels into what else it did."""
+    from brawl_ket.moves import BOB
+    for c in (*CHARACTERS.values(), BOB):
+        for slot in JABS:
+            m = c.moves.get(slot)
+            if m is not None:
+                assert not set(m.cancels) & set(JABS), (c.name, slot, m.cancels)
+    for c in CHARACTERS.values():
+        assert "stand.B" in c.moves["stand.A"].cancels, c.name          # a jab still chains into a heavy
