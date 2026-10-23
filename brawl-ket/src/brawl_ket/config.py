@@ -83,6 +83,11 @@ SUPER_FREEZE = frames(0.75)  # 45 (section 9: up from 30, so the call reads)
 CRASH_REACH = 200
 CRASH_HOLD = 50
 CRASH_LEAP = 40
+# BLOCH SPHERE (the second playtest: holding up through the call cleared it): a rival who takes off
+# more than BLOCH_EARLY frames before the sphere would reach them jumped early, and it hops at them
+# once they are within BLOCH_HOP_REACH px, rising to meet them; a jump as it arrives clears it
+BLOCH_EARLY = 18
+BLOCH_HOP_REACH = 90
 CRASH_LIVE = 3          # ... whose drop hits only in its last frames before the floor: coming down on
                         # them (live for the whole leap, it hit the frozen rival as DOS rose)
 

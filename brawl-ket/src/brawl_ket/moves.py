@@ -116,6 +116,8 @@ class Move:
     follow: Move | None = None          # a move that starts as this one's active frames end (or its
                                         # hits are spent), keeping the target
     warp: int = 0                       # > 0: a follow-up starts this far in front of the target
+    hop: bool = False                   # BLOCH SPHERE: it hops at a rival who jumped early (fight.py,
+                                        # _hop_spheres), and a landing rolls on
 
 
 @dataclass(frozen=True)
@@ -729,7 +731,7 @@ H_UPPERCUT = Move(
 BLOCH_SPHERE = Move(
     "BLOCH SPHERE", 8, 50, 1, Box(-50, 0, 100, 100), BOTH, MID,
     damage=5, hitstun=16, knockback=1.0, kind="super", hit_every=6, hits=4, lunge=6.0,
-    hurt_active=Box(-50, 0, 100, 100), follow=H_UPPERCUT, cue="bloch",
+    hurt_active=Box(-50, 0, 100, 100), follow=H_UPPERCUT, cue="bloch", hop=True,
     poses=("brace", "crouch", "crouch"),
 )
 # BOHR: WAVEFUNCTION COLLAPSE. A probability cloud spreads over the floor; 12 frames before it

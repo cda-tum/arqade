@@ -19,6 +19,8 @@ from dataclasses import dataclass, replace
 
 from . import basis
 from .config import (
+    BLOCH_EARLY,
+    BLOCH_HOP_REACH,
     BLOCK_HITSTOP,
     BODY_MARGIN,
     CRASH_LIVE,
@@ -245,6 +247,7 @@ class Fight:
         self.supers: list[str] = []         # ... whose call it is, and who fired on the same frame after them
         self.super_ko = False               # the round ended on a super
         self._fired: set[str] = set()       # who fired this frame (Bob forgets those presses)
+        self._up = {"p1": False, "p2": False}   # who was in the air last frame (a BLOCH SPHERE's hop)
         self.over = False
         self.winner: str | None = None      # None with over: a draw round
         self._landings: dict[str, _Landing] = {}
@@ -289,6 +292,7 @@ class Fight:
         self._move_tosses(events)       # first: a toss thrown this frame shows in her hand
         self._step_fighters(inputs, events)
         self._push_apart()
+        self._hop_spheres()
         self._move_shots(events)
         self._catch(events)
         self._intercept(events)
@@ -319,6 +323,26 @@ class Fight:
                 late = replace(late, a=False, b=False, x=False)
             echo.rival_boxes = self._reach(_other(key))
             self._fighter_events(key, echo, echo.step(late, start_x[_other(key)]), events)
+
+    def _hop_spheres(self) -> None:
+        """BLOCH SPHERE (the user's ruling after the second playtest): a rival who takes off more than
+        BLOCH_EARLY frames before the sphere would reach them jumped early, and once they are within
+        BLOCH_HOP_REACH px it hops at them, rising to meet them; one who jumps as it arrives sees it
+        roll under them. One hop a jump."""
+        for key, f in self.fighters.items():
+            m, rival = f.move, self.fighters[_other(key)]
+            took_off = rival.y > 0 and not self._up[_other(key)]
+            if f.action == "attack" and m is not None and m.hop and f.phase in ("startup", "active"):
+                ahead = (rival.x - f.x) * f.facing
+                if took_off:            # frames until its front reaches their body
+                    reach = m.hitbox.x + m.hitbox.w + rival.char.hurt_stand.w / 2
+                    arrive = max(0, f.startup - f.frame) + max(0.0, ahead - reach) / m.lunge
+                    f.early_jump = arrive > BLOCH_EARLY
+                if f.early_jump and f.phase == "active" and f.y == 0 and rival.y > 0 \
+                        and 0 < ahead <= BLOCH_HOP_REACH:
+                    f.vy = (2 * f.char.gravity * max(30.0, rival.y)) ** 0.5     # up to where they are
+                    f.early_jump = False
+        self._up = {key: f.y > 0 for key, f in self.fighters.items()}
 
     def _in_super(self, key: str) -> bool:
         """This player's fighter is doing their super (ALICE & BOB: Bob echoes no press meanwhile)."""

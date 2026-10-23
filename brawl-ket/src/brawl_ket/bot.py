@@ -315,7 +315,8 @@ class Bot:
 
     def _dodge_bloch(self, me, rival, dist: float) -> FighterInput | None:
         """The BLOCH SPHERE: decided once a sphere (one roll, BLOCH_TRIES frames' worth of the dodge
-        odds). A bot that will dodge waits for it and jumps at BLOCH_JUMP px; one that won't, and
+        odds). A bot that will dodge waits for it and jumps at BLOCH_JUMP px, as it arrives (an early
+        jump only gets the sphere hopping at it: fight.py, _hop_spheres); one that won't, and
         everyone once it has rolled past, fights on as ever."""
         if (me.x - rival.x) * rival.facing <= 0:
             return None                 # past it (or behind it): nothing to dodge

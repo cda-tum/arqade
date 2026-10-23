@@ -1129,11 +1129,11 @@ class Renderer:
         m = f.move
         if m.name == "BLOCH SPHERE" and f.phase == "active":
             r = BLOCH_R
-            c = (f.x + ox, FLOOR_Y - r + oy)
+            c = (f.x + ox, FLOOR_Y - f.y - r + oy)     # (it hops at a rival who jumped early)
             curl = SA.curled(body, f.facing)
             self.surface.blit(curl, curl.get_rect(center=(round(c[0]), round(c[1]) + 6)))
             SA.bloch(self.surface, c, r, body, up=True, spin=(f.frame - f.startup) * 0.35, fill=70)
-            return f.x, FLOOR_Y - 2.0 * r
+            return f.x, FLOOR_Y - f.y - 2.0 * r
         if m.name == "NINE LIVES" and m.hits and f.phase in ("startup", "active"):
             erwin_box(self.surface, round(f.x) + ox, 70, 48, f.facing, body, FLOOR_Y + oy)
             return f.x, FLOOR_Y - 60.0

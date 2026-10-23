@@ -858,3 +858,34 @@ def test_only_distance_dodges_the_blue_screen(side):
     fight, events = held_up_through_the_call("DOS", side, CRASH_REACH + 30.0)
     other = "p2" if side == "p1" else "p1"
     assert fight.fighters[other].health == ROBERT.health
+
+
+@pytest.mark.parametrize("side", ["p1", "p2"])
+@pytest.mark.parametrize("gap", [150.0, 250.0])
+def test_holding_up_through_the_call_doesnt_dodge_the_bloch_sphere(side, gap):
+    """The user's ruling: the sphere hops after a rival who jumped early, so a jump held through the
+    call comes down on it (or it rises to meet them)."""
+    fight, events = held_up_through_the_call("ROBERT", side, gap)
+    other = "p2" if side == "p1" else "p1"
+    assert ROBERT.health - fight.fighters[other].health >= 2 * BLOCH_SPHERE.damage
+
+
+@pytest.mark.parametrize("side", ["p1", "p2"])
+@pytest.mark.parametrize("gap", [200.0, 300.0])
+def test_a_jump_timed_as_the_sphere_arrives_still_clears_it(side, gap):
+    """... and it stays a dodge you can learn: jump as it arrives (here when it is 135 px off, as the
+    bots do) and it rolls under you."""
+    other = "p2" if side == "p1" else "p1"
+    fight = Fight({side: CHARACTERS["ROBERT"], other: ROBERT}, seed=1)
+    fight.fighters[side].x = 150.0 if side == "p1" else 490.0
+    fight.fighters[other].x = fight.fighters[side].x + (gap if side == "p1" else -gap)
+    fight.meters[side].fill_up()
+    fight.step({side: AB})
+    robert, rival = fight.fighters[side], fight.fighters[other]
+    jumped = False
+    for _ in range(SUPER_FREEZE + 160):
+        go = not jumped and robert.move is BLOCH_SPHERE and robert.phase == "active" \
+            and abs(rival.x - robert.x) <= 135
+        jumped = jumped or go
+        fight.step({other: FighterInput(up=go)})
+    assert jumped and ROBERT.health - rival.health < BLOCH_SPHERE.damage      # no roll landed

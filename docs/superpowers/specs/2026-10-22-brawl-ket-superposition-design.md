@@ -86,7 +86,8 @@ check against the bots and the look.
   jump peaks at 150 px or more since the feel tuning). It hits every 6 frames: 4 hits of 4.
 - It ends with an H-gate uppercut (9, knockdown): the sphere's arrow flips from |0> to |1>,
   and ROBERT switches basis with it, as HADAMARD DIVE does. Recovery 24.
-- **Dodge:** jump over the sphere.
+- **Dodge:** jump over the sphere, as it arrives (since the second playtest, section 9: it hops at
+  a rival who jumped early, so a jump held through the call comes down on it).
 
 ### BOHR: WAVEFUNCTION COLLAPSE
 
@@ -265,3 +266,7 @@ jumps the rival on the call's first frame after.
 - **BLUE SCREEN OF DEATH: a crash stops everything.** Anyone within its 200 px reach is frozen, in
   the air too: frozen mid-jump, they hang where they were (glitched, under the window), and DOS's
   leap is re-aimed over them to drop straight down on them. The only dodge is distance.
+- **BLOCH SPHERE: it hops after a rival who jumps early.** A rival who takes off more than about 18
+  frames before the sphere would reach them jumped early: once they are within about 90 px it hops
+  at them, rising to where they are. A jump timed as it arrives still clears it, so the dodge is
+  real and learnable; a jump held through the call is not one.

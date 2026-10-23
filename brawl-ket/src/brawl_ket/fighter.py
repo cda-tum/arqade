@@ -121,6 +121,7 @@ class Fighter:
         self.seek_x: float | None = None    # BLUE SCREEN OF DEATH on a rival frozen in the air: the x his
                                             # leap stops over, to drop straight down on them ...
         self.drop_air = False               # ... and then the drop is live all the way down
+        self.early_jump = False             # BLOCH SPHERE: the rival jumped while it was far off (fight.py)
         self.hit_count = 0                  # times the move in progress has hit (the fight counts)
 
     # --- derived state ----------------------------------------------------------------
@@ -601,7 +602,7 @@ class Fighter:
         self.move_hit = False
         self.hit_count = 0
         self.target_x = None
-        self.seek_x, self.drop_air = None, False
+        self.seek_x, self.drop_air, self.early_jump = None, False, False
         self.bounced = False
         self.buffer = []            # an older press must not fire a cancel nobody made
         self.chain = self.chain + 1 if cancel else 1
@@ -732,6 +733,8 @@ class Fighter:
         # shockwave, like COLLAPSE's, needs the slam; pressed too late, it lands without one)
         events.append(("land", {"dive": self._diving()}))
         m = self.move
+        if self.action == "attack" and m is not None and m.hop:
+            return                      # BLOCH SPHERE comes down from a hop rolling on
         if self.action == "attack" and m is not None:
             self.vx = 0.0
             if m.dive is not None or m.leap is not None or m.floor_recovery:
