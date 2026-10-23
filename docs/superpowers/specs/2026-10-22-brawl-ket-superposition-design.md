@@ -217,3 +217,36 @@ from `brawl-ket/` with an output path; it draws variant A on the left, B on the 
   dodging, the HUD and the HOW TO PLAY card. The six older fighters' digest changes on purpose.
 - **Attract reels:** they show the game as it was recorded; re-recording them with supers is
   a separate job.
+
+## 9. Changes after the first playtest (2026-10-23)
+
+The user played all seven supers on the cabinet. They like them in general, but they are not
+cinematic enough yet. The targets below are starting values; the build checks them against
+the bots and the look.
+
+- **DOS's bar is green only.** He is always green, so a purple half he can only fill by being
+  hit made his bar far too slow. His bar is one green bar, full when the green half is full.
+  Every other fighter keeps both halves.
+- **Every super is longer and hits harder:**
+  - **The freeze and call:** they last 45 frames, up from 30.
+  - **Damage:** each super deals about 30 in total, up from about 25, still ignoring the colour
+    rule.
+  - **Lingering art:** every super's art stays on screen long enough to read what happened,
+    including after the last hit.
+- **ROBERT, BLOCH SPHERE: harder to dodge.** The sphere is about 100 px tall and hits **MID**,
+  so it can't be crouched. Only a well-timed jump at the top of its arc clears it, since every
+  jump peaks at 150 px or more.
+- **BOHR, WAVEFUNCTION COLLAPSE, and M-CUTIE, DILUTION FRIDGE: you can see what fell.**
+  - The pillar and the fridge **fall over about 20 frames,** visibly, from the top of the screen.
+  - They **stay about 40 frames after landing,** then fade out.
+  - The lock and the dodge are unchanged.
+- **PHOEBE, COHERENT BEAM:** fine as it is. Only the damage change applies.
+- **ERWIN, NINE LIVES: slower, so every ghost pounce reads.** The pounces come every 14 frames
+  instead of 8, and each ghost is visible before it dashes in.
+- **DOS, BLUE SCREEN OF DEATH: the window, and a real blue screen.**
+  - The **"stopped responding" window** agreed in section 4 is shown over the frozen rival for
+    the whole freeze. It is missing in the build.
+  - At the drop, **the whole screen stays BSOD blue for about 30 frames** (not one), with the
+    big crash text, before the CRASH! burst.
+- **ALICE & BOB, ONE-TIME PAD: doesn't work in the build.** Find out why and fix it, so that a
+  rival in range on the ground is caught and the six key passes and the padlock play.
