@@ -80,6 +80,7 @@ KIDS_STRIKE_ODDS = 0.017
 # away from a BLUE SCREEN OF DEATH winding up in reach, a chance a frame of its startup; and it
 # feints (switches at range) a little more often while one half is full and the other isn't
 SUPER_DODGE_ODDS = 0.1
+BLOCH_TRIES = 8         # ... deciding once to dodge it as likely as about 8 frames of SUPER_DODGE_ODDS
 BLOCH_JUMP = 135        # ... jumping the BLOCH SPHERE (100 px, MID) this far off: 6 px a frame, it reaches
                         # the body about 12 frames later, as the jump's feet clear 100 px, and is past
                         # before they come down
@@ -149,6 +150,7 @@ class Bot:
         self.charge_goal = 0            # M-CUTIE: the steps this charge is mashed up to
         self.spin_jump = False          # ... this jump is one to SPIN in (her other jumps don't)
         self.dive_jump = False          # ALICE & BOB: this jump is one to BELL DIVE in
+        self.bloch_plan: bool | None = None     # the BLOCH SPHERE coming: will it dodge (None: undecided)
 
     def input(self, fight: Fight) -> FighterInput:
         me, rival = fight.fighters[self.player], fight.fighters[self.rival]
@@ -292,16 +294,16 @@ class Bot:
         fires, walk off a WAVEFUNCTION COLLAPSE's or DILUTION FRIDGE's locked ring, back off from
         NINE LIVES and ONE-TIME PAD winding up."""
         m = rival.move
+        if rival.action != "attack" or m is None or m.name != "BLOCH SPHERE":
+            self.bloch_plan = None      # (a new sphere gets a new decision)
         if rival.action != "attack" or m is None or m.kind != "super" or me.action not in ("idle", "walk", "crouch"):
             return None
-        if m.name == "BLOCH SPHERE" and dist > BLOCH_JUMP:
-            return FighterInput()       # wait for it: a jump too early comes down into it
+        if m.name == "BLOCH SPHERE":
+            return self._dodge_bloch(me, rival, dist)
         if self.rng.random() >= SUPER_DODGE_ODDS * self.dodge:
             return None
         if m.crash is not None and rival.phase == "startup" and dist <= CRASH_REACH + 10:
             return FighterInput(up=True, dx=-toward)
-        if m.name == "BLOCH SPHERE" and rival.phase == "active" and dist <= BLOCH_JUMP:
-            return FighterInput(up=True)
         if m.name == "COHERENT BEAM" and rival.phase == "startup" and rival.frame >= rival.startup - 3:
             return FighterInput(up=True)
         if m.remote and m.lock > 0 and rival.target_x is not None and rival.phase == "startup" \
@@ -310,6 +312,20 @@ class Bot:
         if m.lock_range and rival.phase == "startup" and dist <= m.lock_range + 20:
             return FighterInput(dx=-toward)
         return None
+
+    def _dodge_bloch(self, me, rival, dist: float) -> FighterInput | None:
+        """The BLOCH SPHERE: decided once a sphere (one roll, BLOCH_TRIES frames' worth of the dodge
+        odds). A bot that will dodge waits for it and jumps at BLOCH_JUMP px; one that won't, and
+        everyone once it has rolled past, fights on as ever."""
+        if (me.x - rival.x) * rival.facing <= 0:
+            return None                 # past it (or behind it): nothing to dodge
+        if self.bloch_plan is None:
+            self.bloch_plan = self.rng.random() < min(1.0, SUPER_DODGE_ODDS * self.dodge * BLOCH_TRIES)
+        if not self.bloch_plan:
+            return None
+        if rival.phase == "active" and dist <= BLOCH_JUMP:
+            return FighterInput(up=True)
+        return FighterInput()           # wait for it: a jump too early comes down into it
 
     def _in_air(self, me, rival, toward: int, dist: float) -> FighterInput:
         air = me.char.moves["air.X"]

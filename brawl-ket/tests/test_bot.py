@@ -483,6 +483,45 @@ def test_a_bot_times_its_jump_over_the_bloch_sphere(monkeypatch, gap):
     assert rolls == 0
 
 
+def bloch_inputs(monkeypatch, odds: float, gap: float = 300.0) -> tuple[list, list]:
+    """A bot facing ROBERT's BLOCH SPHERE from `gap` px: its inputs while the sphere comes, and after
+    it has rolled past (or the move is over)."""
+    import brawl_ket.bot as bot_module
+    from brawl_ket import basis
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import BLOCH_SPHERE, CHARACTERS
+    from brawl_ket.superpos import FULL
+    monkeypatch.setattr(bot_module, "SUPER_DODGE_ODDS", odds)
+    fight = Fight({"p1": CHARACTERS["ROBERT"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 150.0, 150.0 + gap
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    bot = Bot("p2", 1)
+    fight.step({"p1": FighterInput(a=True, b=True)})
+    coming, past = [], []
+    for _ in range(200):
+        robert, me = fight.fighters["p1"], fight.fighters["p2"]
+        inp = bot.input(fight)
+        far = abs(me.x - robert.x) > bot_module.BLOCH_JUMP
+        if robert.move is BLOCH_SPHERE and (me.x - robert.x) * robert.facing > 0 and far:
+            coming.append(inp)                          # (still far: where a dodger waits)
+        elif robert.move is BLOCH_SPHERE and (me.x - robert.x) * robert.facing < 0:
+            past.append(inp)                            # rolled past, still rolling
+        fight.step({"p2": inp})
+    return coming, past
+
+
+def test_a_bot_that_wont_dodge_the_sphere_doesnt_stand_and_wait(monkeypatch):
+    from brawl_ket.fighter import IDLE
+    coming, past = bloch_inputs(monkeypatch, 0.0)
+    assert coming and any(i != IDLE for i in coming)
+
+
+def test_nobody_stays_idle_once_the_sphere_has_rolled_past(monkeypatch):
+    from brawl_ket.fighter import IDLE
+    coming, past = bloch_inputs(monkeypatch, 1.0, 180.0)    # (one that doesn't dodge is rolled along, never past)
+    assert past and any(i != IDLE for i in past)
+
+
 def test_a_bot_walks_off_a_locked_ring(monkeypatch):
     import brawl_ket.bot as bot_module
     from brawl_ket.moves import CHARACTERS, WAVE_COLLAPSE
