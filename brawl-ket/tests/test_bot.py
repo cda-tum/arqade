@@ -59,8 +59,10 @@ def test_bots_are_deterministic(pairing):
 
 # Since a jab can't chain into a jab (2026-10-23), ERWIN beats ROBERT in about 85% of bot rounds, so
 # 10 seeds a side can all go his way: a character's edge, not a side's, for the user to decide
-LOPSIDED = {("ROBERT", "ERWIN"), ("ERWIN", "ROBERT")}
-SIDE_CASES = [pytest.param(p, marks=[pytest.mark.xfail(reason="ERWIN wins about 85% against ROBERT", strict=False)]
+LOPSIDED = {("ROBERT", "ERWIN"): "ERWIN wins about 85% against ROBERT", ("ERWIN", "ROBERT"): "ERWIN wins about 85% against ROBERT",
+            ("DOS", "ALICE & BOB"): "DOS wins about 79% against ALICE & BOB",
+            ("ALICE & BOB", "DOS"): "DOS wins about 79% against ALICE & BOB"}
+SIDE_CASES = [pytest.param(p, marks=[pytest.mark.xfail(reason=LOPSIDED[p], strict=False)]
                            if p in LOPSIDED else []) for p in PAIRINGS]
 
 

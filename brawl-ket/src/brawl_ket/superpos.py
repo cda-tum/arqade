@@ -35,9 +35,15 @@ class Meter:
         """The bar's halves, green first: both, or DOS's one green bar."""
         return tuple(self.fill)
 
+    @property
+    def cap(self) -> int:
+        """What a half holds, in half points: FULL; a one-colour bar's one half holds both halves'
+        worth (the user's ruling, 2026-10-23: DOS's supers come as often as anyone's)."""
+        return FULL if len(self.fill) > 1 else 2 * FULL
+
     def one_colour(self, b: str) -> None:
         """A bar of one colour (DOS, who is always green: section 9 of the spec): everything he
-        deals or takes fills it, and it is full when it is."""
+        deals or takes fills it, and it is full when it holds as much as a whole two-half bar."""
         self.fill = {b: self.fill.get(b, 0)}
 
     def _add(self, b: str, half_points: int) -> list[str]:
@@ -45,19 +51,19 @@ class Meter:
         filled it, and then "full" if the whole bar is now full."""
         if b not in self.fill:          # a one-colour bar: every hit fills it
             b = self.halves[0]
-        before = self.fill[b]
-        self.fill[b] = min(FULL, before + half_points)
-        if before >= FULL or self.fill[b] < FULL:
+        before, cap = self.fill[b], self.cap
+        self.fill[b] = min(cap, before + half_points)
+        if before >= cap or self.fill[b] < cap:
             return []
         return ["half", "full"] if self.full else ["half"]
 
     @property
     def full(self) -> bool:
-        return all(v >= FULL for v in self.fill.values())
+        return all(v >= self.cap for v in self.fill.values())
 
     def share(self, b: str) -> float:
         """How full b's half is, 0 to 1."""
-        return self.fill[b] / FULL
+        return self.fill[b] / self.cap
 
     def empty(self) -> None:
         for b in self.fill:

@@ -1447,7 +1447,7 @@ def test_dos_bar_is_one_green_bar(surface):
     from brawl_ket.render import SUPER_BAR_H, SUPER_BAR_Y, SUPER_HALF_W
     from brawl_ket.superpos import FULL
     fight = Fight({"p1": CHARACTERS["DOS"], "p2": ROBERT})
-    fight.meters["p1"].fill[basis.Z_BASIS] = FULL // 2
+    fight.meters["p1"].fill[basis.Z_BASIS] = FULL        # half of his one bar
     r = Renderer(surface)
     r.draw_fight(fight, [], {"p1": 0, "p2": 0})
     y = SUPER_BAR_Y + SUPER_BAR_H // 2

@@ -96,8 +96,9 @@ def test_dos_is_full_when_his_green_bar_is_and_taking_hits_fills_it_at_half_rate
     assert fight.meters["p2"].fill == {Z: 4}
     m = Meter()
     m.one_colour(Z)
-    assert m.dealt(Z, 39) == [] and not m.full
-    assert m.dealt(X, 1) == ["half", "full"] and m.full     # a purple hit fills the green bar too
+    assert m.cap == 2 * FULL                    # the user's ruling: as much as a whole two-half bar
+    assert m.dealt(Z, 79) == [] and not m.full and m.share(Z) == 158 / 160
+    assert "full" in m.dealt(X, 1) and m.full  # a purple hit fills the green bar too
     m.empty()
     assert m.fill == {Z: 0}
 
@@ -105,6 +106,8 @@ def test_dos_is_full_when_his_green_bar_is_and_taking_hits_fills_it_at_half_rate
 def test_dos_fires_with_only_his_green_bar_full():
     fight = fight_of(DOS, ROBERT, gap=150.0)
     fight.meters["p1"].fill[Z] = FULL
+    assert not fight.meters["p1"].full          # half of it
+    fight.meters["p1"].fill[Z] = 2 * FULL
     assert fight.meters["p1"].full
     assert "super" in kinds(fight.step({"p1": FighterInput(a=True, b=True)}))
     assert fight.meters["p1"].fill == {Z: 0}

@@ -315,7 +315,7 @@ def super_frames(out_dir: str) -> None:
     def fight_of(name: str, x: float, rival_x: float) -> tuple[Fight, Renderer]:
         fight = Fight({"p1": CHARACTERS[name], "p2": ROBERT}, seed=1)
         fight.fighters["p1"].x, fight.fighters["p2"].x = x, rival_x
-        fight.meters["p1"].fill = {b: FULL for b in fight.meters["p1"].fill}
+        fight.meters["p1"].fill = {b: fight.meters["p1"].cap for b in fight.meters["p1"].fill}
         return fight, Renderer(surface)
 
     def play(fight, r, shots: dict) -> None:
@@ -335,11 +335,11 @@ def super_frames(out_dir: str) -> None:
 
     # the bars: DOS's one green bar, half full and full; ROBERT a full green half and a third of purple
     fight, r = fight_of("DOS", 250.0, 400.0)
-    fight.meters["p1"].fill = {basis.Z_BASIS: FULL // 2}
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL}       # half of his one bar
     fight.meters["p2"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL // 3}
     r.draw_fight(fight, [], {"p1": 0, "p2": 0})
     save(surface, out_dir, "super_bar.png")
-    fight.meters["p1"].fill = {basis.Z_BASIS: FULL}
+    fight.meters["p1"].fill = {basis.Z_BASIS: 2 * FULL}
     for _ in range(12):
         r.draw_fight(fight, [], {"p1": 0, "p2": 0})
     save(surface, out_dir, "super_bar_dos_full.png")
