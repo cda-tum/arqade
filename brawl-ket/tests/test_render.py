@@ -1908,3 +1908,32 @@ def test_lingering_art_is_drawn_under_the_fighters(surface, monkeypatch):
     r = Renderer(surface)
     r.draw_fight(Fight({"p1": ROBERT, "p2": ROBERT}), [])
     assert calls.index("lingers") < calls.index("fighter")
+
+
+def test_lingers_and_the_blue_screen_wait_while_the_fight_does(surface):
+    """Paused (the match draws the fight without stepping it) or in hitstop, nothing counts down."""
+    from brawl_ket.dos import BSOD_BLUE
+    fight, ab = bsod_fight(150.0)
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step(ab))
+    for _ in range(200):
+        events = fight.step({})
+        r.draw_fight(fight, events)
+        if any(e.kind == "bsod_crash" for e in events):
+            break
+    for _ in range(100):                                # paused: drawn, never stepped
+        r.draw_fight(fight, [])
+    assert tuple(surface.get_at((4, 4)))[:3] == BSOD_BLUE
+    for n, events, f in super_run(surface, "ALICE & BOB", rival_x=230.0):
+        if any(e.kind == "padlock" for e in events):
+            break
+    r = Renderer(surface)
+    r.draw_fight(f, [e for e in events])
+    age = r.lingers[0].age
+    for _ in range(200):
+        r.draw_fight(f, [])
+    assert r.lingers and r.lingers[0].age == age
+    ticks = f.ticks
+    f.hitstop = 5
+    f.step({})
+    assert f.ticks == ticks                             # a hitstop frame is no fight frame

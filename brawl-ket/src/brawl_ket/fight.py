@@ -238,6 +238,8 @@ class Fight:
         self.tosses: list[Toss] = []        # ALICE & BOB's KEY EXCHANGE photons in flight
         self.trap_grace: dict[Fighter, int] = {}    # a body just let go of a hold: frames no trap can catch it
         self.frames_left = ROUND_FRAMES
+        self.ticks = 0                      # frames the fight has moved (not a call's freeze or a hitstop):
+                                            # what the renderer ages its lingering art by
         self.hitstop = 0
         self.freeze = 0                     # SUPERposition: frames of the call left (nothing moves)
         self.supers: list[str] = []         # ... whose call it is, and who fired on the same frame after them
@@ -283,6 +285,7 @@ class Fight:
             return []
 
         events: list[Event] = []
+        self.ticks += 1
         self._move_tosses(events)       # first: a toss thrown this frame shows in her hand
         self._step_fighters(inputs, events)
         self._push_apart()
@@ -896,6 +899,7 @@ class Fight:
         if self.hitstop > 0:
             self.hitstop -= 1
             return
+        self.ticks += 1
         start_x = {key: f.x for key, f in self.fighters.items()}
         for key, f in self.fighters.items():
             f.step(IDLE, start_x[_other(key)])

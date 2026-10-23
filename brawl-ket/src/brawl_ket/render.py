@@ -724,6 +724,7 @@ class Renderer:
         if fight is not self._fight:
             self._fight = fight
             self._reset()
+            self._ticks = fight.ticks
             for p in PLAYERS:
                 self.trail[p] = self.last_health[p] = fight.fighters[p].health
             for f in fight.fighters.values():   # THE BOX's sprites now, not mid-round
@@ -740,6 +741,8 @@ class Renderer:
                             for steps in range(1, CHARGE_CAP + 1):
                                 halo(body, facing, steps)
         self.t += 1
+        self._dt = fight.ticks - self._ticks        # fight frames since the last draw (0: paused, hitstop)
+        self._ticks = fight.ticks
         self._start_effects(events)
 
         surf = self.surface
@@ -798,7 +801,7 @@ class Renderer:
         if self.bsod_flash:                     # the BLUE SCREEN's drop lands: the whole screen blue, its
             name = self.bsod_crash[1]           # crash text, then the CRASH! burst
             surf.blit(blue_screen(name, W, H), (0, 0))
-            self.bsod_flash -= 1
+            self.bsod_flash = max(0, self.bsod_flash - max(self._dt, 1 if self.bsod_flash == 1 else 0))
 
     # --- effects ----------------------------------------------------------------------------
 
@@ -1215,7 +1218,7 @@ class Renderer:
                 SA.pillar(self.surface, x, lg.colour, k=max(0.05, fade))
             else:
                 self._faded(lambda surf, lg=lg, x=x: self._linger_art(surf, lg, x, oy), round(255 * fade))
-            lg.age += 1
+            lg.age += self._dt
             kept.append(lg)
         self.lingers = kept
 
