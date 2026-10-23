@@ -105,6 +105,8 @@ def test_the_damage():
     for c, slot, m in all_moves():
         if m.name in SPECIAL_DAMAGE:
             assert m.damage == SPECIAL_DAMAGE[m.name], (c.name, slot)
+        elif (c.name, slot) == ("ROBERT", "crouch.B"):
+            assert m.damage == DAMAGE["B"] + 2                  # his own sweep (moves.ROBERT_OWN)
         else:
             key = "throw" if slot == "throw" else slot.split(".")[1]
             assert m.damage == DAMAGE[key], (c.name, slot)
@@ -448,10 +450,11 @@ def test_robert_is_the_shared_normals_but_his_own_buff():
     """The user's ruling (2026-10-23): ROBERT is buffed on his own numbers only, after the jab change;
     ERWIN, M-CUTIE and ALICE & BOB keep the shared normals."""
     from brawl_ket.moves import ROBERT_OWN
-    assert set(ROBERT_OWN) == {"stand.A", "crouch.A", "stand.B"}
+    assert set(ROBERT_OWN) == {"stand.A", "crouch.A", "stand.B", "crouch.B"}
     for slot in NORMALS:
         ours, shared = ROBERT.moves[slot], SHARED_NORMALS[slot]
         assert (ours is shared) == (slot not in ROBERT_OWN), slot
     assert ROBERT.moves["stand.B"].startup == SHARED_NORMALS["stand.B"].startup - 2
     assert ROBERT.moves["stand.A"].recovery == SHARED_NORMALS["stand.A"].recovery - 2
     assert ROBERT.moves["crouch.A"].recovery == SHARED_NORMALS["crouch.A"].recovery - 2
+    assert ROBERT.moves["crouch.B"].damage == SHARED_NORMALS["crouch.B"].damage + 2

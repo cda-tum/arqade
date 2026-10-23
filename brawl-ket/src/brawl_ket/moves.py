@@ -805,6 +805,7 @@ ROBERT_OWN = {
     "stand.B": replace(ROBERT.moves["stand.B"], startup=8),        # his heavy 2 frames faster (10)
     "stand.A": replace(ROBERT.moves["stand.A"], recovery=10),      # his jabs 2 frames back of the feel
     "crouch.A": replace(ROBERT.moves["crouch.A"], recovery=11),    # tuning's +4 (12 and 13)
+    "crouch.B": replace(ROBERT.moves["crouch.B"], damage=10),      # his sweep 2 more (8)
 }
 ROBERT = replace(ROBERT, moves=MappingProxyType({**ROBERT.moves, **ROBERT_OWN}))
 ROBERT = _with_super(ROBERT, BLOCH_SPHERE)
