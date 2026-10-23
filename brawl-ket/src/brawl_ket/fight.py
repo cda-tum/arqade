@@ -270,6 +270,9 @@ class Fight:
                 f.hold_switch(inputs.get(key, IDLE))
             for key, echo in self.echoes.items():      # Bob's echo runs on through the freeze
                 late = echo.replay(inputs.get(key, IDLE))
+                if self._in_super(key):
+                    echo.forget_presses()
+                    continue
                 if echo.here:
                     echo.buffer_presses(late)
                     echo.hold_switch(late)
@@ -304,10 +307,16 @@ class Fight:
             self._fighter_events(key, f, f.step(inputs.get(key, IDLE), start_x[_other(key)]), events)
         for key, echo in self.echoes.items():     # Bob after Alice: he faces as she now does
             late = echo.replay(inputs.get(key, IDLE))
-            if key in self._fired:
-                echo.forget_presses()
+            if key in self._fired or self._in_super(key):
+                echo.forget_presses()                   # a super is one move for both: Bob echoes none of it
+                late = replace(late, a=False, b=False, x=False)
             echo.rival_boxes = self._reach(_other(key))
             self._fighter_events(key, echo, echo.step(late, start_x[_other(key)]), events)
+
+    def _in_super(self, key: str) -> bool:
+        """This player's fighter is doing their super (ALICE & BOB: Bob echoes no press meanwhile)."""
+        m = self.fighters[key].move
+        return m is not None and m.kind == "super"
 
     def _reach(self, key: str) -> tuple[float, ...] | None:
         """Where a throw can reach this player's fighter: either of THE BOX's boxes, or any of
@@ -372,6 +381,29 @@ class Fight:
         self.freeze = SUPER_FREEZE
         self._fired.add(key)
         events.append(Event("super", key))
+        f = self.fighters[key]
+        if f.move is not None and f.move.lock_hold is not None:     # ONE-TIME PAD: caught when it starts
+            self._catch_on_fire(key, f, f.move)
+
+    def _lock_missed(self, f: Fighter, rival: Fighter, m: Move) -> bool:
+        """A lock misses a rival out of its reach (lock_range), in the air (lock_ground), down,
+        getting up, tunnelling or in THE BOX."""
+        return rival.action == "knockdown" or bool(rival.wakeup) or rival.intangible or rival.boxed \
+            or bool(m.lock_range and abs(rival.x - f.x) > m.lock_range) or (m.lock_ground and rival.y > 0)
+
+    def _catch_on_fire(self, key: str, f: Fighter, m: Move) -> None:
+        """ONE-TIME PAD decides its catch the moment A+B fire it, before the call: a rival on the
+        ground and in its reach then is held (as a throw holds) through the call and the startup, so
+        the call can't warn them off. The flank, or the whiff, comes on its first active frame."""
+        rival_key = _other(key)
+        rival = self.fighters[rival_key]
+        if self._lock_missed(f, rival, m):
+            f.target_x = None
+            return
+        f.target_x = rival.x
+        assert m.lock_hold is not None
+        for body in self.bodies(rival_key):
+            body.take_hit(m.lock_hold, basis.Y, f.facing)
 
     def _crash(self, key: str, f: Fighter, hold: Move, events: list[Event]) -> None:
         """BLUE SCREEN OF DEATH: every rival body on the ground within CRASH_REACH is frozen (the
@@ -397,22 +429,23 @@ class Fight:
         either side of them (flank)."""
         rival_key = _other(key)
         rival = self.fighters[rival_key]
-        missed = rival.action == "knockdown" or rival.wakeup or rival.intangible or rival.boxed \
-            or (m.lock_range and abs(rival.x - f.x) > m.lock_range) or (m.lock_ground and rival.y > 0)
+        if m.lock_hold is not None:         # ONE-TIME PAD: caught (or not) when it was fired
+            missed = f.target_x is None
+        else:
+            missed = self._lock_missed(f, rival, m)
+            f.target_x = None if missed else rival.x
         if missed:
-            f.target_x = None
             events.append(Event("lock_miss", key, None, f.x, FLOOR_Y))
+            if m.lock_hold is not None:     # they flash and nothing happens: on to its short end
+                f.hit_count = m.hits
             return
-        f.target_x = rival.x
-        events.append(Event("lock", key, None, rival.x, FLOOR_Y))
-        if m.lock_hold is not None:
-            for body in self.bodies(rival_key):
-                body.take_hit(m.lock_hold, basis.Y, f.facing)
+        assert f.target_x is not None
+        events.append(Event("lock", key, None, f.target_x, FLOOR_Y))
         echo = self.echoes.get(key)
         if m.flank and echo is not None:
             side = 1 if rival.x >= f.x else -1
             f.x = _clamp(rival.x - side * m.flank)
-            echo.x, echo.y = _clamp(rival.x + side * m.flank), 0.0
+            echo.x, echo.y, echo.vy = _clamp(rival.x + side * m.flank), 0.0, 0.0
             f.facing, echo.facing = side, -side
             echo.anchored = True
             events.append(Event("teleport", key, None, f.x, FLOOR_Y))

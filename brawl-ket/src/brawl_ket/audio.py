@@ -223,7 +223,7 @@ EVENT_SOUNDS = {"attack": "swing", "hit": "hit", "block": "ping", "switch": "who
                 "intercept": "sizzle", "teleport": "teleport", "anchor": "anchor", "bell_dive": "bell_dive",
                 "super_half": "super_half", "super_full": "super_full", "super": "super",
                 "crash": "crash", "bsod_land": "bsod_land",
-                "lock": "lock", "lock_miss": None,
+                "lock": "lock", "lock_miss": "sizzle",
                 "bloch": "bloch", "h_gate": "h_gate", "collapse": "collapse", "beam": "beam",
                 "ghosts": "ghosts", "swipe": "swipe", "fridge": "fridge", "key_pass": "key_pass",
                 "padlock": "padlock",

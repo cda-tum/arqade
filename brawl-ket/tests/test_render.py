@@ -1598,3 +1598,27 @@ def test_the_title_shows_the_cpus_level_in_its_colour(surface):
         r.draw(m, [])
         seen[level] = {tuple(surface.get_at((x, y)))[:3] for x in range(200, 440, 2) for y in range(200, 290, 2)}
     assert LEVEL_COLOURS["EASY"] in seen[0] and LEVEL_COLOURS["BRUTAL"] in seen[2]
+
+
+def test_a_one_time_pad_that_catches_nobody_flashes_both_kids(surface):
+    from brawl_ket.config import SUPER_FREEZE
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.moves import ONE_TIME_PAD
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["ALICE & BOB"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 200.0, 400.0     # out of its reach
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step({"p1": FighterInput(a=True, b=True)}))
+    flashed = set()
+    for _ in range(SUPER_FREEZE + ONE_TIME_PAD.startup + 4):
+        events = r_events = fight.step({})
+        r.draw_fight(fight, r_events)
+        if any(e.kind == "lock_miss" for e in events):
+            flashed = {b for b in ("p1", "p1/bob") if r.body_flash[b][0] == P.WHITE}
+    assert flashed == {"p1", "p1/bob"}
+
+
+def test_a_whiff_sizzles():
+    from brawl_ket import audio
+    assert audio.EVENT_SOUNDS["lock_miss"] == "sizzle"

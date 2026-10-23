@@ -88,9 +88,9 @@ class Echo(Fighter):
         return self.queue.popleft()
 
     def forget_presses(self) -> None:
-        """Alice fired her super: the A and B that fired it must not come out of Bob as normals
-        (a super is one move for both)."""
-        self.queue = deque(replace(q, a=False, b=False) for q in self.queue)
+        """Alice fired her super, or is doing it: the A and B that fired it, and anything mashed
+        while it runs, must not come out of Bob as moves (a super is one move for both)."""
+        self.queue = deque(replace(q, a=False, b=False, x=False) for q in self.queue)
 
     def recohere(self) -> None:
         """Back at once (their super): as if his time away had run out."""

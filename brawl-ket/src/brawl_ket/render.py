@@ -773,6 +773,9 @@ class Renderer:
                             if f.move is not None and f.move.crash is not None), None)
                 if dos is not None and dos not in self.crashes:
                     self.crashes[dos] = (self._fight.fighters[dos].x, 0)
+            elif e.kind == "lock_miss" and e.player:     # a super's lock found nobody: they flash
+                for body in (e.player, f"{e.player}/bob"):
+                    self.body_flash[body] = (P.WHITE, SWITCH_FLASH_FRAMES)
             elif e.kind == "bsod_land":
                 self.bsod_flash = 1
                 self.effects.append(Effect("popup", e.x + 50, FLOOR_Y - 150, POPUP_FRAMES, POPUP_FRAMES,

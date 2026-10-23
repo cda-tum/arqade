@@ -460,7 +460,7 @@ class Fighter:
                     shot, shot_basis = self.clipboard
                     self.clipboard = None
                     events.append(("projectile", {"move": shot, "basis": shot_basis, "paste": True}))
-                if m.cue is not None:
+                if m.cue is not None and not self._whiffed(m):
                     events.append((m.cue, {}))
                 if m.tunnel:            # gone: she is already where she will re-form
                     self.x = self.tunnel_to
@@ -477,6 +477,11 @@ class Fighter:
         elif (m.dive is not None or m.floor_recovery) and self.frame == self.startup + m.active \
                 and not self.bounced:
             self.vx = 0.0           # the dive (or SPIN) ran out before the floor: she drops (a bounce keeps its drift)
+
+    def _whiffed(self, m: Move) -> bool:
+        """A super's part with nothing to land on, and so no sound: a remote follow-up whose lock
+        missed (ONE-TIME PAD's padlock), or ONE-TIME PAD itself when it caught nobody."""
+        return m.remote and self.target_x is None and (m.lock < 0 or m.lock_hold is not None)
 
     def _slot_for(self, btn: str, dx: int, rival_x: float) -> str:
         if self.y > 0:

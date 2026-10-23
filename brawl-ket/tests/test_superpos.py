@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from brawl_ket import basis
 from brawl_ket.fight import Fight
 from brawl_ket.fighter import FighterInput
@@ -451,9 +453,10 @@ def test_a_lock_hold_holds_the_rival_and_a_flank_puts_the_pair_either_side():
     pad = replace(REMOTE, lock=0, lock_range=100, lock_ground=True, lock_hold=hold, flank=50, remote=False)
     fight = fight_of(with_super(ALICE_BOB, pad), ROBERT, gap=90.0)
     fire(fight)
-    run(fight, pad.startup)
     rival, alice, bob = fight.fighters["p2"], fight.fighters["p1"], fight.echoes["p1"]
-    assert rival.action == "hitstun" and rival.stun > 60
+    assert rival.action == "hitstun" and rival.stun == hold.hitstun - 1     # held from the press
+    run(fight, pad.startup)
+    assert rival.action == "hitstun" and rival.stun > 50
     assert (alice.x, bob.x) == (390.0 - 50, 390.0 + 50) and bob.anchored
 
 
@@ -598,6 +601,80 @@ def test_one_time_pad_holds_the_rival_between_them_for_25():
 def test_one_time_pad_misses_out_of_reach_or_in_the_air():
     fight = landed("ALICE & BOB", gap=ONE_TIME_PAD.lock_range + 30.0)
     assert fight.fighters["p2"].health == ROBERT.health
+
+
+def pad_fight(side: str, gap: float, rival=ROBERT) -> Fight:
+    """ALICE & BOB on `side`, the rival `gap` px in front of Alice, the pair's bar full."""
+    other = "p2" if side == "p1" else "p1"
+    fight = Fight({side: CHARACTERS["ALICE & BOB"], other: rival}, seed=1)
+    alice = fight.fighters[side]
+    alice.x = 300.0 if side == "p1" else 340.0
+    fight.fighters[other].x = alice.x + (gap if side == "p1" else -gap)
+    fight.echoes[side].x = fight.echoes[side].spot
+    full(fight, side)
+    return fight
+
+
+def press_pad(fight: Fight, side: str, rival_holds: FighterInput, frames: int = 260) -> list:
+    """The player presses A+B; from then on the rival holds the stick as a person does who sees the
+    call coming (the freeze drops their input, but the stick is still held when it ends)."""
+    other = "p2" if side == "p1" else "p1"
+    events = fight.step({side: AB})
+    for _ in range(frames):
+        events += fight.step({other: rival_holds})
+    return events
+
+
+@pytest.mark.parametrize("side", ["p1", "p2"])
+@pytest.mark.parametrize("holds", ["up", "back"])
+def test_one_time_pad_catches_a_rival_in_range_when_a_and_b_are_pressed(side, holds):
+    """The cabinet bug: the catch was decided 36 frames after A+B (after the call and the startup),
+    so a rival in range just held up or back through the call and was gone. It is decided when it
+    starts, as the spec says: on the ground and in reach then, they are caught."""
+    away = 1 if side == "p1" else -1
+    inp = FighterInput(up=True) if holds == "up" else FighterInput(dx=away)
+    fight = pad_fight(side, 95.0)
+    other = "p2" if side == "p1" else "p1"
+    events = press_pad(fight, side, inp)
+    assert "lock_miss" not in kinds(events)
+    assert kinds(events).count("hit") == ONE_TIME_PAD.hits + 1     # six passes and the padlock
+    assert "padlock" in kinds(events)
+    assert fight.fighters[other].health == ROBERT.health - total(ONE_TIME_PAD)
+
+
+@pytest.mark.parametrize("side", ["p1", "p2"])
+def test_one_time_pad_holds_the_rival_from_the_press(side):
+    fight = pad_fight(side, 90.0)
+    other = "p2" if side == "p1" else "p1"
+    fight.step({side: AB})
+    rival = fight.fighters[other]
+    assert rival.action == "hitstun" and rival.vx == 0.0        # held through the call, like a throw
+    for _ in range(SUPER_FREEZE + ONE_TIME_PAD.startup):
+        fight.step({other: FighterInput(up=True)})
+    assert rival.y == 0
+
+
+@pytest.mark.parametrize("side", ["p1", "p2"])
+def test_one_time_pad_out_of_reach_when_pressed_whiffs_with_a_flash_and_no_click(side):
+    fight = pad_fight(side, ONE_TIME_PAD.lock_range + 30.0)
+    other = "p2" if side == "p1" else "p1"
+    events = press_pad(fight, side, FighterInput(dx=-1 if side == "p1" else 1))    # walking in, too late
+    assert "lock_miss" in kinds(events)                    # they flash ...
+    assert "padlock" not in kinds(events) and "key_pass" not in kinds(events)     # ... and nothing plays
+    assert fight.fighters[other].health == ROBERT.health
+    alice = fight.fighters[side]
+    assert alice.move is None                              # and it is over well before a full pad would be
+
+
+@pytest.mark.parametrize("side", ["p1", "p2"])
+def test_bob_echoes_nothing_mashed_during_their_super(side):
+    fight = pad_fight(side, 80.0)
+    fight.step({side: AB})
+    bob = fight.echoes[side]
+    for n in range(SUPER_FREEZE + 140):
+        fight.step({side: AB if n % 4 == 0 else FighterInput()})   # a visitor mashing A+B
+        if fight.fighters[side].move is not None:
+            assert bob.action != "attack"
 
 
 def test_a_supers_startup_cant_be_hit_so_a_jab_never_wastes_the_bar():
