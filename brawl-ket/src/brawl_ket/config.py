@@ -83,6 +83,8 @@ SUPER_FREEZE = frames(0.5)
 CRASH_REACH = 200
 CRASH_HOLD = 50
 CRASH_LEAP = 40
+CRASH_LIVE = 3          # ... whose drop hits only in its last frames before the floor: coming down on
+                        # them (live for the whole leap, it hit the frozen rival as DOS rose)
 
 
 # --- Screen transitions and input timing -------------------------------------

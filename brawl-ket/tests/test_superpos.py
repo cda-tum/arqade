@@ -340,6 +340,36 @@ def test_the_box_dodges_it():
     assert [e.player for e in events if e.kind == "crash"] == [None]
 
 
+@pytest.mark.parametrize("side", ["p1", "p2"])
+@pytest.mark.parametrize("gap", [55.0, 80.0, 150.0])
+def test_the_frozen_rival_stays_frozen_until_dos_comes_down_on_them(side, gap):
+    """The cabinet bug: the CRT DROP's hitbox was live for the whole leap, so it hit the frozen
+    rival as DOS rose (at once from up close), and the hit ended the freeze and its window. The
+    drop only hits as he comes down: the rival is frozen, under the window, until then."""
+    other = "p2" if side == "p1" else "p1"
+    fight = Fight({side: DOS, other: ROBERT}, seed=1)
+    dos, rival = fight.fighters[side], fight.fighters[other]
+    dos.x = 300.0
+    rival.x = 300.0 + (gap if side == "p1" else -gap)
+    full(fight, side)
+    fight.step({side: AB})
+    frozen_at = hit_at = landed_at = None
+    for n in range(SUPER_FREEZE + STARTUP + CRASH_LEAP + 30):
+        events = fight.step({})
+        if frozen_at is None and any(e.kind == "crash" and e.player == other for e in events):
+            frozen_at = n
+        if hit_at is None and any(e.kind == "hit" and e.player == other for e in events):
+            hit_at = n
+        if any(e.kind == "bsod_land" for e in events):
+            landed_at = n
+            break
+        if frozen_at is not None and hit_at is None:
+            assert rival.glitch > 0, n                  # frozen and glitching, the whole time
+    assert None not in (frozen_at, hit_at, landed_at)
+    assert hit_at - frozen_at >= CRASH_LEAP - 5         # it comes down on them at the end of the leap
+    assert rival.health == ROBERT.health - total(BLUE_SCREEN) and rival.action == "knockdown"
+
+
 def test_both_of_alice_and_bob_in_reach_are_frozen():
     fight = bsod(ALICE_BOB, gap=120.0)
     events = run(fight, STARTUP)

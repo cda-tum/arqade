@@ -1622,3 +1622,34 @@ def test_a_one_time_pad_that_catches_nobody_flashes_both_kids(surface):
 def test_a_whiff_sizzles():
     from brawl_ket import audio
     assert audio.EVENT_SOUNDS["lock_miss"] == "sizzle"
+
+
+def bsod_fight(gap: float):
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS["DOS"], "p2": ROBERT}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = 250.0, 250.0 + gap
+    fight.meters["p1"].fill = {basis.Z_BASIS: FULL, basis.X_BASIS: FULL}
+    return fight, {"p1": FighterInput(a=True, b=True)}
+
+
+@pytest.mark.parametrize("gap", [60.0, 150.0])
+def test_the_stopped_responding_window_shows_over_a_close_rival_for_the_whole_freeze(surface, gap):
+    from brawl_ket.dos import BSOD_BLUE
+    fight, ab = bsod_fight(gap)
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step(ab))
+    shown = frozen = 0
+    for _ in range(200):
+        events = fight.step({})
+        r.draw_fight(fight, events)
+        if any(e.kind == "bsod_land" for e in events):
+            break
+        rival = fight.fighters["p2"]
+        if rival.glitch > 0 and fight.freeze == 0:
+            frozen += 1
+            above = {tuple(surface.get_at((round(rival.x) + dx, FLOOR_Y - 175 + dy)))[:3]
+                     for dx in range(-60, 60, 3) for dy in range(0, 40, 3)}
+            shown += BSOD_BLUE in above
+    assert frozen >= 35 and shown == frozen
+

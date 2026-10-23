@@ -21,6 +21,7 @@ from . import basis
 from .config import (
     BLOCK_HITSTOP,
     BODY_MARGIN,
+    CRASH_LIVE,
     CRASH_REACH,
     DRIVE_SLOT_Y,
     FLOOR_Y,
@@ -835,6 +836,8 @@ class Fight:
         if m.hits and f.hit_count >= m.hits:
             return
         if m.remote and f.target_x is None:         # a super's lock that missed: nothing to hit
+            return
+        if m.seek and f.frame < f.startup + m.seek - 1 - CRASH_LIVE:    # a leap's drop: only as it comes down
             return
         for rival in targets:
             if rival.action == "knockdown" or rival.wakeup or rival.intangible:   # downed, getting up, gone
