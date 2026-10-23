@@ -298,6 +298,40 @@ def draw_error_window(surf, midbottom, name: str):
     return win
 
 
+# The drop's full blue screen (section 9 of the SUPERposition spec): the classic crash text of the
+# look's variant A, with the frozen rival's name, at twice the font's size
+def crash_text(name: str) -> tuple[str, ...]:
+    return ("A fatal exception 0E has occurred",
+            "at 0028:C0011E36 in VXD QUBIT(01).",
+            f"{name}.EXE will be terminated.",
+            "",
+            "* Press any key to terminate",
+            "  the current opponent.",
+            "* Press CTRL+ALT+DEL to lose",
+            "  the round.",
+            "",
+            "Press any key to continue _")
+
+
+@lru_cache(maxsize=8)
+def blue_screen(name: str, w: int, h: int) -> pygame.Surface:
+    """The whole screen, BSOD blue: a grey DOS tag and the crash text in white. Built once a name."""
+    from .fonts import load_font
+    f16 = load_font(16)
+    surf = pygame.Surface((w, h))
+    surf.fill(BSOD_BLUE)
+    tag = f16.render(" DOS ", False, BSOD_BLUE)
+    box = tag.get_rect(midtop=(w // 2, 34))
+    surf.fill(P.MIST, box.inflate(4, 4))
+    surf.blit(tag, box)
+    lines = crash_text(name)
+    left = (w - max(f16.size(line)[0] for line in lines)) // 2
+    for i, line in enumerate(lines):
+        if line:
+            surf.blit(f16.render(line, False, P.WHITE), (left, 74 + 24 * i))
+    return surf
+
+
 def glitch_layer(layer, rect, t: int):
     """A frozen body, cut from its own layer (`rect`): tinted blue-white and sliced into rows of 6 px,
     every third nudged sideways a few px, the nudges shifting with `t`."""

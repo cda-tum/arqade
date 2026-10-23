@@ -1653,3 +1653,30 @@ def test_the_stopped_responding_window_shows_over_a_close_rival_for_the_whole_fr
             shown += BSOD_BLUE in above
     assert frozen >= 35 and shown == frozen
 
+
+def test_the_drop_turns_the_whole_screen_blue_with_the_crash_text_then_crash(surface):
+    from brawl_ket.dos import BSOD_BLUE
+    from brawl_ket.render import BSOD_SCREEN_FRAMES
+    fight, ab = bsod_fight(150.0)
+    r = Renderer(surface)
+    r.draw_fight(fight, fight.step(ab))
+    for _ in range(200):
+        events = fight.step({})
+        r.draw_fight(fight, events)
+        if any(e.kind == "bsod_land" for e in events):
+            break
+    assert 25 <= BSOD_SCREEN_FRAMES <= 35
+    blue = 0
+    for n in range(BSOD_SCREEN_FRAMES + 10):
+        if n:
+            r.draw_fight(fight, fight.step({}))
+        corners = {tuple(surface.get_at(p))[:3] for p in ((4, 4), (INTERNAL_WIDTH - 5, INTERNAL_HEIGHT - 5))}
+        if corners == {BSOD_BLUE}:
+            blue += 1
+            text = {tuple(surface.get_at((x, y)))[:3] for x in range(100, 540, 2) for y in range(60, 200, 2)}
+            assert P.WHITE in text                  # the big crash text
+            assert not any(fx.text == "CRASH!" for fx in r.effects)
+        elif blue:
+            break
+    assert BSOD_SCREEN_FRAMES - 2 <= blue <= BSOD_SCREEN_FRAMES
+    assert any(fx.text == "CRASH!" for fx in r.effects)    # and then the burst

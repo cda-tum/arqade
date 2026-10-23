@@ -48,7 +48,8 @@ from .config import (
     TOSS_TO,
 )
 from .cutie import JUMP_SWING, GOLD_PLATE, draw_charging, draw_cutie, draw_spin, draw_trap, draw_wave, halo
-from .dos import BEIGE, BSOD_BLUE, CLIP_W, clip_icon, draw_dos, draw_error_window, draw_floppy, glitch_layer
+from .dos import (BEIGE, BSOD_BLUE, CLIP_W, blue_screen, clip_icon, draw_dos, draw_error_window, draw_floppy,
+                  glitch_layer)
 from .erwin import (
     EYE,
     FADE_STEPS,
@@ -139,6 +140,7 @@ POPUP_ROOM = 40             # a new pop-up replaces any older one this close acr
 WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the floor
 WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
 HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
+BSOD_SCREEN_FRAMES = 30     # the BLUE SCREEN's drop: the whole screen blue this long, then CRASH!
 SWITCH_FLASH_FRAMES = 8     # a switch (an H): the body flashes white as its colour changes
 MEASURE_FLASH_FRAMES = 12   # MEASURE: the rival flashes in BOHR's colour as it collapses
 COLLAPSE_FRAMES = 14        # ... with a ring closing in on it
@@ -657,7 +659,8 @@ class Renderer:
 
     def _reset(self) -> None:
         self.crashes: dict[str, tuple[float, int]] = {}     # BLUE SCREEN OF DEATH: whose strip (DOS's x, age)
-        self.bsod_flash = 0                                 # ... and the landing's blue frame
+        self.bsod_flash = 0                                 # ... the landing's blue screen: frames left
+        self.bsod_crash: tuple[float, str] = (0.0, "")      # ... where it landed, and on whom (its text)
         self._glitch = pygame.Surface((W, H), pygame.SRCALPHA)
         self._ghost_layer = pygame.Surface((320, 320), pygame.SRCALPHA)     # NINE LIVES' ghosts
         self._windows: list[tuple[float, float, str]] = []     # ... the frozen bodies' error windows, to draw
@@ -739,6 +742,10 @@ class Renderer:
         for s in fight.shots:
             self._shot(s, ox, oy)
         self._super_art(fight, ox, oy)
+        if self.bsod_crash[1] and not self.bsod_flash:      # the blue screen is over: CRASH!
+            self.effects.append(Effect("popup", self.bsod_crash[0] + 50, FLOOR_Y - 150, POPUP_FRAMES,
+                                       POPUP_FRAMES, P.WHITE, "CRASH!"))
+            self.bsod_crash = (0.0, "")
         if self.show_boxes:
             self._boxes(fight, ox, oy)
         self._draw_effects(ox, oy, world=True)
@@ -747,9 +754,10 @@ class Renderer:
             self._super_call(fight)
         self._draw_effects(0, 0, world=False)
         self._advance()
-        if self.bsod_flash:                     # the BLUE SCREEN's drop lands: one frame all blue
-            surf.fill(BSOD_BLUE)
-            self.bsod_flash = 0
+        if self.bsod_flash:                     # the BLUE SCREEN's drop lands: the whole screen blue, its
+            name = self.bsod_crash[1]           # crash text, then the CRASH! burst
+            surf.blit(blue_screen(name, W, H), (0, 0))
+            self.bsod_flash -= 1
 
     # --- effects ----------------------------------------------------------------------------
 
@@ -777,9 +785,10 @@ class Renderer:
                 for body in (e.player, f"{e.player}/bob"):
                     self.body_flash[body] = (P.WHITE, SWITCH_FLASH_FRAMES)
             elif e.kind == "bsod_land":
-                self.bsod_flash = 1
-                self.effects.append(Effect("popup", e.x + 50, FLOOR_Y - 150, POPUP_FRAMES, POPUP_FRAMES,
-                                           P.WHITE, "CRASH!"))
+                rival = (self._fight.fighters["p2" if e.player == "p1" else "p1"]
+                         if self._fight is not None and e.player else None)
+                self.bsod_flash = BSOD_SCREEN_FRAMES
+                self.bsod_crash = (e.x, exe_name(rival) if rival is not None else "QUBIT")
             elif e.kind == "switch" and e.player:
                 for body in (e.player, f"{e.player}/bob"):      # the pair's colour is one
                     self.body_flash[body] = (P.WHITE, SWITCH_FLASH_FRAMES)
