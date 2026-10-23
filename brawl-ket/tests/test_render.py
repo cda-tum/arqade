@@ -1716,3 +1716,115 @@ def test_the_bloch_sphere_is_drawn_100_px_across(surface):
     rim = [y for dx in range(-30, 31, 2) for y in range(FLOOR_Y - 130, FLOOR_Y)
            if tuple(surface.get_at((x + dx, y)))[:3] == light]
     assert rim and FLOOR_Y - min(rim) >= 2 * BLOCH_R - 4         # its rim, about 100 px up
+
+
+def super_run(surface, name, rival_x=450.0, x=150.0, rival=ROBERT):
+    """Fire `name`'s super at a rival `rival_x - x` px off; yields (frames after the press, events,
+    the fight) for every frame drawn."""
+    from brawl_ket.fighter import FighterInput
+    from brawl_ket.superpos import FULL
+    fight = Fight({"p1": CHARACTERS[name], "p2": rival}, seed=1)
+    fight.fighters["p1"].x, fight.fighters["p2"].x = x, rival_x
+    fight.meters["p1"].fill = {b: FULL for b in fight.meters["p1"].fill}
+    r = Renderer(surface)
+    events = fight.step({"p1": FighterInput(a=True, b=True)})
+    r.draw_fight(fight, events)
+    for n in range(1, 400):
+        events = fight.step({})
+        r.draw_fight(fight, events)
+        yield n, events, fight
+
+
+def lit_rows(surface, x: int, test) -> list[int]:
+    """The rows of column x (and 6 px either side: past the beam's fringes) whose colour passes `test`."""
+    return [y for y in range(0, FLOOR_Y + 4) if any(test(tuple(surface.get_at((x + dx, y)))[:3]) for dx in range(-6, 7, 2))]
+
+
+def white_hot(c) -> bool:
+    return min(c) >= 225
+
+
+def falls_and_stays(surface, name, move, cue, lit):
+    """Run `name`'s super, the rival stepping off the locked spot as it locks (so only what falls is
+    drawn there); check that it is up there only over the startup's last FALL_FRAMES frames, comes
+    down from the top, stands LINGER_STAY frames after `cue` and goes. `lit(x, top, bottom)` gives the
+    rows between top and bottom where it shows round x."""
+    from brawl_ket.render import FALL_FRAMES, LINGER_FADE, LINGER_STAY
+    assert 18 <= FALL_FRAMES <= 22 and 36 <= LINGER_STAY <= 44
+    landed = None
+    lows = []
+    for n, events, fight in super_run(surface, name):
+        f, rival = fight.fighters["p1"], fight.fighters["p2"]
+        if any(e.kind == "lock" for e in events):
+            rival.x -= 150                              # out of the way (towards her: the stage ends behind)
+        if any(e.kind == cue for e in events):
+            landed = n
+        x = round(rival.x if f.target_x is None else f.target_x)
+        if landed is None and f.move is move and f.phase == "startup":
+            left = f.startup - f.frame
+            if left > FALL_FRAMES:
+                assert not lit(x, 60, FLOOR_Y - 150), left              # nothing up there yet
+            elif f.target_x is not None and left in (10, 6, 2):
+                rows = lit(x, 60, FLOOR_Y - 16)                         # (above the lock's ring)
+                assert rows, left                                       # on its way down
+                lows.append(max(rows))
+        elif landed is not None and n - landed < LINGER_STAY:
+            assert lit(x, FLOOR_Y - 60, FLOOR_Y + 4), n - landed        # standing where it fell
+        elif landed is not None and n - landed > LINGER_STAY + LINGER_FADE + 2:
+            assert not lit(x, 60, FLOOR_Y + 4)                          # and then it's gone
+            break
+    assert landed is not None and len(lows) == 3
+    assert lows[0] < lows[1] < lows[2], lows                            # down from the top
+
+
+def test_the_pillar_falls_from_the_top_over_about_20_frames_then_stays_about_40(surface):
+    """Section 9: you can see what fell. The pillar comes down over about 20 frames, onto the
+    locked spot, and stands there about 40 frames after it lands, then fades."""
+    from brawl_ket.moves import WAVE_COLLAPSE
+    falls_and_stays(surface, "BOHR", WAVE_COLLAPSE, "collapse",
+                    lambda x, top, bottom: [y for y in lit_rows(surface, x, white_hot) if top <= y < bottom])
+
+
+def test_the_fridge_falls_over_about_20_frames_then_stays_about_40(surface):
+    from brawl_ket.moves import DILUTION_FRIDGE
+    from brawl_ket.superart import GOLD_PLATE
+    falls_and_stays(surface, "M-CUTIE", DILUTION_FRIDGE, "fridge",
+                    lambda x, top, bottom: [y for y in range(top, bottom, 2) for dx in range(-90, 91, 6)
+                                            if tuple(surface.get_at((x + dx, y)))[:3] == GOLD_PLATE])
+
+
+@pytest.mark.parametrize("name,cue,colour", [("ROBERT", "h_gate", P.GOLD), ("ERWIN", "swipe", P.GOLD),
+                                              ("ALICE & BOB", "padlock", P.GOLD)])
+def test_a_supers_last_art_lingers_after_its_last_hit(surface, name, cue, colour):
+    """Section 9: every super's art stays long enough to read what happened, the last hit included:
+    the H gate, NINE LIVES' 9/9, the closed padlock stay about LINGER_STAY frames, then go."""
+    from brawl_ket.render import LINGER_FADE, LINGER_STAY
+    rival_x = {"ROBERT": 400.0, "ERWIN": 270.0, "ALICE & BOB": 230.0}[name]
+    at = None
+    counts = {}
+
+    def count() -> int:
+        return sum(tuple(surface.get_at((x, y)))[:3] == colour for x in range(0, INTERNAL_WIDTH, 2)
+                   for y in range(60, FLOOR_Y, 2))
+    for n, events, fight in super_run(surface, name, rival_x=rival_x):
+        if at is None and any(e.kind == cue for e in events):
+            at = n
+        if at is not None and n - at == LINGER_STAY - 4:
+            counts["lingering"] = count()
+        if at is not None and n - at == LINGER_STAY + LINGER_FADE + 30:
+            counts["gone"] = count()
+            break
+    assert counts["lingering"] > counts["gone"] + 30, counts
+
+
+def test_the_beam_narrows_away_after_its_last_hit(surface):
+    from brawl_ket.moves import COHERENT_BEAM
+    seen = []
+    for n, events, fight in super_run(surface, "PHOEBE", rival_x=560.0):
+        f = fight.fighters["p1"]
+        if f.move is COHERENT_BEAM and f.phase == "recovery":
+            seen.append(len(lit_rows(surface, 500, white_hot)))
+        elif seen:
+            break
+    assert seen and seen[0] > 20 and seen[len(seen) // 2] > 0       # still there well into the recovery
+    assert seen == sorted(seen, reverse=True)                       # and narrowing

@@ -140,6 +140,11 @@ POPUP_ROOM = 40             # a new pop-up replaces any older one this close acr
 WAVE_FRAMES = 18            # a landing shockwave's rings spreading along the floor
 WAVE_REACH = 50             # px either side they spread to (COLLAPSE's shockwave box is 45)
 HIT_FLASH_FRAMES = 3        # the body flashes pale on the first frames of a hit
+FALL_FRAMES = 20            # WAVEFUNCTION COLLAPSE's pillar and DILUTION FRIDGE come down over this long,
+FALL_FROM = 56              # ... their lowest end from just under the HUD (the rest still above the screen)
+LINGER_STAY = 40            # a super's last art stays this long after it lands (section 9) ...
+LINGER_FADE = 12            # ... then fades out over this long
+LINGERS = {"collapse": "pillar", "fridge": "fridge", "h_gate": "h_gate", "swipe": "claws", "padlock": "padlock"}
 BLOCH_R = 50                # BLOCH SPHERE's radius: its hitbox is 100 px across and tall
 BSOD_SCREEN_FRAMES = 30     # the BLUE SCREEN's drop: the whole screen blue this long, then CRASH!
 SWITCH_FLASH_FRAMES = 8     # a switch (an H): the body flashes white as its colour changes
@@ -601,6 +606,18 @@ class Effect:
     facing: int = 1
 
 
+@dataclass
+class Linger:
+    """A super's art left on screen after its last hit (the pillar, the fridge, the H gate, the
+    claws, the padlock), at the world x it landed on."""
+
+    kind: str
+    x: float
+    colour: tuple
+    facing: int = 1
+    age: int = 0
+
+
 def tags_of(match: M.Match) -> dict[str, str]:
     """What each side is called on screen: P1 and P2, or CPU1 and CPU2 for a side the CPU fights."""
     return {p: f"CPU{p[1]}" if match.cpu[p] else p.upper() for p in M.PLAYERS}
@@ -664,6 +681,8 @@ class Renderer:
         self.bsod_crash: tuple[float, str] = (0.0, "")      # ... where it landed, and on whom (its text)
         self._glitch = pygame.Surface((W, H), pygame.SRCALPHA)
         self._ghost_layer = pygame.Surface((320, 320), pygame.SRCALPHA)     # NINE LIVES' ghosts
+        self._fade_layer = pygame.Surface((W, H), pygame.SRCALPHA)          # lingering art, fading out
+        self.lingers: list[Linger] = []                                     # a super's art after its last hit
         self._windows: list[tuple[float, float, str]] = []     # ... the frozen bodies' error windows, to draw
         self.trail = {p: 0.0 for p in PLAYERS}          # the damage trail on each bar
         self.trail_wait = {p: 0 for p in PLAYERS}
@@ -743,6 +762,7 @@ class Renderer:
         for s in fight.shots:
             self._shot(s, ox, oy)
         self._super_art(fight, ox, oy)
+        self._draw_lingers(ox, oy)
         if self.bsod_crash[1] and not self.bsod_flash:      # the blue screen is over: CRASH!
             self.effects.append(Effect("popup", self.bsod_crash[0] + 50, FLOOR_Y - 150, POPUP_FRAMES,
                                        POPUP_FRAMES, P.WHITE, "CRASH!"))
@@ -782,6 +802,8 @@ class Renderer:
                             if f.move is not None and f.move.crash is not None), None)
                 if dos is not None and dos not in self.crashes:
                     self.crashes[dos] = (self._fight.fighters[dos].x, 0)
+            elif e.kind in LINGERS:
+                self._linger_start(e)
             elif e.kind == "lock_miss" and e.player:     # a super's lock found nobody: they flash
                 for body in (e.player, f"{e.player}/bob"):
                     self.body_flash[body] = (P.WHITE, SWITCH_FLASH_FRAMES)
@@ -1082,9 +1104,6 @@ class Renderer:
                 k = (f.frame + 1) / f.startup
                 SA.bloch(surf, (f.x + ox, FLOOR_Y - BLOCH_R + oy), round(20 + (BLOCH_R - 20) * k), colour,
                          spin=0.9, fill=34)
-            elif m.name == "H-GATE UPPERCUT" and f.frame < 18:
-                SA.h_gate(surf, (f.x + ox + f.facing * 12, FLOOR_Y - f.y - 190 + oy))
-                SA.bloch(surf, (f.x + ox - f.facing * 80, FLOOR_Y - 190 + oy), 52, colour, up=False, spin=1.2, fill=30)
             elif m.name == "WAVEFUNCTION COLLAPSE":
                 if f.phase == "startup" and target is None:
                     SA.cloud(surf, f.x + ox + f.facing * 160, 260, colour, t=self.t / 4, amp=22)
@@ -1092,41 +1111,38 @@ class Renderer:
                     left = (f.startup - f.frame) / m.lock
                     SA.cloud(surf, target, 40 + 160 * left, colour, t=self.t / 4, amp=34)
                     SA.lock_ring(surf, target)
-                elif target is not None and into < m.active + 14:
-                    SA.pillar(surf, target, colour, k=max(0.2, 1 - max(0, into - m.active) / 14))
+                fall = self._falling(f)
+                if fall is not None:            # the pillar comes down, onto the lock once it locks
+                    SA.falling_pillar(surf, rival.x + ox if target is None else target,
+                                      FALL_FROM + (FLOOR_Y - FALL_FROM) * fall + oy, colour)
             elif m.name == "COHERENT BEAM":
                 hands = (f.x + ox + f.facing * 50, FLOOR_Y - 92 + oy)
                 if f.phase == "startup":
                     SA.flare(surf, hands, round(8 + 22 * (f.frame + 1) / f.startup), colour)
                 elif f.phase == "active":
-                    fade = min(1.0, (m.active - into) / 10)
-                    SA.beam(surf, hands[0], f.facing, colour, t=self.t, k=max(0.25, fade))
+                    SA.beam(surf, hands[0], f.facing, colour, t=self.t)
                     SA.flare(surf, hands, 34, colour)
+                else:                           # after its last hit it narrows away, over the recovery
+                    k = 1 - (into - m.active + 1) / m.recovery
+                    if k > 0:
+                        SA.beam(surf, hands[0], f.facing, colour, t=self.t, k=k)
+                        SA.flare(surf, hands, round(34 * k), colour)
             elif m.name == "NINE LIVES" and m.hits:
                 if f.phase == "active" and target is not None:
                     side = 1 if (into // m.hit_every) % 2 else -1
                     gx = target + side * (70 - (into % m.hit_every) * 6)
                     self._ghost(gx, -side, colour)
                     SA.counter(surf, (target, FLOOR_Y - 180 + oy), f"{min(f.hit_count + 1, 8)}/9")
-            elif m.name == "NINE LIVES":
-                if f.frame < 14 and target is not None:
-                    for n in range(3):
-                        a = (target - 4 + 14 * n, FLOOR_Y - 150 + oy)
-                        b = (target + 40 + 14 * n, FLOOR_Y - 40 + oy)
-                        pygame.draw.line(surf, P.INK, a, b, 6)
-                        pygame.draw.line(surf, P.WHITE, a, b, 3)
-                    SA.counter(surf, (target, FLOOR_Y - 190 + oy), "9/9")
             elif m.name == "DILUTION FRIDGE" and m.follow is not None:
                 if f.phase == "startup" and target is None:
                     SA.shadow_mark(surf, rival.x + ox, colour=colour)
                 elif f.phase == "startup":
                     SA.shadow_mark(surf, target, w=130, locked=True)
-                    k = 1 - (f.startup - f.frame) / m.lock
-                    SA.fridge(surf, target, -40 + (FLOOR_Y + 46) * k + oy, falling=True)
-                elif target is not None:
-                    SA.fridge(surf, target, FLOOR_Y + 6 + oy)
+                fall = self._falling(f)
+                if fall is not None:            # the fridge comes down over its shadow, locked or not
+                    SA.fridge(surf, rival.x + ox if target is None else target,
+                              FALL_FROM + (FLOOR_Y + 6 - FALL_FROM) * fall + oy, falling=True)
             elif m.name == "DILUTION FRIDGE" and target is not None:
-                SA.fridge(surf, target, FLOOR_Y + 6 + oy)
                 SA.frost_wave(surf, target, k=min(1.0, (f.frame + 1) / 6))
             elif m.name == "ONE-TIME PAD" and m.hits and f.phase == "active" and target is not None:
                 bob = fight.echoes[key]
@@ -1140,9 +1156,71 @@ class Renderer:
                 surf.blit(key_img, key_img.get_rect(center=(round(kx), FLOOR_Y - 76 + oy)))
                 SA.counter(surf, (target, FLOOR_Y - 180 + oy), f"{min(f.hit_count + 1, 6)}/6")
             elif m.name == "ONE-TIME PAD" and target is not None:
-                SA.padlock(surf, (target, FLOOR_Y - 120 + oy), closed=f.frame >= 3)
                 if f.frame < 16:
                     blit_center(surf, outlined("CLICK!", 16, P.WHITE, thick=2), (target + 70, FLOOR_Y - 190 + oy))
+
+    @staticmethod
+    def _falling(f: Fighter) -> float | None:
+        """How far down a super's falling thing is (0: off the top, 1: landed), over its last
+        FALL_FRAMES frames before it lands; None outside them."""
+        left = f.startup - f.frame
+        if f.phase != "startup" or left > FALL_FRAMES:
+            return None
+        return 1 - left / FALL_FRAMES           # (steady: an ease-in would spend its first frames under the HUD)
+
+    def _linger_start(self, e) -> None:
+        """A super's last hit: its art stays on (Linger), whatever its move does next."""
+        f = self._fight.fighters[e.player] if self._fight is not None and e.player else None
+        m = f.move if f is not None else None
+        kind = LINGERS.get(e.kind)
+        if m is None or kind is None or m.kind != "super" or m.cue != e.kind:
+            return
+        x = f.x if kind == "h_gate" else f.target_x
+        if x is not None:
+            self.lingers.append(Linger(kind, x, BASIS_BODY[f.basis], f.facing))
+
+    def _draw_lingers(self, ox: int, oy: int) -> None:
+        """The lingering art: LINGER_STAY frames as it was, then LINGER_FADE frames fading out."""
+        kept = []
+        for lg in self.lingers:
+            fade = 1.0 - max(0, lg.age - LINGER_STAY) / LINGER_FADE
+            if fade <= 0:
+                continue
+            x = lg.x + ox
+            if lg.kind == "pillar":             # it narrows away
+                SA.pillar(self.surface, x, lg.colour, k=max(0.05, fade))
+            else:
+                self._faded(lambda surf, lg=lg, x=x: self._linger_art(surf, lg, x, oy), round(255 * fade))
+            lg.age += 1
+            kept.append(lg)
+        self.lingers = kept
+
+    def _linger_art(self, surf, lg: "Linger", x: float, oy: int) -> None:
+        if lg.kind == "fridge":
+            SA.fridge(surf, x, FLOOR_Y + 6 + oy)
+        elif lg.kind == "padlock":
+            SA.padlock(surf, (x, FLOOR_Y - 120 + oy), closed=lg.age >= 3)
+        elif lg.kind == "h_gate":
+            SA.h_gate(surf, (x + lg.facing * 12, FLOOR_Y - 190 + oy))
+            SA.bloch(surf, (x - lg.facing * 80, FLOOR_Y - 190 + oy), 52, lg.colour, up=False, spin=1.2, fill=30)
+        elif lg.kind == "claws":
+            for n in range(3):
+                a = (x - 4 + 14 * n, FLOOR_Y - 150 + oy)
+                b = (x + 40 + 14 * n, FLOOR_Y - 40 + oy)
+                pygame.draw.line(surf, P.INK, a, b, 6)
+                pygame.draw.line(surf, P.WHITE, a, b, 3)
+            SA.counter(surf, (x, FLOOR_Y - 190 + oy), "9/9")
+
+    def _faded(self, draw, alpha: int) -> None:
+        """Draw straight onto the screen, or (fading) onto a see-through layer blitted at `alpha`."""
+        if alpha >= 255:
+            draw(self.surface)
+            return
+        layer = self._fade_layer
+        layer.fill((0, 0, 0, 0))
+        draw(layer)
+        layer.set_alpha(alpha)
+        self.surface.blit(layer, (0, 0))
 
     def _ghost(self, x: float, facing: int, colour) -> None:
         """One of NINE LIVES' ghost ERWINs, pouncing: see-through and pale."""

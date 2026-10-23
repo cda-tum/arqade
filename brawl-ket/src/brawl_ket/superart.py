@@ -168,6 +168,23 @@ def pillar(surf, x, colour, top=40, k=1.0) -> None:
     pygame.draw.ellipse(surf, P.WHITE, rect, 3)
 
 
+def falling_pillar(surf, x, bottom, colour) -> None:
+    """The pillar on its way down: a full-height column of light whose leading end is at `bottom`,
+    a white-hot tip and streaks behind it."""
+    x, bottom = round(x), round(bottom)
+    top = bottom - (FLOOR_Y - 40)
+    if bottom <= 0:
+        return
+    glow(surf, (x, bottom - 30), 60, colour, 80)
+    for w, a, c in ((60, 110, colour), (40, 170, P.lighten(colour, 0.4)), (16, 240, P.WHITE)):
+        col = pygame.Surface((w, bottom - max(0, top)), pygame.SRCALPHA)
+        col.fill((*c, a))
+        surf.blit(col, (x - w // 2, max(0, top)))
+    glow(surf, (x, bottom), 26, P.WHITE, 200)
+    for dx in (-42, -26, 26, 42):
+        pygame.draw.line(surf, P.lighten(colour, 0.5), (x + dx, bottom - 120), (x + dx, bottom - 40), 1)
+
+
 # --- PHOEBE: COHERENT BEAM ----------------------------------------------------------------------------
 
 
