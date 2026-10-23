@@ -480,7 +480,10 @@ class Fighter:
 
     def _whiffed(self, m: Move) -> bool:
         """A super's part with nothing to land on, and so no sound: a remote follow-up whose lock
-        missed (ONE-TIME PAD's padlock), or ONE-TIME PAD itself when it caught nobody."""
+        missed (ONE-TIME PAD's padlock; DILUTION FRIDGE's frost has no cue), or ONE-TIME PAD itself
+        when it caught nobody. Nothing else is silenced: NINE LIVES' ghosts lock with no hold and its
+        swipe isn't remote, so a NINE LIVES that misses still hisses and swipes at nothing, and
+        WAVEFUNCTION COLLAPSE's pillar (a lock with no hold) still falls with its sound."""
         return m.remote and self.target_x is None and (m.lock < 0 or m.lock_hold is not None)
 
     def _slot_for(self, btn: str, dx: int, rival_x: float) -> str:

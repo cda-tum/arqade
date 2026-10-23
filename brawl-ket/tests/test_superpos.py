@@ -786,6 +786,17 @@ def test_bob_echoes_nothing_mashed_during_their_super(side):
             assert bob.action != "attack"
 
 
+def test_a_missed_nine_lives_still_hisses_and_swipes_but_a_missed_pad_is_silent():
+    fight = fight_of(CHARACTERS["ERWIN"], ROBERT, NINE_LIVES.lock_range + 30.0)
+    fire(fight)
+    events = kinds(run(fight, 300))
+    assert "lock_miss" in events and "ghosts" in events and "swipe" in events
+    fight = fight_of(CHARACTERS["ALICE & BOB"], ROBERT, ONE_TIME_PAD.lock_range + 30.0)
+    fire(fight)
+    events = kinds(run(fight, 300))
+    assert "lock_miss" in events and "key_pass" not in events and "padlock" not in events
+
+
 def test_a_supers_startup_cant_be_hit_so_a_jab_never_wastes_the_bar():
     fight = fight_of(CHARACTERS["BOHR"], ROBERT, gap=50.0)
     fire(fight)
