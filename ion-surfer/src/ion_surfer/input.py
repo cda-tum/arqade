@@ -1,5 +1,10 @@
 """Translate pygame keyboard/joystick events into logical per-player actions.
 
+Devices, pad layouts and the two-player keyboard are shared by all games
+(arqade_common.input). The four face buttons double as a d-pad (X up, Y
+left, B down, A right); A also confirms and B goes back; L and R do the
+SANDBOX's extras.
+
 Event driven: each action is held while any of its sources (a key, a
 joystick button, an axis, the hat) is down. The pure decision functions
 (axis_to_direction, should_quit) and Pad's press/auto-repeat logic are unit
@@ -9,8 +14,15 @@ tested; the event plumbing needs real devices and is verified by running it.
 from __future__ import annotations
 
 import pygame
+from arqade_common.input import (
+    KEYBOARD_LAYOUT,
+    LastDevice,
+    PadLayout,
+    PadSlots,
+    default_pad_layout,
+)
 
-from ion_surfer.config import INPUT_CONFIG, KEYMAP, PAUSE_KEYS
+from ion_surfer.config import INPUT_CONFIG
 
 PLAYERS = ("p1", "p2")  # pad 0, pad 1
 
@@ -53,16 +65,35 @@ def axis_to_direction(axis_value: float, deadzone: float) -> int:
 
 
 def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool) -> bool:
+    """Start + Select held together by one player. There is deliberately no
+    quit key: Esc leaves fullscreen in a browser, and the PC launcher handles
+    Esc itself (it ends the game process)."""
     return (p1_start and p1_select) or (p2_start and p2_select)
+
+
+# What each of a player's printed buttons does. In the SANDBOX, blue's L/R
+# remove/add an ion, red's L cools while held and R toggles passive cooling;
+# Select fires that pad's laser kick there, and is otherwise only half of the
+# quit combo. One button can drive several actions; the menu code checks
+# confirm/back first and returns, so B never also scrolls down.
+BUTTON_ACTIONS = {
+    player: {"x": ("up",), "y": ("left",), "b": ("down", "back"), "a": ("right", "confirm"),
+             "l": (l_act,), "r": (r_act,), "start": ("start",), "select": ("select",)}
+    for player, l_act, r_act in (("p1", "remove_ion", "add_ion"), ("p2", "cool", "passive_cool"))
+}
+DIRECTIONS = ("up", "down", "left", "right")
 
 
 def key_codes(names: list[str]) -> list[int]:
     return [getattr(pygame, name) for name in names]
 
 
-def keyboard_quit_held(keys: pygame.key.ScancodeWrapper) -> bool:
-    key_name = INPUT_CONFIG["system"]["keyboard_quit"]
-    return bool(keys[getattr(pygame, key_name)])
+def keymap(player: str) -> dict[int, tuple[str, ...]]:
+    """Each of the player's keys in the shared layout -> its actions."""
+    layout = KEYBOARD_LAYOUT[player]
+    keys = {getattr(pygame, layout[d]): (d,) for d in DIRECTIONS}
+    keys.update({getattr(pygame, layout[b]): acts for b, acts in BUTTON_ACTIONS[player].items()})
+    return keys
 
 
 class Pad:
@@ -74,9 +105,7 @@ class Pad:
     # added to the config but not to the list -- the first press of that
     # button raised KeyError and took the whole game down mid-play.
     ACTIONS = tuple(dict.fromkeys(
-        [act for player in PLAYERS for act in INPUT_CONFIG[player]["buttons"]]
-        + [act for mapping in KEYMAP.values() for act in mapping]
-        + ["start", "select"]
+        [*DIRECTIONS, *(act for m in BUTTON_ACTIONS.values() for acts in m.values() for act in acts)]
     ))
 
     def __init__(self):
@@ -128,18 +157,26 @@ class Pad:
 
 
 class Controls:
-    def __init__(self):
+    def __init__(self, pad_layout: PadLayout | None = None):
         self.pads = [Pad(), Pad()]
-        self.pause_key = False  # keyboard-only pause key (Esc) pressed this frame
         self.any_button = False  # any joystick button (or, with the keyboard on, key) went down
-        self.joys = {}  # instance id -> (joystick, pad index)
-        self.keymap = {pi: {act: key_codes(names) for act, names in m.items()} for pi, m in KEYMAP.items()}
-        self.pause_keys = key_codes(PAUSE_KEYS)
+        # Which joystick is whose: pads join P1 then P2 as they appear (in a
+        # browser, only after their first button press).
+        self.slots = PadSlots()
+        self.pad_layout = pad_layout or default_pad_layout()
+        # Keyboard or pad, per player, so on-screen hints name what they're holding.
+        self.devices = LastDevice()
+        self.keymap = [keymap(p) for p in PLAYERS]
+        self.slots.scan()
+
+    @property
+    def joys(self):
+        """Every connected joystick by device index (for the input test)."""
+        return {i: pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())}
 
     def begin_frame(self):
         for p in self.pads:
             p.pressed.clear()
-        self.pause_key = False
         self.any_button = False
 
     def consume_buttons(self):
@@ -150,9 +187,10 @@ class Controls:
         return any(act in p.pressed for p in self.pads)
 
     def pause_pressed(self):
-        """Start on either pad (or the keyboard's Esc) pauses and resumes.
-        Select never does: it is reserved for the Start + Select quit combo."""
-        return self.any_pressed("start") or self.pause_key
+        """Start on either pad (or either player's Start key) pauses and
+        resumes. Select never does: it is reserved for the Start + Select
+        quit combo."""
+        return self.any_pressed("start")
 
     def quit_combo(self):
         a, b = self.pads
@@ -162,28 +200,21 @@ class Controls:
         )
 
     def _joy_pad(self, e):
-        entry = self.joys.get(e.instance_id)
-        return None if entry is None else self.pads[entry[1]]
+        slot = self.slots.slot_of(e.instance_id)
+        return None if slot is None else self.pads[slot]
 
     def handle(self, e):
+        self.slots.handle_event(e)
+        self.devices.handle_event(e, self.slots, keyboard=_keyboard_enabled)
+        layout = self.pad_layout
         if e.type in (pygame.KEYDOWN, pygame.KEYUP):
             if not _keyboard_enabled:
                 return
             on = e.type == pygame.KEYDOWN
             self.any_button |= on
-            if on and e.key in self.pause_keys:
-                self.pause_key = True
-            for pi, m in self.keymap.items():
-                for act, keys in m.items():
-                    if e.key in keys:
-                        self.pads[pi].set(act, ("k", e.key), on)
-        elif e.type == pygame.JOYDEVICEADDED:
-            for pi, pk in enumerate(PLAYERS):
-                if INPUT_CONFIG[pk]["joystick_index"] == e.device_index:
-                    j = pygame.joystick.Joystick(e.device_index)
-                    self.joys[j.get_instance_id()] = (j, pi)
-        elif e.type == pygame.JOYDEVICEREMOVED:
-            self.joys.pop(e.instance_id, None)
+            for pi, m in enumerate(self.keymap):
+                for act in m.get(e.key, ()):
+                    self.pads[pi].set(act, ("k", e.key), on)
         elif e.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP):
             # any button at all, mapped or not, on any pad: the HOW TO PLAY
             # card is dismissed with it
@@ -192,21 +223,16 @@ class Controls:
             if pad is None:
                 return
             on = e.type == pygame.JOYBUTTONDOWN
-            system = INPUT_CONFIG["system"]
-            cfg = INPUT_CONFIG[PLAYERS[self.pads.index(pad)]]
-            if e.button == system["select_button"]:
-                pad.set("select", ("jb", e.button), on)
-            elif e.button == system["start_button"]:
-                pad.set("start", ("jb", e.button), on)
-            else:
-                for act, buttons in cfg["buttons"].items():
-                    if e.button in buttons:
+            player = PLAYERS[self.pads.index(pad)]
+            for name, raw in (*layout.buttons.items(), *layout.dpad_buttons.items()):
+                if e.button == raw:
+                    for act in BUTTON_ACTIONS[player].get(name, (name,)):
                         pad.set(act, ("jb", e.button), on)
         elif e.type == pygame.JOYAXISMOTION:
             pad = self._joy_pad(e)
             if pad is None:
                 return
-            ax_x, ax_y = INPUT_CONFIG[PLAYERS[self.pads.index(pad)]]["axes"]
+            ax_x, ax_y = layout.stick_axes
             d = axis_to_direction(e.value, INPUT_CONFIG["axis_deadzone"])
             if e.axis == ax_x:
                 pad.set("left", "jax", d < 0)
@@ -216,7 +242,8 @@ class Controls:
                 pad.set("down", "jay", d > 0)
         elif e.type == pygame.JOYHATMOTION:
             pad = self._joy_pad(e)
-            if pad is None or e.hat != INPUT_CONFIG[PLAYERS[self.pads.index(pad)]]["hat_index"]:
+            # the layout's d-pad hat, or else hat 0, for pads that have one
+            if pad is None or e.hat != (layout.dpad_hat or 0):
                 return
             hx, hy = e.value
             pad.set("left", "hat", hx < 0)

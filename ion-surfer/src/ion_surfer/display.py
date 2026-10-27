@@ -18,6 +18,7 @@ local testing.
 from __future__ import annotations
 
 import pygame
+from arqade_common import runtime
 
 from ion_surfer.config import INTERNAL_HEIGHT, INTERNAL_WIDTH
 
@@ -50,6 +51,11 @@ def make_display(fullscreen: bool, window_size: str) -> tuple[pygame.Surface, py
     Windowed: returns a separate low-res `surface` to draw on and the actual
     `window`; `present()` does the manual scale+blit as before.
     """
+    if runtime.is_browser():
+        # The page scales the canvas to fit, so draw straight onto a display
+        # of the internal size: no SCALED, no manual blit.
+        return pygame.display.set_mode((INTERNAL_WIDTH, INTERNAL_HEIGHT)), None
+
     if fullscreen:
         surface = pygame.display.set_mode(
             (INTERNAL_WIDTH, INTERNAL_HEIGHT), pygame.SCALED | pygame.FULLSCREEN

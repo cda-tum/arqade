@@ -7,9 +7,8 @@ camera scrolls ever faster.
 
 **Status:** full game (solo, 2-player versus, 2-player co-op, seeded levels, records),
 a quantum sandbox mode (**SANDBOX**, 1–4 ions),
-`--input-test`, and a Batocera deploy script. Button/axis indices in `INPUT_CONFIG` use
-the same placeholders as the quantum games and still need an `--input-test` run on the
-real cabinet.
+`--input-test`, and a Batocera deploy script. It also runs in the browser (pygbag), from
+the same code.
 
 ## Gameplay
 
@@ -190,6 +189,12 @@ uv run python -m ion_surfer.main --fps               # force the FPS overlay on
 uv run python -m ion_surfer.main --window-size 1800x960
 ```
 
+In the browser (pygbag's test server on http://localhost:8000), from the repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve ion-surfer
+```
+
 Press **F3** in-game to toggle the FPS overlay at runtime. The game renders at 1200×640
 and is scaled and letterboxed onto the real screen.
 
@@ -199,32 +204,38 @@ and is scaled and letterboxed onto the real screen.
 uv run python -m ion_surfer.main --input-test
 ```
 
-This mode shows live joystick axes, buttons and hats. Esc quits. Update the placeholder
-indices in `src/ion_surfer/config.py` (`INPUT_CONFIG`) with what you observe. All button
-and axis mappings live there.
+This mode shows live joystick axes, buttons and hats. Esc quits. Button and axis numbers
+live in `../common/src/arqade_common/input.py`, shared by all games.
 
 ### Controls
 
-| | P1 (blue) | P2 (red) |
+| | P1 (blue): pad / keys | P2 (red): pad / keys |
 |---|---|---|
-| Select electrode | Stick left/right or Y/A / ← → | Stick left/right or Y/A / D G |
-| Voltage | Stick up/down or X/B / ↑ ↓ | Stick up/down or X/B / R F |
-| Start (menus) / pause (in play) | Start / 1 | Start / 2 |
-| Menu: confirm | **A** / Ctrl, Space, Enter | **A** / A |
-| Menu: back | **B** / Backspace | **B** / S |
-| Sandbox: laser kick | Select / 5 | Select / 6 |
-| Sandbox: L | remove ion (key Q) | cool while held (key C) |
-| Sandbox: R | add ion (key E) | passive cooling on/off (key V) |
+| Select electrode | Stick or d-pad left/right, or Y/A / A D or C B | the same / ← → or J L |
+| Voltage | Stick or d-pad up/down, or X/B / W S or G V | the same / ↑ ↓ or I K |
+| Start (menus) / pause (in play) | Start / Space | Start / Enter |
+| Menu: confirm | **A** / B | **A** / L |
+| Menu: back | **B** / V | **B** / K |
+| Sandbox: laser kick | Select / L-Shift | Select / R-Shift |
+| Sandbox: L | remove ion (key F) | cool while held (key U) |
+| Sandbox: R | add ion (key H) | passive cooling on/off (key O) |
+
+The keys are the layout shared by all the games (`../common`): each player's half of the
+keyboard is a pad, its 2x3 buttons on F G H / C V B and U I O / J K L. On-screen hints name
+the keys or the pad buttons, whichever each player last used. In the SEED entry, letter
+keys type, so Space or Enter finishes it.
 
 - **Start** pauses during play, on either controller, in every mode including the
-  sandbox (Esc too, on the keyboard). The pause menu has RESUME, RESTART and QUIT TO
+  sandbox. The pause menu has RESUME, RESTART and QUIT TO
   TITLE (QUIT with `--sandbox`, which has no title screen): the stick moves the
   selection, A picks, Start or B resumes. Select does not pause; it is reserved for
   the quit combo (and fires the laser kick in the sandbox).
-- **Quit:** hold Start and Select together on either controller (1+5 or 2+6 on the
-  keyboard), paused or not, also on the HOW TO PLAY card, or pick QUIT in the main menu
-  with A.
-- The keyboard keys are a dev fallback only. The cabinet loader runs the game with `--no-keyboard`: Batocera also turns P1's pad into keystrokes (arrow keys, numpad, letters, Enter/Space — see `../AGENTS.md`), which would otherwise let P1's stick or buttons drive P2 or fire two actions at once.
+- **Quit:** hold Start and Select together on either controller (Space + L-Shift or
+  Enter + R-Shift on the keyboard), paused or not, also on the HOW TO PLAY card, or pick
+  QUIT in the main menu with A. There is no quit key: Esc leaves fullscreen in a browser,
+  and the PC launcher's Esc ends the game on its own. In the browser, quitting goes back
+  to the menu and tells the page around the game (`arqade:quit`).
+- The cabinet loader runs the game with `--no-keyboard`: Batocera also turns P1's pad into keystrokes (arrow keys, numpad, letters, Enter/Space — see `../AGENTS.md`), which would otherwise let P1's stick or buttons drive P2 or fire two actions at once. Pads use the cabinet's button numbers by default; `--pad-layout xbox` reads an Xbox-style pad on a PC instead, and browser gamepads use the browser's standard layout.
 
 Records (solo and co-op) are saved to `~/.ion_surfer_scores.json`. On Batocera that is
 `/userdata/system/`, so a redeploy doesn't reset them.

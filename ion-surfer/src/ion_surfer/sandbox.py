@@ -329,7 +329,9 @@ class Sandbox:
             _text(s, titles[key], self.f_tiny, TITLE_C, (r.x + 10, r.y + 6), "topleft")
         return s
 
-    def draw(self, surf, sy):
+    def draw(self, surf, sy, hint=None):
+        """`hint` is the controls line under the panels, named for the
+        players' devices (the game builds it); by default the pads' names."""
         if self.crystal:
             self.draw_ions(surf, sy)
         else:
@@ -339,8 +341,8 @@ class Sandbox:
         self.draw_phase_space(surf)
         self.draw_scope(surf)
         self.draw_readout(surf)
-        _text(surf, "STICK electrode / voltage    SELECT laser kick    BLUE  L remove / R add ion    "
-                    "RED  L hold: cool / R passive cooling    START pause",
+        _text(surf, hint or ("STICK electrode / voltage    SELECT laser kick    BLUE  L remove / R add ion    "
+                             "RED  L hold: cool / R passive cooling    START pause"),
               self.f_tiny, DIM_C, (self.w / 2, PANEL_TOP + PANEL_H + 14))
 
     def _surface_y(self, sy, x):

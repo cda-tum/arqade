@@ -19,6 +19,7 @@ import math
 import random
 
 import pygame
+from arqade_common.input import KEYBOARD
 
 from ion_surfer import game as G
 
@@ -163,6 +164,8 @@ class Tutorial:
         self.mode = mode
         self.age = 0.0
         self.demo = Demo(mode)
+        self.name = game.name  # names a control for the players' keys or pads
+        self.devices = game.controls.devices
         self.bg = game.bg
         self.f_title = game.f_title
         self.f_label = G.load_font("Bungee-Regular.ttf", 22)
@@ -200,7 +203,8 @@ class Tutorial:
             self._game_controls(s, right)
 
         if self.age % 0.9 < 0.6:
-            G.text(s, "PRESS ANY BUTTON TO START", self.f_prompt, (255, 255, 255), (G.W / 2, 612))
+            any_button = "ANY KEY" if self.devices.everyone_on(KEYBOARD) else "ANY BUTTON"
+            G.text(s, f"PRESS {any_button} TO START", self.f_prompt, (255, 255, 255), (G.W / 2, 612))
 
     def _stick(self, s, center, color):
         x, y = center
@@ -227,9 +231,18 @@ class Tutorial:
                 G.text(s, lab, self.f_key, (8, 12, 28) if color else (90, 104, 150), (c[0], c[1] + 1))
 
     def _row(self, s, x, y, key, what, key_color=TEXT_C, width=86):
-        """A printed button name, then what it does, lined up at x + width."""
+        """A printed button name, then what it does, lined up at x + width
+        (further right if the name is longer, e.g. a key's)."""
+        width = max(width, self.f_key.size(key)[0] + 12)
         G.text(s, key, self.f_key, key_color, (x, y), "midleft")
         G.text(s, what, self.f_ctrl, TEXT_C, (x + width, y), "midleft")
+
+    def _faces(self, player=None):
+        """What X B Y A are called for a player's device: on the keyboard, the
+        keys in their place ("G V C B"), for both players when player is None."""
+        if player is None:
+            return " / ".join(dict.fromkeys(self._faces(p) for p in ("p1", "p2")))
+        return " ".join(self.name(b, player) for b in ("x", "b", "y", "a"))
 
     def _game_controls(self, s, r):
         who = {1: "Either pad works.", 2: "Each pad has its own curve.",
@@ -242,10 +255,11 @@ class Tutorial:
         G.text(s, "raise / lower it", self.f_ctrl, TEXT_C, (r.x + 104, r.y + 168), "topleft")
         face = (175, 186, 220)
         self._cluster(s, (r.x + 2, r.y + 222), {"X": face, "Y": face, "B": face, "A": face})
-        G.text(s, "X B Y A work", self.f_ctrl, TEXT_C, (r.x + 164, r.y + 236), "topleft")
+        who = self.devices.latest if self.mode == 1 else None  # 1 player: either pad works
+        G.text(s, f"{self._faces(who)} work", self.f_ctrl, TEXT_C, (r.x + 164, r.y + 236), "topleft")
         G.text(s, "like the stick:", self.f_ctrl, TEXT_C, (r.x + 164, r.y + 262), "topleft")
         G.text(s, "up, down, left, right", self.f_small, G.TEXT_DIM, (r.x + 164, r.y + 290), "topleft")
-        self._row(s, r.x, r.y + 362, "START", "pause")
+        self._row(s, r.x, r.y + 362, self.name("start", who), "pause")
 
     def _sandbox_controls(self, s, r):
         face = (175, 186, 220)
@@ -256,9 +270,10 @@ class Tutorial:
             G.text(s, name, self.f_label, color, (x, r.y + 44), "topleft")
             self._cluster(s, (x + 52, r.y + 40), {"L": color, "R": color, "X": face, "Y": face,
                                                  "B": face, "A": face})
-            self._row(s, x, r.y + 146, "L", l_what, color, 30)
-            self._row(s, x, r.y + 176, "R", r_what, color, 30)
-        self._row(s, r.x, r.y + 230, "STICK", "electrode / voltage")
-        G.text(s, "(X B Y A work like the stick)", self.f_small, G.TEXT_DIM, (r.x, r.y + 252), "topleft")
-        self._row(s, r.x, r.y + 300, "SELECT", "laser kick")
-        self._row(s, r.x, r.y + 336, "START", "pause")
+            player = name.lower()
+            self._row(s, x, r.y + 146, self.name("l", player), l_what, color, 30)
+            self._row(s, x, r.y + 176, self.name("r", player), r_what, color, 30)
+        self._row(s, r.x, r.y + 230, self.name("stick"), "electrode / voltage")
+        G.text(s, f"({self._faces()} work like the stick)", self.f_small, G.TEXT_DIM, (r.x, r.y + 252), "topleft")
+        self._row(s, r.x, r.y + 300, self.name("select"), "laser kick")
+        self._row(s, r.x, r.y + 336, self.name("start"), "pause")

@@ -1,0 +1,21 @@
+{
+  "id": "ion-surfer",
+  "title": "Ion Surfer",
+  "tagline": "Bend an ion trap's electric potential to surf your ion along the chip.",
+  "description": "Each player steers a cursor over a strip of trap electrodes. Raise and lower their voltages to reshape the potential curve your ion rolls on, and keep it moving as the view scrolls. Grab photons, and avoid defects, blocks, lasers, stray ions and loss holes. Play alone, against a friend on separate curves, or together on one shared curve. The SANDBOX is a real quantum ion to play with: kick it with the laser, squeeze the trap and cool it down.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "A / D to pick an electrode, W / S to raise or lower it, Space to pause",
+      "p2": "Left / Right to pick an electrode, Up / Down to raise or lower it, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Left and right pick an electrode; up and down raise or lower its voltage.",
+    "Your ion rolls along the curve. Don't let it fall behind the scrolling view.",
+    "Grab photons for bonus points. Avoid loss holes, blocks and stray ions.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

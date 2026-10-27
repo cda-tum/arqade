@@ -10,13 +10,13 @@ import pygame  # noqa: E402
 import pytest  # noqa: E402
 
 from ion_surfer import game as game_mod  # noqa: E402
-from ion_surfer.config import INPUT_CONFIG  # noqa: E402
+from arqade_common.input import ENCODER  # noqa: E402
 
-START = INPUT_CONFIG["system"]["start_button"]    # raw 9
-SELECT = INPUT_CONFIG["system"]["select_button"]  # raw 8
-A = INPUT_CONFIG["p1"]["buttons"]["confirm"][0]    # raw 1
-B = INPUT_CONFIG["p1"]["buttons"]["back"][0]       # raw 2
-Y_AXIS = INPUT_CONFIG["p1"]["axes"][1]
+START = ENCODER.buttons["start"]    # raw 9
+SELECT = ENCODER.buttons["select"]  # raw 8
+A = ENCODER.buttons["a"]    # raw 1
+B = ENCODER.buttons["b"]       # raw 2
+Y_AXIS = ENCODER.stick_axes[1]
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def make_game(tmp_path, monkeypatch):
     def make(mode=1, sandbox_only=False):
         g = game_mod.Game(pygame.Surface((game_mod.W, game_mod.H)), sandbox_only=sandbox_only)
         # Fake both pads as connected joysticks: instance id == pad index.
-        g.controls.joys = {0: (None, 0), 1: (None, 1)}
+        g.controls.slots.slot_of = lambda iid: iid if iid in (0, 1) else None
         if not sandbox_only:
             g.start(mode)
         return g
@@ -157,9 +157,9 @@ def test_sandbox_only_pause_menu_quits_the_program(make_game):
     assert not g.running
 
 
-def test_keyboard_fallback_pauses_with_start_key_and_esc(make_game):
+def test_each_players_start_key_pauses(make_game):
     g = make_game()
-    for key in (pygame.K_1, pygame.K_ESCAPE):
+    for key in (pygame.K_SPACE, pygame.K_RETURN):  # P1's Start, P2's Start
         frame(g, pygame.event.Event(pygame.KEYDOWN, key=key, unicode=""))
         frame(g, pygame.event.Event(pygame.KEYUP, key=key, unicode=""))
         assert g.state == "pause"

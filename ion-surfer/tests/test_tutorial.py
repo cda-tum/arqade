@@ -11,16 +11,16 @@ import pytest  # noqa: E402
 
 from ion_surfer import game as game_mod  # noqa: E402
 from ion_surfer import tutorial  # noqa: E402
-from ion_surfer.config import INPUT_CONFIG  # noqa: E402
+from arqade_common.input import ENCODER  # noqa: E402
 from ion_surfer.input import set_keyboard_enabled  # noqa: E402
 
-START = INPUT_CONFIG["system"]["start_button"]    # raw 9
-SELECT = INPUT_CONFIG["system"]["select_button"]  # raw 8
-A = INPUT_CONFIG["p1"]["buttons"]["confirm"][0]    # raw 1 (also "right" in play)
-B = INPUT_CONFIG["p1"]["buttons"]["back"][0]       # raw 2
+START = ENCODER.buttons["start"]    # raw 9
+SELECT = ENCODER.buttons["select"]  # raw 8
+A = ENCODER.buttons["a"]    # raw 1 (also "right" in play)
+B = ENCODER.buttons["b"]       # raw 2
 L = 4                                              # printed L, raw 4
-Y_AXIS = INPUT_CONFIG["p1"]["axes"][1]
-X_AXIS = INPUT_CONFIG["p1"]["axes"][0]
+Y_AXIS = ENCODER.stick_axes[1]
+X_AXIS = ENCODER.stick_axes[0]
 
 
 class FakeSounds:
@@ -44,7 +44,7 @@ def make_menu(tmp_path, monkeypatch):
 
     def make():
         g = game_mod.Game(pygame.Surface((game_mod.W, game_mod.H)), sounds=FakeSounds())
-        g.controls.joys = {0: (None, 0), 1: (None, 1)}
+        g.controls.slots.slot_of = lambda iid: iid if iid in (0, 1) else None
         return g
 
     yield make

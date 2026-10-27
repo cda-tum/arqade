@@ -6,12 +6,15 @@ Shape the trap potential with the electrodes on the floor and keep your ion on s
 Game state, physics and drawing. CLI / entry point: main.py; input mapping:
 config.py / input.py.
 """
+import asyncio
 import json
 import math
 import random
 from pathlib import Path
 
 import pygame
+from arqade_common import runtime, web
+from arqade_common.input import KEYBOARD
 
 from ion_surfer import sound
 from ion_surfer.config import FPS, INTERNAL_HEIGHT, INTERNAL_WIDTH, SCORE_FILE
@@ -172,12 +175,17 @@ def text(surf, s, font, color, pos, anchor="center", alpha=None):
 SANDBOX = 4  # mode number of the sandbox, picked from the main menu
 
 
+KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}  # the keys that stand in for each player's stick
+# Same as the folder name in the web build and the "id" in game.json.
+GAME_ID = "ion-surfer"
+
+
 class Game:
-    def __init__(self, screen, sandbox_only=False, sounds=None):
+    def __init__(self, screen, sandbox_only=False, sounds=None, pad_layout=None):
         self.screen = screen
         self.sandbox_only = sandbox_only
         self.running = True
-        self.controls = Controls()
+        self.controls = Controls(pad_layout)
         self.sounds = sounds or Sounds()  # silent unless run() built real ones
         self.tutorial = None
         self.f_title = load_font("Bungee-Regular.ttf", 54)
@@ -810,7 +818,7 @@ class Game:
         elif self.state == "menu":
             self.t += dt
             if self.seed_edit:
-                if self.confirm() or self.back() or c.pause_key:
+                if self.confirm() or self.back():
                     self.seed_edit = False
                     self.sounds.play("confirm")
                     return
@@ -1118,12 +1126,17 @@ class Game:
                 text(s, ch if ch != " " else "_", self.f_item, col, (x, y))
                 if i == self.seed_slot:
                     pygame.draw.rect(s, GOLD, (x - 10, y + 16, 20, 3))
-            text(s, "UP/DOWN change   LEFT/RIGHT move   A or B done   (empty = random)", self.f_tiny,
+            if self.controls.devices.everyone_on(KEYBOARD):  # letter keys type, so Start finishes
+                done = f"type   LEFT/RIGHT move   {self.name('start')} done"
+            else:
+                done = f"UP/DOWN change   LEFT/RIGHT move   {self.name('a')} or {self.name('b')} done"
+            text(s, f"{done}   (empty = random)", self.f_tiny,
                  TEXT_DIM, (W / 2, 236 + len(self.MAIN_ITEMS) * 42))
         lines = [
-            "BLUE (P1): stick = select electrode / voltage",
-            "RED (P2): stick = select electrode / voltage",
-            "Co-op: one shared waveform, one ion.   A: confirm   B: back   START: pause",
+            f"BLUE (P1): {self.name('stick', 'p1').lower()} = select electrode / voltage",
+            f"RED (P2): {self.name('stick', 'p2').lower()} = select electrode / voltage",
+            f"Co-op: one shared waveform, one ion.   {self.name('a')}: confirm   {self.name('b')}: back   "
+            f"{self.name('start')}: pause",
         ]
         for i, ln in enumerate(lines):
             text(s, ln, self.f_small, TEXT_DIM, (W / 2, 486 + i * 22))
@@ -1135,7 +1148,9 @@ class Game:
         s.blit(self.dim, (0, 0))
         text(s, "PAUSED", self.f_title, GOLD, (W / 2, 190))
         self.draw_items(self.PAUSE_ITEMS, 290)
-        text(s, "A: choose   START or B: resume", self.f_small, TEXT_DIM, (W / 2, 420))
+        p = self.controls.devices.latest  # one player works the menu
+        text(s, f"{self.name('a', p)}: choose   {self.name('start', p)} or {self.name('b', p)}: resume",
+             self.f_small, TEXT_DIM, (W / 2, 420))
         if self.mode != SANDBOX:
             text(s, f"SEED {self.current_seed}", self.f_small, TEXT_DIM, (W / 2, 450))
 
@@ -1158,13 +1173,31 @@ class Game:
         text(s, f"SEED {self.current_seed}", self.f_item, (230, 235, 255), (W / 2, 296))
         self.draw_items(self.OVER_ITEMS, 370)
 
+    # ---------- button names ----------
+    def name(self, control, player=None):
+        """A control's on-screen name for one player's keys or pad, or for
+        both players' when player is None (e.g. "SPACE / ENTER"). "stick" is
+        the stick or the direction keys."""
+        if player is None:
+            return " / ".join(dict.fromkeys(self.name(control, p) for p in ("p1", "p2")))
+        if control == "stick":
+            return KEYBOARD_STICKS[player] if self.controls.devices[player] == KEYBOARD else "STICK"
+        return self.controls.devices.label(control, player)
+
+    def sandbox_hint(self):
+        """The SANDBOX's controls line, for the players' devices."""
+        n = self.name
+        return (f"{n('stick')} electrode / voltage    {n('select')} laser kick    "
+                f"BLUE  {n('l', 'p1')} remove / {n('r', 'p1')} add ion    "
+                f"RED  {n('l', 'p2')} hold: cool / {n('r', 'p2')} passive cooling    {n('start')} pause")
+
     def draw(self):
         if self.state == "tutorial":
             self.tutorial.draw(self.screen)  # a full-screen card of its own
             return
         self.draw_world()
         if self.state != "menu" and self.mode == SANDBOX:
-            self.sandbox.draw(self.screen, sy)
+            self.sandbox.draw(self.screen, sy, self.sandbox_hint())
         elif self.state != "menu":
             self.draw_hud()
         if self.state == "menu":
@@ -1175,7 +1208,27 @@ class Game:
             self.draw_over()
 
 
-def run(*, fullscreen=False, window_size="1200x640", show_fps=False, sandbox_only=False):
+async def _leave(game, surface, window):
+    """A player asked to quit: True ends the program. In the browser there is
+    nothing to hand back to, so instead the game tells the page (which may
+    take the player back to its game list) and returns to its menu -- once
+    the quit buttons are let go, or the menu would quit again at once."""
+    if not runtime.is_browser():
+        return True
+    web.post_event(web.QUIT, GAME_ID)
+    while game.controls.quit_combo():
+        game.controls.begin_frame()
+        for e in pygame.event.get():
+            game.controls.handle(e)
+        present(surface, window)
+        pygame.display.flip()
+        await asyncio.sleep(0)
+    game.running = True
+    game.to_menu()
+    return False
+
+
+async def run(*, fullscreen=False, window_size="1200x640", show_fps=False, sandbox_only=False, pad_layout=None):
     sound.pre_init()
     pygame.init()
     pygame.joystick.init()
@@ -1183,9 +1236,10 @@ def run(*, fullscreen=False, window_size="1200x640", show_fps=False, sandbox_onl
     pygame.display.set_caption("Ion Trap Sandbox" if sandbox_only else "Ion Surfer")
     pygame.mouse.set_visible(not fullscreen)
     clock = pygame.time.Clock()
-    game = Game(surface, sandbox_only=sandbox_only, sounds=sound.load_sounds(W))
+    game = Game(surface, sandbox_only=sandbox_only, sounds=sound.load_sounds(W), pad_layout=pad_layout)
     fps_font = load_font("Rubik-Medium.ttf", 15)
-    while game.running:
+    playing = False  # a match is on (for the page's game-start / game-end events)
+    while True:
         dt = min(0.1, clock.tick(FPS) / 1000)
         game.controls.begin_frame()
         for e in pygame.event.get():
@@ -1200,11 +1254,21 @@ def run(*, fullscreen=False, window_size="1200x640", show_fps=False, sandbox_onl
                 continue
             game.controls.handle(e)
         if game.controls.quit_combo():
-            break
-        game.controls.update(dt)
-        game.update(dt)
+            game.running = False
+        if game.running:
+            game.controls.update(dt)
+            game.update(dt)
+        now_playing = game.state in ("play", "pause") and game.running
+        if now_playing != playing:
+            playing = now_playing
+            web.post_event(web.GAME_START if playing else web.GAME_END, GAME_ID)
+        if not game.running:  # QUIT, Start + Select, or the window closed
+            if await _leave(game, surface, window):
+                break
+            continue
         game.draw()
         if show_fps:
             text(surface, f"{clock.get_fps():.0f} fps", fps_font, (255, 211, 107), (8, H - 8), "bottomleft")
         present(surface, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere

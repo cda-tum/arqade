@@ -55,24 +55,35 @@ def test_read_keys_reports_nothing_held_with_keyboard_disabled():
 
 
 def test_pad_knows_every_action_the_config_can_produce():
-    """Regression: a "confirm" action existed in INPUT_CONFIG but not in Pad's
+    """Regression: a "confirm" action existed in the config but not in Pad's
     hand-written action list, so the first press of A raised KeyError and the
-    game died mid-play. Pad derives the list from the config now; this asserts
-    the two can never drift apart again."""
-    from ion_surfer.config import INPUT_CONFIG, KEYMAP
-    from ion_surfer.input import PLAYERS, Pad
+    game died mid-play. Pad derives the list from BUTTON_ACTIONS now; this
+    asserts the two can never drift apart again."""
+    from ion_surfer.input import BUTTON_ACTIONS, PLAYERS, Pad, keymap
 
     pad = Pad()
     for player in PLAYERS:
-        for act in INPUT_CONFIG[player]["buttons"]:
-            pad.set(act, ("jb", 0), True)   # must not raise
-            assert pad.held(act)
-            pad.set(act, ("jb", 0), False)
-            assert not pad.held(act)
-    for mapping in KEYMAP.values():
-        for act in mapping:
-            pad.set(act, ("k", 0), True)
-            assert pad.held(act)
+        for acts in [*BUTTON_ACTIONS[player].values(), *keymap(player).values()]:
+            for act in acts:
+                pad.set(act, ("jb", 0), True)   # must not raise
+                assert pad.held(act)
+                pad.set(act, ("jb", 0), False)
+                assert not pad.held(act)
+
+
+def test_the_shared_keyboard_layout_drives_each_players_pad():
+    """P1: W A S D and G C V B steer, B confirms, F/H are L/R. P2: arrows,
+    I J K L, L confirms, U/O are L/R."""
+    from ion_surfer.input import Controls
+
+    pygame.init()
+    c = Controls()
+    for key in (pygame.K_b, pygame.K_w, pygame.K_h, pygame.K_l, pygame.K_u):
+        c.handle(pygame.event.Event(pygame.KEYDOWN, key=key))
+    p1, p2 = c.pads
+    assert p1.held("confirm") and p1.held("right") and p1.held("up") and p1.held("add_ion")
+    assert p2.held("confirm") and p2.held("right") and p2.held("cool")
+    assert not p1.held("cool") and not p2.held("add_ion")
 
 
 def test_pad_treats_an_unknown_action_as_not_held():
