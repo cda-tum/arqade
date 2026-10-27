@@ -5,18 +5,19 @@ Munich Quantum Software Forum arcade edition (pygame 2.5)
 Game state, rules, sprites and drawing. CLI / entry point: main.py; input
 mapping and tunables: config.py.
 """
-import json, math, random
+import asyncio, json, math, random
 from array import array
 from pathlib import Path
 
 import pygame
+from arqade_common import runtime, web
+from arqade_common.input import KEYBOARD, PAD
 
 from error_invaders.config import (
     BACK_HOLD_TO_QUIT,
     FPS,
     GLOW,
     HISCORE_FILE,
-    INPUT_CONFIG,
     INTERNAL_HEIGHT,
     INTERNAL_WIDTH,
     MASTER_VOLUME,
@@ -60,7 +61,7 @@ def now(): return pygame.time.get_ticks() / 1000.0
 screen = window = canvas = clock = inp = None
 AUDIO = False
 
-def setup(fullscreen, window_size):
+def setup(fullscreen, window_size, pad_layout=None):
     global screen, window, canvas, clock, inp, AUDIO
     pygame.mixer.pre_init(22050, -16, 1, 512)
     pygame.init()
@@ -76,7 +77,7 @@ def setup(fullscreen, window_size):
         pygame.mixer.set_num_channels(24)
     except Exception:
         AUDIO = False
-    inp = Input()
+    inp = Input(pad_layout)
 
 # ---------------- Fonts / text ----------------
 FONT_PATH = str(Path(__file__).parent / "assets" / "fonts" / "PressStart2P-Regular.ttf")
@@ -788,7 +789,7 @@ def draw_hud(S):
     text(S, ("BOSS %d" if g.mode == "rush" else "WAVE %d") % g.wave, 12, WHITE, W - 16, 14, "right", "top")
     text(S, "LIVES", 8, (153, 170, 170), 16, 36, "left", "top")
     for i in range(g.lives): pygame.draw.rect(S, SPECIAL["bias"], (84 + i * 16, 34, 10, 10), 2)
-    text(S, "START: PAUSE", 8, (68, 68, 85), W - 16, 36, "right", "top")
+    text(S, "%s: PAUSE" % inp.devices.shared_label("start"), 8, (68, 68, 85), W - 16, 36, "right", "top")
     dashed_line(S, fade(COL["X"], 0.4), (0, DEATH_LINE), (W, DEATH_LINE), 6, 8, 1)
     text(S, "LOGICAL ERROR THRESHOLD", 8, fade(COL["X"], 0.55), W - 10, DEATH_LINE - 4, "right", "bottom")
     bosses.draw_overlay(S)
@@ -949,11 +950,24 @@ def draw_title(S):
         if on and blink:
             text(S, ">", 16, col, W/2 - 120, y); text(S, "<", 16, col, W/2 + 120, y)
     if note: text(S, note, 8, note_col, W/2, 600)
-    hint = ("STICK select  ·  A ok  ·  START go" if menu["step"] == 0
-            else "STICK select  ·  A/START play  ·  B back")
+    stick, a, b, start = (button_name(k) for k in ("stick", "a", "b", "start"))
+    hint = ("%s select  ·  %s ok  ·  %s go" % (stick, a, start) if menu["step"] == 0
+            else "%s select  ·  %s/%s play  ·  %s back" % (stick, a, start, b))
     text(S, hint, 8, (119, 119, 119), W/2, 664)
     text(S, "HI %06d (%s)   ·   MUNICH QUANTUM SOFTWARE FORUM" % (hiscores.get(mode, 0), mode.upper()),
          8, (85, 85, 102), W/2, 700)
+
+KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}   # the keys that stand in for each player's stick
+
+def button_name(name, player=None):
+    """A control's on-screen name for one player's keys or pad, or for both
+    players' when player is None (e.g. "SPACE / ENTER"). "stick" is the
+    stick or the direction keys."""
+    if player is None:
+        return " / ".join(dict.fromkeys(button_name(name, p) for p in ("p1", "p2")))
+    if name == "stick":
+        return KEYBOARD_STICKS[player] if inp.devices[player] == KEYBOARD else "STICK"
+    return inp.devices.label(name, player)
 
 # ---------------- HOW TO PLAY ----------------
 DEMO = pygame.Rect(56, 232, 440, 330)   # the demo scene's panel
@@ -1023,16 +1037,20 @@ def draw_tutorial(S):
     for r, row in enumerate(("LXR", "YBA")):
         for c, label in enumerate(row):
             draw_button(S, 680 + c * 52, 306 + r * 50, label, label in "AB", label.lower() in d["lit"])
-    for i, (key, action) in enumerate((("STICK", "MOVE"), ("A", "FIRE"), ("B", "SWITCH COLOR"),
-                                       ("START", "PAUSE"))):
+    who = None if g is not None and g.two else inp.devices.latest   # whose keys or pad to name
+    keys = [button_name(k, who) for k in ("stick", "a", "b", "start")]
+    size = 16 if max(font(16).size(k)[0] for k in keys) <= 92 else 8   # long key names: smaller
+    action_x = 556 + max(100, max(font(size).size(k)[0] for k in keys) + 16)
+    for i, (key, action) in enumerate(zip(keys, ("MOVE", "FIRE", "SWITCH COLOR", "PAUSE"))):
         y = 422 + i * 34
-        text(S, key, 16, WHITE, 556, y, "left")
-        text(S, action, 16, GREY, 656, y, "left")
+        text(S, key, size, WHITE, 556, y, "left")
+        text(S, action, 16, GREY, action_x, y, "left")
     if g is not None and g.two:
-        text(S, "SAME ON BOTH PADS", 8, GREY, kx, 562)
+        text(S, "SAME ON BOTH PADS" if inp.devices.everyone_on(PAD) else "SAME FOR BOTH PLAYERS", 8, GREY, kx, 562)
 
     if int(t / 0.45) % 3 != 2:
-        text(S, "PRESS ANY BUTTON TO START", 16, WHITE, W/2, 668)
+        any_button = "ANY KEY" if inp.devices.everyone_on(KEYBOARD) else "ANY BUTTON"
+        text(S, "PRESS %s TO START" % any_button, 16, WHITE, W/2, 668)
 
 def draw_over(S):
     draw_game(S)
@@ -1059,7 +1077,12 @@ def draw_pause(S):
         text(S, label, 14, WHITE if on else (68, 68, 68), W/2, y)
         if on and blink:
             text(S, ">", 14, WHITE, W/2 - 150, y); text(S, "<", 14, WHITE, W/2 + 150, y)
-    text(S, "UP/DOWN select  ·  FIRE pick  ·  START resume", 8, (119, 119, 119), W/2, box.bottom - 20)
+    p = inp.devices.latest   # one player works the menu
+    if inp.devices[p] == PAD:
+        hint = "UP/DOWN select  ·  FIRE pick  ·  START resume"
+    else:
+        hint = "UP/DOWN select  ·  %s pick  ·  %s resume" % (button_name("a", p), button_name("start", p))
+    text(S, hint, 8, (119, 119, 119), W/2, box.bottom - 20)
 
 def draw_input_test(S):
     S.fill(BG)
@@ -1068,8 +1091,9 @@ def draw_input_test(S):
     y = 110
     if not inp.joys: text(S, "No joysticks detected.", 10, COL["X"], 40, y, "left"); y += 30
     for i, j in inp.joys.items():
-        who = [p for p in ("p1", "p2") if INPUT_CONFIG[p]["joystick_index"] == i]
-        text(S, "JOY %d: %s %s" % (i, j.get_name()[:40], ("-> " + who[0].upper()) if who else ""), 10, SPECIAL["bias"], 40, y, "left"); y += 22
+        slot = inp.pads.slot_of(j.get_instance_id())
+        who = "-> P%d" % (slot + 1) if slot is not None else ""
+        text(S, "JOY %d: %s %s" % (i, j.get_name()[:40], who), 10, SPECIAL["bias"], 40, y, "left"); y += 22
         axes = "  ".join("a%d:%+.2f" % (k, j.get_axis(k)) for k in range(j.get_numaxes()))
         text(S, "axes " + axes, 8, WHITE, 60, y, "left"); y += 18
         hats = "  ".join("h%d:%s" % (k, j.get_hat(k)) for k in range(j.get_numhats()))
@@ -1079,7 +1103,7 @@ def draw_input_test(S):
     text(S, "last keys: " + (", ".join(inp.last_keys) or "-"), 10, YELLOW, 40, y + 10, "left")
     for i, p in enumerate(("p1", "p2")):
         text(S, "%s actions: %s" % (p.upper(), ", ".join(sorted(inp.held[p])) or "-"), 10, WHITE, 40, y + 50 + i * 24, "left")
-    text(S, "Mapping lives in error_invaders/config.py (INPUT_CONFIG)", 8, (119, 119, 119), W/2, H - 30)
+    text(S, "Mapping lives in arqade_common/input.py (shared by all games)", 8, (119, 119, 119), W/2, H - 30)
 
 # =====================================================================
 # Main loop
@@ -1108,7 +1132,7 @@ def step_title(dt):
         if a or start:
             if TITLE_ROWS[menu["row"]] != "QUIT": menu["two"] = menu["row"] == 1
             menu["step"] = 1; play("menu_ok")
-        elif QUIT_FROM_MENU and (pygame.K_ESCAPE in inp.ev_keys or inp.back_held > BACK_HOLD_TO_QUIT):
+        elif QUIT_FROM_MENU and inp.back_held > BACK_HOLD_TO_QUIT:
             return False
     elif a or start:
         menu["step"] = 0; new_game(menu["two"]); open_tutorial(); play("menu_ok")
@@ -1131,7 +1155,7 @@ def step_tutorial(dt):
         state = "play"; inp.swallow(); play("menu_ok")
 
 def step_play(dt):
-    """One frame of play: Start (or P / Esc) pauses, otherwise the game runs."""
+    """One frame of play: Start pauses, otherwise the game runs."""
     global state
     if inp.pause:
         state = "paused"; pause_menu.open(); play("menu_ok")
@@ -1151,9 +1175,38 @@ def step_paused():
     elif act == "title": to_menu(); play("menu_back")   # no score recorded
     elif act == "move": play("menu_move")
 
-def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=False):
+# Same as the folder name in the web build and the "id" in game.json.
+GAME_ID = "error-invaders"
+_playing = False   # a game is on (for the page's game-start / game-end events)
+
+def _note_playing():
+    global _playing
+    now = state in ("play", "paused")
+    if now != _playing:
+        _playing = now
+        web.post_event(web.GAME_START if now else web.GAME_END, GAME_ID)
+
+async def _leave():
+    """A player asked to quit: True ends the program. In the browser there is
+    nothing to hand back to, so instead the game tells the page (which may
+    take the player back to its game list) and returns to its title -- once
+    the quit buttons are let go, or the title would quit again at once."""
+    if not runtime.is_browser():
+        return True
+    if state in ("play", "paused"):   # the game ends before the player leaves
+        to_menu(); _note_playing()
+    web.post_event(web.QUIT, GAME_ID)
+    while inp.quit_combo or inp.back_held > 0:
+        for e in pygame.event.get(): inp.handle(e)
+        inp.update(0.0); inp.end_frame()
+        present(screen, window); pygame.display.flip()
+        await asyncio.sleep(0)
+    to_menu()
+    return False
+
+async def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=False, pad_layout=None):
     global state, mode, title_t, over_t
-    setup(fullscreen, window_size)
+    setup(fullscreen, window_size, pad_layout)
     load_hiscores()
     build_sounds()
     if input_test: state = "inputtest"
@@ -1166,11 +1219,15 @@ def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=F
             elif e.type == pygame.KEYDOWN and e.key == pygame.K_F3: show_fps = not show_fps
             inp.handle(e)
         inp.update(dt)
-        if inp.quit_combo and state != "inputtest": break
+        if inp.quit_combo and state != "inputtest":
+            if await _leave(): break
+            inp.end_frame(); continue
         pump_sfx()
 
         if state == "title":
-            running = step_title(dt)
+            if not step_title(dt):
+                if await _leave(): break
+                inp.end_frame(); continue
             (draw_tutorial if state == "tutorial" else draw_title)(canvas)
             screen.blit(canvas, (0, 0))
         elif state == "tutorial":
@@ -1212,3 +1269,5 @@ def run(*, fullscreen=False, window_size="960x720", show_fps=False, input_test=F
         present(screen, window)
         pygame.display.flip()
         inp.end_frame()
+        _note_playing()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere

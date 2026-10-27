@@ -1,0 +1,22 @@
+{
+  "id": "error-invaders",
+  "title": "Pauli Invaders",
+  "tagline": "Space Invaders meets quantum error correction: correct each error with the matching color.",
+  "description": "Each invader is an X, Z or Y error, and only a shot of the matching color corrects it. A Y error equals X times Z, so red then blue works, or purple at once. In HARD mode a wrong color changes the error instead. Shoot the Cosmic Ray for power-ups, and face bosses like a crawling logical error, a wave packet that must be measured first and a syndrome lattice that hides its errors. For 1 or 2 players, sharing their lives.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W A S D to move, B to fire, V to switch color, Space to pause",
+      "p2": "Arrows to move, L to fire, K to switch color, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Move your ship and fire at the invading errors.",
+    "Only a shot of the error's color corrects it: switch color with B.",
+    "A Y error is X times Z: hit it with red and then blue, or with purple directly.",
+    "Don't let the errors reach the logical error threshold.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

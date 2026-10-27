@@ -198,8 +198,8 @@ def test_a_held_through_the_dismissal_does_nothing_until_released(monkeypatch):
     try:
         inp = input_mod.Input()
         joy = FakeJoy()
-        inp.joys = {0: joy}
-        fire = input_mod.INPUT_CONFIG["p1"]["buttons"]["fire"][0]
+        inp.pads.pad = lambda slot: joy if slot == 0 else None   # P1's pad
+        fire = inp.pad_layout.buttons["a"]
         joy.buttons.add(fire)
         inp.update(DT)
         inp.swallow()
