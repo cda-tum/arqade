@@ -229,7 +229,8 @@ class RoundScene(Scene):
         self.dining.draw_bubbles(surf)
         self.hud.draw(surf, t, self.score_flash)
         if self.solo:
-            lbl = text("Y: SWAP CHEF", 8, P.TEXT_DIM, shadow=P.INK)
+            y_name = self.app.inp.name("y", PLAYERS[self.players[0]])
+            lbl = text(f"{y_name}: SWAP CHEF", 8, P.TEXT_DIM, shadow=P.INK)
             surf.blit(lbl, (4, INTERNAL_HEIGHT - 11))
         if self.tutorial is not None:
             self.tutorial.draw(surf, t)

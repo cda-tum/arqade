@@ -17,6 +17,7 @@ import random
 import threading
 
 import pygame
+from arqade_common import runtime
 
 from overquqed import config
 
@@ -258,7 +259,13 @@ class Audio:
         self.playing: str | None = None
         self.fast = False
         self._lock = threading.Lock()
-        threading.Thread(target=self._render_all, daemon=True).start()
+        if runtime.is_browser():
+            # No threads in the browser: update() renders one track per frame
+            # instead, title first, so the game keeps drawing meanwhile.
+            self._renderer = self._render_tracks()
+        else:
+            self._renderer = None
+            threading.Thread(target=self._render_all, daemon=True).start()
 
     def _sound(self, samples) -> pygame.mixer.Sound:
         buf = samples if isinstance(samples, array.array) else array.array("h", samples)
@@ -273,6 +280,11 @@ class Audio:
         return pygame.mixer.Sound(buffer=buf.tobytes())
 
     def _render_all(self) -> None:
+        for _ in self._render_tracks():
+            pass
+
+    def _render_tracks(self):
+        """Render every track, title first, yielding after each one."""
         order = ["title"] + [k for k in TRACKS if k != "title"]
         for name in order:
             bpm, tr, lead, fast = TRACKS[name]
@@ -283,6 +295,7 @@ class Audio:
                 snd.set_volume(config.MUSIC_VOLUME)
                 with self._lock:
                     self.tracks[key] = snd
+                yield
 
     def play(self, name: str) -> None:
         s = self.sounds.get(name)
@@ -303,6 +316,8 @@ class Audio:
 
     def update(self) -> None:
         """Start (or switch to) the wanted track once it has been rendered."""
+        if self._renderer is not None and next(self._renderer, StopIteration) is StopIteration:
+            self._renderer = None  # all rendered
         if self.want is None:
             return
         key = self.want + (":fast" if self.fast and (self.want + ":fast") in TRACKS_FAST else "")

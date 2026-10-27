@@ -77,6 +77,13 @@ uv run python -m overquqed --fullscreen
 uv run python -m overquqed --window-size 1440x1080 --fps
 ```
 
+In the browser (pygbag's test server on http://localhost:8000), from the
+repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve overquqed
+```
+
 `python -m overquqed.main` works too, like the sibling games. F3 toggles
 the FPS overlay. The internal resolution is 480×360, which scales by exactly
 3 onto the cabinet's 1920×1080 panel, so pixels stay crisp.
@@ -89,18 +96,24 @@ uv run python -m overquqed --input-test
 
 This mode shows every joystick's axes, buttons and hats, which logical
 actions each pad resolves to, and the keys held down. You can also open it
-with F1 on the title screen. Leave with Esc, or hold Select for 2 s.
+with F1 on the title screen (not in the browser). Leave with Esc, or hold
+Select for 2 s.
 
 ## Controls
 
-| Action | Cabinet (either pad) | P1 keyboard | P2 keyboard |
+| Action | Pad | P1 keyboard | P2 keyboard |
 |---|---|---|---|
-| Move | stick | arrow keys | I J K L |
-| Pick up / put down / serve | A (raw 1) | A | O |
-| Use station (tap or hold) | B (raw 2) | B | P |
-| Swap chef (1-player) | Y (raw 3) | Y | U |
-| Start / pause | Start | Enter | 2 |
-| Back (menus) | B, or Select | B, or Space | P, or Backspace |
+| Move | stick or d-pad | W A S D | arrow keys |
+| Pick up / put down / serve | A | B | L |
+| Use station (tap or hold) | B | V | K |
+| Swap chef (1-player) | Y | C | J |
+| Start / pause | Start | Space | Enter |
+| Back (menus) | B, or Select | V, or L-Shift | K, or R-Shift |
+
+The keys are the layout shared by all the games (`../common`): each player's
+half of the keyboard is a pad, its 2x3 buttons on F G H / C V B and
+U I O / J K L. On-screen hints name the keys or the pad buttons, whichever
+each player last used.
 
 - **Using stations.** Tap B on the Flipper and the Stirrer. Hold B on the
   Blender, the Waffle Iron and the Sink; a ring shows progress, and letting go
@@ -119,13 +132,15 @@ with F1 on the title screen. Leave with Esc, or hold Select for 2 s.
   through it counts as released until it really is, so it never works a
   station or pauses. RESTART from the pause menu skips the card.
 - **Quitting.** QUIT on the title, or Start + Select on one pad from
-  anywhere. Holding Select for 2 s on the title screen also quits. Esc quits
-  from the title when the keyboard is enabled.
+  anywhere. Holding Select for 2 s on the title screen also quits. There is
+  no quit key: Esc leaves fullscreen in a browser, and the PC launcher's Esc
+  ends the game on its own. In the browser, quitting goes back to the title
+  and tells the page around the game (`arqade:quit`).
 - **Keyboard on the cabinet.** The cabinet loader passes `--no-keyboard`
   because Batocera's evmapy turns P1's pad into key presses (see
-  `../AGENTS.md`). P1's dev keys are deliberately the keys evmapy sends for the
-  same buttons, and P2's avoid all of them. `tests/test_config.py` enforces
-  both rules.
+  `../AGENTS.md`). Pads use the cabinet's button numbers by default;
+  `--pad-layout xbox` reads an Xbox-style pad on a PC instead, and browser
+  gamepads use the browser's standard layout.
 - **Idle.** Any screen left alone for 60 s falls back to the title. After 12 s
   on the title, bots start cooking a demo round.
 - **Hiscores.** They live in `~/.overquqed_hiscores.json`, which is
@@ -139,7 +154,7 @@ with F1 on the title screen. Leave with Esc, or hold Select for 2 s.
 
 The code goes to `/userdata/games/overquqed/overquqed/` and the loader to
 `/userdata/roms/pygame/overquqed.pygame`. It runs with
-`main(["--fullscreen", "--no-keyboard"])`, the same shape as the other games.
+`asyncio.run(main(["--fullscreen", "--no-keyboard"]))`, the same shape as the other games.
 
 The first time you deploy:
 

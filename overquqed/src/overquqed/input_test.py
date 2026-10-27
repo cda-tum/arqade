@@ -52,9 +52,9 @@ def draw_input_test(surface: pygame.Surface, inp: Input) -> None:
         surface.blit(text(f"{p.upper()} actions: {acts}"[:58], 8, color), (8, y))
         y += 12
     y += 4
-    system = config.INPUT_CONFIG["system"]
+    buttons = inp.pad_layout.buttons
     surface.blit(
-        text(f"config: start={system['start_button']} select={system['select_button']}", 8, palette.TEXT_DIM),
+        text(f"{inp.pad_layout.name}: start={buttons['start']} select={buttons['select']}", 8, palette.TEXT_DIM),
         (8, y),
     )
 

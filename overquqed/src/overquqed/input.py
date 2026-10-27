@@ -1,27 +1,40 @@
 """Translate raw pygame joystick/keyboard state into logical per-player actions.
 
 Polled once per frame: each action is held while any of its sources (a key,
-a joystick button, the analog stick, the hat) is down; `pressed` is the
-rising edge. The pure decision helpers (axis_to_direction, joystick_actions,
-should_quit, Repeater) are unit tested; reading real devices needs hardware
-and is verified with `--input-test`.
+a joystick button, the analog stick, the d-pad) is down; `pressed` is the
+rising edge. Devices, pad layouts and the two-player keyboard are shared by
+all games (arqade_common.input). The pure decision helpers
+(axis_to_direction, actions_from_state, should_quit, Repeater) are unit
+tested; reading real devices needs hardware and is verified with
+`--input-test`.
 """
 
 from __future__ import annotations
 
 import pygame
-
-from overquqed.config import (
-    INPUT_CONFIG,
-    KEYBOARD_QUIT,
-    KEYMAP,
-    REPEAT_DELAY,
-    REPEAT_INTERVAL,
+from arqade_common.input import (
+    KEYBOARD,
+    LastDevice,
+    PadLayout,
+    PadSlots,
+    PlayerState,
+    default_pad_layout,
+    read_player,
 )
+
+from overquqed.config import AXIS_DEADZONE, REPEAT_DELAY, REPEAT_INTERVAL
 
 PLAYERS = ("p1", "p2")  # pad 0, pad 1
 DIRECTIONS = ("left", "right", "up", "down")
 ACTIONS = DIRECTIONS + ("pick", "use", "swap", "start", "select")
+# The printed button behind each action.
+ACTION_BUTTONS = {
+    "pick": "a",  # pick up / put down / take / serve
+    "use": "b",  # work the station in front of you
+    "swap": "y",  # swap chef (1-player mode)
+    "start": "start",  # confirms / pauses
+    "select": "select",  # goes back; Start + Select on one pad quits
+}
 
 
 # Batocera's pygame system runs evmapy, which turns player 1's pad into
@@ -61,45 +74,22 @@ def axis_to_direction(axis_value: float, deadzone: float) -> int:
 
 
 def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool) -> bool:
-    """Start + Select held together on the *same* pad."""
+    """Start + Select held together on the *same* pad. There is deliberately
+    no quit key: Esc leaves fullscreen in a browser, and the PC launcher
+    handles Esc itself (it ends the game process)."""
     return (p1_start and p1_select) or (p2_start and p2_select)
 
 
-def key_codes(names: list[str]) -> list[int]:
-    return [getattr(pygame, name) for name in names]
+def actions_from_state(state: PlayerState) -> set[str]:
+    """Logical actions held by one player, from their keys and pad.
 
-
-def keyboard_quit_held(keys) -> bool:
-    return bool(keys[getattr(pygame, KEYBOARD_QUIT)])
-
-
-def joystick_actions(
-    player: str,
-    buttons_down: set[int],
-    axes: tuple[float, float],
-    hat: tuple[int, int],
-) -> set[str]:
-    """Logical actions held on one pad, from its raw state.
-
-    The analog stick is the primary direction source (this cabinet has no
-    hat: get_numhats() == 0); a non-centred hat, if present, wins.
+    The analog stick is the primary direction source on the cabinet (it has
+    no hat); the d-pad and the direction keys count too.
     """
-    cfg = INPUT_CONFIG[player]
-    system = INPUT_CONFIG["system"]
-    deadzone = INPUT_CONFIG["axis_deadzone"]
-    held: set[str] = set()
-    for act, buttons in cfg["buttons"].items():
-        if buttons_down & set(buttons):
-            held.add(act)
-    if system["start_button"] in buttons_down:
-        held.add("start")
-    if system["select_button"] in buttons_down:
-        held.add("select")
-
-    dx = axis_to_direction(axes[0], deadzone)
-    dy = axis_to_direction(axes[1], deadzone)
-    if hat != (0, 0):
-        dx, dy = hat[0], -hat[1]  # hat y is positive-up
+    held = {act for act, button in ACTION_BUTTONS.items() if state[button]}
+    held.update(d for d in DIRECTIONS if state[d])
+    dx = axis_to_direction(state.stick_x, AXIS_DEADZONE)
+    dy = axis_to_direction(state.stick_y, AXIS_DEADZONE)
     if dx < 0:
         held.add("left")
     elif dx > 0:
@@ -136,60 +126,49 @@ class Input:
     """All input for one frame. Call `handle(event)` for every event, then
     `update(dt)` once per frame before querying."""
 
-    def __init__(self) -> None:
-        self.joysticks: list[pygame.joystick.JoystickType] = []
-        self.keymap = {p: {act: key_codes(names) for act, names in m.items()} for p, m in KEYMAP.items()}
+    def __init__(self, pad_layout: PadLayout | None = None) -> None:
+        # Which pad is whose: pads join P1 then P2 as they appear (in a
+        # browser, only after their first button press).
+        self.pads = PadSlots()
+        self.pad_layout = pad_layout or default_pad_layout()
+        # Keyboard or pad, per player, so on-screen hints name what they're holding.
+        self.devices = LastDevice()
         self.held = {p: set() for p in PLAYERS}
         self.pressed = {p: set() for p in PLAYERS}
         self.nav = {p: set() for p in PLAYERS}  # directions incl. auto-repeat
         self._repeat = {p: {d: Repeater() for d in DIRECTIONS} for p in PLAYERS}
         self.select_held_time = 0.0
-        self.keyboard_quit = False
         self.activity = False  # any input at all this frame (for the idle timer)
         # Any joystick button (or, without --no-keyboard, any key) that went
         # down this frame, mapped or not: what dismisses the HOW TO PLAY card.
         self.any_button = False
         self._button_down = False
-        self.rescan()
+        self.pads.scan()
 
-    def rescan(self) -> None:
-        self.joysticks = []
-        for i in range(pygame.joystick.get_count()):
-            joy = pygame.joystick.Joystick(i)
-            joy.init()
-            self.joysticks.append(joy)
+    @property
+    def joysticks(self) -> list[pygame.joystick.JoystickType]:
+        """Every connected joystick (for the input test)."""
+        return [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
 
     def handle(self, event: pygame.event.Event) -> None:
-        if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
-            self.rescan()
-        elif event.type == pygame.JOYBUTTONDOWN or (event.type == pygame.KEYDOWN and _keyboard_enabled):
+        self.pads.handle_event(event)
+        self.devices.handle_event(event, self.pads, keyboard=_keyboard_enabled)
+        if event.type == pygame.JOYBUTTONDOWN or (event.type == pygame.KEYDOWN and _keyboard_enabled):
             self._button_down = True
 
-    def _pad_state(self, player: str) -> set[str]:
-        index = INPUT_CONFIG[player]["joystick_index"]
-        if index >= len(self.joysticks):
-            return set()
-        joy = self.joysticks[index]
-        cfg = INPUT_CONFIG[player]
-        buttons = {b for b in range(joy.get_numbuttons()) if joy.get_button(b)}
-        ax_x, ax_y = cfg["axes"]
-        axes = (
-            joy.get_axis(ax_x) if joy.get_numaxes() > ax_x else 0.0,
-            joy.get_axis(ax_y) if joy.get_numaxes() > ax_y else 0.0,
-        )
-        hat = joy.get_hat(cfg["hat_index"]) if joy.get_numhats() > cfg["hat_index"] else (0, 0)
-        return joystick_actions(player, buttons, axes, hat)
+    def _held(self, player: str, keys) -> set[str]:
+        pad = self.pads.pad(PLAYERS.index(player))
+        try:
+            return actions_from_state(read_player(player, keys, pad, self.pad_layout))
+        except pygame.error:  # the pad went away mid-read
+            return actions_from_state(read_player(player, keys, None, self.pad_layout))
 
     def update(self, dt: float) -> None:
         keys = read_keys()
-        self.keyboard_quit = keyboard_quit_held(keys)
-        self.activity = self.keyboard_quit or self._button_down
+        self.activity = self._button_down
         self.any_button, self._button_down = self._button_down, False
         for p in PLAYERS:
-            held = self._pad_state(p)
-            for act, codes in self.keymap[p].items():
-                if any(keys[c] for c in codes):
-                    held.add(act)
+            held = self._held(p, keys)
             self.pressed[p] = held - self.held[p]
             self.held[p] = held
             self.nav[p] = {
@@ -238,3 +217,16 @@ class Input:
             p1_start="start" in a, p1_select="select" in a,
             p2_start="start" in b, p2_select="select" in b,
         )
+
+    # --- button names, for on-screen hints ---
+    def name(self, control: str, player: str | None = None) -> str:
+        """A control's on-screen name for one player's keys or pad, or for
+        both players' when player is None (e.g. "SPACE / ENTER"). "stick" is
+        the stick or the direction keys."""
+        if player is None:
+            return " / ".join(dict.fromkeys(self.name(control, p) for p in PLAYERS))
+        if control == "stick":
+            if self.devices[player] == KEYBOARD:
+                return "WASD" if player == "p1" else "ARROWS"
+            return "STICK"
+        return self.devices.label(control, player)

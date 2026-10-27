@@ -17,7 +17,6 @@ class ScriptedInput(Input):
 
     def update(self, dt):
         self.activity = any(self.next_held.values())
-        self.keyboard_quit = False
         for p in ("p1", "p2"):
             held = set(self.next_held[p])
             self.pressed[p] = held - self.held[p]
@@ -290,3 +289,28 @@ def test_card_demo_kitchen_serves_both_orders_and_loops():
     assert {"A", "B"} <= captions
     demo.update(2 / 60)
     assert demo.t < 0.1 and len(demo.world.orders.orders) == 2  # and it starts over
+
+
+def test_in_the_browser_quit_goes_back_to_the_title(app, monkeypatch):
+    """Start + Select tells the page and returns to the title instead of ending."""
+    import asyncio
+
+    sent = []
+    browser = {"on": True}
+    monkeypatch.setattr(game.runtime, "is_browser", lambda: browser["on"])
+    monkeypatch.setattr(game.web, "post_event", lambda kind, game_id: sent.append(kind))
+    frames = {"n": 0}
+    real_flip = pygame.display.flip
+
+    def flip():
+        real_flip()
+        frames["n"] += 1
+        assert frames["n"] < 100, "the loop didn't end"
+        app.inp.next_held["p1"] = {"start", "select"} if 5 <= frames["n"] < 10 else set()
+        if frames["n"] == 40:  # a browser has no window to close, so stop being one to end the test
+            browser["on"] = False
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+
+    monkeypatch.setattr(pygame.display, "flip", flip)
+    asyncio.run(app.run())
+    assert sent == [game.web.QUIT] and frames["n"] >= 40

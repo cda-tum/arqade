@@ -17,6 +17,7 @@ import math
 import random
 
 import pygame
+from arqade_common.input import KEYBOARD, PAD
 
 from overquqed import palette as P
 from overquqed.bot import Bot
@@ -202,7 +203,8 @@ class HowToPlayScene(Scene):
         self._draw_demo(surf, 8, 80)
         self._draw_controls(surf, 240, 80)
         if int(self.t * 2) % 2 == 0:
-            prompt = text("PRESS ANY BUTTON TO START", 16, P.WHITE, shadow=P.INK)
+            any_button = "ANY KEY" if self.app.inp.devices.everyone_on(KEYBOARD) else "ANY BUTTON"
+            prompt = text(f"PRESS {any_button} TO START", 16, P.WHITE, shadow=P.INK)
             surf.blit(prompt, ((INTERNAL_WIDTH - prompt.get_width()) // 2, 318))
 
     def _draw_demo(self, surf: pygame.Surface, x: int, y: int) -> None:
@@ -225,12 +227,18 @@ class HowToPlayScene(Scene):
         cy = y + h + 36
         parts = [text(what, 8, P.TEXT)]
         if button:
-            parts.insert(0, text(button + ": ", 8, LIT[button]))
+            parts.insert(0, text(self._name(button) + ": ", 8, LIT[button]))
         width = sum(p.get_width() for p in parts)
         cx = x + 4 + (w - width) // 2
         for p in parts:
             surf.blit(p, (cx, cy))
             cx += p.get_width()
+
+    def _name(self, label: str) -> str:
+        """A printed name (STICK, A, START...) for the players' keys or pads:
+        the one player's when one is cooking, both players' otherwise."""
+        who = PLAYERS[self.players[0]] if len(self.players) == 1 else None
+        return self.app.inp.name(label.lower(), who)
 
     def _draw_controls(self, surf: pygame.Surface, x: int, y: int) -> None:
         w = INTERNAL_WIDTH - 8 - x
@@ -241,8 +249,13 @@ class HowToPlayScene(Scene):
         draw_cluster(surf, x + 118, y + 28)
         for i, (label, action, col) in enumerate(CONTROLS):
             ly = y + 92 + i * 18
-            key = text(label + ":", 8, col)
-            surf.blit(key, (x + 58 - key.get_width(), ly))
-            surf.blit(text(action, 8, P.TEXT), (x + 66, ly))
-        note = text("BOTH PADS THE SAME", 8, P.TEXT_DIM)
+            key = text(self._name(label) + ":", 8, col)
+            if key.get_width() <= 52:  # right-aligned, as the pad's letters
+                surf.blit(key, (x + 58 - key.get_width(), ly))
+                surf.blit(text(action, 8, P.TEXT), (x + 66, ly))
+            else:  # a long key name (e.g. "WASD / ARROWS"): the action follows it
+                surf.blit(key, (x + 8, ly))
+                surf.blit(text(action, 8, P.TEXT), (x + 16 + key.get_width(), ly))
+        on_pads = self.app.inp.devices.everyone_on(PAD)
+        note = text("BOTH PADS THE SAME" if on_pads else "SAME FOR BOTH PLAYERS", 8, P.TEXT_DIM)
         surf.blit(note, (x + (w - note.get_width()) // 2, y + 188))

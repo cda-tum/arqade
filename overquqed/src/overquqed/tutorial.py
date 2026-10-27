@@ -149,8 +149,9 @@ class Tutorial:
                 surf.blit(rich(part, P.INK), (52, y + 19 + li * 12))
         full = sum(len(line) for line in beat.lines)
         if self.shown >= full and beat.wait == "A" and int(t * 3) % 2 == 0:
-            surf.blit(text("A >", 8, (200, 60, 60)), (INTERNAL_WIDTH - 36, y + h - 12))
-        skip = text("START: SKIP", 8, P.TEXT_DIM, shadow=P.INK)
+            a = text(f"{self.scene.app.inp.name('a')} >", 8, (200, 60, 60))
+            surf.blit(a, (INTERNAL_WIDTH - 12 - a.get_width(), y + h - 12))
+        skip = text(f"{self.scene.app.inp.name('start')}: SKIP", 8, P.TEXT_DIM, shadow=P.INK)
         surf.blit(skip, (INTERNAL_WIDTH - skip.get_width() - 4, y - 11))
         if self.oops > 0:
             msg = rich("Not quite! Check the recipe on the ticket.", P.BAD, outline=P.INK)

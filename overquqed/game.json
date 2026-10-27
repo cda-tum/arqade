@@ -1,0 +1,22 @@
+{
+  "id": "overquqed",
+  "title": "Overquqed",
+  "tagline": "A cooperative quantum kitchen: prepare quantum states and serve them before they decohere.",
+  "description": "You and a friend run the ancilla kitchen of a fault-tolerant quantum computer. Guests, personified error-correcting codes and protocols, order quantum states like |+>, Bell pairs and GHZ. Pull fresh qubits from the Dilution Fridge, run them through kitchen appliances that are really quantum gates, and serve them before they decohere. A tutorial and three kitchens, for 2 players in co-op, or alone swapping between the chefs.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W A S D to walk, B to pick up and serve, V to use a station, C to swap chef, Space to pause",
+      "p2": "Arrows to walk, L to pick up and serve, K to use a station, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Guests order quantum states, like |+> or |1>.",
+    "Take a qubit from the fridge, change it with the gate machines and serve it before the guest walks out.",
+    "A picks up, puts down and serves; B works the station in front of you.",
+    "Playing alone? Y swaps between the two chefs.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

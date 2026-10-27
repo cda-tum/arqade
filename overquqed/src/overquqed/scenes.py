@@ -109,7 +109,7 @@ class TitleScene(Scene):
             surf.blit(band, (0, 150))
             draw_logo(surf, 158, self.t)
             if int(self.t * 2) % 2 == 0:
-                center(surf, text("PRESS START", 8, P.WHITE, shadow=P.INK), 196)
+                center(surf, text(f"PRESS {self.app.inp.name('start')}", 8, P.WHITE, shadow=P.INK), 196)
             return
         surf.blit(self.backdrop, (0, 0))
         draw_logo(surf, 34, self.t)
@@ -151,7 +151,8 @@ class TitleScene(Scene):
                 bob = int(self.t * 4) % 2
                 surf.blit(text(">", 16, P.GOLD, shadow=P.INK), (x - 22 - bob, y))
                 surf.blit(text("<", 16, P.GOLD, shadow=P.INK), (x + label.get_width() + 6 + bob, y))
-        center(surf, text("STICK: CHOOSE   A: OK   START: PLAY", 8, P.TEXT_DIM, shadow=P.INK), 304)
+        n = self.app.inp.name
+        center(surf, text(f"{n('stick')}: CHOOSE   {n('a')}: OK   {n('start')}: PLAY", 8, P.TEXT_DIM, shadow=P.INK), 304)
         center(surf, text("original game for the MQSF gaming corner", 8, (150, 140, 170)), 346)
 
 
@@ -208,16 +209,18 @@ class JoinScene(Scene):
                 spr.set_alpha(70)
                 surf.blit(spr, (x + 56, 110))
                 if int(self.t * 2) % 2 == 0:
-                    lbl = text("PRESS A", 8, P.TEXT)
+                    lbl = text(f"PRESS {self.app.inp.name('a', PLAYERS[i])}", 8, P.TEXT)
                     surf.blit(lbl, (x + 80 - lbl.get_width() // 2, 196))
                 lbl = text("TO JOIN", 8, P.TEXT)
                 surf.blit(lbl, (x + 80 - lbl.get_width() // 2, 208))
         if len(self.joined) == 1:
-            center(surf, text("Solo? Press Y in the kitchen to swap chefs.", 8, P.TEXT_DIM), 256)
-        center(surf, text("A / START again: LET'S COOK", 8, P.WHITE), 282)
+            y_name = self.app.inp.name("y", PLAYERS[self.joined[0]])
+            center(surf, text(f"Solo? Press {y_name} in the kitchen to swap chefs.", 8, P.TEXT_DIM), 256)
+        n = self.app.inp.name
+        center(surf, text(f"{n('a')} / {n('start')} again: LET'S COOK", 8, P.WHITE), 282)
         left = max(0, self.AUTO_GO - self.t)
         center(surf, text(f"starting in {int(left) + 1}", 8, P.TEXT_DIM), 300)
-        center(surf, text("B: BACK", 8, (90, 80, 110)), 340)
+        center(surf, text(f"{self.app.inp.name('b')}: BACK", 8, (90, 80, 110)), 340)
 
 
 class LevelSelectScene(Scene):
@@ -333,7 +336,8 @@ class LevelSelectScene(Scene):
                     line = f"{r + 1}. ---   ---"
                     col = (90, 80, 110)
                 surf.blit(text(line, 8, col), (x + 8 + (r // 3) * 124, yy + 13 + (r % 3) * 11))
-        center(surf, text("A/START: COOK   B: BACK", 8, P.TEXT_DIM), 350)
+        n = self.app.inp.name
+        center(surf, text(f"{n('a')}/{n('start')}: COOK   {n('b')}: BACK", 8, P.TEXT_DIM), 350)
 
 
 def _wrap_px(s: str, chars: int) -> list[str]:
@@ -453,11 +457,14 @@ class ResultsScene(Scene):
                 surf.blit(text(ch, 16, col, shadow=P.INK), (x, 254))
                 if sel:
                     surf.fill(P.GOLD, (x, 274, 16, 2))
-            center(surf, text("STICK: LETTER   A: NEXT", 8, P.TEXT_DIM), 290)
+            p = self.app.inp.devices.latest  # one player types
+            center(surf, text(f"{self.app.inp.name('stick', p)}: LETTER   {self.app.inp.name('a', p)}: NEXT",
+                              8, P.TEXT_DIM), 290)
         else:
             if self.rank >= 0:
                 center(surf, text(f"#{self.rank + 1} ON THE BOARD!", 8, P.GOOD), 250)
             if self.level.tutorial:
                 center(surf, text("Now try the Superconducting Snack Bar!", 8, P.TEXT), 250)
             if int(self.t * 2) % 2 == 0:
-                center(surf, text("A / START: CONTINUE", 8, P.WHITE), 300)
+                center(surf, text(f"{self.app.inp.name('a')} / {self.app.inp.name('start')}: CONTINUE", 8, P.WHITE),
+                       300)

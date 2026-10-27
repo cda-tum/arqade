@@ -21,68 +21,11 @@ HUD_HEIGHT = 3 * TILE  # ticket strip
 KITCHEN_Y = HUD_HEIGHT  # top edge of map row 0
 
 # --- Input mapping ---
-# Raw button numbers confirmed on the cabinet (both pads, see AGENTS.md):
-# printed L X R / Y B A = raw 4 0 5 / 3 2 1. The stick is an analog axis; the
-# hat is only read as a fallback for other pads.
-INPUT_CONFIG = {
-    "p1": {
-        "joystick_index": 0,
-        "hat_index": 0,
-        "axes": (0, 1),  # (x axis, y axis), SDL convention: negative = left/up
-        "buttons": {
-            "pick": [1],  # printed A: pick up / put down / take / serve
-            "use": [2],  # printed B: work the station in front of you
-            "swap": [3],  # printed Y: swap chef (1-player mode)
-        },
-    },
-    "p2": {
-        "joystick_index": 1,
-        "hat_index": 0,
-        "axes": (0, 1),
-        "buttons": {
-            "pick": [1],
-            "use": [2],
-            "swap": [3],
-        },
-    },
-    "system": {
-        # Start confirms / pauses, Select goes back. Quit: Start + Select held
-        # together on the same pad. Confirmed on the cabinet (see AGENTS.md).
-        "start_button": 9,
-        "select_button": 8,
-    },
-    "axis_deadzone": 0.5,
-}
-
-# Keyboard fallback for local dev (ignored on the cabinet via --no-keyboard).
-# P1 deliberately uses exactly the keys Batocera's evmapy emits for P1's pad
-# for the *same* actions (arrows, a, b, y, Enter, Space), so a double-fire
-# would only ever repeat the same action. P2 avoids every key evmapy emits
-# for a control this game reads. tests/test_config.py enforces both.
-KEYMAP = {
-    "p1": {
-        "left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"],
-        "pick": ["K_a"], "use": ["K_b"], "swap": ["K_y"],
-        "start": ["K_RETURN"], "select": ["K_SPACE"],
-    },
-    "p2": {
-        "left": ["K_j"], "right": ["K_l"], "up": ["K_i"], "down": ["K_k"],
-        "pick": ["K_o"], "use": ["K_p"], "swap": ["K_u"],
-        "start": ["K_2"], "select": ["K_BACKSPACE"],
-    },
-}
-KEYBOARD_QUIT = "K_ESCAPE"
-
-# What evmapy (batocera-pygame/evmapy.keys) turns P1's pad into. Used by the
-# config tests only. "l" is P1's printed L, a button this game never reads.
-EVMAPY_P1_KEYS = {
-    "a": "K_a", "b": "K_b", "x": "K_x", "y": "K_y", "l": "K_l", "r": "K_r",
-    "l2": "K_m", "r2": "K_s", "l3": "K_n", "r3": "K_t", "hotkey": "K_h",
-    "start": "K_RETURN", "select": "K_SPACE",
-    "up": "K_UP", "down": "K_DOWN", "left": "K_LEFT", "right": "K_RIGHT",
-    "stick_up": "K_KP8", "stick_down": "K_KP2", "stick_left": "K_KP4", "stick_right": "K_KP6",
-}
-EVMAPY_UNUSED_BUTTONS = {"l"}  # P1 buttons whose keystroke nothing here reads
+# Pads, button numbers and the keyboard layout are shared by all games: see
+# arqade_common.input (and input.ACTION_BUTTONS: A picks, B uses a station, Y
+# swaps chef). The cabinet loader passes --no-keyboard, so the keystrokes
+# Batocera's evmapy fakes for P1's pad never reach the game.
+AXIS_DEADZONE = 0.5
 
 # Menu auto-repeat for held stick directions.
 REPEAT_DELAY = 0.30

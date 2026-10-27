@@ -1,8 +1,10 @@
 import pygame
 
 from overquqed import input as inp_mod
-from overquqed.config import INPUT_CONFIG, REPEAT_DELAY, REPEAT_INTERVAL
-from overquqed.input import Repeater, axis_to_direction, joystick_actions, read_keys, should_quit
+from arqade_common.input import PlayerState
+
+from overquqed.config import REPEAT_DELAY, REPEAT_INTERVAL
+from overquqed.input import Repeater, actions_from_state, axis_to_direction, read_keys, should_quit
 
 
 def test_axis_deadzone():
@@ -17,28 +19,41 @@ def test_quit_needs_start_and_select_on_the_same_pad():
     assert not should_quit(p1_start=True, p1_select=False, p2_start=False, p2_select=True)
 
 
-def test_confirmed_face_buttons_map_to_pick_use_swap():
-    # Printed A = raw 1, B = raw 2, Y = raw 3 (confirmed on the cabinet).
-    for p in ("p1", "p2"):
-        assert joystick_actions(p, {1}, (0.0, 0.0), (0, 0)) == {"pick"}
-        assert joystick_actions(p, {2}, (0.0, 0.0), (0, 0)) == {"use"}
-        assert joystick_actions(p, {3}, (0.0, 0.0), (0, 0)) == {"swap"}
+def _state(*held, stick=(0.0, 0.0)):
+    return PlayerState(frozenset(held), *stick)
 
 
-def test_start_and_select_resolve_from_system_buttons():
-    system = INPUT_CONFIG["system"]
-    held = joystick_actions("p1", {system["start_button"], system["select_button"]}, (0, 0), (0, 0))
-    assert held == {"start", "select"}
+def test_face_buttons_map_to_pick_use_swap():
+    assert actions_from_state(_state("a")) == {"pick"}
+    assert actions_from_state(_state("b")) == {"use"}
+    assert actions_from_state(_state("y")) == {"swap"}
+    assert actions_from_state(_state("start", "select")) == {"start", "select"}
 
 
 def test_stick_is_an_analog_axis_negative_up():
-    assert joystick_actions("p1", set(), (0.0, -1.0), (0, 0)) == {"up"}
-    assert joystick_actions("p1", set(), (1.0, 1.0), (0, 0)) == {"right", "down"}
-    assert joystick_actions("p1", set(), (0.2, -0.2), (0, 0)) == set()
+    assert actions_from_state(_state(stick=(0.0, -1.0))) == {"up"}
+    assert actions_from_state(_state(stick=(1.0, 1.0))) == {"right", "down"}
+    assert actions_from_state(_state(stick=(0.2, -0.2))) == set()
 
 
-def test_hat_is_a_fallback_and_positive_up():
-    assert joystick_actions("p2", set(), (0.0, 0.0), (-1, 1)) == {"left", "up"}
+def test_the_dpad_and_direction_keys_count_too():
+    assert actions_from_state(_state("left", "up")) == {"left", "up"}
+
+
+def test_the_shared_keyboard_cooks(monkeypatch):
+    """P1: W A S D walk, B picks, V uses, C swaps, Space is Start. P2: arrows, L, K, J, Enter."""
+    class Keys:
+        def __init__(self, *held):
+            self.held = held
+
+        def __getitem__(self, key):
+            return key in self.held
+
+    pygame.init()
+    inp = inp_mod.Input()
+    monkeypatch.setattr(inp_mod, "read_keys", lambda: Keys(pygame.K_d, pygame.K_b, pygame.K_k, pygame.K_RETURN))
+    inp.update(1 / 60)
+    assert inp.held["p1"] == {"right", "pick"} and inp.held["p2"] == {"use", "start"}
 
 
 def test_repeater_fires_on_press_then_after_delay_then_interval():
