@@ -54,7 +54,9 @@ def draw_title_screen(
     prompt_font: pygame.font.Font,
     selected: int,
     show_prompt: bool,
+    start_label: str = "START",
 ) -> None:
+    """`start_label` names Start for the players' devices, e.g. "SPACE / ENTER"."""
     surface.fill(config.COLOR_BACKGROUND)
 
     title = title_font.render("QUANTUM PONG", False, config.COLOR_TEXT)
@@ -69,7 +71,7 @@ def draw_title_screen(
     _draw_items(surface, item_font, TITLE_ITEMS, selected, config.INTERNAL_WIDTH // 2, 182)
 
     if show_prompt:
-        prompt = prompt_font.render("PRESS START", False, config.COLOR_FPS)
+        prompt = prompt_font.render(f"PRESS {start_label}", False, config.COLOR_FPS)
         surface.blit(
             prompt, prompt.get_rect(center=(config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT - 22))
         )
@@ -102,8 +104,10 @@ def draw_pause_menu(
     item_font: pygame.font.Font,
     hint_font: pygame.font.Font,
     selected: int,
+    hint_text: str = "A: PICK   START / B: RESUME",
 ) -> None:
-    """Centred box over the frozen field, which the caller has already drawn."""
+    """Centred box over the frozen field, which the caller has already drawn.
+    `hint_text` names the buttons for the device of whoever is using the menu."""
     veil = pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT), pygame.SRCALPHA)
     veil.fill((*config.COLOR_BACKGROUND, 170))
     surface.blit(veil, (0, 0))
@@ -118,5 +122,5 @@ def draw_pause_menu(
 
     _draw_items(surface, item_font, PAUSE_ITEMS, selected, box.centerx, box.y + 48)
 
-    hint = hint_font.render("A: PICK   START / B: RESUME", False, config.COLOR_HINT)
+    hint = hint_font.render(hint_text, False, config.COLOR_HINT)
     surface.blit(hint, hint.get_rect(center=(box.centerx, box.bottom - 14)))

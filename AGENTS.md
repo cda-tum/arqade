@@ -451,6 +451,58 @@ as long as it keeps to what the existing ones do:
   `pygame.event.poll()` or `wait()` would not see the pads, and Esc would not
   quit it.
 
+## Browser build (pygbag) and shared code (`common/`, `tools/`)
+
+The games also run in the browser, compiled to WebAssembly by pygbag, from
+the same code as the cabinet. Ported so far: Quantum Pong.
+
+- **pygame-ce on PCs and in the browser, pygame 2.5.2 on the cabinet.**
+  pygbag only has pygame-ce, and the cabinet has no pip, so a ported game
+  depends on `pygame-ce` but must keep running on 2.5.2: use only APIs both
+  have, and run the tests on both (see `common/README.md`).
+- **Async main loop.** `async def main(argv)`, every frame loop ends with
+  `await asyncio.sleep(0)`, and callers use `asyncio.run(main(...))`. The
+  launcher and `capture.py` accept both async and plain `main()`.
+- **Shared code** lives in `common/src/arqade_common/` (pad layouts, the
+  two-player keyboard, pad hot-plugging, browser events, button hints). Games use it as a
+  path dependency; `deploy_batocera.sh` and the web build copy it next to
+  the game's package.
+- **Browser-only behaviour** stays behind `arqade_common.runtime.is_browser()`
+  and is kept small: the display is the internal size (the page scales it),
+  frame times are capped at 0.1 s (a hidden tab pauses the page), and quitting
+  (Start + Select or the menu) returns to the title and sends `arqade:quit`
+  to the embedding page.
+- **Button hints follow the device.** `LastDevice` remembers per player
+  whether they last pressed a key or a pad button; `label()` names a button
+  for that device ("SPACE" vs "START"). Before anyone has pressed anything,
+  hints assume the keyboard in the browser and pads elsewhere, so the
+  cabinet's screens are unchanged. Screens both players read combine both
+  (`shared_label`, e.g. "SPACE / ENTER"); a menu one player works uses
+  `latest`, the player who pressed something last.
+- **No quit key** in ported games (Esc leaves fullscreen in a browser; the PC
+  launcher catches Esc itself). Quit is Start + Select, or the title's QUIT.
+- **Optional page events** (`arqade_common.web.post_event`):
+  `arqade:game-start` / `arqade:game-end` around a match, `arqade:quit`. They
+  do nothing outside a browser or when nobody listens.
+- **Each ported game has a `game.json`** (the manifest the website reads;
+  `version` is filled in from `pyproject.toml` at build time). Its thumbnail
+  is made from `batocera/logos/<package>-wide.png`.
+- **Building:** `uv run --project tools tools/build_web.py [game ...]` writes
+  `build/arqade-games-<version>.zip` (one folder per game);
+  `--serve <game>` runs one game on pygbag's test server (localhost:8000,
+  add `#debug` to the URL for the Python console). `build/` is git-ignored.
+- **pygbag quirks:** `main.py` must itself `import pygame`, or pygbag doesn't
+  load pygame-ce (the build script's generated `main.py` does). A quick key
+  tap from a test script can be missed by games that poll held keys; hold
+  keys for a few frames when automating.
+- **What the build script changes in pygbag's page** (`tools/build_web.py`):
+  the game is scaled by whole device pixels (2x, 3x, ...; pygbag's own
+  sizing stretches to any factor, which makes pixel art ragged), the game
+  archive is accepted whether or not the server gzip-labels it, and
+  `--can_close 1` drops pygbag's "Are you sure you want to navigate away?"
+  prompt. Each patch checks pygbag's template still looks as expected, so a
+  pygbag upgrade that changes it fails the build instead of silently.
+
 ## Button convention (all games must follow this)
 
 Players move between games and must not have to relearn the controls. Every

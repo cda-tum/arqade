@@ -57,8 +57,10 @@ The game's own package is importable from a bot, too.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import gc
 import importlib
+import inspect
 import os
 import random
 import sys
@@ -341,6 +343,7 @@ def capture(rom: str, seconds: float | None, seed: int, out: Path | None = None,
             sound_only: bool = False) -> Path:
     game_dir = project_dir(rom)
     sys.path.insert(0, str(game_dir / "src"))
+    sys.path.insert(1, str(game_dir.parent / "common" / "src"))  # code shared by the games
     bot_mod = importlib.import_module(f"bots.{rom}")
     seconds = seconds or getattr(bot_mod, "SECONDS", 75.0)
     CLIPS.mkdir(exist_ok=True)
@@ -424,7 +427,9 @@ def capture(rom: str, seconds: float | None, seed: int, out: Path | None = None,
     os.chdir(game_dir)
     main = importlib.import_module(f"{rom}.main").main
     try:
-        main(["--window-size", f"{SIZE[0]}x{SIZE[1]}", "--no-keyboard"])
+        result = main(["--window-size", f"{SIZE[0]}x{SIZE[1]}", "--no-keyboard"])
+        if inspect.iscoroutine(result):  # games ported to the browser
+            asyncio.run(result)
     except (Done, SystemExit):
         pass
     finally:

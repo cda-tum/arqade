@@ -79,6 +79,13 @@ uv run python -m quantum_pong.main --window-size 1280x720
 
 Press **F3** in-game to toggle the FPS overlay at runtime.
 
+In the browser (pygbag's test server on http://localhost:8000), from the
+repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve quantum-pong
+```
+
 ### Input test mode
 
 The cabinet's exact joystick/button indices are unknown. Run this on the real
@@ -110,20 +117,30 @@ stick doesn't. Start+Select still quits from it, and after 60 s untouched it
 goes back to the title. The press that dismisses it can't pause the match:
 the match seeds its button edges with whatever is held when it begins.
 
-### Keyboard fallback (dev only)
+### Keyboard
+
+The keyboard layout shared by all games (`arqade_common.input`): each player
+has a stick and the pad's buttons.
 
 | Action | P1 | P2 |
 |---|---|---|
 | Move | W / S | Up / Down |
-| Pause / resume | P (either player) | P (either player) |
-| Pick a menu item (A) | Enter | Enter |
-| Start from the title (Start) | Space or P | Space or P |
+| Start: start from the title, pause / resume | Space | Enter |
+| A: pick a menu item | B | L |
+| B: resume from the pause menu | V | K |
+| Select (Start + Select quits) | Left Shift | Right Shift |
 | Dismiss HOW TO PLAY | any key | any key |
-| Quit | Esc (either player) | Esc (either player) |
+| Quit (hold both) | Space + Left Shift | Enter + Right Shift |
 
-On the cabinet, quit is Start+Select held together on either controller, or
-QUIT on the title. Start or A (Enter/Space on keyboard) also leaves the winner
-screen.
+Quit is Start + Select held together by one player (pad or keyboard), or QUIT
+on the title. There is no quit key: Esc leaves fullscreen in a browser, and
+the PC launcher's Esc ends the game on its own. Start or A also leaves the winner screen. In the browser,
+quitting (Start + Select, or QUIT on the title) goes back to the title and tells the page around the game
+(`arqade:quit`), which may take the player back to its game list.
+
+Pads use the cabinet's button numbers by default; `--pad-layout xbox` reads
+an Xbox-style pad on a PC instead. In the browser, gamepads use the browser's
+standard layout.
 
 ### Pausing
 

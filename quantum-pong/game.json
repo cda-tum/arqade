@@ -1,0 +1,21 @@
+{
+  "id": "quantum-pong",
+  "title": "Quantum Pong",
+  "tagline": "Classic two-player Pong, with quantum gates that split, flip and teleport the ball.",
+  "description": "Return the ball and get it past your opponent. Gates named after quantum operations appear on the field: H splits the ball in two, X and Z bounce it, SWAP teleports it. A dashed outline shows where the next gate will appear, so you can aim for it.",
+  "players": "2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W / S to move, Space to pause",
+      "p2": "Up / Down to move, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Move your paddle to return the ball.",
+    "Score by getting the ball past the other paddle. First to 7 wins.",
+    "Hit the gates: H splits the ball, X and Z bounce it, SWAP teleports it.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

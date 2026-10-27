@@ -21,6 +21,7 @@ import math
 from dataclasses import dataclass, field
 
 import pygame
+from arqade_common.input import KEYBOARD, PAD, PLAYERS, LastDevice
 
 from quantum_pong import config, fonts, sprites
 from quantum_pong.gates import Gate, check_gate_collisions, is_live
@@ -198,12 +199,24 @@ class TutorialCard:
         self.warning_caption = self.font.render(WARNING_CAPTION, False, config.COLOR_HINT)
         self.stick_text = self.font.render("STICK: MOVE YOUR PADDLE", False, config.COLOR_TEXT)
         self.start_text = self.font.render("START: PAUSE", False, config.COLOR_TEXT)
-        self.prompt = self.font.render("PRESS ANY BUTTON TO START", False, config.COLOR_FPS)
+        self._texts: dict[tuple[str, tuple[int, int, int]], pygame.Surface] = {}
         self.gate_labels = sprites.make_gate_label_surfaces(gate_font)
         self.warning_labels = sprites.make_gate_warning_labels(gate_font)
         self.field_rect = pygame.Rect(FIELD_LEFT, FIELD_TOP, FIELD_WIDTH, FIELD_HEIGHT)
 
-    def draw(self, surface: pygame.Surface, demo: DemoScene, t: float, show_prompt: bool) -> None:
+    def _text(self, text: str, color: tuple[int, int, int]) -> pygame.Surface:
+        """Rendered once per text: the hints change only when a player
+        switches between keyboard and pad."""
+        if (text, color) not in self._texts:
+            self._texts[text, color] = self.font.render(text, False, color)
+        return self._texts[text, color]
+
+    def draw(
+        self, surface: pygame.Surface, demo: DemoScene, t: float, show_prompt: bool,
+        devices: LastDevice | None = None,
+    ) -> None:
+        """`devices`: what each player is using, for the control hints
+        (None: pads, as on the cabinet)."""
         surface.fill(config.COLOR_BACKGROUND)
         cx = config.INTERNAL_WIDTH // 2
 
@@ -215,10 +228,17 @@ class TutorialCard:
         caption = self.captions[demo.kind] if demo.gate_is_live() or not demo.gates else self.warning_caption
         surface.blit(caption, caption.get_rect(center=(cx, CAPTION_Y)))
 
-        self._draw_controls(surface)
+        on_pads = devices is None or devices.everyone_on(PAD)
+        if on_pads:
+            self._draw_controls(surface)
+        else:
+            self._draw_key_controls(surface, devices)
 
         if show_prompt:
-            surface.blit(self.prompt, self.prompt.get_rect(center=(cx, PROMPT_Y)))
+            on_keys = devices is not None and devices.everyone_on(KEYBOARD)
+            prompt = "PRESS ANY KEY TO START" if on_keys else "PRESS ANY BUTTON TO START"
+            text = self._text(prompt, config.COLOR_FPS)
+            surface.blit(text, text.get_rect(center=(cx, PROMPT_Y)))
 
     def _draw_demo(self, surface: pygame.Surface, demo: DemoScene) -> None:
         # Draw in simulation coordinates on a strip the field's height: x is
@@ -239,6 +259,19 @@ class TutorialCard:
         for flash in demo.flashes:
             sprites.draw_flash(strip, flash, demo.t)
         pygame.draw.rect(surface, config.COLOR_MIDLINE, self.field_rect.inflate(2, 2), 1)
+
+    def _draw_key_controls(self, surface: pygame.Surface, devices: LastDevice) -> None:
+        """The same two controls as text, when anyone is on the keyboard:
+        each player's own keys (or STICK for a player on a pad)."""
+        y = CONTROLS_Y + 2
+        moves = dict.fromkeys(
+            "STICK" if devices[p] == PAD else f"{devices.label('up', p)}/{devices.label('down', p)}"
+            for p in PLAYERS
+        )
+        move = self._text(f"{', '.join(moves)}: MOVE", config.COLOR_TEXT)
+        surface.blit(move, move.get_rect(midleft=(FIELD_LEFT, y)))
+        pause = self._text(f"{devices.shared_label('start')}: PAUSE", config.COLOR_TEXT)
+        surface.blit(pause, pause.get_rect(midright=(FIELD_LEFT + FIELD_WIDTH, y)))
 
     def _draw_controls(self, surface: pygame.Surface) -> None:
         """The stick and START, the only controls a match uses (both pads

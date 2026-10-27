@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# web build (tools/build_web.py): staging copies and the release zip
+/build/

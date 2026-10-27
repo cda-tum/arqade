@@ -20,7 +20,9 @@ runner.py). Polling games (`Joystick(i).get_button(n)`) and event-driven ones
 
 from __future__ import annotations
 
+import asyncio
 import importlib
+import inspect
 import json
 import os
 import sys
@@ -200,11 +202,18 @@ def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     src_dir, package, game_args = argv[0], argv[1], argv[2:]
     sys.path.insert(0, src_dir)
+    # Code shared by the games (common/src next to the game folders).
+    common_src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(src_dir))), "common", "src")
+    if os.path.isdir(common_src):
+        sys.path.insert(1, common_src)
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
     config = json.loads(os.environ.get(ENV_VAR) or "{}")
     if config:
         install(config)
-    importlib.import_module(f"{package}.main").main(game_args)
+    result = importlib.import_module(f"{package}.main").main(game_args)
+    # Games ported to the browser have an async main(); the rest are plain.
+    if inspect.iscoroutine(result):
+        asyncio.run(result)
 
 
 if __name__ == "__main__":

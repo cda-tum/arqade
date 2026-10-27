@@ -6,6 +6,8 @@ import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+import asyncio
+
 import pytest
 
 from quantum_pong import main as main_mod
@@ -17,7 +19,7 @@ def _run(monkeypatch, title, tutorial, game, winner=()):
     title, tutorial, game, winner = iter(title), iter(tutorial), iter(game), iter(winner)
 
     def screen(name, results):
-        def run(*args, **kwargs):
+        async def run(*args, **kwargs):
             shown.append(name)
             return next(results)
         return run
@@ -27,7 +29,7 @@ def _run(monkeypatch, title, tutorial, game, winner=()):
     monkeypatch.setattr(main_mod, "run_game", screen("game", game))
     monkeypatch.setattr(main_mod, "run_winner_screen", screen("winner", winner))
     with pytest.raises(SystemExit) as exit_info:
-        main_mod.main(["--no-keyboard"])
+        asyncio.run(main_mod.main(["--no-keyboard"]))
     assert exit_info.value.code == 0  # a clean exit hands back to the cabinet's menu
     return shown
 
