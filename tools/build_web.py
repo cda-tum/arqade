@@ -40,7 +40,7 @@ BUILD = REPO / "build"
 COMMON = REPO / "common" / "src" / "arqade_common"
 LOGOS = REPO / "batocera" / "logos"
 
-THUMBNAIL_SIZE = (640, 360)  # 16:9, what the website's game cards show
+THUMBNAIL_SIZE = (1024, 512)  # 2:1, the wide logo as it is: what the website's game tiles show
 
 PYGBAG_ARGS = [
     # Let the embedding page's "click to start" be the user gesture that
@@ -105,7 +105,7 @@ def pygbag(staged: Path, title: str, *, serve: bool) -> None:
 
 
 def make_thumbnail(game_dir: Path, target: Path) -> None:
-    """The game's wide logo, letterboxed onto 16:9 in its own background colour.
+    """The game's wide logo, fitted onto THUMBNAIL_SIZE in its own background colour.
     Scaled by whole-pixel steps (nearest neighbour) so the pixel art stays crisp."""
     logo = pygame.image.load(LOGOS / f"{package_name(game_dir)}-wide.png")
     width, height = THUMBNAIL_SIZE
