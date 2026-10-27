@@ -67,17 +67,42 @@ class FakePad:
         return 0
 
 
-def test_any_new_pad_button_counts_once_for_how_to_play():
+def test_any_new_pad_button_counts_once_for_how_to_play(monkeypatch):
     pygame.init()
     inp = Input()
-    inp.joysticks = [FakePad(), FakePad()]
+    pads = [FakePad(), FakePad()]
+    monkeypatch.setattr(inp.pads, "pad", lambda slot: pads[slot])
     inp.update(1 / 60)
     assert not inp.frame_input().any_button
-    inp.joysticks[1].held = {4}  # L: not used in the game, but it still skips the card
+    pads[1].held = {4}  # L: not used in the game, but it still skips the card
     inp.update(1 / 60)
     assert inp.frame_input().any_button
     inp.update(1 / 60)  # held, not pressed again
     assert not inp.frame_input().any_button
+
+
+def test_the_shared_keyboard_layout_rotates_and_pauses(monkeypatch):
+    """P1's B key is their A button (clockwise), V their B, Space their Start."""
+    pygame.init()
+    inp = Input()
+    held = {pygame.K_b, pygame.K_SPACE}
+    monkeypatch.setattr(ginput, "read_keys", lambda: _Keys(held))
+    inp.update(1 / 60)
+    fi = inp.frame_input()
+    assert fi.players["p1"].cw and not fi.players["p1"].ccw and fi.pauses["p1"]
+    held.clear()
+    held.update({pygame.K_v, pygame.K_k})
+    inp.update(1 / 60)
+    fi = inp.frame_input()
+    assert fi.players["p1"].ccw and fi.players["p2"].ccw and not fi.players["p1"].cw
+
+
+class _Keys:
+    def __init__(self, held):
+        self.held = held
+
+    def __getitem__(self, key):
+        return key in self.held
 
 
 def test_a_key_counts_as_any_button_only_with_the_keyboard_on():

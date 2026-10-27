@@ -1,0 +1,21 @@
+{
+  "id": "gate-drop",
+  "title": "Gate Drop",
+  "tagline": "A Dr. Mario-style puzzle on a quantum circuit: drop gate pills and cancel every error.",
+  "description": "Each board is a small quantum circuit with Pauli errors sitting on its wires. Gate pills fall onto the wires, and two of the same gate next to each other cancel out. Clear every error on your board: in versus, before your rival does (first to 2 rounds); alone, level after level for a high score. Each player picks their own level and speed.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W A S D to move and drop, B / V to rotate, Space to pause",
+      "p2": "Arrows to move and drop, L / K to rotate, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Move the falling gate pill and rotate it with A and B. Push down to drop it faster.",
+    "Two of the same gate next to each other on a wire cancel out.",
+    "Cancel every error on your board to win the round.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

@@ -33,18 +33,20 @@ GOAL = {
 CLUSTER = (("L", "X", "R"), ("Y", "B", "A"))
 CONTROLS = (("STICK", "MOVE / DROP"), ("A", "ROTATE RIGHT"), ("B", "ROTATE LEFT"), ("START", "PAUSE"))
 PROMPT = "PRESS ANY BUTTON TO START"
+KEYBOARD_PROMPT = "PRESS ANY KEY TO START"  # when everyone is on the keyboard
 
 
-def caption(demo: "Demo") -> tuple[str, ...]:
-    """What the demo is showing, a line or two under its well."""
+def caption(demo: "Demo", a: str = "A", stick: str = "STICK") -> tuple[str, ...]:
+    """What the demo is showing, a line or two under its well. `a` and
+    `stick` name the controls for the player's device ("B", "WASD")."""
     if demo.solved or demo.board.phase == "flash":
         return ("SAME GATES", "CANCEL!")
     if demo.t >= SCRIPT[-1][0]:
-        return ("STICK DOWN:", "DROP")
+        return (f"{stick} DOWN:", "DROP")
     if demo.t >= SCRIPT[1][0]:
-        return ("A: ROTATE",)
+        return (f"{a}: ROTATE",)
     if demo.t >= SCRIPT[0][0]:
-        return ("STICK: MOVE",)
+        return (f"{stick}: MOVE",)
     return ("A PILL FALLS",)
 
 

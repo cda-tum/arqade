@@ -83,29 +83,13 @@ BACKGROUNDS = (  # two-tone tile patterns, one per round
 )
 
 # --- Input -------------------------------------------------------------------------
-INPUT_CONFIG = {
-    "p1": {"joystick_index": 0, "hat_index": 0, "axes": (0, 1)},
-    "p2": {"joystick_index": 1, "hat_index": 0, "axes": (0, 1)},
-    "buttons": {"cw": [1], "ccw": [2]},  # printed A and B
-    "system": {
-        "start_button": 9, "select_button": 8,
-        "confirm_buttons": [1], "back_buttons": [2],
-        "keyboard_quit": "K_ESCAPE",
-    },
-    "axis_deadzone": 0.5,
-}
+# Raw button numbers and the keyboard layout live in arqade_common.input
+# (printed A rotates clockwise and B anti-clockwise in game; in menus A or
+# Start confirms and B goes back). The cabinet loader passes --no-keyboard, so
+# the keystrokes Batocera's evmapy fakes for P1's pad never reach the game.
+AXIS_DEADZONE = 0.5
 REPEAT_DELAY = 0.18  # stick auto-repeat for moving the pill
 REPEAT_INTERVAL = 0.06
-
-# Keyboard: a dev fallback only. The cabinet loader passes --no-keyboard, so
-# the keystrokes Batocera's evmapy fakes for P1's pad never reach the game.
-KEYMAP = {
-    "p1": {"left": ["K_a"], "right": ["K_d"], "up": ["K_w"], "down": ["K_s"], "cw": ["K_q"], "ccw": ["K_e"],
-           "confirm": ["K_1", "K_RETURN"], "back": ["K_BACKSPACE"], "pause": ["K_p"]},
-    "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"],
-           "cw": ["K_PERIOD"], "ccw": ["K_COMMA"], "confirm": ["K_2", "K_KP_ENTER"], "back": ["K_DELETE"],
-           "pause": ["K_END"]},
-}
 
 # --- Single-player scoring ----------------------------------------------------------
 SPEED_SCORE = {"LOW": 1, "MED": 2, "HI": 3}

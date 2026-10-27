@@ -15,6 +15,7 @@ import math
 import random
 
 import pygame
+from arqade_common.input import KEYBOARD, PLAYERS, LastDevice
 
 from gate_drop import config, tutorial
 from gate_drop.board import Cnot, Gate
@@ -90,9 +91,14 @@ def make_logo(font: pygame.font.Font, text: str = "GATE DROP") -> pygame.Surface
     return s
 
 
+KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}  # the keys that stand in for each player's stick
+
+
 class Renderer:
-    def __init__(self, surface: pygame.Surface) -> None:
+    def __init__(self, surface: pygame.Surface, devices: LastDevice | None = None) -> None:
         self.surface = surface
+        # Who last used keys or a pad, so the hints name what they're holding.
+        self.devices = devices or LastDevice()
         self.sprites = Sprites()
         self.font8, self.font16, self.font32 = load_font(8), load_font(16), load_font(32)
         self.backgrounds = [make_background(c) for c in config.BACKGROUNDS]
@@ -273,8 +279,28 @@ class Renderer:
             if active and int(self.t * 3) % 2 == 0:
                 arrow = outlined(self.font8, ">", config.GATE_COLORS["H"], shadow=False)
                 s.blit(arrow, (W // 2 - img.get_width() // 2 - 16, y))
-        hint = outlined(self.font8, "A: PICK   START / B: RESUME", shade(WHITE, 0.8), shadow=False)
+        p = self.devices.latest  # one player works the menu
+        pick, back, start = (self._name(k, p) for k in ("a", "b", "start"))
+        hint = outlined(self.font8, f"{pick}: PICK   {start} / {back}: RESUME", shade(WHITE, 0.8), shadow=False)
         s.blit(hint, (W // 2 - hint.get_width() // 2, box.bottom - 18))
+
+    # --- button names ---------------------------------------------------------------------
+
+    def _name(self, action: str, player: str | None = None) -> str:
+        """A control's on-screen name for one player's device, or for both
+        players' when `player` is None (e.g. "SPACE / ENTER")."""
+        if action == "stick":
+            names = [KEYBOARD_STICKS[p] if self.devices[p] == KEYBOARD else "STICK"
+                     for p in ((player,) if player else PLAYERS)]
+            return " / ".join(dict.fromkeys(names))
+        return self.devices.label(action, player) if player else self.devices.shared_label(action)
+
+    def _foot(self, *parts: str) -> pygame.Surface:
+        """A footer line of hints, closer together if the key names make it long."""
+        img = outlined(self.font8, "    ".join(parts), WHITE, shadow=False)
+        if img.get_width() > W - 16:
+            img = outlined(self.font8, "  ".join(parts), WHITE, shadow=False)
+        return img
 
     def _board(self, match: Match, player: str) -> None:
         board = match.boards.get(player)
@@ -478,9 +504,12 @@ class Renderer:
             if setup.ready:
                 stamp = outlined(self.font16, "READY!", config.GATE_COLORS["T"])
             else:
-                stamp = outlined(self.font8, "A: READY", WHITE, shadow=False)
+                who = self.devices.latest if match.mode == 1 else p
+                stamp = outlined(self.font8, f"{self._name('a', who)}: READY", WHITE, shadow=False)
             s.blit(stamp, (cx - stamp.get_width() // 2, box.bottom - 26))
-        foot = outlined(self.font8, "STICK: CHOOSE    A: READY    B: BACK", WHITE, shadow=False)
+        who = self.devices.latest if match.mode == 1 else None
+        foot = self._foot(f"{self._name('stick', who)}: CHOOSE", f"{self._name('a', who)}: READY",
+                          f"{self._name('b', who)}: BACK")
         s.fill(INK, (0, 242, W, 20))
         s.blit(foot, (W // 2 - foot.get_width() // 2, 248))
 
@@ -505,7 +534,9 @@ class Renderer:
                     for dy, glyph in ((-16, "^"), (44, "v")):
                         arrow = outlined(self.font8, glyph, WHITE, shadow=False)
                         s.blit(arrow, (box.centerx - arrow.get_width() // 2, box.y + dy + 2))
-        foot = outlined(self.font8, "STICK: LETTER    A: NEXT    B: BACK", WHITE, shadow=False)
+        p = self.devices.latest
+        foot = self._foot(f"{self._name('stick', p)}: LETTER", f"{self._name('a', p)}: NEXT",
+                          f"{self._name('b', p)}: BACK")
         s.fill(INK, (0, 242, W, 20))
         s.blit(foot, (W // 2 - foot.get_width() // 2, 248))
 
@@ -554,7 +585,8 @@ class Renderer:
             winner = match.match_winner or "p1"
             lines = [outlined(self.font32, f"{winner.upper()} WINS!", config.PLAYER_COLORS[winner])]
             if match.t >= config.MATCH_RESULT_LOCK:
-                lines.append(outlined(self.font8, "A / START: REMATCH     B: TITLE", WHITE, shadow=False))
+                a, start, b = (self._name(k) for k in ("a", "start", "b"))
+                lines.append(outlined(self.font8, f"{a} / {start}: REMATCH     {b}: TITLE", WHITE, shadow=False))
         if not lines:
             return
         width = max(img.get_width() for img in lines) + 24
@@ -584,10 +616,11 @@ class Renderer:
             s.blit(self.font8.render(line, False, config.COLOR_TEXT), (goal.x + 10, goal.y + 20 + i * 12))
         controls = pygame.Rect(144, goal.bottom + 6, W - 156, 126)
         self._card(controls, "CONTROLS")
-        self._controls(controls, self.demo.control())
+        self._controls(controls, self.demo.control(), self.devices.latest if match.mode == 1 else None)
         s.fill(INK, (0, 242, W, 20))
         if (self.t % 1.0) < 0.65:
-            prompt = outlined(self.font8, tutorial.PROMPT, config.GATE_COLORS["H"], shadow=False)
+            text = tutorial.KEYBOARD_PROMPT if self.devices.everyone_on(KEYBOARD) else tutorial.PROMPT
+            prompt = outlined(self.font8, text, config.GATE_COLORS["H"], shadow=False)
             s.blit(prompt, (W // 2 - prompt.get_width() // 2, 248))
 
     def _card(self, box: pygame.Rect, title: str) -> None:
@@ -622,15 +655,17 @@ class Renderer:
             rise = min(1.0, self.demo_popup / 0.25)
             img = outlined(self.font8, "FIXED!", lighten(color, 0.5))
             s.blit(img, (ox + cols * CELL // 2 - img.get_width() // 2, oy + 40 - round(rise * 24)))
-        lines = tutorial.caption(self.demo)
+        p = self.devices.latest
+        lines = tutorial.caption(self.demo, self._name("a", p), self._name("stick", p))
         for i, line in enumerate(lines):
             img = outlined(self.font8, line, WHITE, shadow=False)
             s.blit(img, (72 - img.get_width() // 2, oy + rows * CELL + 22 + i * 12))
 
-    def _controls(self, box: pygame.Rect, active: str | None) -> None:
+    def _controls(self, box: pygame.Rect, active: str | None, player: str | None = None) -> None:
         """The stick and the 2x3 cluster as printed on the cabinet (L X R over
         Y B A), plus Start: used buttons lit, the one the demo presses flashing
-        white, and what each does listed beside them."""
+        white, and what each does listed beside them, named for `player`'s
+        device (both players' when None)."""
         s = self.surface
         lit, dim = config.GATE_COLORS["H"], (70, 64, 110)
         # the stick: a ball on a shaft, leaning the way the demo pushes it
@@ -670,9 +705,13 @@ class Renderer:
         for i, (name, action) in enumerate(tutorial.CONTROLS):
             y = box.y + 30 + i * 22
             flash = active == name.lower() or (name == "STICK" and active in ("left", "down"))
-            key = outlined(self.font8, f"{name}:", WHITE if flash else lit, shadow=False)
+            key = outlined(self.font8, f"{self._name(name.lower(), player)}:", WHITE if flash else lit, shadow=False)
+            text = outlined(self.font8, action, WHITE, shadow=False)
             s.blit(key, (box.x + 140, y))
-            s.blit(outlined(self.font8, action, WHITE, shadow=False), (box.x + 140 + key.get_width() + 6, y))
+            if box.x + 140 + key.get_width() + 6 + text.get_width() > box.right - 6:
+                s.blit(text, (box.x + 148, y + 10))  # long key names: the action goes under them
+            else:
+                s.blit(text, (box.x + 140 + key.get_width() + 6, y))
 
     # --- the title ------------------------------------------------------------------------
 
@@ -711,9 +750,9 @@ class Renderer:
             if active and int(self.t * 3) % 2 == 0:
                 s.blit(outlined(self.font16, ">", config.GATE_COLORS["H"]), (x - 24, y))
         if int(self.t * 2) % 2 == 0:
-            press = outlined(self.font8, "PRESS START", config.GATE_COLORS["H"], shadow=False)
+            press = outlined(self.font8, f"PRESS {self._name('start')}", config.GATE_COLORS["H"], shadow=False)
             s.blit(press, (W // 2 - press.get_width() // 2, menu.bottom + 6))
-        foot = outlined(self.font8, "STICK: CHOOSE    A: PICK    START: PLAY", WHITE, shadow=False)
+        foot = self._foot(f"{self._name('stick')}: CHOOSE", f"{self._name('a')}: PICK", f"{self._name('start')}: PLAY")
         bar = pygame.Rect(0, 242, W, 20)
         s.fill(INK, bar)
         s.blit(foot, (W // 2 - foot.get_width() // 2, 248))

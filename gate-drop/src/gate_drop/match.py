@@ -409,6 +409,12 @@ class Match:
         self.state = state
         self.t = 0.0
 
+    def back_to_title(self) -> None:
+        """Leave whatever is going on for the title (the browser's way of quitting)."""
+        if self.state == NAME_ENTRY:
+            self._save_name()
+        self._to_title()
+
     def _to_title(self) -> None:
         self.boards = {}
         self.paused = False
