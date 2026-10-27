@@ -18,13 +18,14 @@ import random
 from types import SimpleNamespace
 
 import pygame
+from arqade_common.input import KEYBOARD, LastDevice
 
 from planck_time import config
 from planck_time import palette as P
 from planck_time import session as S
 from planck_time import tutorial as T
 from planck_time.microgames import BOSSES
-from planck_time.pixel import backdrop, blit_center, orb, outlined
+from planck_time.pixel import backdrop, blit_center, button, orb, outlined, set_buttons
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 SW, SH = config.SCREEN_W, config.SCREEN_H
@@ -33,7 +34,8 @@ KEY = (255, 0, 255)  # transparent in the bezels
 PLAYER_NAMES = {"p1": "P1", "p2": "P2"}
 BOSS_FACE = (SW // 2, 30)  # where a boss's portrait goes on its intro: where the game draws it
 CARD_FACE = (62, 62)  # ...and on the BOSS! card
-INPUT_LABELS = {"stick": "STICK", "a": "PRESS A", "mash": "MASH A!", "stick+a": "STICK + A"}
+INPUT_LABELS = {"stick": "{stick}", "a": "PRESS {a}", "mash": "MASH {a}!", "stick+a": "{stick} + {a}"}
+KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}  # the keys that stand in for each player's stick
 
 HEART = (
     ".oo...oo.",
@@ -110,8 +112,10 @@ def ease_out_back(k: float) -> float:
 
 
 class Renderer:
-    def __init__(self, surface: pygame.Surface) -> None:
+    def __init__(self, surface: pygame.Surface, devices: LastDevice | None = None) -> None:
         self.surface = surface
+        # Who last used keys or a pad, so the hints name what they're holding.
+        self.devices = devices or LastDevice()
         self.t = 0.0
         self.screens = {p: pygame.Surface((SW, SH)) for p in S.PLAYERS}
         self.bezels = {p: make_bezel(config.PLAYER_COLORS[p]) for p in S.PLAYERS}
@@ -132,6 +136,22 @@ class Renderer:
         scratch = pygame.Surface((SW, SH))
         for boss in BOSSES:  # build each boss's art now, not on its first frame
             boss.portrait(scratch, (SW // 2, SH // 2), 0.0)
+
+    # --- button names ---------------------------------------------------------------------
+
+    def _stick(self, p: str) -> str:
+        return KEYBOARD_STICKS[p] if self.devices[p] == KEYBOARD else "STICK"
+
+    def _shared_stick(self) -> str:
+        return " / ".join(dict.fromkeys(self._stick(p) for p in S.PLAYERS))
+
+    def _player_of(self, s: S.Session, p: str) -> str:
+        """Whose controls a screen shows: solo, either player plays it."""
+        return self.devices.latest if s.mode == 1 else p
+
+    def _buttons_for(self, p: str) -> None:
+        """Before drawing one player's screen, so its hints name their buttons."""
+        set_buttons({"a": self.devices.label("a", p), "stick": self._stick(p)})
 
     # --- the frame ------------------------------------------------------------------------
 
@@ -186,7 +206,7 @@ class Renderer:
         if s.state == S.RESULT and s.game_cls is not None:
             self._caption(s.game_cls.CAPTION)
         elif s.state in (S.INTRO, S.PLAY):
-            hint = outlined("START: PAUSE", 8, P.MIST, shadow=False)
+            hint = outlined(f"{self.devices.shared_label('start')}: PAUSE", 8, P.MIST, shadow=False)
             blit_center(surf, hint, (W // 2, H - 14))
 
     def _handheld(self, s: S.Session, p: str, center) -> None:
@@ -253,6 +273,7 @@ class Renderer:
         if game is None:
             screen.fill(P.NIGHT)
             return
+        self._buttons_for(self._player_of(s, p))
         game.draw(screen)
         if state == S.INTRO:
             screen.blit(self.intro_dim, (0, 0))
@@ -295,7 +316,7 @@ class Renderer:
         pygame.draw.rect(screen, P.NIGHT, panel, border_radius=7)
         pygame.draw.rect(screen, P.GOLD if s.first_time else P.SLATE, panel, 1, border_radius=7)
         self._input_icon(screen, game.INPUT, (SW // 2, panel.y + 24), s.t, s.first_time)
-        label = outlined(INPUT_LABELS[game.INPUT], 8, P.WHITE)
+        label = outlined(INPUT_LABELS[game.INPUT].format(a=button("a"), stick=button("stick")), 8, P.WHITE)
         blit_center(screen, label, (SW // 2, panel.bottom - 10))
 
     def _input_icon(self, screen, kind: str, center, t: float, demo: bool) -> None:
@@ -335,7 +356,7 @@ class Renderer:
         pygame.draw.ellipse(screen, P.SLATE, (cx - 12, cy - 3, 24, 14))
         y = cy + (2 if down else -2)
         orb(screen, (cx, y), 10, P.BAD)
-        blit_center(screen, outlined("A", 8, P.WHITE, shadow=False), (cx + 1, y))
+        blit_center(screen, outlined(button("a"), 8, P.WHITE, shadow=False), (cx + 1, y))
         if demo and phase < 0.5:
             r = round(12 + 16 * phase)
             pygame.draw.circle(screen, P.WHITE, (cx, y), r, 1)
@@ -441,7 +462,8 @@ class Renderer:
         score = outlined(f"{s.scores['p1']}  -  {s.scores['p2']}", 16, P.WHITE)
         lines = [head, score]
         if s.t >= config.MATCH_RESULT_LOCK:
-            lines.append(outlined("A: REMATCH     B: TITLE", 8, P.MIST, shadow=False))
+            a, b = (self.devices.shared_label(k) for k in ("a", "b"))
+            lines.append(outlined(f"{a}: REMATCH     {b}: TITLE", 8, P.MIST, shadow=False))
         self._banner(lines)
 
     def _pause_menu(self, s: S.Session) -> None:
@@ -451,7 +473,9 @@ class Renderer:
         for i, item in enumerate(S.PAUSE_ITEMS):
             on = i == s.pause_index
             lines.append(outlined(f"> {item} <" if on else item, 16 if on else 8, P.GOLD if on else P.WHITE))
-        lines.append(outlined("A: PICK   START / B: RESUME", 8, P.MIST, shadow=False))
+        p = self.devices.latest  # one player works the menu
+        pick, back, start = (self.devices.label(k, p) for k in ("a", "b", "start"))
+        lines.append(outlined(f"{pick}: PICK   {start} / {back}: RESUME", 8, P.MIST, shadow=False))
         self._banner(lines)
 
     def _name_entry(self, s: S.Session) -> None:
@@ -472,7 +496,9 @@ class Renderer:
                 if active and int(self.t * 4) % 2 == 0:
                     blit_center(surf, outlined("^", 8, P.WHITE, shadow=False), (box.centerx, box.y - 10))
                     blit_center(surf, outlined("v", 8, P.WHITE, shadow=False), (box.centerx, box.bottom + 10))
-        foot = outlined("STICK: LETTER    A: NEXT    B: BACK", 8, P.WHITE)
+        p = self.devices.latest
+        a, b = (self.devices.label(k, p) for k in ("a", "b"))
+        foot = outlined(f"{self._stick(p)}: LETTER    {a}: NEXT    {b}: BACK", 8, P.WHITE)
         surf.fill(P.INK, (0, 300, W, 24))
         blit_center(surf, foot, (W // 2, 312))
 
@@ -520,6 +546,8 @@ class Renderer:
         pygame.draw.circle(surf, P.INK, (bx + 14, by + 34), 3)
         pygame.draw.circle(surf, P.GOOD if lit else P.shade(P.BAD, 0.8), (bx + 14, by + 34), 2)
         screen = self.screens["p1"]
+        player = self.devices.latest if s.mode == 1 else "p1"
+        self._buttons_for(player)
         game.draw(screen)
         beat = SimpleNamespace(t=demo.t, first_time=True, gained={"p1": 1 if game.result else 0}, first=None)
         if demo.phase == T.INTRO:
@@ -541,23 +569,32 @@ class Renderer:
             surf.blit(outlined(line, 8, P.WHITE, shadow=False), (x0, panel.y + 30 + i * 14))
         surf.blit(outlined("CONTROLS", 8, P.GOLD), (x0, panel.y + 104))
         self._controls(demo, (panel.centerx, panel.y + 146))
-        for i, (key, action) in enumerate((("STICK", "MOVE / POINT"), ("A", "PRESS / PICK"),
-                                           ("START", "PAUSE"))):
-            y = panel.y + 182 + i * 14
-            surf.blit(outlined(f"{key}:", 8, P.GOLD, shadow=False), (x0 + 6, y))
-            surf.blit(outlined(action, 8, P.WHITE, shadow=False), (x0 + 62, y))
+        d = self.devices
         if s.mode == 1:
-            pads = [("EITHER PAD PLAYS", P.MIST)]
+            names = (self._stick(player), d.label("a", player), d.label("start", player))
         else:
-            pads = [("P1 LEFT PAD", config.PLAYER_COLORS["p1"]), ("   ", P.MIST),
-                    ("P2 RIGHT PAD", config.PLAYER_COLORS["p2"])]
+            names = (self._shared_stick(), d.shared_label("a"), d.shared_label("start"))
+        rows = [(outlined(f"{key}:", 8, P.GOLD, shadow=False), outlined(action, 8, P.WHITE, shadow=False))
+                for key, action in zip(names, ("MOVE / POINT", "PRESS / PICK", "PAUSE"))]
+        action_x = x0 + 6 + max(56, max(key.get_width() for key, _ in rows) + 8)
+        for i, (key, action) in enumerate(rows):
+            y = panel.y + 182 + i * 14
+            surf.blit(key, (x0 + 6, y))
+            surf.blit(action, (action_x, y))
+        side = {p: "KEYS" if d[p] == KEYBOARD else "PAD" for p in S.PLAYERS}
+        if s.mode == 1:
+            pads = [("EITHER SIDE PLAYS" if d.everyone_on(KEYBOARD) else "EITHER PAD PLAYS", P.MIST)]
+        else:
+            pads = [(f"P1 LEFT {side['p1']}", config.PLAYER_COLORS["p1"]), ("   ", P.MIST),
+                    (f"P2 RIGHT {side['p2']}", config.PLAYER_COLORS["p2"])]
         imgs = [outlined(text, 8, color, shadow=False) for text, color in pads]
         x = panel.centerx - sum(i.get_width() for i in imgs) // 2
         for img in imgs:
             surf.blit(img, (x, panel.bottom - 18))
             x += img.get_width()
         if int(self.t * 2) % 2 == 0:
-            blit_center(surf, outlined("PRESS ANY BUTTON TO START", 16, P.WHITE), (W // 2, H - 26))
+            any_button = "ANY KEY" if d.everyone_on(KEYBOARD) else "ANY BUTTON"
+            blit_center(surf, outlined(f"PRESS {any_button} TO START", 16, P.WHITE), (W // 2, H - 26))
 
     def _controls(self, demo, center) -> None:
         """The cabinet's pad as it is built: the stick, the 2x3 buttons printed
@@ -640,10 +677,12 @@ class Renderer:
                 bx, by = center[0] - BEZEL_W // 2, center[1] - BEZEL_H // 2
                 surf.blit(self.bezels[p], (bx, by))
                 screen = self.screens[p]
+                self._buttons_for(p)
                 s.attract[p].draw(screen)
                 surf.blit(screen, (bx + 30, by + 18))
             if blink:
-                blit_center(surf, outlined("PRESS START", 16, P.WHITE), (W // 2, H - 26))
+                blit_center(surf, outlined(f"PRESS {self.devices.shared_label('start')}", 16, P.WHITE),
+                            (W // 2, H - 26))
             return
         self._logo((W // 2 - 18, 92), 32)
         blit_center(surf, outlined("A QUANTUM MICROGAME PARTY", 8, P.CREAM), (W // 2, 132))
@@ -658,7 +697,7 @@ class Renderer:
                 blit_center(surf, outlined(">", 16, P.GOLD), (W // 2 - img.get_width() // 2 - 20 + bob, y))
                 blit_center(surf, outlined("<", 16, P.GOLD), (W // 2 + img.get_width() // 2 + 20 - bob, y))
         if blink:
-            blit_center(surf, outlined("PRESS START", 8, P.WHITE), (W // 2, 282))
+            blit_center(surf, outlined(f"PRESS {self.devices.shared_label('start')}", 8, P.WHITE), (W // 2, 282))
         best = s.hiscores.entries[0] if s.hiscores.entries else None
         if best:
             hi = outlined(f"HI-SCORE  {best.name}  {best.score}", 8, P.MIST, shadow=False)

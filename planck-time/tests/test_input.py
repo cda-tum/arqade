@@ -66,3 +66,27 @@ def test_any_key_counts_as_a_press_unless_the_keyboard_is_off():
         assert not inp.frame_input().any_press
     finally:
         pinput.set_keyboard_enabled(True)
+
+
+def test_the_shared_keyboard_layout_plays(monkeypatch):
+    """P1's B key is their A button, Space their Start; P2's L key is their A."""
+    pygame.init()
+    inp = Input()
+    held = {pygame.K_b, pygame.K_SPACE, pygame.K_d}
+    monkeypatch.setattr(pinput, "read_keys", lambda: _Keys(held))
+    inp.update(1 / 60)
+    fi = inp.frame_input()
+    assert fi.players["p1"].a and fi.pauses["p1"] and fi.players["p1"].stick == (1.0, 0.0)
+    assert not fi.players["p2"].a
+    held.clear()
+    held.add(pygame.K_l)
+    inp.update(1 / 60)
+    assert inp.frame_input().players["p2"].a and not inp.frame_input().players["p1"].a
+
+
+class _Keys:
+    def __init__(self, held):
+        self.held = held
+
+    def __getitem__(self, key):
+        return key in self.held

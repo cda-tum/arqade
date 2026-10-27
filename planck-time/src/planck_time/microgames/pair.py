@@ -19,7 +19,7 @@ import pygame
 
 from planck_time import palette as P
 from planck_time.microgames.base import IDLE, H, W, Microgame, PlayerInput, register
-from planck_time.pixel import backdrop, blit_center, orb, outlined, result_overlay
+from planck_time.pixel import backdrop, blit_center, button, orb, outlined, result_overlay
 
 COLORS = (P.SKY, P.TEAL, P.VIOLET, P.ORANGE)  # one per game, shared by every particle
 OMEGA = 6.0  # radians per second of the pair's loop at level 0 (about 1 s a loop)
@@ -168,5 +168,5 @@ class Pair(Microgame):
             for d in (-1, 1):
                 pygame.draw.line(surf, P.INK, (x - 9, y - 9 * d), (x + 9, y + 9 * d), 7)
                 pygame.draw.line(surf, P.BAD, (x - 9, y - 9 * d), (x + 9, y + 9 * d), 3)
-        blit_center(surf, outlined("A ON THE TWO IN SYNC", 8, P.WHITE), (W // 2, H - 14))
+        blit_center(surf, outlined(f"{button('a')} ON THE TWO IN SYNC", 8, P.WHITE), (W // 2, H - 14))
         result_overlay(surf, self.result, self.since_end, seed=9)

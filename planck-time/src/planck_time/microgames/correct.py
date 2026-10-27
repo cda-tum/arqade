@@ -23,7 +23,7 @@ import pygame
 
 from planck_time import palette as P
 from planck_time.microgames.base import IDLE, H, W, Microgame, PlayerInput, register
-from planck_time.pixel import blit_center, outlined, result_overlay
+from planck_time.pixel import blit_center, button, outlined, result_overlay
 
 ORDER = ("X", "Z", "Y")  # the colour code ship's cycle, as in Pauli Invaders
 COL = {k: P.GATE[k] for k in ORDER}
@@ -222,5 +222,5 @@ class Correct(Microgame):
             surf.fill(P.lighten(c, 0.3), (round(sx) - 2, round(sy) - SHOT[1] // 2 - 1, SHOT[0] + 2, SHOT[1] + 2))
             surf.fill(c, (round(sx) - 1, round(sy) - SHOT[1] // 2, SHOT[0], SHOT[1]))
         ship(surf, self.ship_x, SHIP_Y, active)
-        blit_center(surf, outlined("A WHEN YOUR COLOUR MATCHES", 8, P.WHITE), (W // 2, H - 9))
+        blit_center(surf, outlined(f"{button('a')} WHEN YOUR COLOUR MATCHES", 8, P.WHITE), (W // 2, H - 9))
         result_overlay(surf, self.result, self.since_end, seed=13)

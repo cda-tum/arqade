@@ -1,16 +1,18 @@
-"""Pads and the dev keyboard, polled once per frame into a session.FrameInput.
+"""Pads and the keyboard, polled once per frame into a session.FrameInput.
 
 Per player, in a microgame: the analog stick (deadzoned, -1..1), stick
 steps (a push past half way, auto-repeated, for cursors and grids), and A
 pressed and held. In menus the same steps navigate, A (or Start) confirms
 and B goes back. Start pauses. Any button at all (or, for dev, any key)
-counts as a press, for the HOW TO PLAY card. The pure helpers are unit tested; reading
+counts as a press, for the HOW TO PLAY card. Devices, button layouts and
+the two-player keyboard are shared by all games (arqade_common.input). The pure helpers are unit tested; reading
 real pads is verified on the cabinet with --input-test.
 """
 
 from __future__ import annotations
 
 import pygame
+from arqade_common.input import LastDevice, PadLayout, PadSlots, default_pad_layout, read_player
 
 from planck_time import config
 from planck_time.microgames import PlayerInput
@@ -37,14 +39,6 @@ def read_keys():
     return pygame.key.get_pressed() if _keyboard_enabled else _NoKeys()
 
 
-def _codes(names: list[str]) -> list[int]:
-    return [getattr(pygame, name) for name in names]
-
-
-def keyboard_quit_held(keys) -> bool:
-    return bool(keys[getattr(pygame, config.INPUT_CONFIG["system"]["keyboard_quit"])])
-
-
 def deadzone(value: float, dz: float = config.INPUT_CONFIG["axis_deadzone"]) -> float:
     """An axis value with the deadzone cut out and the rest rescaled to 0..1."""
     if abs(value) <= dz:
@@ -62,7 +56,9 @@ def step_sign(value: float, threshold: float = config.INPUT_CONFIG["step_thresho
 
 
 def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool) -> bool:
-    """Start + Select held together on the same pad."""
+    """Start + Select held together by one player. There is deliberately no
+    quit key: Esc leaves fullscreen in a browser, and the PC launcher handles
+    Esc itself (it ends the game process)."""
     return (p1_start and p1_select) or (p2_start and p2_select)
 
 
@@ -91,79 +87,59 @@ class AutoRepeat:
 
 
 class Input:
-    def __init__(self) -> None:
-        self.joysticks: list = []
-        self.keymap = {p: {act: _codes(names) for act, names in config.KEYMAP[p].items()} for p in PLAYERS}
+    def __init__(self, pad_layout: PadLayout | None = None) -> None:
+        # Which pad is whose: pads join P1 then P2 as they appear (in a
+        # browser, only after their first button press).
+        self.pads = PadSlots()
+        self.pad_layout = pad_layout or default_pad_layout()
+        # Keyboard or pad, per player, so on-screen hints name what they're holding.
+        self.devices = LastDevice()
         self.repeat_x = {p: AutoRepeat() for p in PLAYERS}
         self.repeat_y = {p: AutoRepeat() for p in PLAYERS}
-        self._down: dict[str, set[int]] = {p: set() for p in PLAYERS}
-        self._keys_prev: dict[str, set[str]] = {p: set() for p in PLAYERS}
+        self._held_prev: dict[str, frozenset[str]] = {p: frozenset() for p in PLAYERS}
         self.frame = FrameInput()
         self.start_select = {p: (False, False) for p in PLAYERS}
         self.select_held_time = 0.0
-        self.keyboard_quit = False
-        self._key_pressed = False  # any key went down since the last update (dev only)
-        self.rescan()
-
-    def rescan(self) -> None:
-        self.joysticks = []
-        for i in range(pygame.joystick.get_count()):
-            joy = pygame.joystick.Joystick(i)
-            joy.init()
-            self.joysticks.append(joy)
+        self._key_pressed = False  # any key went down since the last update
+        self.pads.scan()
 
     def handle(self, event: pygame.event.Event) -> None:
-        if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
-            self.rescan()
-        elif event.type == pygame.KEYDOWN and _keyboard_enabled:
+        self.pads.handle_event(event)
+        self.devices.handle_event(event, self.pads, keyboard=_keyboard_enabled)
+        if event.type == pygame.KEYDOWN and _keyboard_enabled:
             self._key_pressed = True
 
-    def _read_pad(self, player: str) -> tuple[set[int], float, float]:
-        """(buttons down, stick x, stick y), deadzoned, with y positive = down."""
-        cfg = config.INPUT_CONFIG[player]
-        if cfg["joystick_index"] >= len(self.joysticks):
-            return set(), 0.0, 0.0
-        joy = self.joysticks[cfg["joystick_index"]]
+    def _read(self, player: str):
+        """(buttons and directions held, stick x, stick y), the stick deadzoned
+        with y positive = down. Keys and the d-pad stand in for a centred stick."""
+        pad = self.pads.pad(PLAYERS.index(player))
         try:
-            down = {b for b in range(joy.get_numbuttons()) if joy.get_button(b)}
-            ax_i, ay_i = cfg["axes"]
-            x = deadzone(joy.get_axis(ax_i)) if joy.get_numaxes() > ax_i else 0.0
-            y = deadzone(joy.get_axis(ay_i)) if joy.get_numaxes() > ay_i else 0.0
-            if x == 0 and y == 0 and joy.get_numhats() > cfg["hat_index"]:
-                hx, hy = joy.get_hat(cfg["hat_index"])
-                x, y = float(hx), float(-hy)
-        except pygame.error:
-            return set(), 0.0, 0.0
-        return down, x, y
+            state = read_player(player, read_keys(), pad, self.pad_layout)
+        except pygame.error:  # the pad went away mid-read
+            state = read_player(player, read_keys(), None, self.pad_layout)
+        x, y = deadzone(state.stick_x), deadzone(state.stick_y)
+        if x == 0:
+            x = float(state["right"]) - float(state["left"])
+        if y == 0:
+            y = float(state["down"]) - float(state["up"])
+        return state.held, x, y
 
     def update(self, dt: float) -> None:
-        keys = read_keys()
-        system = config.INPUT_CONFIG["system"]
-        a_button, start = system["a_button"], system["start_button"]
-        self.keyboard_quit = keyboard_quit_held(keys)
-        frame = FrameInput(activity=self.keyboard_quit)
+        frame = FrameInput()
         for p in PLAYERS:
-            down, x, y = self._read_pad(p)
-            held_keys = {act for act, codes in self.keymap[p].items() if any(keys[k] for k in codes)}
-            if x == 0:
-                x = float(("right" in held_keys) - ("left" in held_keys))
-            if y == 0:
-                y = float(("down" in held_keys) - ("up" in held_keys))
-            pressed = down - self._down[p]
-            self._down[p] = down
-            new_keys = held_keys - self._keys_prev[p]
-            self._keys_prev[p] = held_keys
+            held, x, y = self._read(p)
+            pressed = held - self._held_prev[p]
+            self._held_prev[p] = held
             step = (self.repeat_x[p].update(dt, step_sign(x)), self.repeat_y[p].update(dt, step_sign(y)))
-            a = a_button in pressed or "a" in new_keys
-            a_held = a_button in down or "a" in held_keys
-            frame.players[p] = PlayerInput((x, y), step, a, a_held)
+            a = "a" in pressed
+            frame.players[p] = PlayerInput((x, y), step, a, "a" in held)
             frame.nav[p] = step
-            frame.confirms[p] = a or start in pressed or "start" in new_keys
-            frame.backs[p] = system["back_button"] in pressed or "back" in new_keys
-            frame.pauses[p] = start in pressed or "start" in new_keys
-            frame.presses[p] = bool(pressed or new_keys)
-            self.start_select[p] = (start in down, system["select_button"] in down)
-            if down or x or y or held_keys:
+            frame.confirms[p] = a or "start" in pressed
+            frame.backs[p] = "b" in pressed
+            frame.pauses[p] = "start" in pressed
+            frame.presses[p] = bool(pressed)
+            self.start_select[p] = ("start" in held, "select" in held)
+            if held or x or y:
                 frame.activity = True
         if self._key_pressed:  # any key at all, not just the mapped ones (the HOW TO PLAY card)
             frame.presses["p1"] = frame.activity = True

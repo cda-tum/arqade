@@ -9,6 +9,7 @@ pick the window size. Same approach as the sibling games.
 from __future__ import annotations
 
 import pygame
+from arqade_common import runtime
 
 from planck_time.config import INTERNAL_HEIGHT, INTERNAL_WIDTH
 
@@ -27,7 +28,12 @@ def compute_scaled_rect(
 
 def make_display(fullscreen: bool, window_size: str) -> tuple[pygame.Surface, pygame.Surface | None]:
     """Returns (surface_to_draw_on, window_or_None). In fullscreen the surface
-    is what gets presented, so window is None and present() is a no-op."""
+    is what gets presented, so window is None and present() is a no-op.
+    In the browser the display itself is the internal surface too."""
+    if runtime.is_browser():
+        # The page scales the canvas to fit (pixelated), so draw straight
+        # onto a display of the internal size: no SCALED, no manual blit.
+        return pygame.display.set_mode((INTERNAL_WIDTH, INTERNAL_HEIGHT)), None
     if fullscreen:
         surface = pygame.display.set_mode(
             (INTERNAL_WIDTH, INTERNAL_HEIGHT), pygame.SCALED | pygame.FULLSCREEN

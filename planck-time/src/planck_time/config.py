@@ -1,9 +1,9 @@
-"""Single source of truth for resolution, timings, colours and input.
+"""Single source of truth for resolution, timings, colours and input feel.
 
-Joystick 0 = P1 (left, blue), joystick 1 = P2 (right, red). The raw button
-numbers are the ones confirmed on the cabinet (see ../../../AGENTS.md):
-printed A = 1, B = 2, Select = 8, Start = 9. Every microgame uses only the
-stick and A; B, Start and Select are for menus, pausing and quitting.
+P1 is left (blue), P2 right (red). Pads, button numbers and the keyboard
+layout are shared by all games: see arqade_common.input. Every microgame
+uses only the stick and A; B, Start and Select are for menus, pausing and
+quitting.
 """
 
 from __future__ import annotations
@@ -53,27 +53,11 @@ COLOR_FPS = (248, 208, 104)
 
 # --- Input -------------------------------------------------------------------------
 INPUT_CONFIG = {
-    "p1": {"joystick_index": 0, "hat_index": 0, "axes": (0, 1)},
-    "p2": {"joystick_index": 1, "hat_index": 0, "axes": (0, 1)},
-    "system": {
-        "a_button": 1, "back_button": 2, "start_button": 9, "select_button": 8,
-        "keyboard_quit": "K_ESCAPE",
-    },
     "axis_deadzone": 0.25,  # analog stick
     "step_threshold": 0.5,  # a stick push past this counts as a step
 }
 REPEAT_DELAY = 0.22  # auto-repeat for stick steps (cursors, grids, menus)
 REPEAT_INTERVAL = 0.11
-
-# Keyboard: a dev fallback only. The cabinet loader passes --no-keyboard, so
-# the keystrokes Batocera's evmapy fakes for P1's pad never reach the game.
-KEYMAP = {
-    # ESDF, not WASD: P1's dev keys must avoid the pad's own letters l, x, r, b, y, a.
-    "p1": {"left": ["K_s"], "right": ["K_f"], "up": ["K_e"], "down": ["K_d"], "a": ["K_q"],
-           "back": ["K_w"], "start": ["K_1"]},
-    "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"], "a": ["K_PERIOD"],
-           "back": ["K_COMMA"], "start": ["K_2"]},
-}
 
 # --- Sound -------------------------------------------------------------------------
 MASTER_VOLUME = 0.8

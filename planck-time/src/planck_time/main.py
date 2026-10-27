@@ -1,12 +1,13 @@
 """Entry point: CLI args, then hand off to the game loop in game.py.
 
 Same CLI as the sibling games, so the Batocera loader written by
-deploy_batocera.sh can call main(["--fullscreen", "--no-keyboard"]).
+deploy_batocera.sh can run asyncio.run(main(["--fullscreen", "--no-keyboard"])).
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sys
 
@@ -16,6 +17,7 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "nearest")
 
 import pygame  # noqa: E402
+from arqade_common.input import PAD_LAYOUTS  # noqa: E402
 
 from planck_time import config, game  # noqa: E402
 from planck_time.display import make_display  # noqa: E402
@@ -34,10 +36,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="A boss after this many wins (dev: 1 to try the boss at once)")
     parser.add_argument("--no-keyboard", action="store_true",
                         help="Ignore the keyboard, joysticks only (used on the Batocera cabinet)")
+    parser.add_argument("--pad-layout", choices=sorted(PAD_LAYOUTS), default=None,
+                        help="How to read pad buttons: encoder (the cabinet's sticks, default), "
+                        "xbox (an Xbox-style pad on a PC), standard (browser gamepads)")
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> None:
+async def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     set_keyboard_enabled(not args.no_keyboard)
     config.BOSS_EVERY = max(1, args.boss_every)
@@ -50,11 +55,12 @@ def main(argv: list[str] | None = None) -> None:
         pygame.display.set_caption("Planck Time")
         run_input_test(surface, window)
     else:
-        game.run(fullscreen=args.fullscreen, window_size=args.window_size,
-                 show_fps=args.fps or config.SHOW_FPS_DEFAULT)
+        await game.run(fullscreen=args.fullscreen, window_size=args.window_size,
+                       show_fps=args.fps or config.SHOW_FPS_DEFAULT,
+                       pad_layout=PAD_LAYOUTS.get(args.pad_layout))
     pygame.quit()
     sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

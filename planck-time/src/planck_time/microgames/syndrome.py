@@ -49,7 +49,7 @@ import pygame
 from planck_time import decoherence
 from planck_time import palette as P
 from planck_time.microgames.base import IDLE, Boss, H, PlayerInput, W, register_boss
-from planck_time.pixel import backdrop, blit_center, card, outlined, result_overlay
+from planck_time.pixel import backdrop, blit_center, button, card, outlined, result_overlay
 
 N = 5  # data qubits
 LOSE_AT = 3  # flipped qubits that outvote the rest
@@ -278,7 +278,7 @@ class Syndrome(Boss):
         elif self.result:
             blit_center(surf, outlined("QUBIT SAVED!", 8, P.GOOD), (W // 2, H - 14))
         else:
-            blit_center(surf, outlined("A BETWEEN THE RED CHECKS", 8, P.WHITE), (W // 2, H - 14))
+            blit_center(surf, outlined(f"{button('a')} BETWEEN THE RED CHECKS", 8, P.WHITE), (W // 2, H - 14))
         if self.result and self.since_end < WIN_FLASH:
             flash = _white()
             flash.set_alpha(round(220 * (1 - self.since_end / WIN_FLASH)))

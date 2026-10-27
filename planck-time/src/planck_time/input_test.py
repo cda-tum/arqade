@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pygame
 
+from arqade_common.input import default_pad_layout
+
 from planck_time import config
 from planck_time import palette as P
 from planck_time.display import present
@@ -30,7 +32,7 @@ def _joystick_lines(joy) -> list[str]:
 def run_input_test(surface: pygame.Surface, window: pygame.Surface | None) -> None:
     clock = pygame.time.Clock()
     font = load_font(8)
-    system = config.INPUT_CONFIG["system"]
+    buttons = default_pad_layout().buttons
     joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
     for joy in joysticks:
         joy.init()
@@ -40,9 +42,9 @@ def run_input_test(surface: pygame.Surface, window: pygame.Surface | None) -> No
         if any(event.type == pygame.QUIT for event in pygame.event.get()):
             return
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_ESCAPE]:
+        if keys[pygame.K_ESCAPE]:  # this diagnostic screen only; the game has no quit key
             return
-        combo = (system["start_button"], system["select_button"])
+        combo = (buttons["start"], buttons["select"])
         for joy in joysticks:
             if joy.get_numbuttons() > max(combo) and all(joy.get_button(b) for b in combo):
                 return

@@ -1,3 +1,5 @@
+import asyncio
+
 from planck_time.main import main
 
-main()
+asyncio.run(main())

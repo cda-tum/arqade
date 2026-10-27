@@ -15,7 +15,7 @@ import pygame
 
 from planck_time import palette as P
 from planck_time.microgames.base import H, W, Microgame, PlayerInput, register
-from planck_time.pixel import backdrop, blit_center, orb, outlined, result_overlay
+from planck_time.pixel import backdrop, blit_center, button, orb, outlined, result_overlay
 
 CENTER = (W // 2, 78)
 RADIUS = 42
@@ -105,5 +105,5 @@ class Measure(Microgame):
             for a, b in (((x - 6, y - 6), (x + 6, y + 6)), ((x + 6, y - 6), (x - 6, y + 6))):
                 pygame.draw.line(surf, P.INK, a, b, 5)
                 pygame.draw.line(surf, P.BAD, a, b, 2)
-        blit_center(surf, outlined("A WHEN IT POINTS AT |1>", 8, P.WHITE), (W // 2, H - 9))
+        blit_center(surf, outlined(f"{button('a')} WHEN IT POINTS AT |1>", 8, P.WHITE), (W // 2, H - 9))
         result_overlay(surf, self.result, self.since_end, seed=5)

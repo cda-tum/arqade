@@ -18,6 +18,20 @@ from planck_time.fonts import load_font
 
 _FONTS: dict[int, pygame.font.Font] = {}
 
+# What the controls are called on the screen being drawn: the renderer sets
+# them before each player's screen, so a hint says "A" and "STICK" to a pad
+# player and names the keys ("B", "WASD") to one on the keyboard.
+_BUTTONS = {"a": "A", "stick": "STICK"}
+
+
+def button(name: str) -> str:
+    """The on-screen name of "a" or "stick" for the player being drawn."""
+    return _BUTTONS[name]
+
+
+def set_buttons(names: dict[str, str]) -> None:
+    _BUTTONS.update(names)
+
 
 def font(size: int) -> pygame.font.Font:
     if size not in _FONTS:

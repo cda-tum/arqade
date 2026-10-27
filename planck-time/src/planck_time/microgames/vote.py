@@ -16,7 +16,7 @@ import pygame
 
 from planck_time import palette as P
 from planck_time.microgames.base import H, W, Microgame, PlayerInput, register
-from planck_time.pixel import backdrop, blit_center, card, outlined, result_overlay
+from planck_time.pixel import backdrop, blit_center, button, card, outlined, result_overlay
 
 ROW_Y = 78
 BIT_COLOR = {0: P.SKY, 1: P.ORANGE}
@@ -123,5 +123,5 @@ class Vote(Microgame):
         bob = 0 if still else round(2 * math.sin(self.t * 9))
         px, py = self.card_center(self.cursor)
         pointer(surf, px, py - self.size // 2 - 9 + bob, P.GOLD)
-        blit_center(surf, outlined("A ON THE ODD ONE OUT", 8, P.WHITE), (W // 2, H - 9))
+        blit_center(surf, outlined(f"{button('a')} ON THE ODD ONE OUT", 8, P.WHITE), (W // 2, H - 9))
         result_overlay(surf, self.result, self.since_end, seed=17)

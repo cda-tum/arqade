@@ -115,17 +115,18 @@ wrong press, laughs at a logical error and dissolves when the qubit
 survives. Its portrait and name are on the BOSS! card, and the boss has its
 own track.
 
-| Action | Cabinet | P1 keyboard | P2 keyboard |
+| Action | Pad | P1 keyboard | P2 keyboard |
 |---|---|---|---|
-| Stick | stick | E S D F | arrows |
-| A (and confirm in menus) | A | Q | . |
-| Back (menus) | B | W | , |
-| Start / pause (resume or quit to the title) | Start | 1 | 2 |
-| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Esc | Esc |
+| Stick | stick or d-pad | W A S D | arrows |
+| A (and confirm in menus) | A | B | L |
+| Back (menus) | B | V | K |
+| Start / pause (resume or quit to the title) | Start | Space | Enter |
+| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Space + L-Shift | Enter + R-Shift |
 
-P1's dev keys avoid the pad's own letters (l, x, r, b, y, a; see
-`../AGENTS.md`). The keyboard is a dev fallback only: on the cabinet the
-loader passes `--no-keyboard`. High scores are kept in
+The keys are the layout shared by all the games (`../common`); on-screen
+hints name the keys or the pad buttons, whichever each player last used.
+There is no quit key (Esc leaves fullscreen in a browser). On the cabinet
+the loader passes `--no-keyboard`. High scores are kept in
 `~/.planck_time_scores.json`, outside the package, so a redeploy keeps them.
 
 ## Setup (dev machine)
@@ -141,6 +142,18 @@ uv run pytest
 uv run python tools/snapshot.py /tmp/planck-snaps   # every screen and microgame to PNGs
 ```
 
+In the browser (pygbag's test server on http://localhost:8000), from the
+repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve planck-time
+```
+
+In the browser, quitting (Start + Select, or QUIT on the title) goes back to
+the title and tells the page around the game (`arqade:quit`). Pads use the
+cabinet's button numbers by default; `--pad-layout xbox` reads an Xbox-style
+pad on a PC instead, and browser gamepads use the browser's standard layout.
+
 ## Layout
 
 | Module | Role |
@@ -152,7 +165,7 @@ uv run python tools/snapshot.py /tmp/planck-snaps   # every screen and microgame
 | `render.py` | The 640x360 frame: handheld bezels, HUD, fuse, cards, and every screen. |
 | `decoherence.py` | DECOHERENCE, SYNDROME!'s monster: its pre-rendered static body, face, moods, bolt and dissolve. |
 | `audio.py` | Chiptune effects, adapted from Gate Drop's. No music. |
-| `input.py`, `config.py`, `hiscores.py` | Pads and the dev keyboard; every tuning number and button; the top-10 table. |
+| `input.py`, `config.py`, `hiscores.py` | Pads and the keyboard; every tuning number and button; the top-10 table. |
 
 ### Adding a microgame
 

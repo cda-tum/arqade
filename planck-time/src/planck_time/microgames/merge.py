@@ -32,7 +32,7 @@ import pygame
 
 from planck_time import palette as P
 from planck_time.microgames.base import IDLE, H, W, Microgame, PlayerInput, register
-from planck_time.pixel import backdrop, blit_center, outlined, result_overlay
+from planck_time.pixel import backdrop, blit_center, button, outlined, result_overlay
 
 D = 5                           # the code distance: D x D qubits, (D-1) x (D-1) faces
 FACES = D - 1
@@ -280,9 +280,9 @@ class Merge(Microgame):
         elif won:
             hint = "MERGED: " + self.label() + " MEASURED"
         elif self.order is not None:
-            hint = "LANE, A TURNS, < PUSHES IN"
+            hint = f"LANE, {button('a')} TURNS, < PUSHES IN"
         else:
-            hint = "A TURNS, < PUSHES IN"
+            hint = f"{button('a')} TURNS, < PUSHES IN"
         blit_center(surf, outlined(hint, 8, P.WHITE), (W // 2, H - 9))
         result_overlay(surf, self.result, self.since_end, seed=31)
 

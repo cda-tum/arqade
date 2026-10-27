@@ -1,0 +1,21 @@
+{
+  "id": "planck-time",
+  "title": "Planck Time",
+  "tagline": "A quantum microgame party: five-second games, faster and faster.",
+  "description": "Nineteen tiny games come one after another, each a few seconds long, each with one verb on screen: measure the qubit, cancel the gates, fix the error. Every one uses only the stick and A. Play alone for a high score with four lives, or side by side against a friend on the same microgames. A one-line caption afterwards says what quantum idea you just played.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W A S D to move, B for A, Space to pause",
+      "p2": "Arrows to move, L for A, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Each microgame shows one verb: do it before the fuse burns down.",
+    "Every microgame uses only the stick and A.",
+    "Solo: four lives, how many can you clear? Versus: the last one with hearts left wins.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

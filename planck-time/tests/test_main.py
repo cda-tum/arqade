@@ -1,3 +1,5 @@
+import asyncio
+
 from planck_time.main import parse_args
 
 
@@ -11,6 +13,11 @@ def test_boss_every_defaults_to_the_config():
 
     assert parse_args([]).boss_every == config.BOSS_EVERY
     assert parse_args(["--boss-every", "1"]).boss_every == 1
+
+
+def test_a_pad_layout_can_be_picked():
+    assert parse_args([]).pad_layout is None
+    assert parse_args(["--pad-layout", "xbox"]).pad_layout == "xbox"
 
 
 def test_the_cabinet_loader_flags_parse():
@@ -46,7 +53,7 @@ def test_the_game_runs_headless_and_quits(monkeypatch):
 
     monkeypatch.setattr(pygame.display, "flip", flip)
     monkeypatch.setattr(game.config, "SCORE_FILE", None)
-    game.run(fullscreen=False, window_size="640x360", show_fps=True)
+    asyncio.run(game.run(fullscreen=False, window_size="640x360", show_fps=True))
     assert frames["n"] >= 30
 
 
@@ -75,5 +82,5 @@ def test_quit_on_the_title_ends_the_game_loop(monkeypatch):
 
     monkeypatch.setattr(Input, "frame_input", frame_input)
     monkeypatch.setattr(game.config, "SCORE_FILE", None)
-    game.run(fullscreen=False, window_size="640x360", show_fps=False)
+    asyncio.run(game.run(fullscreen=False, window_size="640x360", show_fps=False))
     assert frames["n"] == 3
