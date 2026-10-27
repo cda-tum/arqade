@@ -5,8 +5,8 @@ IconicArcade Raspberry Pi 4 cabinet (Batocera, `pygame` system). A pygame port o
 browser version, packaged the same way as Quantum Pong and Quantum Towers.
 
 **Status:** full game (1 or 2 players, EASY/HARD/BOSS RUSH mode, boss fights,
-power-ups, lattice surgery, high scores), in-game input-test mode, and a Batocera deploy script. Fire/swap use the
-button numbers confirmed on the cabinet. Start/Select (8/9) are still unconfirmed.
+power-ups, lattice surgery, high scores), in-game input-test mode, and a Batocera deploy script. It also runs in the
+browser (pygbag), from the same code. Button numbers are the ones confirmed on the cabinet.
 
 The game used to be called *Error Invaders*. Only the displayed name changed: the
 folder, the Python package `error_invaders`, the ROM file `error_invaders.pygame`
@@ -66,6 +66,12 @@ uv run python -m error_invaders.main --fps               # force the FPS overlay
 uv run python -m error_invaders.main --window-size 1280x960
 ```
 
+In the browser (pygbag's test server on http://localhost:8000), from the repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve error-invaders
+```
+
 Press **F3** in-game to toggle the FPS overlay at runtime. **Ctrl+N** skips the current boss fight (keyboard only, so not on the cabinet, which
 runs with `--no-keyboard`). A game with a skipped boss does not set a high score. The game renders at 960×720
 (4:3). On a 16:9 screen it is scaled up with black bars at the sides.
@@ -78,21 +84,25 @@ uv run python -m error_invaders.main --input-test
 
 This mode shows live joystick axes, hats and buttons, and the actions each player
 currently triggers. You can also open it from the title screen with **F1**. Esc (or
-holding Select for 2 s) goes back to the title. Update the placeholder indices in
-`src/error_invaders/config.py` (`INPUT_CONFIG`) with what you observe. All button and
-axis mappings live there.
+holding Select for 2 s) goes back to the title. Button and axis numbers live in
+`../common/src/arqade_common/input.py`, shared by all games.
 
 ### Controls
 
 | | P1 | P2 |
 |---|---|---|
-| Move | Stick / WASD | Stick / arrow keys |
-| Fire / confirm | A / Y (or Z) | A / `,` |
-| Switch color / back | B / X | B / `.` |
+| Move | Stick or d-pad / W A S D | Stick or d-pad / arrow keys |
+| Fire / confirm | A / B | A / L |
+| Switch color / back | B / V | B / K |
+| Start (go on, pause) | Start / Space | Start / Enter |
+| Select (back) | Select / L-Shift | Select / R-Shift |
+
+The keys are the layout shared by all the games (`../common`); on-screen hints name
+the keys or the pad buttons, whichever each player last used.
 
 - **Title menu:** page one is 1 PLAYER / 2 PLAYERS / QUIT, page two the mode (EASY,
-  HARD, BOSS RUSH). The stick moves, A picks, B (or Select, Esc) goes back a page, and
-  **Start** (or Enter) always goes on towards a match, whatever row is selected. A on
+  HARD, BOSS RUSH). The stick moves, A picks, B (or Select) goes back a page, and
+  **Start** always goes on towards a match, whatever row is selected. A on
   **QUIT** leaves the game at once, back to the cabinet's game list (or the launcher).
 - **HOW TO PLAY:** every match started from the title opens with a card: the goal, a
   looping demo (red corrects red, red turns purple blue, blue corrects blue) and the
@@ -100,17 +110,19 @@ axis mappings live there.
   starts play (presses in its first 0.3 s are ignored, the stick doesn't count), and
   whatever is held then is swallowed, so that press doesn't also fire or switch color.
   The code is `src/error_invaders/tutorial.py`.
-- **Pause:** press **Start** (or P / Esc) during play, on either controller. Everything
+- **Pause:** press **Start** during play, on either controller. Everything
   freezes. In the pause menu the stick picks RESUME or QUIT TO TITLE, A (fire) chooses,
   and Start or B resumes. Quitting to the title doesn't record a score.
 - **Quit:** QUIT on the title, or hold Start and Select together on either controller
-  (anywhere, the HOW TO PLAY card included). You can also hold Select (or press Esc) for
-  2 s on the first menu page.
-- The keyboard keys are a dev fallback only. On the cabinet the loader passes
-  `--no-keyboard`, because Batocera turns P1's pad into keystrokes as well (see
-  `../AGENTS.md`), which made P1 move P2 and one button fire two actions.
-- For a keyboard-emulating encoder with MAME defaults, set `KEY_PRESET = "mame"` in
-  `config.py`. P1 is then arrows + LCtrl/LAlt, and P2 is R/F/D/G + A/S.
+  (anywhere, the HOW TO PLAY card included). You can also hold Select for 2 s on the
+  first menu page. There is no quit key: Esc leaves fullscreen in a browser, and the PC
+  launcher's Esc ends the game on its own. In the browser, quitting goes back to the
+  title and tells the page around the game (`arqade:quit`).
+- On the cabinet the loader passes `--no-keyboard`, because Batocera turns P1's pad
+  into keystrokes as well (see `../AGENTS.md`), which made P1 move P2 and one button
+  fire two actions. Pads use the cabinet's button numbers by default; `--pad-layout
+  xbox` reads an Xbox-style pad on a PC instead, and browser gamepads use the browser's
+  standard layout.
 
 High scores (one per mode, BOSS RUSH included) are saved to `~/.error_invaders_hiscores.json`. On Batocera
 that is `/userdata/system/`, so a redeploy doesn't reset them.

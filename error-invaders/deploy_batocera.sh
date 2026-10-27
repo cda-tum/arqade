@@ -26,32 +26,36 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 
 # Stage a clean copy of the package (strip dev-only cruft) plus the loader.
 cp -r "$SCRIPT_DIR/src/error_invaders" "$STAGE_DIR/error_invaders"
+# Code shared by all games goes next to the game's own package.
+cp -r "$SCRIPT_DIR/../common/src/arqade_common" "$STAGE_DIR/arqade_common"
 find "$STAGE_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-rm -f "$STAGE_DIR/error_invaders/py.typed"
+rm -f "$STAGE_DIR/error_invaders/py.typed" "$STAGE_DIR/arqade_common/py.typed"
 
 cat > "$STAGE_DIR/${GAME_NAME}.pygame" <<EOF
 #!/usr/bin/env python
 """Batocera entry point for Pauli Invaders.
 The real game lives at ${GAMES_DIR}, kept separate from the ROMs folder.
 """
+import asyncio
 import sys
 
 sys.path.insert(0, "${GAMES_DIR}")
 from error_invaders.main import main
 
 if __name__ == "__main__":
-    main(["--fullscreen", "--no-keyboard"])
+    asyncio.run(main(["--fullscreen", "--no-keyboard"]))
 EOF
 chmod +x "$STAGE_DIR/${GAME_NAME}.pygame"
 
 echo "Deploying to ${HOST} ..."
-ssh "$HOST" "mkdir -p '${GAMES_DIR}' && rm -rf '${GAMES_DIR}/error_invaders'"
+ssh "$HOST" "mkdir -p '${GAMES_DIR}' && rm -rf '${GAMES_DIR}/error_invaders' '${GAMES_DIR}/arqade_common'"
 scp -r "$STAGE_DIR/error_invaders" "$HOST:${GAMES_DIR}/error_invaders"
+scp -r "$STAGE_DIR/arqade_common" "$HOST:${GAMES_DIR}/arqade_common"
 scp "$STAGE_DIR/${GAME_NAME}.pygame" "$HOST:${ROM_FILE}"
 ssh "$HOST" "chmod +x '${ROM_FILE}'"
 
 echo
 echo "Deployed."
-echo "  Code:   ${GAMES_DIR}/error_invaders/"
+echo "  Code:   ${GAMES_DIR}/error_invaders/ and ${GAMES_DIR}/arqade_common/"
 echo "  Loader: ${ROM_FILE}"
 echo "Restart EmulationStation (or rescan the pygame system) on the cabinet to see it."

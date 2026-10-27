@@ -1,8 +1,8 @@
 """Single source of truth for input mapping and tuning constants.
 
-Joystick 0 = P1, joystick 1 = P2, same as Quantum Pong / Quantum Towers. The
-fire/swap button numbers are confirmed on the cabinet; Start = 9 / Select = 8
-are still placeholders -- check them with `--input-test`.
+The first pad is P1's, the second P2's, same as the sibling games. Raw button
+and axis numbers live in arqade_common.input, shared by all games; check new
+hardware with `--input-test`.
 """
 
 from pathlib import Path
@@ -12,65 +12,9 @@ INTERNAL_WIDTH = 960
 INTERNAL_HEIGHT = 720
 
 # --- Input mapping ---
-# Keyboard presets (pygame key names, resolved at runtime). Most arcade
-# encoders emulate a keyboard; pick the layout that matches.
-#  "default": P1 WASD + Y/X, P2 arrows + comma/period (same as the browser version)
-#  "mame":    MAME defaults - P1 arrows + LCtrl/LAlt, P2 RFDG + A/S, 1/2 = start
-KEY_PRESET = "default"
-KEY_PRESETS = {
-    "default": {
-        "p1": {"left": ["K_a"], "right": ["K_d"], "up": ["K_w"], "down": ["K_s"],
-               "fire": ["K_y", "K_z"], "swap": ["K_x"]},  # Y and Z: works on QWERTZ and QWERTY
-        "p2": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"],
-               "fire": ["K_COMMA"], "swap": ["K_PERIOD"]},
-    },
-    "mame": {
-        "p1": {"left": ["K_LEFT"], "right": ["K_RIGHT"], "up": ["K_UP"], "down": ["K_DOWN"],
-               "fire": ["K_LCTRL"], "swap": ["K_LALT"]},
-        "p2": {"left": ["K_d"], "right": ["K_g"], "up": ["K_r"], "down": ["K_f"],
-               "fire": ["K_a"], "swap": ["K_s"]},
-    },
-}
-KEYS_CONFIRM = ["K_RETURN", "K_KP_ENTER", "K_1", "K_2"]
-KEYS_BACK = ["K_ESCAPE"]
-# Pause / resume during play (the keyboard twin of Start). Not one of P1's
-# evmapy letters l x r b y a, see ../AGENTS.md.
-KEYS_PAUSE = ["K_p", "K_ESCAPE"]
-
-# Joysticks. Raw button numbers confirmed on the cabinet (both pads, see
-# ../AGENTS.md): printed L X R / Y B A = raw 4 0 5 / 3 2 1. The stick is an
-# analog axis there; the hat is only read as a fallback for other pads.
+# Pads, button numbers and the keyboard layout are shared by all games: see
+# arqade_common.input (and input.ACTION_BUTTONS: A fires, B switches color).
 INPUT_CONFIG = {
-    "p1": {
-        "joystick_index": 0,
-        "hat_index": 0,
-        "axes": (0, 1),  # (x axis, y axis)
-        "buttons": {
-            "fire": [1],  # printed A
-            "swap": [2],  # printed B
-        },
-    },
-    "p2": {
-        "joystick_index": 1,
-        "hat_index": 0,
-        "axes": (0, 1),
-        "buttons": {
-            "fire": [1],  # printed A
-            "swap": [2],  # printed B
-        },
-    },
-    "system": {
-        # Start confirms, and pauses during play; Select goes back (in the
-        # menus). Quit combo: Start + Select held together, on either controller.
-        # Raw 9 is the button printed START and raw 8 is SELECT -- the
-        # reverse of what these were set to originally. EmulationStation's own
-        # es_input.cfg for this pad agrees (select id=8, start id=9), and the
-        # symptom was unmistakable: SELECT confirmed menus, because the game
-        # read raw 8 as "start". The quit combo is unaffected either way,
-        # which is why it went unnoticed for so long.
-        "start_button": 9,
-        "select_button": 8,
-    },
     "axis_deadzone": 0.5,
 }
 
@@ -78,7 +22,7 @@ INPUT_CONFIG = {
 SHOW_SCANLINES = True
 GLOW = True  # additive glow effects; set False if the cabinet drops frames
 MASTER_VOLUME = 0.8  # 0.0 .. 1.0
-QUIT_FROM_MENU = True  # ESC / holding Select on the first menu page quits
+QUIT_FROM_MENU = True  # holding Select on the first menu page quits
 BACK_HOLD_TO_QUIT = 2.0  # seconds
 
 # Stored outside the package folder, so a redeploy doesn't wipe it

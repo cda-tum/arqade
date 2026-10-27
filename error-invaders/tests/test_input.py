@@ -41,3 +41,21 @@ def test_read_keys_reports_nothing_held_with_keyboard_disabled():
     finally:
         set_keyboard_enabled(True)
     assert keyboard_enabled()
+
+
+def test_the_shared_keyboard_plays_and_a_quick_tap_still_counts():
+    """P1: B fires, V switches color, Space is Start. P2: L fires. A key
+    pressed and let go within one frame is still a press."""
+    from error_invaders.input import Input
+
+    pygame.init()
+    inp = Input()
+    for key in (pygame.K_b, pygame.K_l, pygame.K_SPACE):
+        inp.handle(pygame.event.Event(pygame.KEYDOWN, key=key))
+    inp.update(1 / 60)
+    assert inp.hit("p1", "fire") and inp.hit("p2", "fire") and not inp.hit("p1", "swap")
+    assert inp.confirm and inp.pause
+    inp.end_frame()
+    inp.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_v))
+    inp.update(1 / 60)
+    assert inp.hit("p1", "swap") and not inp.hit("p1", "fire")
