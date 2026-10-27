@@ -57,19 +57,21 @@ Overquqed has music), `--input-test`, and a Batocera deploy script. Button numbe
     the multiplier capped at 8. A level clear adds `500 x level x speed`.
   - Overflowing ends the game, and a top-10 score gets your initials.
 
-| Action | Cabinet | P1 keyboard | P2 keyboard |
+| Action | Pad | P1 keyboard | P2 keyboard |
 |---|---|---|---|
-| Move / menus | stick | W A S D | arrows |
+| Move / menus | stick or d-pad | W A S D | arrows |
 | Soft drop | stick down | S | down arrow |
-| Rotate clockwise / anti-clockwise | A / B | Q / E | . / , |
-| Confirm, ready (menus) | A or Start | 1, Enter | 2, keypad Enter |
-| Back, un-ready (menus) | B | Backspace | Delete |
+| Rotate clockwise / anti-clockwise | A / B | B / V | L / K |
+| Confirm, ready (menus) | A or Start | B or Space | L or Enter |
+| Back, un-ready (menus) | B | V | K |
 | Skip HOW TO PLAY | any button | any key | any key |
-| Pause (resume or quit to the title) | Start | P | End |
-| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Esc | Esc |
+| Pause (resume or quit to the title) | Start | Space | Enter |
+| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Space + L-Shift | Enter + R-Shift |
 
-In single player, either pad plays. The keyboard is a dev fallback only; on
-the cabinet the loader passes `--no-keyboard`. High scores are kept in
+In single player, either pad plays. The keys are the layout shared by all
+the games (`../common`); on-screen hints name the keys or the pad buttons,
+whichever each player last used. There is no quit key (Esc leaves
+fullscreen in a browser). On the cabinet the loader passes `--no-keyboard`. High scores are kept in
 `~/.gate_drop_scores.json`, outside the package, so a redeploy keeps them.
 
 ## Setup (dev machine)
@@ -85,6 +87,18 @@ uv run pytest
 uv run python tools/snapshot.py /tmp/gate-drop-snaps   # render a scripted match to PNGs
 ```
 
+In the browser (pygbag's test server on http://localhost:8000), from the
+repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve gate-drop
+```
+
+In the browser, quitting (Start + Select, or QUIT on the title) goes back to
+the title and tells the page around the game (`arqade:quit`). Pads use the
+cabinet's button numbers by default; `--pad-layout xbox` reads an Xbox-style
+pad on a PC instead, and browser gamepads use the browser's standard layout.
+
 ## Layout
 
 | Module | Role |
@@ -95,7 +109,7 @@ uv run python tools/snapshot.py /tmp/gate-drop-snaps   # render a scripted match
 | `tutorial.py` | The HOW TO PLAY card's words and its scripted demo round. Pure, tested. |
 | `sprites.py`, `render.py` | Procedural SNES-style pixel art at 480x270 (x4 on the cabinet). |
 | `audio.py` | Chiptune effects (menu move, confirm and back too), adapted from Overquqed's `audio.py`. No music. |
-| `input.py`, `config.py` | Pads and dev keyboard; every tuning number, colour and button. |
+| `input.py`, `config.py` | Pads and the keyboard; every tuning number, colour and button. |
 
 ## Deploying to the cabinet
 
