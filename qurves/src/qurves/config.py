@@ -1,10 +1,8 @@
 """Single source of truth for resolution, rules tuning, colours and input.
 
-Joystick 0 is the left pad, joystick 1 the right one, same as the sibling
-games. The raw button numbers are the ones confirmed on the cabinet (see
-../../../AGENTS.md): printed X = 0, A = 1, B = 2, Y = 3, Select = 8,
-Start = 9. Axis 1 is the stick's vertical axis (negative = up, confirmed);
-axis 0 being horizontal still wants an --input-test check on the cabinet.
+The first pad is the left one, the second the right one, same as the
+sibling games. Raw button and axis numbers live in arqade_common.input,
+shared by all games; run --input-test on new hardware to see what it reports.
 """
 
 from __future__ import annotations
@@ -91,30 +89,10 @@ PLAYER_COLORS = {
 GATE_COLORS = {"H": (235, 240, 255), "X": (255, 205, 60), "Z": (70, 235, 235)}
 
 # --- Input -------------------------------------------------------------------------
+# Pads, button numbers and the keyboard layout are shared by all games: see
+# arqade_common.input (and input.FACE_DIRECTIONS for the buttons that steer).
+# The cabinet loader passes --no-keyboard, so the keystrokes Batocera's evmapy
+# fakes for P1's pad never reach the game.
 INPUT_CONFIG = {
-    "pads": (
-        {"joystick_index": 0, "hat_index": 0, "axes": (0, 1),  # (horizontal, vertical)
-         # printed L X R / Y B A: X, Y, B, A sit like W, A, S, D
-         "buttons": {"up": [0], "left": [3], "down": [2], "right": [1]}},
-        {"joystick_index": 1, "hat_index": 0, "axes": (0, 1),
-         "buttons": {"up": [0], "left": [3], "down": [2], "right": [1]}},
-    ),
-    "system": {
-        "start_button": 9, "select_button": 8,
-        "confirm_buttons": [1], "back_buttons": [2],  # printed A confirms menus, B goes back
-        "keyboard_quit": "K_ESCAPE",
-    },
     "axis_deadzone": 0.25,
 }
-
-# Keyboard: a dev fallback only. The cabinet loader passes --no-keyboard, so
-# the keystrokes Batocera's evmapy fakes for P1's pad never reach the game.
-KEYMAP = {
-    ("stick", 0): {"up": ["K_w"], "left": ["K_a"], "down": ["K_s"], "right": ["K_d"]},
-    ("pad", 0): {"up": ["K_t"], "left": ["K_f"], "down": ["K_g"], "right": ["K_h"]},
-    ("stick", 1): {"up": ["K_i"], "left": ["K_j"], "down": ["K_k"], "right": ["K_l"]},
-    ("pad", 1): {"up": ["K_UP"], "left": ["K_LEFT"], "down": ["K_DOWN"], "right": ["K_RIGHT"]},
-}
-KEYS_CONFIRM = ["K_RETURN", "K_1", "K_2"]
-KEYS_BACK = ["K_BACKSPACE"]
-KEYS_PAUSE = ["K_p"]

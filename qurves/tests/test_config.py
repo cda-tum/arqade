@@ -1,5 +1,3 @@
-import pygame
-
 from qurves import config
 
 
@@ -15,28 +13,11 @@ def test_internal_size_scales_onto_1080p_by_a_whole_number():
     assert 1920 // config.INTERNAL_WIDTH == 1080 // config.INTERNAL_HEIGHT
 
 
-def test_menu_buttons_follow_the_cabinet_convention():
-    # AGENTS.md "Button convention": printed A = raw 1 confirms, B = raw 2
-    # goes back; Start = raw 9 and Select = raw 8 (not the other way round).
-    system = config.INPUT_CONFIG["system"]
-    assert system["confirm_buttons"] == [1] and system["back_buttons"] == [2]
-    assert system["start_button"] == 9 and system["select_button"] == 8
-
-
 def test_the_face_buttons_steer_like_wasd():
-    # Printed L X R / Y B A = raw 4 0 5 / 3 2 1: X is up, Y B A are left, down, right.
-    for pad in config.INPUT_CONFIG["pads"]:
-        assert pad["buttons"] == {"up": [0], "left": [3], "down": [2], "right": [1]}
-        assert pad["axes"] == (0, 1)
+    # Printed L X R / Y B A: X is up, Y B A are left, down, right.
+    from qurves.input import FACE_DIRECTIONS
 
-
-def test_all_key_names_exist_in_pygame():
-    names = [config.INPUT_CONFIG["system"]["keyboard_quit"], *config.KEYS_CONFIRM, *config.KEYS_BACK, *config.KEYS_PAUSE]
-    for mapping in config.KEYMAP.values():
-        for keys in mapping.values():
-            names += keys
-    for name in names:
-        assert hasattr(pygame, name), name
+    assert FACE_DIRECTIONS == {"x": "up", "y": "left", "b": "down", "a": "right"}
 
 
 def test_every_mode_has_starts_controls_and_colours_for_each_player():

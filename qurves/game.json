@@ -1,0 +1,22 @@
+{
+  "id": "qurves",
+  "title": "Qurves",
+  "tagline": "Light cycles in superposition: split into mirrored copies, and lose only when every copy crashes.",
+  "description": "Steer your light cycle and make the others crash into a trail. Drive over an H gate and your bike splits into mirrored copies; you only lose the round when every copy has crashed. Drive through a rival's ghost trail to measure it, X jumps you across the arena with a shield, and Z shields you. For 2 or 4 players, first to 3 rounds.",
+  "players": "2-4",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W A S D (or G C V B) to steer, Space to pause",
+      "p2": "Arrows (or I J K L) to steer, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Steer with the stick or the X Y B A buttons. Don't crash into a trail.",
+    "H splits you into mirrored copies: you only lose when every copy crashes.",
+    "Drive through a ghost trail to measure it. X jumps across and shields you, Z shields you.",
+    "With 4 players, each pad's stick is one player and its buttons another.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

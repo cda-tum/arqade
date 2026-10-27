@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 
 import pygame
+from arqade_common.input import KEYBOARD, PAD, PLAYERS, LastDevice
 
 from qurves import config, rules
 from qurves.fonts import load_font
@@ -226,6 +227,9 @@ class TitleTrails:
 # --- the renderer -----------------------------------------------------------------------
 
 
+KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}  # the keys that stand in for each side's stick
+
+
 class Renderer:
     RULES = (
         "DRIVE OVER H TO SPLIT INTO MIRRORED COPIES",
@@ -234,8 +238,11 @@ class Renderer:
         "X: JUMP ACROSS AND SHIELD     Z: SHIELD",
     )
 
-    def __init__(self, surface: pygame.Surface) -> None:
+    def __init__(self, surface: pygame.Surface, devices: LastDevice | None = None) -> None:
         self.surface = surface
+        # Which side of the keyboard or which pad was used last, so the hints
+        # name what each side is holding. Sides are "p1" (left) and "p2" (right).
+        self.devices = devices or LastDevice()
         self.font8, self.font16, self.font32, self.font48 = (load_font(n) for n in (8, 16, 32, 48))
         self.background = make_background()
         self.scanlines = make_scanlines() if config.SHOW_SCANLINES else None
@@ -449,7 +456,8 @@ class Renderer:
                                   special_flags=pygame.BLEND_ADD)
                 x += gap
             if match.t >= config.MATCH_RESULT_LOCK:
-                self._center(self._plain("A / START: REMATCH      B: TITLE", self.font16, config.COLOR_TEXT),
+                a, start, b = (self.name(k) for k in ("a", "start", "b"))
+                self._center(self._plain(f"{a} / {start}: REMATCH      {b}: TITLE", self.font16, config.COLOR_TEXT),
                              H // 2 + 88, add=False)
 
     def _draw_pause(self, match: Match) -> None:
@@ -462,8 +470,29 @@ class Renderer:
             label = f"> {item} <" if active else item
             self._center(self._glow(label, self.font16, config.COLOR_FPS if active else config.COLOR_TEXT),
                          H // 2 + 6 + i * 34)
-        self._center(self._plain("STICK: CHOOSE    A: PICK    START / B: RESUME", self.font8, config.COLOR_DIM),
+        side = self.devices.latest  # one player works the menu
+        stick, pick, start, back = (self.name(k, side) for k in ("stick", "a", "start", "b"))
+        self._center(self._plain(f"{stick}: CHOOSE    {pick}: PICK    {start} / {back}: RESUME", self.font8,
+                                 config.COLOR_DIM),
                      H // 2 + 96, add=False)
+
+    # --- button names ---------------------------------------------------------------------
+
+    def name(self, control: str, side: str | None = None) -> str:
+        """A control's on-screen name for one side's device, or for both sides'
+        when `side` is None (e.g. "SPACE / ENTER"). "stick" is the stick or the
+        direction keys, "face" the X Y B A buttons that steer."""
+        if side is None:
+            return " / ".join(dict.fromkeys(self.name(control, p) for p in PLAYERS))
+        on_keys = self.devices[side] == KEYBOARD
+        if control == "stick":
+            return KEYBOARD_STICKS[side] if on_keys else "STICK"
+        if control == "face":
+            return " ".join(self.devices.label(b, side) for b in ("x", "y", "b", "a"))
+        return self.devices.label(control, side)
+
+    def _quit_combo(self) -> str:
+        return " / ".join(dict.fromkeys(f"{self.name('start', p)} + {self.name('select', p)}" for p in PLAYERS))
 
     # --- the title ------------------------------------------------------------------------
 
@@ -484,11 +513,16 @@ class Renderer:
         self._center(self._glow("> QUIT <" if quit_ else "QUIT", self.font16,
                                 config.COLOR_FPS if quit_ else config.COLOR_DIM), 422)
         if int(self.t * 2) % 2 == 0:
-            self._center(self._glow("PRESS START", self.font32, WHITE), 460)
+            self._center(self._glow(f"PRESS {self.name('start')}", self.font32, WHITE), 460)
         if match.mode == 4:
-            self._center(self._plain("EACH PAD: THE STICK IS ONE PLAYER, THE X Y B A BUTTONS ANOTHER",
-                                     self.font8, config.COLOR_TEXT), 494, add=False)
-        self._center(self._plain("STICK: CHOOSE     A: PICK     START: PLAY     QUIT: START + SELECT",
+            if self.devices.everyone_on(PAD):
+                sides = "EACH PAD: THE STICK IS ONE PLAYER, THE X Y B A BUTTONS ANOTHER"
+            else:
+                sides = (f"LEFT: P1 {self.name('stick', 'p1')}, P3 {self.name('face', 'p1')}     "
+                         f"RIGHT: P2 {self.name('stick', 'p2')}, P4 {self.name('face', 'p2')}")
+            self._center(self._plain(sides, self.font8, config.COLOR_TEXT), 494, add=False)
+        stick, pick, start = (self.name(k) for k in ("stick", "a", "start"))
+        self._center(self._plain(f"{stick}: CHOOSE     {pick}: PICK     {start}: PLAY     QUIT: {self._quit_combo()}",
                                  self.font8, config.COLOR_DIM), 512, add=False)
 
     # --- text -------------------------------------------------------------------------------

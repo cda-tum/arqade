@@ -1,14 +1,16 @@
-"""Pads and the dev keyboard, polled once per frame into a match.FrameInput.
+"""Pads and the keyboard, polled once per frame into a match.FrameInput.
 
-Per pad there are two steering inputs: the stick (with the hat as a
-fallback) and the four face buttons X Y B A laid out like W A S D. Which
+Devices, pad layouts and the two-player keyboard are shared by all games
+(arqade_common.input); each player's half of the keyboard counts as their
+pad. Per pad there are two steering inputs: the stick (or the d-pad, or the
+direction keys) and the four face buttons X Y B A laid out like W A S D. Which
 player each one steers is the match's business (config.CONTROLS). In menus,
 printed A (or Start) confirms and printed B goes back. Any button at all
 (or, without --no-keyboard, any key) dismisses the HOW TO PLAY card, and
 the buttons still held then are consumed until let go (consume_held), so
 the press that dismissed it never steers.
 
-The pure helpers (stick_direction, hat_direction, latest_direction,
+The pure helpers (stick_direction, latest_direction,
 should_quit) are unit tested; reading real pads is verified on the cabinet
 with --input-test.
 """
@@ -16,6 +18,7 @@ with --input-test.
 from __future__ import annotations
 
 import pygame
+from arqade_common.input import PLAYERS, LastDevice, PadLayout, PadSlots, default_pad_layout, read_player
 
 from qurves import config
 from qurves.match import FrameInput
@@ -23,6 +26,8 @@ from qurves.rules import Vec
 
 DIRECTIONS = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
 PADS = (0, 1)
+# Printed L X R / Y B A: X, Y, B, A sit like W, A, S, D.
+FACE_DIRECTIONS = {"x": "up", "y": "left", "b": "down", "a": "right"}
 
 # Batocera's evmapy turns P1's pad into keystrokes too (see ../../../AGENTS.md),
 # so the cabinet loader passes --no-keyboard and only the pads are read.
@@ -45,14 +50,6 @@ def read_keys():
     return pygame.key.get_pressed() if _keyboard_enabled else _NoKeys()
 
 
-def _codes(names: list[str]) -> list[int]:
-    return [getattr(pygame, name) for name in names]
-
-
-def keyboard_quit_held(keys) -> bool:
-    return bool(keys[getattr(pygame, config.INPUT_CONFIG["system"]["keyboard_quit"])])
-
-
 def stick_direction(ax: float, ay: float, deadzone: float) -> Vec | None:
     """The stick's dominant axis past the deadzone, as a grid direction."""
     if abs(ax) <= deadzone and abs(ay) <= deadzone:
@@ -60,16 +57,6 @@ def stick_direction(ax: float, ay: float, deadzone: float) -> Vec | None:
     if abs(ax) > abs(ay):
         return (1 if ax > 0 else -1, 0)
     return (0, 1 if ay > 0 else -1)
-
-
-def hat_direction(hat: tuple[int, int]) -> Vec | None:
-    """A hat switch as a grid direction (a hat's positive y is up)."""
-    hx, hy = hat
-    if hx:
-        return (hx, 0)
-    if hy:
-        return (0, -hy)
-    return None
 
 
 def latest_direction(order: list[str], held: set[str]) -> tuple[list[str], Vec | None]:
@@ -81,23 +68,25 @@ def latest_direction(order: list[str], held: set[str]) -> tuple[list[str], Vec |
 
 
 def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool) -> bool:
-    """Start + Select held together on the same pad."""
+    """Start + Select held together on the same pad. There is deliberately no
+    quit key: Esc leaves fullscreen in a browser, and the PC launcher handles
+    Esc itself (it ends the game process)."""
     return (p1_start and p1_select) or (p2_start and p2_select)
 
 
 class Input:
-    def __init__(self) -> None:
-        self.joysticks: list = []
-        self.keymap = {src: {name: _codes(keys) for name, keys in m.items()} for src, m in config.KEYMAP.items()}
-        self.confirm_keys = _codes(config.KEYS_CONFIRM)
-        self.back_keys = _codes(config.KEYS_BACK)
-        self.pause_keys = _codes(config.KEYS_PAUSE)
+    def __init__(self, pad_layout: PadLayout | None = None) -> None:
+        # Which pad is whose: pads join P1's side then P2's as they appear
+        # (in a browser, only after their first button press).
+        self.pads = PadSlots()
+        self.pad_layout = pad_layout or default_pad_layout()
+        # Keyboard or pad, per side, so on-screen hints name what they're holding.
+        self.devices = LastDevice()
         self._order = {pad: [] for pad in PADS}
-        self._down: dict[int, set[int]] = {pad: set() for pad in PADS}
-        self._consumed: dict[int, set[int]] = {pad: set() for pad in PADS}
-        self._raw: dict[int, set[int]] = {pad: set() for pad in PADS}
+        self._down: dict[int, set[str]] = {pad: set() for pad in PADS}
+        self._consumed: dict[int, set[str]] = {pad: set() for pad in PADS}
+        self._raw: dict[int, set[str]] = {pad: set() for pad in PADS}
         self._key_pressed = False
-        self._keys_down: set[str] = set()
         self._stick_prev: dict[int, Vec | None] = {pad: None for pad in PADS}
         self.stick: list[Vec | None] = [None, None]
         self.pad: list[Vec | None] = [None, None]
@@ -105,21 +94,13 @@ class Input:
         self.confirm = self.back = self.pause = self.pick = self.any_button = False
         self.start_select = {pad: (False, False) for pad in PADS}
         self.select_held_time = 0.0
-        self.keyboard_quit = False
         self.activity = False
-        self.rescan()
-
-    def rescan(self) -> None:
-        self.joysticks = []
-        for i in range(pygame.joystick.get_count()):
-            joy = pygame.joystick.Joystick(i)
-            joy.init()
-            self.joysticks.append(joy)
+        self.pads.scan()
 
     def handle(self, event: pygame.event.Event) -> None:
-        if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
-            self.rescan()
-        elif event.type == pygame.KEYDOWN and _keyboard_enabled:
+        self.pads.handle_event(event)
+        self.devices.handle_event(event, self.pads, keyboard=_keyboard_enabled)
+        if event.type == pygame.KEYDOWN and _keyboard_enabled:
             self._key_pressed = True
 
     def consume_held(self) -> None:
@@ -127,73 +108,48 @@ class Input:
         for pad in PADS:
             self._consumed[pad] = set(self._raw[pad])
 
-    def _read_pad(self, pad: int) -> tuple[set[int], Vec | None]:
-        cfg = config.INPUT_CONFIG["pads"][pad]
-        if cfg["joystick_index"] >= len(self.joysticks):
-            return set(), None
-        joy = self.joysticks[cfg["joystick_index"]]
+    def _read(self, pad: int, keys):
+        """(buttons and directions held, the stick as a grid direction or None)."""
+        player = PLAYERS[pad]
         try:
-            down = {b for b in range(joy.get_numbuttons()) if joy.get_button(b)}
-            ax_i, ay_i = cfg["axes"]
-            ax = joy.get_axis(ax_i) if joy.get_numaxes() > ax_i else 0.0
-            ay = joy.get_axis(ay_i) if joy.get_numaxes() > ay_i else 0.0
-            direction = stick_direction(ax, ay, config.INPUT_CONFIG["axis_deadzone"])
-            if direction is None and joy.get_numhats() > cfg["hat_index"]:
-                direction = hat_direction(joy.get_hat(cfg["hat_index"]))
-        except pygame.error:
-            return set(), None
-        return down, direction
+            state = read_player(player, keys, self.pads.pad(pad), self.pad_layout)
+        except pygame.error:  # the pad went away mid-read
+            state = read_player(player, keys, None, self.pad_layout)
+        stick = stick_direction(state.stick_x, state.stick_y, config.INPUT_CONFIG["axis_deadzone"])
+        if stick is None:  # the d-pad or the direction keys
+            stick = next((vec for name, vec in DIRECTIONS.items() if state[name]), None)
+        return set(state.held), stick
 
     def update(self, dt: float) -> None:
         keys = read_keys()
-        system = config.INPUT_CONFIG["system"]
-        self.keyboard_quit = keyboard_quit_held(keys)
-        self.activity = self.keyboard_quit
+        self.activity = False
         self.confirm = self.back = self.pause = self.pick = False
         self.any_button, self._key_pressed = self._key_pressed, False
         self.nav = None
         for pad in PADS:
-            raw, stick = self._read_pad(pad)
+            raw, stick = self._read(pad, keys)
             self._raw[pad] = raw
             self._consumed[pad] &= raw
-            down = raw - self._consumed[pad]
-            if stick is None:
-                for name, vec in DIRECTIONS.items():
-                    if any(keys[k] for k in self.keymap[("stick", pad)][name]):
-                        stick = vec
-                        break
-            buttons = config.INPUT_CONFIG["pads"][pad]["buttons"]
-            held = {name for name, nums in buttons.items() if down & set(nums)}
-            held |= {name for name, codes in self.keymap[("pad", pad)].items() if any(keys[k] for k in codes)}
+            down = raw - self._consumed[pad] - set(DIRECTIONS)
+            held = {FACE_DIRECTIONS[name] for name in down if name in FACE_DIRECTIONS}
             self._order[pad], self.pad[pad] = latest_direction(self._order[pad], held)
 
             pressed = down - self._down[pad]
             self._down[pad] = down
-            self.confirm |= bool(pressed & {*system["confirm_buttons"], system["start_button"]})
-            self.back |= bool(pressed & set(system["back_buttons"]))
-            self.pause |= system["start_button"] in pressed
-            self.pick |= bool(pressed & set(system["confirm_buttons"]))
+            self.confirm |= bool(pressed & {"a", "start"})
+            self.back |= "b" in pressed
+            self.pause |= "start" in pressed
+            self.pick |= "a" in pressed
             self.any_button |= bool(pressed)
             # Raw, not down: Start + Select quits even with a consumed button.
-            self.start_select[pad] = (system["start_button"] in raw, system["select_button"] in raw)
+            self.start_select[pad] = ("start" in raw, "select" in raw)
 
             if stick is not None and stick != self._stick_prev[pad] and self.nav is None:
                 self.nav = stick
             self._stick_prev[pad] = stick
             self.stick[pad] = stick
-            if raw or stick is not None or held:
+            if raw or stick is not None:
                 self.activity = True
-
-        keys_now = {"confirm"} if any(keys[k] for k in self.confirm_keys) else set()
-        keys_now |= {"back"} if any(keys[k] for k in self.back_keys) else set()
-        keys_now |= {"pause"} if any(keys[k] for k in self.pause_keys) else set()
-        new_keys = keys_now - self._keys_down
-        self._keys_down = keys_now
-        self.confirm |= "confirm" in new_keys
-        self.pick |= "confirm" in new_keys
-        self.back |= "back" in new_keys
-        self.pause |= "pause" in new_keys
-        self.activity |= bool(keys_now)
 
         if any(select for _start, select in self.start_select.values()):
             self.select_held_time += dt
