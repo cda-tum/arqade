@@ -1,8 +1,7 @@
 """Single source of truth for input mapping and tuning constants.
 
-Joystick 0 = P1, joystick 1 = P2, same as the other games in this repo. The
-face-button numbers are the ones confirmed on the cabinet (see ../AGENTS.md),
-and so are Start = 9 / Select = 8 (not the other way round).
+The first pad is P1's, the second P2's, same as the other games in this repo.
+Raw button and axis numbers live in arqade_common.input, shared by all games.
 """
 
 from pathlib import Path
@@ -77,37 +76,9 @@ REPEAT_DELAY = 0.30
 REPEAT_INTERVAL = 0.15
 
 # --- Input mapping ---
-# Dev keyboard fallback (pygame key names). P1 avoids l/x/r/b/y/a, which the
-# cabinet's P1 encoder also sends as keystrokes -- see ../AGENTS.md. On the
-# cabinet the loader passes --no-keyboard anyway.
-KEYS = {
-    "p1": {"up": ["K_e"], "down": ["K_d"], "left": ["K_s"], "right": ["K_f"],
-           "next": ["K_j"], "other": ["K_k"], "undo": ["K_u"], "prev": ["K_i"]},
-    "p2": {"up": ["K_UP"], "down": ["K_DOWN"], "left": ["K_LEFT"], "right": ["K_RIGHT"],
-           "next": ["K_PERIOD"], "other": ["K_COMMA"], "undo": ["K_m"], "prev": ["K_n"]},
-}
-KEYS_CONFIRM = ["K_RETURN", "K_KP_ENTER", "K_1", "K_2"]
-KEYS_BACK = ["K_ESCAPE"]
-KEYS_PAUSE = ["K_p"]
-
-# Joysticks. Raw button numbers confirmed on the cabinet (both pads):
-# printed L X R / Y B A = raw 4 0 5 / 3 2 1. The stick is an analog axis
-# there; the hat is only read as a fallback for other pads.
-_PAD_BUTTONS = {
-    "next": [1, 5],  # printed A (or R): next station
-    "other": [2],    # printed B: other end of the same pair
-    "undo": [0],     # printed X: take back the last step
-    "prev": [4],     # printed L: previous station
-}
+# Pads, button numbers and the keyboard layout are shared by all games: see
+# arqade_common.input (and input.ACTION_BUTTONS for what each button does).
 INPUT_CONFIG = {
-    "p1": {"joystick_index": 0, "hat_index": 0, "axes": (0, 1), "buttons": _PAD_BUTTONS},
-    "p2": {"joystick_index": 1, "hat_index": 0, "axes": (0, 1), "buttons": _PAD_BUTTONS},
-    "system": {
-        # Start confirms / pauses, Select goes back to the menu. Quit combo:
-        # Start + Select held together, on either controller.
-        "start_button": 9,
-        "select_button": 8,
-    },
     "axis_deadzone": 0.5,
 }
 
@@ -115,7 +86,7 @@ INPUT_CONFIG = {
 SHOW_SCANLINES = True
 GLOW = True  # additive glow effects; set False if the cabinet drops frames
 MASTER_VOLUME = 0.8
-BACK_HOLD_TO_QUIT = 2.0  # seconds holding Select/ESC on the title screen
+BACK_HOLD_TO_QUIT = 2.0  # seconds holding Select on the title screen
 
 # Outside the package folder, so a redeploy doesn't wipe it
 # (on Batocera, ~ is /userdata/system).

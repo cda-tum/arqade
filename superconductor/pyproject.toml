@@ -4,9 +4,15 @@ version = "0.1.0"
 description = "Route two-qubit gates across a superconducting chip before they decohere"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
+# pygame-ce on PCs and in the browser (pygbag only has pygame-ce). The cabinet
+# keeps Batocera's own pygame 2.5.2, so the code sticks to what both offer.
 dependencies = [
-    "pygame==2.5.2",
+    "pygame-ce>=2.5.6",
+    "arqade-common",
 ]
+
+[tool.uv.sources]
+arqade-common = { path = "../common", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.12.0,<0.13.0"]

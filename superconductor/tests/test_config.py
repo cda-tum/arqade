@@ -1,17 +1,7 @@
-import pygame
-
-from superconductor import config
-
-CABINET_P1_LETTERS = {"l", "x", "r", "b", "y", "a"}
+from superconductor.input import ACTION_BUTTONS
 
 
-def test_p1_dev_keys_avoid_the_letters_the_cabinet_encoder_types():
-    for names in config.KEYS["p1"].values():
-        for name in names:
-            assert pygame.key.name(getattr(pygame, name)) not in CABINET_P1_LETTERS
-
-
-def test_pad_buttons_are_distinct():
-    for p in ("p1", "p2"):
-        used = [b for idxs in config.INPUT_CONFIG[p]["buttons"].values() for b in idxs]
-        assert len(used) == len(set(used))
+def test_each_pad_button_does_one_thing():
+    used = [b for buttons in ACTION_BUTTONS.values() for b in buttons]
+    assert len(used) == len(set(used))
+    assert ACTION_BUTTONS["next"] == ("a", "r") and ACTION_BUTTONS["other"] == ("b",)

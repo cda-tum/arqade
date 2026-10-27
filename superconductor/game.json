@@ -1,0 +1,22 @@
+{
+  "id": "superconductor",
+  "title": "Superconductor",
+  "tagline": "Route two-qubit gates across a superconducting chip before they decohere.",
+  "description": "Pairs of qubits light up on the chip in the same color: each pair is a two-qubit gate waiting to happen. Draw a route between them one coupler at a time, and a qubit travels along it to fire the gate. Nothing is reserved, but two qubits that meet crash and both gates are lost. Watch the coherence ring, use speed qubits and Bell pairs, and avoid defect couplers. Alone, in co-op on one chip, or in versus on two chips with the same pairs.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W A S D to draw a route, B for the next pair, V for the other end, G to undo, Space to pause",
+      "p2": "Arrows to draw a route, L for the next pair, K for the other end, I to undo, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Each pair of same-colour qubits is a gate to run.",
+    "Draw a route between them with the stick before the ring runs out.",
+    "Two qubits that meet crash: both gates are lost.",
+    "A (or R) picks the next pair, L the previous one, B the other end, X undoes a step.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}
