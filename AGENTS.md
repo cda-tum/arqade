@@ -2,7 +2,7 @@
 
 This directory holds independent pygame games (`quantum-pong/`,
 `quantum-towers/`, `error-invaders/`, `ion-surfer/`, `overquqed/`,
-`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, `qircuit/`, more later) built for the same
+`superconductor/`, `qurves/`, `gate-drop/`, `planck-time/`, `brawl-ket/`, `qarrera/`, `gate-prix/`, more later) built for the same
 physical target: a Batocera-based arcade cabinet ("IconicArcade"), a Raspberry
 Pi 4 with a 21" 1920x1080 screen and two 6-button joystick pads. (`launcher/`
 runs them all from one menu on an ordinary PC instead.) This file
@@ -76,7 +76,9 @@ Each game ships its own `deploy_batocera.sh` (see `quantum-pong/` and
   the ROMs folder entirely.
 - A tiny loader script goes to `/userdata/roms/pygame/<game_name>.pygame`:
   it just does `sys.path.insert(0, ".../games/<game_name>")` then imports and
-  calls that game's `main()`, typically with `--fullscreen`.
+  calls that game's `main()`, typically with `--fullscreen`. It also
+  installs the idle exit (see "Idle exit" below), so the deploy copies
+  `batocera/arqade_idle.py` beside the package.
 - Rewriting the loader's **content** does not require an EmulationStation
   rescan/restart — ES only re-reads the ROM list/directory structure at scan
   time, not each file's contents at launch time. So once a game's `.pygame`
@@ -374,7 +376,8 @@ that is how the lockdown above was verified rather than assumed.
 
 ### Experimental games: a hidden dev mode (`batocera/experimental.py`)
 
-A game that isn't ready for visitors (Qircuit, 2026-10-12) can still be
+A game that isn't ready for visitors (Qarrera, then called Qircuit, from
+2026-10-12 until it went public on 2026-10-19) can still be
 deployed and tried on the cabinet itself. Its deploy script **parks** the
 loader at `/userdata/games/<rom>/<rom>.pygame` instead of in
 `/userdata/roms/pygame/`, so ES never lists it. Then:
@@ -399,7 +402,7 @@ loader at `/userdata/games/<rom>/<rom>.pygame` instead of in
 - **How:** turning it on symlinks each parked loader into the ROMs folder and
   calls ES's local HTTP API (`127.0.0.1:1234`, always on): `POST
   /addgames/pygame` with a partial gamelist adds the games to the running
-  list in place, named after the ROM (`qircuit` → `Qircuit`), with no reload
+  list in place, named after the ROM (`qarrera` → `Qarrera`), with no reload
   splash. `POST /removegames/pygame` takes them out again and unlinks their
   files, which are only the links. **Don't point `removegames` at a real
   ROM: it deletes the file.**
@@ -413,7 +416,7 @@ loader at `/userdata/games/<rom>/<rom>.pygame` instead of in
   and hooked; `--on`/`--off` do it over SSH.
 
 Checked on the cabinet (Batocera 39, 2026-10-13): `--on` and `--off` over SSH
-add Qircuit to the running list and take it out again (`GET
+add Qircuit (now Qarrera) to the running list and take it out again (`GET
 /systems/pygame/games` shows it), and the parked loader stays. Not yet seen
 there: the pad combo, the screensaver hook and a reboot. The event hooks were
 checked against batocera-emulationstation's source (`Scripting.cpp`,
@@ -421,9 +424,9 @@ checked against batocera-emulationstation's source (`Scripting.cpp`,
 
 **The cabinet's Python has no numpy, no PyOpenGL and no pip** (checked
 2026-10-13). The other games need only pygame; a game that needs more has to
-bring it along in its deploy: Qircuit's `deploy_batocera.sh` unpacks the
+bring it along in its deploy: Qarrera's `deploy_batocera.sh` unpacks the
 aarch64 / CPython 3.11 wheels of numpy and PyOpenGL into
-`/userdata/games/qircuit/vendor/` and its loader adds that to `sys.path`.
+`/userdata/games/qarrera/vendor/` and its loader adds that to `sys.path`.
 With that it runs, on OpenGL ES under sway (2026-10-13).
 
 ## Local PC launcher (`launcher/`, `./arqade.sh`)
@@ -551,14 +554,14 @@ left mid-round, or a round needs to stop without power-cycling anything.
   add items such as RESTART.
 - **In the menu:** the stick moves the selection, A picks an item, and Start
   or B resumes.
-- **Start + Select still quits at once**, paused or not, and the idle timeout
-  back to the title keeps running while paused.
+- **Start + Select still quits at once**, paused or not, and the idle exit
+  (see below) keeps running while paused.
 
 Where the games stand (2026-10-01): every game follows it except
 Superconductor, whose pause screen goes to its menu with Select rather than
 through a menu item. That one is deliberately left as it is.
 
-- Gate Drop, Planck Time, Brawl-Ket, Qircuit, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
+- Gate Drop, Planck Time, Brawl-Ket, Qarrera, Qurves, Quantum Pong, Qlimbers and Pauli Invaders:
   RESUME and QUIT TO TITLE.
 - Ion Surfer and Overquqed add RESTART. Ion Surfer's sandbox laser kick moved
   from Start to Select, so that Start can pause there too.
@@ -602,8 +605,7 @@ up (players, mode, map, …) and right before play or the countdown starts:
   that dismisses the card does nothing in the game.
 - It shows on every match started from the title, but not on an in-match
   RESTART or on a rematch from the game-over screen.
-- Start + Select still quits from it, and the game's idle timeout keeps
-  running.
+- Start + Select still quits from it, and the idle exit keeps running.
 - The attract bot has to press a button to get past it.
 
 Where the games stand (2026-10-12): all eleven games have the QUIT row and the
@@ -612,6 +614,48 @@ card. The card lives in `<package>/tutorial.py`, except in Overquqed, where
 card is `howto.py`. Each demo runs the game's own rules and draw code on a
 small scripted scene. Every game also has synthesized sound effects now (Ion
 Surfer was the last to get them, in `ion_surfer/sound.py`).
+
+### Idle exit: 20 s untouched and the game closes (all games, nothing to do)
+
+A game nobody touches for 20 seconds exits (2026-10-14), on any screen: title,
+HOW TO PLAY card, mid-round, paused. The cabinet is then back on ES's game
+list, and ES's screensaver starts the attract reels 15 s later; in the PC
+launcher the menu does the same. A game left running never keeps the cabinet
+out of its attract mode.
+
+- **It lives outside the games**, in `batocera/arqade_idle.py`. Its
+  `install()` wraps `pygame.event.get` (which every game reads its input
+  through) and raises `SystemExit` from it, as the launcher's Esc does. Every
+  `deploy_batocera.sh` copies it to `/userdata/games/<rom>/` and the loader
+  calls `arqade_idle.install()`; the launcher's `child.py` installs it too.
+  A new game gets it by following the same deploy shape, with no game code.
+- **Input** is a button pressed or released, a stick crossing half
+  deflection (drift doesn't count), a key or a mouse button. A held
+  joystick button, stick or hat counts for as long as it is held, up to
+  40 s, so holding the stick over is never idle.
+- **"Held" must never get stuck**, or the game never closes. That happened
+  on the cabinet (2026-10-19, games left in their menus): evmapy echoes P1's
+  stick as arrow and keypad keys, and when the stick jumps from one side
+  straight to the other between two reads it presses the new key without
+  releasing the old one (kempniu/evmapy `source.py`, `_normalize_event`
+  reports one threshold crossing per event). The game saw a KEYDOWN with no
+  KEYUP. So now:
+  - keys count only as they go down or up, never as held (on the cabinet
+    each one is an echo of P1's pad, whose joystick events count anyway);
+  - every call checks what the events say is held against the pad itself
+    (`get_button`/`get_axis`/`get_hat` through `pygame.joystick.Joystick(i)`,
+    so the launcher's virtual pads too), so a release the game threw away
+    still lets go;
+  - nothing counts as held for more than 40 s after it went down, so a
+    jammed button closes the game a minute later.
+- **Only time spent reading events counts**: a gap of more than 0.25 s
+  between two `event.get` calls (loading) counts as 0.25 s.
+- Running a game on its own (`uv run ...`) and the attract capture
+  (`attract/capture.py`) don't install it.
+- The games' own, older idle timeouts (60 s back to the title in Brawl-Ket,
+  Gate Drop, Overquqed, Planck Time, ...) are still there but never fire on
+  the cabinet or in the launcher any more. They only matter when a game runs
+  on its own.
 
 ## Player colours: left is blue, right is red (a taste)
 
@@ -635,7 +679,7 @@ like the button convention: new games follow it from the start.
 
 ## AI opponents: one AI per game, three levels (a precedent)
 
-Qircuit is the first game with computer opponents, and it sets the pattern
+Qarrera is the first game with computer opponents, and it sets the pattern
 for any game that gets them later.
 
 - **Three levels, named the same everywhere: EASY, TOUGH, BRUTAL.**
@@ -643,19 +687,19 @@ for any game that gets them later.
   - TOUGH: a decent player has to work for the win.
   - BRUTAL: as close to perfect as the game allows. It also knows everything
     the game state tells it: items, hazards, where every rival is.
-- **A level is a handful of numbers, not separate code.** Qircuit's `ai.py`
+- **A level is a handful of numbers, not separate code.** Qarrera's `ai.py`
   has one `Skill` dataclass and a `SKILLS` dict keyed by level (how hard it
   corners, how early it brakes, how often it thinks, whether it reads the
   gates). One driver class runs all three.
 - **One AI per game, in the game's package (`<package>/ai.py`).** It is pure:
   it reads the game's own state and returns the same controls a person's
-  input becomes (Qircuit: up or down on its cruise speed, a wire change),
+  input becomes (Qarrera: up or down on its cruise speed, a wire change),
   never more. So it plays by the same rules and is unit tested like the rules.
 - **Everything that plays the game without a person uses that one AI:**
   - the in-game opponents;
-  - any demo racing behind the title (Qircuit's title shows four bots);
+  - any demo racing behind the title (Qarrera's title shows four bots);
   - the attract-reel bot, `batocera/attract/bots/<rom>.py`, which turns the
-    AI's controls into virtual pad presses (`bots/qircuit.py` is short:
+    AI's controls into virtual pad presses (`bots/qarrera.py` is short:
     menus, then stick moves).
 
   The older games' reel bots predate this and keep their own logic. A game
@@ -666,20 +710,20 @@ for any game that gets them later.
   title menu. One person gets bots by default, so a lone visitor always has
   a race. Bots take the places people leave free.
   - At most four people: the cabinet has two sticks and two button clusters.
-  - Bots can push the field past four (Qircuit allows 8 cars in all) where
+  - Bots can push the field past four (Qarrera allows 8 cars in all) where
     the game has room for it.
 - **Bots never wear a player's colour**, nor a hue leaning towards one. P1–P4
   are blue, red, green and purple, and orange, pink, cyan and teal lean
   towards them (see "Player colours"), so bots get neutral colours (yellow,
   white, grey, tan, ...) and are labelled CPU1, CPU2, and so on. People's
-  cars or cursors are marked as well (Qircuit outlines them in white), so you
+  cars or cursors are marked as well (Qarrera outlines them in white), so you
   find your own among many.
 - **Bots don't make every sound.** What happens to them (a bump, a crash)
-  sounds as it does for people. Continuous or personal cues (Qircuit's drift
+  sounds as it does for people. Continuous or personal cues (Qarrera's drift
   and red warning, being put back in, taking the lead) sound only for
   people, or eight cars turn into noise.
 - **Test the ladder:** alone on the same track, BRUTAL is faster than TOUGH,
-  TOUGH than EASY, and EASY clearly slower (`qircuit/tests/test_ai.py`).
+  TOUGH than EASY, and EASY clearly slower (`qarrera/tests/test_ai.py`).
   None of them should make the mistakes the game punishes, unless a level
   makes them on purpose.
 
@@ -688,7 +732,10 @@ for any game that gets them later.
 `batocera/logos/` renders every game's logo with `generate_logos.py`: a
 1024x1024 `<rom>-logo.png`, a 1024x512 `<rom>-wide.png` for the cabinet's
 game list (the same identity re-laid out, not a crop) and a transparent
-`<rom>-marquee.png`. Each game
+`<rom>-marquee.png`. `extended/<rom>-logo.png` is the square logo on a
+1792x1792 canvas, its background drawn on outwards (`art(size, pad)`), for
+50 mm round pin badges: only their middle 38 mm show on the face, and every
+title sits inside that. Each game
 has its own `logo_<rom>.py`, which imports the game's package and draws with
 the game's own sprite and draw functions. `kit.py` has the shared lettering
 and light effects. A new game gets a module there too. These preferences were
@@ -715,6 +762,11 @@ worked out with the cabinet's owners over several rounds:
   - Planck Time: die-cut vinyl stickers on the title screen's purple checker:
     a handheld mid-MEASURE!, its fuse lit, and the rainbow wordmark with its
     stopwatch.
+  - Qarrera: a slot-car set's box lid, the game's voxel racers
+    sprite-stacked on one curve of its space track, and a leaning
+    pixel-italic title over a band of the track's red-and-blue kerb.
+  - Gate Prix: a motorsport livery, heavy italic race lettering with speed
+    cuts over the finish chequer, P1's car through the glowing H gate.
 
   A new game picks a look none of these already has.
 - **Faithful to the game.** Use only elements and colours the game really
@@ -828,6 +880,8 @@ already-deployed `.pygame` loader's content to call `main(["--input-test",
 from the existing menu entry, press each physical button one at a time
 (release before the next), and read back the raw numbers shown — then restore
 the loader (redeploy normally) once done. No ES rescan needed for either step.
+Drop its `arqade_idle.install()` line while you do, or the test closes after
+20 s without a press.
 
 ## Font quirks (bundled Press Start 2P)
 

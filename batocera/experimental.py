@@ -4,8 +4,9 @@ It is for testing a new game on the cabinet itself. Nothing on screen names
 it: the extra games simply appear in the list, and leave it again.
 
 A game that isn't public yet parks its .pygame loader at
-/userdata/games/<rom>/<rom>.pygame instead of in the ROMs folder (see
-qircuit/deploy_batocera.sh), so EmulationStation never finds it. Turning the
+/userdata/games/<rom>/<rom>.pygame instead of in the ROMs folder (as
+Qarrera's deploy_batocera.sh did before it went public; see its git
+history), so EmulationStation never finds it. Turning the
 mode on links every parked loader into /userdata/roms/pygame/ and tells the
 running ES about it; turning it off removes the links again. ES updates the
 game list in place, with no restart.

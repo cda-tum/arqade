@@ -98,23 +98,26 @@ def sunburst(size: int | tuple[int, int], center: tuple[float, float]) -> pygame
     return pygame.transform.smoothscale(big, (w, h))
 
 
-def art(size: int) -> pygame.Surface:
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, the sunburst running on (see generate_logos.py: extended/)."""
     S = 1024
+    E = S + 2 * pad
     figure = kit.nearest(hero(), K)
     word = kit.nearest(title(), TK)
-    top = 112
-    x = (S - CELL * K) // 2  # the sprites themselves centred, not their shadow
-    impact = (S / 2, top + (2 * CELL + GAP / 2) * K)  # the middle of the gap
+    top = pad + 112
+    x = pad + (S - CELL * K) // 2  # the sprites themselves centred, not their shadow
+    impact = (E / 2, top + (2 * CELL + GAP / 2) * K)  # the middle of the gap
 
-    surf = sunburst(S, impact)
-    surf.blit(kit.radial((S, S), impact, 380, kit.shade(LIGHT, 0.9), 0.7), (0, 0),
+    surf = sunburst(E, impact)
+    surf.blit(kit.radial((E, E), impact, 380, kit.shade(LIGHT, 0.9), 0.7), (0, 0),
               special_flags=pygame.BLEND_ADD)
     surf = kit.finish(surf, vignette_strength=0.55)
     for dx, dy, n in SPEED:
         surf.fill(DOT, (x + dx * K, top + dy * K, K, n * K))
     surf.blit(figure, (x, top))
-    kit.blit_center(surf, word, (S / 2, top + figure.get_height() + 64 + word.get_height() / 2))
-    return surf if size == S else pygame.transform.smoothscale(surf, (size, size))
+    kit.blit_center(surf, word, (E / 2, top + figure.get_height() + 64 + word.get_height() / 2))
+    return surf if size == S else pygame.transform.smoothscale(surf, (round(E * size / S),) * 2)
 
 
 def wide(width: int, height: int) -> pygame.Surface:

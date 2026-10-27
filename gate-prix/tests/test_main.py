@@ -86,14 +86,13 @@ def test_the_shooter_and_the_victim_of_a_hit_hear_different_sounds():
     assert audio.sound_for(Event("hazard", "p1", "mine")) != audio.sound_for(Event("hazard", "p1", "cloud"))
 
 
-def test_the_engine_rises_with_speed_and_loops_whole_periods():
-    assert audio.engine_step(0.0) == 0 and audio.engine_step(5.0) == audio.ENGINE_STEPS - 1
-    assert audio.engine_step(1.0) < audio.engine_step(1.5)
-    freqs = [audio.engine_freq(i) for i in range(audio.ENGINE_STEPS)]
-    assert freqs == sorted(freqs)
-    loop = audio.engine_loop(3)
-    period = 2 * round(audio.SAMPLE_RATE / audio.engine_freq(3))
-    assert len(loop) % period == 0
+def test_there_is_no_engine_only_a_nitro_hiss_while_boosting():
+    assert not hasattr(audio, "engine_loop")
+    assert audio.nitro_volume(0.0) == 0.0
+    assert 0 < audio.nitro_volume(0.2) < audio.nitro_volume(0.5) <= audio.nitro_volume(2.0) == 1.0
+    loop = audio.nitro_loop()
+    assert len(loop) == int(audio.SAMPLE_RATE * 0.6)
+    assert max(abs(v) for v in loop) < audio.AMP // 2 + 1
 
 
 def test_the_audio_plays_or_stays_silent_without_crashing():
@@ -103,7 +102,9 @@ def test_the_audio_plays_or_stays_silent_without_crashing():
     while not a.ready() and time.time() < deadline:
         time.sleep(0.05)
     a.play_events([Cue("go"), Event("right", "p1", 2)])
-    a.engines({"p1": 1.0, "p2": 0.3})
-    a.engines({"p1": 1.2})
-    a.engines({})
+    a.nitro({"p1": 0.3, "p2": 0.7})
+    a.nitro({"p1": 0.3})
+    a.nitro({})
+    a.menu_music(True)
+    a.menu_music(False)
     assert config.MASTER_VOLUME > 0

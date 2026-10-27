@@ -83,4 +83,20 @@
 		<marquee>./images/brawl_ket-marquee.png</marquee>
 		<lang>en</lang>
 	</game>
+	<game>
+		<path>./qarrera.pygame</path>
+		<name>Qarrera</name>
+		<desc>Slot-car racing on the four wires of a quantum circuit, for 1 to 4 players and computer racers: pick your speed and your wire, grab the gates, and lead the pack. Every second in front counts.</desc>
+		<image>./images/qarrera-wide.png</image>
+		<marquee>./images/qarrera-marquee.png</marquee>
+		<lang>en</lang>
+	</game>
+	<game>
+		<path>./gate_prix.pygame</path>
+		<name>Gate Prix</name>
+		<desc>Kart racing through a dilution fridge, for 1 or 2 players against computer racers: steer through the glowing gate to build the target quantum circuit. Every right gate is a boost, and the CIRCUIT CHECK before the final lap pays out for a perfect circuit.</desc>
+		<image>./images/gate_prix-wide.png</image>
+		<marquee>./images/gate_prix-marquee.png</marquee>
+		<lang>en</lang>
+	</game>
 </gameList>

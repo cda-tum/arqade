@@ -209,12 +209,15 @@ def title(width: int) -> pygame.Surface:
 # --- the three layouts --------------------------------------------------------------------
 
 
-def art(size: int) -> pygame.Surface:
-    big = scene((size, size), size * 0.5, (size * 0.53, size * 0.77), size * 0.245,
-                (0, 0, size, size * 0.34))
-    out = pygame.transform.smoothscale(big, (size, size)).convert()
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on every side
+    (see generate_logos.py: extended/), the road, the wall and the warp running on."""
+    full = size + 2 * pad
+    big = scene((full, full), pad + size * 0.5, (pad + size * 0.53, pad + size * 0.77), size * 0.245,
+                (0, 0, full, pad + size * 0.34))
+    out = pygame.transform.smoothscale(big, (full, full)).convert()
     out = kit.finish(out, vignette_strength=0.45)
-    kit.blit_center(out, title(round(size * 0.86)), (size * 0.5, size * 0.2))
+    kit.blit_center(out, title(round(size * 0.86)), (pad + size * 0.5, pad + size * 0.2))
     return out
 
 

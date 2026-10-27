@@ -1,7 +1,8 @@
-"""Synthesised sound effects: no audio files, no numpy.
+"""Synthesised sound effects (no numpy), and one song for the menus.
 
-The engine hums at a pitch that follows the car's speed (one looping sound per speed
-step, switched as the car speeds up or slows down); a right gate rings higher the longer
+There is no engine sound: a constant hum that follows the speed was tiring to listen to
+on the cabinet. A person's car is only heard while it boosts: a soft nitro hiss, looping,
+louder the stronger the boost, that fades out as the boost ends. A right gate rings higher the longer
 the streak, with a boost whoosh on top; a wrong or missed one buzzes; the CIRCUIT CHECK
 plays a fanfare (a bigger one for a perfect circuit) as the view freezes, and the LIGHT
 SPEED! warp after it is a long rising whoosh; the countdown beeps, items and boxes chime and cars
@@ -10,10 +11,15 @@ its victim (a bot too: what happens to a bot sounds as it does for a person) and
 for its shooter, and a DECOHERENCE cloud crackles for whoever drives
 through it and chimes for its dropper; a mine spins you out with a falling whine.
 
+The title and the HOW TO PLAY card play "vapormall" by Bolt Action
+(assets/music/, see its LICENSE), looping; it fades in on the title and out as the
+countdown starts, and comes back with the title.
+
 Everything is rendered in a background thread at start-up (a second or two on the Pi), so
 the game starts at once and a sound not ready yet is simply skipped. If the mixer can't
-start (no sound card) the whole thing is a silent no-op: the cabinet never crashes over
-audio. The tone helpers are adapted from Gate Drop's audio.py (same repo).
+start (no sound card) the whole thing is a silent no-op, and so is the song if it can't be
+loaded: the cabinet never crashes over audio. The tone helpers are adapted from Gate
+Drop's audio.py (same repo).
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ import array
 import math
 import random
 import threading
+from importlib import resources
 
 import pygame
 
@@ -31,9 +38,13 @@ from gate_prix.race import Event
 
 SAMPLE_RATE = 22050
 AMP = 32767
-ENGINE_STEPS = 12  # looping engine sounds, from standing to the biggest boost
-ENGINE_TOP = 2.0  # the speed (in top speeds) of the highest step: the biggest boost
-ENGINE_VOLUME = 0.35
+NITRO_VOLUME = 0.35  # the nitro hiss, of the master volume (it is quiet to begin with)
+NITRO_FULL = 0.7  # a boost this strong (extra top speed) or more hisses at full volume
+NITRO_FADE_MS = 300  # the hiss's fade out as the boost ends
+MUSIC = resources.files("gate_prix") / "assets" / "music" / "vapormall.ogg"
+MUSIC_VOLUME = 0.55  # the menu song, of the master volume
+MUSIC_FADE_IN_MS = 800
+MUSIC_FADE_OUT_MS = 1200
 
 NOTE_INDEX = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8,
               "A": 9, "A#": 10, "B": 11}
@@ -173,24 +184,35 @@ def build_sfx() -> dict[str, list[int]]:
     return sfx
 
 
-def engine_freq(step: int) -> float:
-    """The engine's pitch at a speed step: ~50 Hz standing, rising with speed."""
-    return 50.0 + 120.0 * step / (ENGINE_STEPS - 1)
+def nitro_loop(seconds: float = 0.6, sr: int = SAMPLE_RATE) -> array.array:
+    """A seamless loop of nitro: soft, dark noise (a one-pole low-pass) with a gentle
+    flutter, its last 40 ms crossfaded into its start. No pitch, so it never drones."""
+    rng = random.Random(17)
+    n = int(sr * seconds)
+    fade = int(0.04 * sr)
+    raw = []
+    y = 0.0
+    for _ in range(n + fade):
+        y += 0.18 * (rng.uniform(-1, 1) - y)
+        raw.append(y)
+    peak = max(abs(v) for v in raw) or 1.0
+    flutter = 12 / seconds  # whole cycles in the loop
+    out = array.array("h", [0]) * n
+    for i in range(n):
+        v = raw[i]
+        if i < fade:  # the tail beyond n, faded into the start
+            k = i / fade
+            v = v * k + raw[n + i] * (1 - k)
+        amp = 0.85 + 0.15 * math.sin(2 * math.pi * flutter * i / sr)
+        out[i] = int(AMP * 0.5 * amp * v / peak)
+    return out
 
 
-def engine_loop(step: int, sr: int = SAMPLE_RATE) -> array.array:
-    """A seamless engine loop: a saw and a square an octave down, whole periods only."""
-    f = engine_freq(step)
-    period = max(4, round(sr / f)) * 2  # two saw periods = one sub period
-    one = array.array("h", (int(AMP * ENGINE_VOLUME * (0.6 * _wave("saw", 2 * i / period)
-                                                     + 0.4 * _wave("square", i / period)))
-                            for i in range(period)))
-    return one * max(1, round(0.12 * sr / period))
-
-
-def engine_step(speed: float) -> int:
-    """The engine step for a speed in top speeds (0 standing, 1 top speed, up to 1.8)."""
-    return max(0, min(ENGINE_STEPS - 1, round(speed / ENGINE_TOP * (ENGINE_STEPS - 1))))
+def nitro_volume(boost: float) -> float:
+    """The hiss's channel volume for a boost (extra top speed, a fraction); 0 is off."""
+    if boost <= 0:
+        return 0.0
+    return 0.35 + 0.65 * min(1.0, boost / NITRO_FULL)
 
 
 ITEM_SOUNDS = {"SPLIT": "split", "QEC": "qec", "MEASURE": "zap", "TUNNEL": "tunnel",
@@ -251,7 +273,10 @@ class NullAudio:
     def play_events(self, events: list, players=()) -> None:
         pass
 
-    def engines(self, speeds: dict[str, float]) -> None:
+    def nitro(self, boosts: dict[str, float]) -> None:
+        pass
+
+    def menu_music(self, on: bool) -> None:
         pass
 
     def ready(self) -> bool:
@@ -268,10 +293,17 @@ class Audio:
         self.freq, _fmt, self.channels = info
         pygame.mixer.set_num_channels(16)
         pygame.mixer.set_reserved(2)
-        self.engine_channels = {"p1": pygame.mixer.Channel(0), "p2": pygame.mixer.Channel(1)}
-        self.engine_playing: dict[str, int | None] = {"p1": None, "p2": None}
+        self.nitro_channels = {"p1": pygame.mixer.Channel(0), "p2": pygame.mixer.Channel(1)}
+        self.nitro_on = {"p1": False, "p2": False}
         self.sounds: dict[str, pygame.mixer.Sound] = {}
-        self.engine_sounds: list[pygame.mixer.Sound] = []
+        self.nitro_sound: pygame.mixer.Sound | None = None
+        self.music_on = False
+        try:
+            pygame.mixer.music.load(str(MUSIC))
+            pygame.mixer.music.set_volume(config.MASTER_VOLUME * MUSIC_VOLUME)
+            self.music = True
+        except (pygame.error, FileNotFoundError):
+            self.music = False
         self._done = False
         self._lock = threading.Lock()
         threading.Thread(target=self._render_all, daemon=True).start()
@@ -290,11 +322,10 @@ class Audio:
         return pygame.mixer.Sound(buffer=buf.tobytes())
 
     def _render_all(self) -> None:
-        engines = [self._sound(engine_loop(i)) for i in range(ENGINE_STEPS)]
-        for s in engines:
-            s.set_volume(config.MASTER_VOLUME * 0.5)
+        nitro = self._sound(nitro_loop())
+        nitro.set_volume(config.MASTER_VOLUME * NITRO_VOLUME)
         with self._lock:
-            self.engine_sounds = engines
+            self.nitro_sound = nitro
         for name, samples in build_sfx().items():
             snd = self._sound(samples)
             snd.set_volume(config.MASTER_VOLUME)
@@ -312,19 +343,31 @@ class Audio:
             if snd is not None:
                 snd.play()
 
-    def engines(self, speeds: dict[str, float]) -> None:
-        """Each player's engine at its speed (in top speeds); a player left out is silent."""
+    def nitro(self, boosts: dict[str, float]) -> None:
+        """Each player's nitro hiss for its car's boost now (extra top speed, a fraction); a
+        player left out, or not boosting, fades out."""
         with self._lock:
-            loops = self.engine_sounds
-        for p, channel in self.engine_channels.items():
-            step = engine_step(speeds[p]) if p in speeds and loops else None
-            if step == self.engine_playing[p]:
-                continue
-            self.engine_playing[p] = step
-            if step is None:
-                channel.stop()
-            else:
-                channel.play(loops[step], loops=-1)
+            loop = self.nitro_sound
+        for p, channel in self.nitro_channels.items():
+            volume = nitro_volume(boosts.get(p, 0.0)) if loop is not None else 0.0
+            if volume > 0:
+                if not self.nitro_on[p]:
+                    channel.play(loop, loops=-1, fade_ms=80)
+                    self.nitro_on[p] = True
+                channel.set_volume(volume)
+            elif self.nitro_on[p]:
+                channel.fadeout(NITRO_FADE_MS)
+                self.nitro_on[p] = False
+
+    def menu_music(self, on: bool) -> None:
+        """The menu song: fading in when `on` turns true, out when it turns false."""
+        if not self.music or on == self.music_on:
+            return
+        self.music_on = on
+        if on:
+            pygame.mixer.music.play(loops=-1, fade_ms=MUSIC_FADE_IN_MS)
+        else:
+            pygame.mixer.music.fadeout(MUSIC_FADE_OUT_MS)
 
 
 def make_audio():

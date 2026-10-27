@@ -18,6 +18,9 @@ the finish line and its gantry, the minimap, item icons, the drift and item effe
 QUIT row and the HOW TO PLAY card. So is the look file's polish: every car's Bloch orb,
 the results' circuits and Bloch spheres, the title's wordmark and ITEM FULL.
 
+It is public on the cabinet since 2026-10-19: in `../batocera/gamelist.xml`, and
+`deploy_batocera.sh` puts its loader in the ROMs folder (`--parked` for experimental mode).
+
 ## The race
 
 - **Up to 6 cars, 3 laps** of about 40 s. 2 players race in a vertical split screen (P1
@@ -139,6 +142,20 @@ the results' circuits and Bloch spheres, the title's wordmark and ITEM FULL.
   through) sounds as from a person, and your MEASURE hitting a bot zaps it as well as
   ringing for you. A bot's own drifts, boosts, streaks, boxes, items and checks stay
   silent, so a full field never turns into noise.
+
+## Sound and music
+
+Every sound effect is synthesised at start-up (`audio.py`). There is no engine sound: the
+hum that followed the car's speed was tiring on the cabinet (2026-10-19). A person's car
+is heard only while it boosts, as a soft nitro hiss that gets louder with the boost and
+fades out when it ends. Every right gate still rings, with a whoosh.
+
+The title and the HOW TO PLAY card play "vapormall" by Bolt Action, looping
+(`src/gate_prix/assets/music/`, from Batocera's own menu music). It fades in on the title
+and out when the countdown starts. Its licence allows non-commercial use with credit, so
+the title screen credits it, and so does this README: music by
+[Bolt Action](https://www.youtube.com/channel/UCduGZR4WsJJ_NGdRhLA07qA), "vapormall"
+(`src/gate_prix/assets/music/LICENSE.md` has the terms).
 
 ## Controls
 

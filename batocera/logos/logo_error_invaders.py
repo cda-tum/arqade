@@ -76,9 +76,9 @@ def word(text: str, col: str, k: int, d: int) -> pygame.Surface:
     return shadowed(kit.tint(shape, paint), kit.tint(shape, SHADOW[col]), d)
 
 
-def stars(S: pygame.Surface, keep_out: list[pygame.Rect], count: int = 46) -> None:
+def stars(S: pygame.Surface, keep_out: list[pygame.Rect], count: int = 46, seed: int = 3) -> None:
     """A sparse starfield of single grid pixels, a few brighter crosses."""
-    rng = random.Random(3)
+    rng = random.Random(seed)
     w, h = S.get_size()
     placed = 0
     while placed < count:
@@ -93,20 +93,26 @@ def stars(S: pygame.Surface, keep_out: list[pygame.Rect], count: int = 46) -> No
                 S.set_at((x + dx, y + dy), (90, 96, 140))
 
 
-def art(size: int) -> pygame.Surface:
-    S = pygame.Surface((GRID, GRID))
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, the starfield running on (see generate_logos.py: extended/)."""
+    gp = pad * GRID // size  # the pad on the grid
+    S = pygame.Surface((GRID + 2 * gp, GRID + 2 * gp))
     S.fill(BG)
+    inner = S.subsurface((gp, gp, GRID, GRID))  # the square itself, stars and all
     hero = shadowed(invader("X", 12), invader("X", 12, color=SHADOW["X"], letter=False), 4)
     hero_r = hero.get_rect(center=(GRID // 2 + 2, 90))
     pauli = word("PAULI", "X", 4, 2)
     invaders = word("INVADERS", "Z", 3, 2)
     pauli_r = pauli.get_rect(midtop=(GRID // 2 + 1, 158))
     invaders_r = invaders.get_rect(midtop=(GRID // 2 + 1, pauli_r.bottom + 6))
-    stars(S, [hero_r, pauli_r, invaders_r])
-    S.blit(hero, hero_r)
-    S.blit(pauli, pauli_r)
-    S.blit(invaders, invaders_r)
-    return pygame.transform.scale(S, (size, size))
+    stars(inner, [hero_r, pauli_r, invaders_r])
+    if gp:  # more of them out in the pad, as sparse
+        stars(S, [pygame.Rect(gp, gp, GRID, GRID)], round(46 * ((GRID + 2 * gp) ** 2 / GRID ** 2 - 1)), seed=4)
+    inner.blit(hero, hero_r)
+    inner.blit(pauli, pauli_r)
+    inner.blit(invaders, invaders_r)
+    return pygame.transform.scale(S, (size + 2 * pad, size + 2 * pad))
 
 
 def wide(width: int, height: int) -> pygame.Surface:

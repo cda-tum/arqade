@@ -185,7 +185,14 @@ def _shadowed(surf: pygame.Surface, offset: int) -> pygame.Surface:
     return out
 
 
-def art(size: int) -> pygame.Surface:
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, on more of the same dark substrate (see generate_logos.py: extended/)."""
+    if pad:
+        out = pygame.Surface((size + 2 * pad, size + 2 * pad))
+        out.fill(BG)
+        out.blit(art(size), (pad, pad))
+        return out
     ss = size * 2  # draw at double size, smoothscale down: antialiased lines
     big = pygame.Surface((ss, ss))
     big.fill(BG)

@@ -197,16 +197,22 @@ def scene(w: int, h: int, hy: int, spread: tuple[float, float] = (18, 260), line
     return surf
 
 
-def art(size: int) -> pygame.Surface:
-    surf = scene(size, size, round(size * 0.6))
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, the floor running on (fanning out as far again
+    at the canvas's bottom edge) (see generate_logos.py: extended/)."""
+    full = size + 2 * pad
+    hy = pad + round(size * 0.6)
+    fan = 18 + (260 - 18) * (full - hy) / (size - round(size * 0.6))  # the square's lines, carried on down
+    surf = scene(full, full, hy, spread=(18, fan))
 
     h = kit.nearest(hero(), ZOOM)
-    kit.blit_center(surf, kit.blur(kit.pad(h, 40), 12), (size / 2, size * 0.38))
-    kit.blit_center(surf, h, (size / 2, size * 0.38))
+    kit.blit_center(surf, kit.blur(kit.pad(h, 40), 12), (full / 2, pad + size * 0.38))
+    kit.blit_center(surf, h, (full / 2, pad + size * 0.38))
 
     word = title(16)
     word = kit.fit(word, 880, 260) if word.get_width() > 880 else word
-    kit.blit_center(surf, word, (size / 2, size * 0.79))
+    kit.blit_center(surf, word, (full / 2, pad + size * 0.79))
     return surf
 
 

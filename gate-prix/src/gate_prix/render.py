@@ -922,6 +922,7 @@ class Renderer:
                  "START: PAUSE", 12, LABEL, center=(cx, 486))
         if match.attract:
             self.put("DEMO", 14, LABEL, topright=(W - 16, 12))
+        self.put("MUSIC: VAPORMALL BY BOLT ACTION", 11, LABEL, topleft=(16, 12))  # its licence
 
     def _pause(self, match: Match) -> None:
         self.surface.blit(self._shade[170], (0, 0))

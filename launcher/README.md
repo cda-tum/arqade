@@ -35,7 +35,9 @@ random after another. Any key or click brings the menu back and does nothing
 else. **Settings → Attract mode** turns it off.
 
 **In a game, Esc always goes back to the menu**, whatever the game's own
-controls. If a game crashes, the menu says so with the last error line; the
+controls, and so does leaving a game untouched for 20 s (the cabinet's idle
+exit, `batocera/arqade_idle.py`), after which the menu's attract reels follow
+as usual. If a game crashes, the menu says so with the last error line; the
 full traceback is in the terminal the launcher was started from.
 
 ## Keyboard as cabinet pads

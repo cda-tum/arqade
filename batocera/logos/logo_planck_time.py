@@ -38,7 +38,6 @@ sys.path.insert(0, str(kit.ROOT / "planck-time/src"))
 
 from planck_time import config, render  # noqa: E402
 from planck_time import palette as P  # noqa: E402
-from planck_time import session as S  # noqa: E402
 from planck_time.microgames.base import PlayerInput  # noqa: E402
 from planck_time.microgames.measure import Measure  # noqa: E402
 from planck_time.pixel import outlined  # noqa: E402
@@ -78,13 +77,6 @@ def screen() -> pygame.Surface:
     return surf
 
 
-class _Play:
-    """Just enough of a Session for render.Renderer._fuse: a game in play."""
-
-    state = S.PLAY
-    time_left = FUSE_LEFT
-
-
 def handheld() -> tuple[pygame.Surface, tuple[int, int]]:
     """P1's handheld at the game's own size (300x200), MEASURE! on its screen
     and its fuse burning, and where the fuse's spark is."""
@@ -96,7 +88,7 @@ def handheld() -> tuple[pygame.Surface, tuple[int, int]]:
     r = render.Renderer.__new__(render.Renderer)  # only _fuse's own state, no window
     r.surface, r.t, r.rng = hh, 0.0, random.Random(4)
     for _ in range(SPARK_FRAMES):
-        r._fuse(_Play, *FUSE_AT)
+        r._fuse(FUSE_LEFT, True, *FUSE_AT)  # a game in play
     spark = (FUSE_AT[0] + round(SW * FUSE_LEFT), FUSE_AT[1] + 2)
     return hh, spark
 
@@ -238,15 +230,18 @@ def lay_out(surf: pygame.Surface, hero_at: tuple[int, int], k: int, title_img: p
     return surf
 
 
-def art(size: int) -> pygame.Surface:
+def art(size: int, pad: int = 0) -> pygame.Surface:
+    """The square logo, `size` px; with `pad`, on a canvas `pad` px bigger on
+    every side, the checker running on (see generate_logos.py: extended/)."""
     S = 1024
+    E = S + 2 * pad
     word = kit.nearest(title(), TK)
     hero_w, hero_h = render.BEZEL_W * K, render.BEZEL_H * K
     gap = 56
-    top = (S - (word.get_height() + gap + hero_h)) // 2
-    surf = lay_out(sheet((S, S), 16 * K), ((S - hero_w) // 2, top + word.get_height() + gap), K,
-                   word, ((S - word.get_width()) // 2, top), BORDER, (8, 12))
-    return surf if size == S else pygame.transform.smoothscale(surf, (size, size))
+    top = pad + (S - (word.get_height() + gap + hero_h)) // 2
+    surf = lay_out(sheet((E, E), 16 * K), ((E - hero_w) // 2, top + word.get_height() + gap), K,
+                   word, ((E - word.get_width()) // 2, top), BORDER, (8, 12))
+    return surf if size == S else pygame.transform.smoothscale(surf, (round(E * size / S),) * 2)
 
 
 def wide(width: int, height: int) -> pygame.Surface:
