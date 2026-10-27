@@ -12,6 +12,7 @@ from __future__ import annotations
 import pygame
 
 from quantum_towers import config, visuals
+from quantum_towers.input import button_name, last_device
 from quantum_towers.solo import format_time
 
 LEGEND_LINES = [
@@ -82,7 +83,8 @@ def draw_title_screen(
     _draw_player_choice(surface, choice_font or legend_font, selected, y, show_prompt)
 
     if show_prompt:
-        prompt = prompt_font.render("PRESS A OR START", False, config.COLOR_FPS)
+        prompt_text = f"PRESS {button_name('a')} OR {button_name('start')}"
+        prompt = prompt_font.render(prompt_text, False, config.COLOR_FPS)
         surface.blit(
             prompt, prompt.get_rect(center=(config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT - 28))
         )
@@ -136,6 +138,13 @@ def draw_winner_screen(
 PAUSE_HINT = "A: PICK   START/B: RESUME"
 
 
+def pause_hint() -> str:
+    """PAUSE_HINT, named for whoever pressed something last (one player
+    works the menu)."""
+    p = last_device().latest
+    return f"{button_name('a', p)}: PICK   {button_name('start', p)}/{button_name('b', p)}: RESUME"
+
+
 def draw_pause_menu(
     surface: pygame.Surface,
     title_font: pygame.font.Font,
@@ -171,7 +180,7 @@ def draw_pause_menu(
                 surface, item_font, ">", config.COLOR_HINT, (rect.x - 16, y)
             )
     visuals.blit_outlined_text_centered(
-        surface, hint_font, PAUSE_HINT, config.COLOR_TOWER, centerx, box.bottom - 16
+        surface, hint_font, pause_hint(), config.COLOR_TOWER, centerx, box.bottom - 16
     )
 
 
@@ -279,8 +288,11 @@ class AutoRepeat:
 
 
 def initials_hint(entry: NameEntry) -> str:
-    """The footer, saying what A does from where the cursor is."""
-    return f"STICK: LETTER   A: {'DONE' if entry.pos == 2 else 'NEXT'}   B: BACK"
+    """The footer, saying what A does from where the cursor is, named for
+    whoever pressed something last."""
+    p = last_device().latest
+    stick, a, b = (button_name(k, p) for k in ("stick", "a", "b"))
+    return f"{stick}: LETTER   {a}: {'DONE' if entry.pos == 2 else 'NEXT'}   {b}: BACK"
 
 
 def _draw_arrow(surface: pygame.Surface, centerx: int, tip_y: int, pointing_up: bool) -> None:
@@ -363,5 +375,6 @@ def draw_times_table(
             visuals.blit_outlined_text(surface, row_font, text, color, (x, y))
     if t >= config.TIMES_TABLE_LOCK:
         visuals.blit_outlined_text_centered(
-            surface, small_font, "A: CONTINUE", config.COLOR_TOWER, centerx, config.INTERNAL_HEIGHT - 22
+            surface, small_font, f"{button_name('a')}: CONTINUE", config.COLOR_TOWER, centerx,
+            config.INTERNAL_HEIGHT - 22
         )

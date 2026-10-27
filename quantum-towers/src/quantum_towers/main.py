@@ -14,24 +14,30 @@ screen flow.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import random
 import sys
 from dataclasses import fields, replace
 
 import pygame
 import pygame.gfxdraw
+from arqade_common import runtime, web
+from arqade_common.input import PAD_LAYOUTS
 
 from quantum_towers import config, fonts, screens, solo, sound, tutorial, visuals
 from quantum_towers.display import make_display, present
 from quantum_towers.input import (
     PlayerRawInput,
+    get_events,
     keyboard_enabled,
-    keyboard_quit_held,
+    last_device,
     read_keys,
     pressed_edge,
     read_player_raw_input,
     set_keyboard_enabled,
+    set_pad_layout,
     should_quit,
+    start_devices,
 )
 from quantum_towers.notation import render_state
 from quantum_towers.pause import PAUSE_ITEMS, PauseButtons, PauseMenu
@@ -47,6 +53,9 @@ from quantum_towers.times import Times
 TOWER_TOP = 18
 INFO_HEIGHT = 32
 LEGEND_HEIGHT = 40
+
+# Same as the folder name in the web build and the "id" in game.json.
+GAME_ID = "quantum-towers"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -70,6 +79,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Ignore the keyboard, joysticks only (used on the Batocera cabinet)",
     )
+    parser.add_argument(
+        "--pad-layout",
+        choices=sorted(PAD_LAYOUTS),
+        default=None,
+        help="How to read pad buttons: encoder (the cabinet's sticks, default), "
+        "xbox (an Xbox-style pad on a PC), standard (browser gamepads)",
+    )
     return parser.parse_args(argv)
 
 
@@ -77,37 +93,25 @@ def _poll_players(keys: pygame.key.ScancodeWrapper) -> tuple:
     return read_player_raw_input("p1", keys), read_player_raw_input("p2", keys)
 
 
-def _wants_quit(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> bool:
+def _wants_quit(p1_raw, p2_raw) -> bool:
     return should_quit(
         p1_start=p1_raw.start_held,
         p1_select=p1_raw.select_held,
         p2_start=p2_raw.start_held,
         p2_select=p2_raw.select_held,
-        keyboard_quit=keyboard_quit_held(keys),
     )
 
 
-def _wants_start(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> bool:
-    return (
-        p1_raw.start_held
-        or p2_raw.start_held
-        or p1_raw.confirm_held
-        or p2_raw.confirm_held
-        or keys[pygame.K_RETURN]
-        or keys[pygame.K_SPACE]
-    )
+def _wants_start(p1_raw, p2_raw) -> bool:
+    return p1_raw.start_held or p2_raw.start_held or p1_raw.confirm_held or p2_raw.confirm_held
 
 
-def _pause_buttons(p1_raw, p2_raw, keys: pygame.key.ScancodeWrapper) -> PauseButtons:
-    """The pause menu's buttons, from both pads and the dev keyboard."""
-    system = config.INPUT_CONFIG["system"]
+def _pause_buttons(p1_raw, p2_raw) -> PauseButtons:
+    """The pause menu's buttons, from both players' pads and keys."""
     return PauseButtons(
-        start=p1_raw.start_held or p2_raw.start_held
-        or bool(keys[getattr(pygame, system["keyboard_pause"])]),
-        confirm=p1_raw.confirm_held or p2_raw.confirm_held
-        or bool(keys[getattr(pygame, system["keyboard_menu_confirm"])]),
-        back=p1_raw.back_held or p2_raw.back_held
-        or bool(keys[getattr(pygame, system["keyboard_menu_back"])]),
+        start=p1_raw.start_held or p2_raw.start_held,
+        confirm=p1_raw.confirm_held or p2_raw.confirm_held,
+        back=p1_raw.back_held or p2_raw.back_held,
         up=p1_raw.up_held or p2_raw.up_held,
         down=p1_raw.down_held or p2_raw.down_held,
     )
@@ -122,14 +126,13 @@ def _merged(p1_raw: PlayerRawInput, p2_raw: PlayerRawInput) -> PlayerRawInput:
     return PlayerRawInput(**values)
 
 
-def _menu_held(raw: PlayerRawInput, keys: pygame.key.ScancodeWrapper) -> tuple[int, int, bool, bool]:
+def _menu_held(raw: PlayerRawInput) -> tuple[int, int, bool, bool]:
     """(dx, dy, A, B) held this frame, for the initials entry. dy = -1 is up."""
-    system = config.INPUT_CONFIG["system"]
     return (
         int(raw.right_held) - int(raw.left_held),
         int(raw.down_held) - int(raw.up_held),
-        raw.confirm_held or bool(keys[getattr(pygame, system["keyboard_menu_confirm"])]),
-        raw.back_held or bool(keys[getattr(pygame, system["keyboard_menu_back"])]),
+        raw.confirm_held,
+        raw.back_held,
     )
 
 
@@ -172,7 +175,7 @@ def _camera_step(
 TITLE_ROWS = tuple(key for key, _label in screens.PLAYER_CHOICES)  # "1p", "2p", "quit"
 
 
-def run_title_screen(
+async def run_title_screen(
     surface: pygame.Surface,
     window: pygame.Surface | None,
     selected: str = "2p",
@@ -200,17 +203,17 @@ def run_title_screen(
     prev_up = prev_down = True
 
     while True:
-        dt = clock.tick(config.FPS) / 1000.0
+        dt = runtime.frame_seconds(clock.tick(config.FPS) / 1000.0)
         t += dt
 
-        for event in pygame.event.get():
+        for event in get_events():
             if event.type == pygame.QUIT:
                 return "quit"
 
         keys = read_keys()
         p1_raw, p2_raw = _poll_players(keys)
 
-        if _wants_quit(p1_raw, p2_raw, keys):
+        if _wants_quit(p1_raw, p2_raw):
             return "quit"
         up = p1_raw.up_held or p2_raw.up_held
         down = p1_raw.down_held or p2_raw.down_held
@@ -224,10 +227,10 @@ def run_title_screen(
             mode = selected if selected != "quit" else mode
             sounds.move.play()
         prev_up, prev_down = up, down
-        wants_start = _wants_start(p1_raw, p2_raw, keys)
+        wants_start = _wants_start(p1_raw, p2_raw)
         if armed and wants_start:
             # A picks the highlighted row; Start (or Enter/Space) always plays.
-            start = p1_raw.start_held or p2_raw.start_held or keys[pygame.K_SPACE]
+            start = p1_raw.start_held or p2_raw.start_held
             choice = mode if start else selected
             if choice != "quit":
                 sounds.select.play()
@@ -242,9 +245,10 @@ def run_title_screen(
         )
         present(internal, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
 
 
-def run_winner_screen(
+async def run_winner_screen(
     surface: pygame.Surface,
     window: pygame.Surface | None,
     winner: str,
@@ -261,27 +265,28 @@ def run_winner_screen(
     (sounds or sound.silent()).win.play()
 
     while True:
-        dt = clock.tick(config.FPS) / 1000.0
+        dt = runtime.frame_seconds(clock.tick(config.FPS) / 1000.0)
         t += dt
 
-        for event in pygame.event.get():
+        for event in get_events():
             if event.type == pygame.QUIT:
                 return "quit"
 
         keys = read_keys()
         p1_raw, p2_raw = _poll_players(keys)
 
-        if _wants_quit(p1_raw, p2_raw, keys):
+        if _wants_quit(p1_raw, p2_raw):
             return "quit"
-        if t >= config.WINNER_SCREEN_DURATION or _wants_start(p1_raw, p2_raw, keys):
+        if t >= config.WINNER_SCREEN_DURATION or _wants_start(p1_raw, p2_raw):
             return "continue"
 
         screens.draw_winner_screen(internal, big_font, small_font, label, floors)
         present(internal, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
 
 
-def run_tutorial(
+async def run_tutorial(
     surface: pygame.Surface,
     window: pygame.Surface | None,
     mode: str,
@@ -304,11 +309,11 @@ def run_tutorial(
     pygame.event.clear((pygame.JOYBUTTONDOWN, pygame.KEYDOWN))
 
     while True:
-        dt = clock.tick(config.FPS) / 1000.0
+        dt = runtime.frame_seconds(clock.tick(config.FPS) / 1000.0)
         t += dt
 
         pressed = False
-        for event in pygame.event.get():
+        for event in get_events():
             if event.type == pygame.QUIT:
                 return "quit"
             if event.type == pygame.JOYBUTTONDOWN or (
@@ -318,7 +323,7 @@ def run_tutorial(
 
         keys = read_keys()
         p1_raw, p2_raw = _poll_players(keys)
-        if _wants_quit(p1_raw, p2_raw, keys):
+        if _wants_quit(p1_raw, p2_raw):
             return "quit"
 
         idle_seconds = 0.0 if pressed else idle_seconds + dt
@@ -331,6 +336,7 @@ def run_tutorial(
         tutorial.draw_tutorial(internal, card, t, screens.blink_visible(t, config.TITLE_BLINK_PERIOD))
         present(internal, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
 
 
 def _draw_player_half(
@@ -417,7 +423,7 @@ def _handle_attacks(
     return players, None
 
 
-def run_game(
+async def run_game(
     surface: pygame.Surface, window: pygame.Surface | None, sounds: sound.Sounds, show_fps: bool
 ) -> tuple[str, dict[str, PlayerState]]:
     """Play one match. Returns (result, players); result is 'p1'/'p2'
@@ -478,9 +484,9 @@ def run_game(
     )
 
     while True:
-        dt = clock.tick(config.FPS) / 1000.0
+        dt = runtime.frame_seconds(clock.tick(config.FPS) / 1000.0)
 
-        for event in pygame.event.get():
+        for event in get_events():
             if event.type == pygame.QUIT:
                 return "quit", players
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_F3:
@@ -490,12 +496,12 @@ def run_game(
         p1_raw, p2_raw = _poll_players(keys)
         raws = {"p1": p1_raw, "p2": p2_raw}
 
-        if _wants_quit(p1_raw, p2_raw, keys):
+        if _wants_quit(p1_raw, p2_raw):
             return "quit", players
 
         # The idle timeout keeps counting while paused: a game abandoned in
         # the pause menu still goes back to the title by itself.
-        pause_buttons = _pause_buttons(p1_raw, p2_raw, keys)
+        pause_buttons = _pause_buttons(p1_raw, p2_raw)
         any_input = (
             any(raws[pk].button_held[a] for pk in ("p1", "p2") for a in ACTIONS)
             or pause_buttons.any_held()
@@ -526,6 +532,7 @@ def run_game(
                 )
             present(internal, window)
             pygame.display.flip()
+            await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
             continue
         frozen_frame = None
         game_time += dt
@@ -671,6 +678,7 @@ def run_game(
 
         present(internal, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
 
         if players["p1"].floor >= config.TOWER_HEIGHT:
             return "p1", players
@@ -690,7 +698,7 @@ def _solo_tower_region() -> pygame.Rect:
     )
 
 
-def run_solo(
+async def run_solo(
     surface: pygame.Surface,
     window: pygame.Surface | None,
     sounds: sound.Sounds,
@@ -744,9 +752,9 @@ def run_solo(
     frozen_frame: pygame.Surface | None = None
 
     while True:
-        dt = clock.tick(config.FPS) / 1000.0
+        dt = runtime.frame_seconds(clock.tick(config.FPS) / 1000.0)
 
-        for event in pygame.event.get():
+        for event in get_events():
             if event.type == pygame.QUIT:
                 return "quit", timer.seconds
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_F3:
@@ -756,10 +764,10 @@ def run_solo(
         p1_raw, p2_raw = _poll_players(keys)
         raw = _merged(p1_raw, p2_raw)
 
-        if _wants_quit(p1_raw, p2_raw, keys):
+        if _wants_quit(p1_raw, p2_raw):
             return "quit", timer.seconds
 
-        pause_buttons = _pause_buttons(p1_raw, p2_raw, keys)
+        pause_buttons = _pause_buttons(p1_raw, p2_raw)
         any_input = any(raw.button_held.values()) or pause_buttons.any_held()
         idle_seconds = 0.0 if any_input else idle_seconds + dt
         if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
@@ -787,6 +795,7 @@ def run_solo(
                 )
             present(internal, window)
             pygame.display.flip()
+            await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
             continue
         frozen_frame = None
         previous_time, game_time = game_time, game_time + dt
@@ -904,9 +913,10 @@ def run_solo(
 
         present(internal, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
 
 
-def run_initials(
+async def run_initials(
     surface: pygame.Surface, window: pygame.Surface | None, times: Times, seconds: float
 ) -> tuple[str, int | None]:
     """Three initials for a top-10 time, as in Gate Drop: the stick changes
@@ -934,20 +944,20 @@ def run_initials(
         return rank if rank >= 0 else None
 
     while True:
-        dt = clock.tick(config.FPS) / 1000.0
+        dt = runtime.frame_seconds(clock.tick(config.FPS) / 1000.0)
         t += dt
 
-        for event in pygame.event.get():
+        for event in get_events():
             if event.type == pygame.QUIT:
                 return "quit", None
 
         keys = read_keys()
         p1_raw, p2_raw = _poll_players(keys)
-        if _wants_quit(p1_raw, p2_raw, keys):
+        if _wants_quit(p1_raw, p2_raw):
             return "quit", None
 
         raw = _merged(p1_raw, p2_raw)
-        dx, dy, confirm, back = _menu_held(raw, keys)
+        dx, dy, confirm, back = _menu_held(raw)
         any_input = dx or dy or confirm or back or raw.start_held or any(raw.button_held.values())
         idle_seconds = 0.0 if any_input else idle_seconds + dt
         if idle_seconds >= config.IDLE_TIMEOUT_SECONDS:
@@ -967,9 +977,10 @@ def run_initials(
         screens.draw_initials(internal, title_font, letter_font, small_font, entry, time_text, t)
         present(internal, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
 
 
-def run_times_table(
+async def run_times_table(
     surface: pygame.Surface, window: pygame.Surface | None, times: Times, new_rank: int | None
 ) -> str:
     """FASTEST CLEARS, with `new_rank`'s entry blinking. Returns 'done' after
@@ -984,21 +995,21 @@ def run_times_table(
     prev_pressed = True  # a button held from the screen before must be let go
 
     while True:
-        dt = clock.tick(config.FPS) / 1000.0
+        dt = runtime.frame_seconds(clock.tick(config.FPS) / 1000.0)
         t += dt
 
-        for event in pygame.event.get():
+        for event in get_events():
             if event.type == pygame.QUIT:
                 return "quit"
 
         keys = read_keys()
         p1_raw, p2_raw = _poll_players(keys)
-        if _wants_quit(p1_raw, p2_raw, keys):
+        if _wants_quit(p1_raw, p2_raw):
             return "quit"
 
         raw = _merged(p1_raw, p2_raw)
-        _dx, _dy, confirm, back = _menu_held(raw, keys)
-        pressed = confirm or back or _wants_start(p1_raw, p2_raw, keys)
+        _dx, _dy, confirm, back = _menu_held(raw)
+        pressed = confirm or back or _wants_start(p1_raw, p2_raw)
         if t >= config.TIMES_TABLE_DURATION:
             return "done"
         if t >= config.TIMES_TABLE_LOCK and pressed_edge(prev_pressed, pressed):
@@ -1008,9 +1019,10 @@ def run_times_table(
         screens.draw_times_table(internal, title_font, row_font, small_font, times.entries, new_rank, t)
         present(internal, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
 
 
-def run_solo_flow(
+async def run_solo_flow(
     surface: pygame.Surface,
     window: pygame.Surface | None,
     sounds: sound.Sounds,
@@ -1020,18 +1032,18 @@ def run_solo_flow(
     """A solo run and what follows a finished one: initials for a top-10 time,
     then the table. Returns 'quit' to leave the game; anything else means back
     to the title."""
-    result, seconds = run_solo(surface, window, sounds, show_fps, times)
+    result, seconds = await run_solo(surface, window, sounds, show_fps, times)
     if result != "done":
         return result
     new_rank = None
     if times.qualifies(seconds):
-        result, new_rank = run_initials(surface, window, times, seconds)
+        result, new_rank = await run_initials(surface, window, times, seconds)
         if result != "done":
             return result
-    return run_times_table(surface, window, times, new_rank)
+    return await run_times_table(surface, window, times, new_rank)
 
 
-def run_flow(
+async def run_flow(
     surface: pygame.Surface,
     window: pygame.Surface | None,
     sounds: sound.Sounds,
@@ -1044,38 +1056,69 @@ def run_flow(
     mode = "2p"  # the title starts on whichever was played last
 
     while True:
-        action = run_title_screen(surface, window, mode, sounds)
+        action = await run_title_screen(surface, window, mode, sounds)
         if action == "quit":
-            return
+            if await _leave(surface, window):
+                return
+            continue
         mode = action
 
-        result = run_tutorial(surface, window, mode, sounds)
+        result = await run_tutorial(surface, window, mode, sounds)
         if result == "quit":
-            return
+            if await _leave(surface, window):
+                return
+            continue
         if result == "idle":
             continue
 
+        web.post_event(web.GAME_START, GAME_ID)
         if mode == "1p":
-            if run_solo_flow(surface, window, sounds, show_fps, times) == "quit":
+            result = await run_solo_flow(surface, window, sounds, show_fps, times)
+            web.post_event(web.GAME_END, GAME_ID)
+            if result == "quit" and await _leave(surface, window):
                 return
             continue
 
-        result, players = run_game(surface, window, sounds, show_fps)
+        result, players = await run_game(surface, window, sounds, show_fps)
+        web.post_event(web.GAME_END, GAME_ID)
         if result == "quit":
-            return
+            if await _leave(surface, window):
+                return
+            continue
         if result in ("p1", "p2"):
             floors = {"p1": players["p1"].floor, "p2": players["p2"].floor}
-            if run_winner_screen(surface, window, result, floors, sounds) == "quit":
-                return
+            if await run_winner_screen(surface, window, result, floors, sounds) == "quit":
+                if await _leave(surface, window):
+                    return
         # result == "idle" or "title" falls straight back to the title screen
 
 
-def main(argv: list[str] | None = None) -> None:
+async def _leave(surface: pygame.Surface, window: pygame.Surface | None) -> bool:
+    """A player asked to quit: True ends the program. In the browser there is
+    nothing to hand back to, so instead the game tells the page (which may
+    take the player back to its game list) and returns to its title -- once
+    the quit buttons are let go, or the title would quit again at once."""
+    if not runtime.is_browser():
+        return True
+    web.post_event(web.QUIT, GAME_ID)
+    while True:
+        get_events()
+        if not _wants_quit(*_poll_players(read_keys())):
+            return False
+        present(surface, window)
+        pygame.display.flip()
+        await asyncio.sleep(0)
+
+
+async def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     set_keyboard_enabled(not args.no_keyboard)
+    if args.pad_layout:
+        set_pad_layout(PAD_LAYOUTS[args.pad_layout])
 
     pygame.init()
     pygame.joystick.init()
+    start_devices()
     surface, window = make_display(args.fullscreen, args.window_size)
     pygame.display.set_caption("Quantum Towers")
 
@@ -1086,11 +1129,11 @@ def main(argv: list[str] | None = None) -> None:
     else:
         sounds = sound.load_sounds()
         show_fps = args.fps or config.SHOW_FPS_DEFAULT
-        run_flow(surface, window, sounds, show_fps, Times(config.TIMES_FILE))
+        await run_flow(surface, window, sounds, show_fps, Times(config.TIMES_FILE))
 
     pygame.quit()
     sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

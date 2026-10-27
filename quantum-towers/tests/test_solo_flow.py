@@ -1,3 +1,4 @@
+import asyncio
 """The single-player time trial, driven headlessly with scripted input: the
 title's player-count choice, the solo run (solved with the BFS's own action
 sequence), the initials entry and the fastest-clears table."""
@@ -16,6 +17,13 @@ from quantum_towers.times import Entry, Times
 
 FRAME = 0.02  # seconds per frame, from the fake clock
 QUIT = {"start": True, "select": True}
+
+
+def _returning(value):
+    """An async stand-in for a screen that returns `value`."""
+    async def screen(*_a):
+        return value
+    return screen
 
 
 def _raw(**held) -> PlayerRawInput:
@@ -83,20 +91,20 @@ def screen(monkeypatch):
 def test_title_starts_the_highlighted_choice(screen):
     surface, script = screen
     script([{}, {"confirm": True}])
-    assert main.run_title_screen(surface, None, "2p") == "2p"
+    assert asyncio.run(main.run_title_screen(surface, None, "2p")) == "2p"
     script([{}, {"start": True}])
-    assert main.run_title_screen(surface, None, "1p") == "1p"
+    assert asyncio.run(main.run_title_screen(surface, None, "1p")) == "1p"
 
 
 def test_title_stick_moves_between_one_and_two_players(screen):
     surface, script = screen
     script([{}, {"up": True}, {}, {"start": True}])
-    assert main.run_title_screen(surface, None, "2p") == "1p"
+    assert asyncio.run(main.run_title_screen(surface, None, "2p")) == "1p"
     script([{}, {"down": True}, {}, {"confirm": True}])
-    assert main.run_title_screen(surface, None, "1p") == "2p"
+    assert asyncio.run(main.run_title_screen(surface, None, "1p")) == "2p"
     # A held stick only moves once.
     script([{}, {"down": True}, {"down": True}, {"down": True}, {}, {"confirm": True}])
-    assert main.run_title_screen(surface, None, "1p") == "2p"
+    assert asyncio.run(main.run_title_screen(surface, None, "1p")) == "2p"
 
 
 def test_title_waits_for_a_held_button_to_be_let_go(screen):
@@ -104,13 +112,13 @@ def test_title_waits_for_a_held_button_to_be_let_go(screen):
     # A still held from QUIT TO TITLE, and a stick still pushed: neither acts
     # until let go.
     script([{"confirm": True, "up": True}] * 5 + [{}, {"start": True}])
-    assert main.run_title_screen(surface, None, "2p") == "2p"
+    assert asyncio.run(main.run_title_screen(surface, None, "2p")) == "2p"
 
 
 def test_title_quit_combo(screen):
     surface, script = screen
     script([])
-    assert main.run_title_screen(surface, None, "2p") == "quit"
+    assert asyncio.run(main.run_title_screen(surface, None, "2p")) == "quit"
 
 
 # --- the solo run ------------------------------------------------------------
@@ -162,7 +170,7 @@ def run_solo(screen, monkeypatch):
 
     def run(frames: list[dict], pad: str = "p1", times: Times | None = None):
         script(frames, pad)
-        return main.run_solo(surface, None, SOUNDS, False, times or Times(None))
+        return asyncio.run(main.run_solo(surface, None, SOUNDS, False, times or Times(None)))
 
     return run
 
@@ -289,7 +297,7 @@ def test_run_initials_saves_the_name_and_returns_the_rank(screen):
     times.add("ZZZ", 10.0)
     up, a = {"up": True}, {"confirm": True}
     script([{}, up, {}, up, {}, a, {}, {"right": True}, {}, up, {}, a, {}])
-    result, rank = main.run_initials(surface, None, times, 20.0)
+    result, rank = asyncio.run(main.run_initials(surface, None, times, 20.0))
     assert result == "done"
     assert rank == 1
     assert [(e.name, e.seconds) for e in times.entries] == [("ZZZ", 10.0), ("CAB", 20.0)]
@@ -299,7 +307,7 @@ def test_run_initials_ignores_an_a_still_held_from_before(screen):
     surface, script = screen
     times = Times(None)
     script([{"confirm": True}] * 10 + [{}, {"confirm": True}, {}, {"confirm": True}, {}, {"confirm": True}])
-    result, rank = main.run_initials(surface, None, times, 20.0)
+    result, rank = asyncio.run(main.run_initials(surface, None, times, 20.0))
     assert (result, rank) == ("done", 0)
     assert times.entries[0].name == "AAA"
 
@@ -309,7 +317,7 @@ def test_an_abandoned_initials_entry_is_saved_as_typed(screen, monkeypatch):
     surface, script = screen
     times = Times(None)
     script([{}, {"up": True}] + [{}] * 100)
-    result, rank = main.run_initials(surface, None, times, 20.0)
+    result, rank = asyncio.run(main.run_initials(surface, None, times, 20.0))
     assert (result, rank) == ("idle", 0)
     assert times.entries[0].name == "BAA"
 
@@ -318,7 +326,7 @@ def test_run_initials_quit_combo(screen):
     surface, script = screen
     times = Times(None)
     script([])
-    result, _rank = main.run_initials(surface, None, times, 20.0)
+    result, _rank = asyncio.run(main.run_initials(surface, None, times, 20.0))
     assert result == "quit"
 
 
@@ -352,15 +360,15 @@ def test_times_table_returns_on_a_press_after_a_second(screen):
     lock = round(config.TIMES_TABLE_LOCK / FRAME)
     # A press inside the first second does nothing.
     script([{}, {"confirm": True}] + [{}] * lock + [{"back": True}])
-    assert main.run_times_table(surface, None, times, 0) == "done"
+    assert asyncio.run(main.run_times_table(surface, None, times, 0)) == "done"
     script([{}] * 3 + [{"confirm": True}])
-    assert main.run_times_table(surface, None, times, 0) == "quit"  # ran into the quit combo
+    assert asyncio.run(main.run_times_table(surface, None, times, 0)) == "quit"  # ran into the quit combo
 
 
 def test_times_table_returns_by_itself(screen, monkeypatch):
     surface, script = screen
     script([{}] * (round(config.TIMES_TABLE_DURATION / FRAME) + 5))
-    assert main.run_times_table(surface, None, Times(None), None) == "done"
+    assert asyncio.run(main.run_times_table(surface, None, Times(None), None)) == "done"
 
 
 # --- the flow after a run ----------------------------------------------------
@@ -371,19 +379,19 @@ def flow(monkeypatch):
     calls = []
 
     def run(solo_result, times):
-        monkeypatch.setattr(main, "run_solo", lambda *_a: solo_result)
+        monkeypatch.setattr(main, "run_solo", _returning(solo_result))
 
-        def initials(_surface, _window, _times, seconds):
+        async def initials(_surface, _window, _times, seconds):
             calls.append(("initials", seconds))
             return "done", 0
 
-        def table(_surface, _window, _times, new_rank):
+        async def table(_surface, _window, _times, new_rank):
             calls.append(("table", new_rank))
             return "done"
 
         monkeypatch.setattr(main, "run_initials", initials)
         monkeypatch.setattr(main, "run_times_table", table)
-        return main.run_solo_flow(None, None, SOUNDS, False, times)
+        return asyncio.run(main.run_solo_flow(None, None, SOUNDS, False, times))
 
     return run, calls
 

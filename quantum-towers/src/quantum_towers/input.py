@@ -1,5 +1,9 @@
 """Translate raw pygame joystick/keyboard state into logical actions.
 
+Devices, pad layouts and the two-player keyboard are shared by all games
+(arqade_common.input). Each gate sits on one of the pad's printed buttons
+(GATE_BUTTONS); A confirms and B goes back in the menus.
+
 The pure decision functions (pressed_edge, should_quit) are unit tested.
 Reading actual device state needs pygame + hardware/SDL and is exercised by
 manual/headless smoke testing only.
@@ -10,8 +14,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pygame
+from arqade_common.input import (
+    KEYBOARD,
+    PLAYERS,
+    LastDevice,
+    PadLayout,
+    PadSlots,
+    default_pad_layout,
+    read_player,
+)
 
-from quantum_towers.config import ACTION_NAMES, AXIS_DEADZONE, INPUT_CONFIG
+from quantum_towers.config import ACTION_NAMES, AXIS_DEADZONE, GATE_BUTTONS
 
 
 # Batocera's pygame system runs evmapy, which turns player 1's pad into
@@ -61,11 +74,45 @@ def axis_indicates_down(axis_value: float, deadzone: float) -> bool:
     return axis_value > deadzone
 
 
-def should_quit(
-    *, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool, keyboard_quit: bool
-) -> bool:
-    combo = (p1_start and p1_select) or (p2_start and p2_select)
-    return keyboard_quit or combo
+def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool) -> bool:
+    """Start + Select held together by one player. There is deliberately no
+    quit key: Esc leaves fullscreen in a browser, and the PC launcher handles
+    Esc itself (it ends the game process)."""
+    return (p1_start and p1_select) or (p2_start and p2_select)
+
+
+# Which pad is whose, and how to read its buttons. main() calls
+# set_pad_layout() and start_devices() once at start-up.
+_pads = PadSlots()
+_pad_layout = default_pad_layout()
+# Keyboard or pad, per player, so on-screen hints name what they're holding.
+_last_device = LastDevice()
+
+
+def set_pad_layout(layout: PadLayout) -> None:
+    global _pad_layout
+    _pad_layout = layout
+
+
+def start_devices() -> None:
+    """Pick up the pads already connected (call after pygame.joystick.init())."""
+    _pads.scan()
+
+
+def get_events() -> list[pygame.event.Event]:
+    """pygame.event.get(), noting pads that connect or disconnect on the way.
+    Every event loop in the game uses this instead of pygame.event.get():
+    in a browser, a gamepad only appears after its first button press."""
+    events = pygame.event.get()
+    for event in events:
+        _pads.handle_event(event)
+        _last_device.handle_event(event, _pads, keyboard=_keyboard_enabled)
+    return events
+
+
+def last_device() -> LastDevice:
+    """Who last used their keys or their pad, for the screens' button hints."""
+    return _last_device
 
 
 @dataclass
@@ -81,83 +128,43 @@ class PlayerRawInput:
     right_held: bool = False
 
 
-def get_joystick(index: int) -> pygame.joystick.JoystickType | None:
-    if index >= pygame.joystick.get_count():
-        return None
-    joy = pygame.joystick.Joystick(index)
-    if not joy.get_init():
-        joy.init()
-    return joy
-
-
 def read_player_raw_input(player_key: str, keys: pygame.key.ScancodeWrapper) -> PlayerRawInput:
-    """Poll keyboard + this player's configured joystick for one frame."""
-    cfg = INPUT_CONFIG[player_key]
-    kb = cfg["keyboard"]
-    button_held = {name: bool(keys[getattr(pygame, kb[name])]) for name in ACTION_NAMES}
-    up_held = bool(keys[getattr(pygame, cfg["up_keyboard"])])
-    down_held = bool(keys[getattr(pygame, cfg["down_keyboard"])])
-    left_held = bool(keys[getattr(pygame, cfg["left_keyboard"])])
-    right_held = bool(keys[getattr(pygame, cfg["right_keyboard"])])
-
-    start_held = False
-    select_held = False
-    confirm_held = False
-    back_held = False
-
-    joystick = get_joystick(cfg["joystick_index"])
-    if joystick is not None:
-        num_buttons = joystick.get_numbuttons()
-        for name in ACTION_NAMES:
-            idx = cfg["buttons"][name]
-            if idx < num_buttons:
-                button_held[name] = button_held[name] or bool(joystick.get_button(idx))
-
-        num_hats = joystick.get_numhats()
-        hat_index = cfg["hat_index"]
-        if hat_index < num_hats:
-            hat_x, hat_y = joystick.get_hat(hat_index)
-            up_held = up_held or hat_y > 0
-            down_held = down_held or hat_y < 0
-            left_held = left_held or hat_x < 0
-            right_held = right_held or hat_x > 0
-
-        num_axes = joystick.get_numaxes()
-        vertical_axis = cfg["vertical_axis"]
-        if vertical_axis < num_axes:
-            axis_value = joystick.get_axis(vertical_axis)
-            up_held = up_held or axis_indicates_up(axis_value, AXIS_DEADZONE)
-            down_held = down_held or axis_indicates_down(axis_value, AXIS_DEADZONE)
-        horizontal_axis = cfg["horizontal_axis"]
-        if horizontal_axis < num_axes:
-            # Same sign convention as the vertical axis: negative = left.
-            axis_value = joystick.get_axis(horizontal_axis)
-            left_held = left_held or axis_value < -AXIS_DEADZONE
-            right_held = right_held or axis_value > AXIS_DEADZONE
-
-        system = INPUT_CONFIG["system"]
-        if system["start_button"] < num_buttons:
-            start_held = bool(joystick.get_button(system["start_button"]))
-        if system["select_button"] < num_buttons:
-            select_held = bool(joystick.get_button(system["select_button"]))
-        if system["confirm_button"] < num_buttons:
-            confirm_held = bool(joystick.get_button(system["confirm_button"]))
-        if system["back_button"] < num_buttons:
-            back_held = bool(joystick.get_button(system["back_button"]))
-
+    """Poll this player's keys + pad for one frame."""
+    pad = _pads.pad(PLAYERS.index(player_key))
+    try:
+        state = read_player(player_key, keys, pad, _pad_layout)
+    except pygame.error:  # the pad went away mid-read
+        state = read_player(player_key, keys, None, _pad_layout)
     return PlayerRawInput(
-        button_held=button_held,
-        up_held=up_held,
-        start_held=start_held,
-        select_held=select_held,
-        confirm_held=confirm_held,
-        down_held=down_held,
-        back_held=back_held,
-        left_held=left_held,
-        right_held=right_held,
+        button_held={name: state[GATE_BUTTONS[name]] for name in ACTION_NAMES},
+        up_held=state["up"] or axis_indicates_up(state.stick_y, AXIS_DEADZONE),
+        start_held=state["start"],
+        select_held=state["select"],
+        confirm_held=state["a"],
+        down_held=state["down"] or axis_indicates_down(state.stick_y, AXIS_DEADZONE),
+        back_held=state["b"],
+        # Same sign convention as the vertical axis: negative = left.
+        left_held=state["left"] or state.stick_x < -AXIS_DEADZONE,
+        right_held=state["right"] or state.stick_x > AXIS_DEADZONE,
     )
 
 
-def keyboard_quit_held(keys: pygame.key.ScancodeWrapper) -> bool:
-    key_name = INPUT_CONFIG["system"]["keyboard_quit"]
-    return bool(keys[getattr(pygame, key_name)])
+def button_name(control: str, player: str | None = None) -> str:
+    """A control's on-screen name for one player's keys or pad, or for both
+    players' when player is None (e.g. "SPACE / ENTER"). "up" is the stick
+    pushed up: "STICK UP" on a pad, the up key on the keyboard."""
+    if player is None:
+        return " / ".join(dict.fromkeys(button_name(control, p) for p in PLAYERS))
+    if control == "up" and _last_device[player] != KEYBOARD:
+        return "STICK UP"
+    if control == "stick" and _last_device[player] == KEYBOARD:
+        return "WASD" if player == "p1" else "ARROWS"
+    if control == "stick":
+        return "STICK"
+    return _last_device.label(control, player)
+
+
+def cluster_keys(player: str) -> str:
+    """A player's six button keys as they sit, e.g. "F G H / C V B"."""
+    rows = (("l", "x", "r"), ("y", "b", "a"))
+    return " / ".join(" ".join(_last_device.label(b, player) for b in row) for row in rows)

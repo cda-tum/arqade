@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import pygame
@@ -147,7 +148,7 @@ def game(monkeypatch):
 
         monkeypatch.setattr(main, "_poll_players", poll)
         null = _NullSound()
-        return main.run_game(surface, None, Sounds(null, null, null), show_fps=False)
+        return asyncio.run(main.run_game(surface, None, Sounds(null, null, null), show_fps=False))
 
     yield run
     set_keyboard_enabled(True)

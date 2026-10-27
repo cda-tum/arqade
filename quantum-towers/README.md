@@ -164,46 +164,52 @@ uv run python -m quantum_towers.main --fps               # force the FPS overlay
 uv run python -m quantum_towers.main --window-size 1280x720
 ```
 
+In the browser (pygbag's test server on http://localhost:8000), from the repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve quantum-towers
+```
+
 Press **F3** in-game to toggle the FPS overlay at runtime.
 
 ### Input test mode
 
-The cabinet's exact button indices are unknown. Run this on the real hardware (or with a
-controller plugged into your dev machine) and press everything to see live index values:
+Run this on the real hardware (or with a controller plugged into your dev machine) and press
+everything to see live index values:
 
 ```bash
 uv run python -m quantum_towers.main --input-test
 ```
 
-Update the placeholder indices in `src/quantum_towers/config.py` (`INPUT_CONFIG`) with what you
-observe. That's the single place all button mappings live.
+Button and axis numbers live in `../common/src/arqade_common/input.py`, shared by all games.
+Which gate sits on which printed button is `GATE_AT_POSITION` in `config.py`.
 
-### Keyboard fallback (dev only)
+### Keyboard
+
+The keys are the layout shared by all the games (`../common`): each player's half of the
+keyboard is a pad, its 2x3 buttons on F G H / C V B (P1) and U I O / J K L (P2), so each gate
+key sits where its button does on the pad. On-screen hints name the keys or the pad buttons,
+whichever each player last used.
 
 | Action | P1 | P2 |
 |---|---|---|
-| X / Y / Z | Q / W / E | Numpad 4 / 5 / 6 |
-| H / RESET | D / F | Numpad 7 / 9 |
-| Push up (confirm climb) | Up arrow | Numpad 8 |
-| Pause / resume | P (either player) | P (either player) |
-| Pause menu: move / pick / resume | Up, Down / Enter / Backspace | Numpad 8, 2 / Enter / Backspace |
-| Quit | Esc (either player) | Esc (either player) |
+| X / Y / Z | F / G / H | U / I / O |
+| H / RESET | V / B | K / L |
+| Push up (confirm climb) | W | Up arrow |
+| Start (pause / resume) | Space | Enter |
+| Pause menu: move / pick / resume | W, S / B / V | Up, Down / L / K |
+| Quit | Space + L-Shift | Enter + R-Shift |
 
 On the cabinet, quit is Start+Select held together on either controller, and Start pauses.
+There is no quit key: Esc leaves fullscreen in a browser, and the PC launcher's Esc ends the
+game on its own. In the browser, quitting goes back to the title and tells the page around the
+game (`arqade:quit`).
 
 The cabinet loader runs the game with `--no-keyboard`: Batocera also turns P1's pad into
 keystrokes (arrow keys, numpad, letters, Enter/Space — see `../AGENTS.md`), which would
-otherwise let P1's stick or buttons drive P2 or fire two actions at once.
-
-P1's dev keys deliberately avoid L/X/R/B/Y/A: the real cabinet's P1 encoder emits a keyboard
-keystroke matching each button's own printed letter *in addition to* its joystick signal, and a
-dev fallback key that collided with one of those would double-fire two actions from a single real
-button press (this is exactly what caused the first real-hardware mapping bug — see
-`config.py`).
-
-"Push up" reads the stick as an analog axis (`vertical_axis`), not a hat switch — this cabinet's
-sticks don't send hat events at all. Same axis index and deadzone Quantum Pong already confirmed
-on this hardware for paddle movement.
+otherwise let P1's stick or buttons drive P2 or fire two actions at once. Pads use the cabinet's
+button numbers by default; `--pad-layout xbox` reads an Xbox-style pad on a PC instead, and
+browser gamepads use the browser's standard layout.
 
 ## Tests
 
@@ -228,7 +234,7 @@ sequences and rendering across many real game states without a crash.
 ## Tuning
 
 Tower height, the BFS search depth cap, charges-to-attack, knockback floors, and all colors live
-in `src/quantum_towers/config.py` alongside `INPUT_CONFIG`. Target-generation walk length lives
+in `src/quantum_towers/config.py`. Target-generation walk length lives
 in `src/quantum_towers/targets.py`.
 
 ## Fonts

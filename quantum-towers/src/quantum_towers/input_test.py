@@ -10,7 +10,6 @@ import pygame
 
 from quantum_towers import config
 from quantum_towers.display import present
-from quantum_towers.input import keyboard_quit_held
 
 
 def _joystick_lines(font: pygame.font.Font, joy: pygame.joystick.JoystickType) -> list[pygame.Surface]:
@@ -47,7 +46,7 @@ def run_input_test(surface: pygame.Surface, window: pygame.Surface | None) -> No
                 running = False
 
         keys = pygame.key.get_pressed()
-        if keyboard_quit_held(keys):
+        if keys[pygame.K_ESCAPE]:  # this diagnostic screen only; the game has no quit key
             running = False
 
         internal.fill(config.COLOR_BACKGROUND)

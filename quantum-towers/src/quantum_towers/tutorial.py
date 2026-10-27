@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import pygame
 
 from quantum_towers import config, fonts, screens, visuals
+from quantum_towers.input import KEYBOARD, button_name, cluster_keys, last_device
 from quantum_towers.notation import render_state
 from quantum_towers.player import PlayerState, apply_action, confirm_climb, new_player
 from quantum_towers.quantum import apply_h, apply_x, apply_z, zero_state
@@ -40,6 +41,7 @@ GOAL_LINES = {
     ),
 }
 PROMPT = "PRESS ANY BUTTON TO START"
+KEYBOARD_PROMPT = "PRESS ANY KEY TO START"  # when everyone is on the keyboard
 
 
 class Dismissal:
@@ -183,7 +185,8 @@ def draw_tutorial(surface: pygame.Surface, card: Card, t: float, show_prompt: bo
     _draw_controls(surface, card, demo)
 
     if show_prompt:
-        visuals.blit_outlined_text_centered(surface, font, PROMPT, config.COLOR_FPS, _W // 2, _H - 14)
+        prompt = KEYBOARD_PROMPT if last_device().everyone_on(KEYBOARD) else PROMPT
+        visuals.blit_outlined_text_centered(surface, font, prompt, config.COLOR_FPS, _W // 2, _H - 14)
 
 
 def _draw_demo(surface: pygame.Surface, card: Card, demo: DemoFrame, t: float) -> None:
@@ -291,15 +294,23 @@ def _draw_controls(surface: pygame.Surface, card: Card, demo: DemoFrame) -> None
 
     y = top + 2 * _ROW_H + 4
     step = LINE + 2
-    lines = ("STICK UP: CLIMB", "X Y Z H: GATES", "  : RESET TO |0>", "START: PAUSE")
+    who = last_device().latest if card.mode == "1p" else None  # whose keys or pad to name
+    lines = (f"{button_name('up', who)}: CLIMB", "X Y Z H: GATES", "  : RESET TO |0>",
+             f"{button_name('start', who)}: PAUSE")
     for i, text in enumerate(lines):
         visuals.blit_outlined_text(surface, font, text, config.COLOR_TEXT, (left, y + i * step))
     # The RESET icon stands in for the word, as on the legend.
     visuals.draw_reset_icon(surface, (left + 6, y + 2 * step + 4), config.COLOR_TEXT)
 
     who_y = box.bottom - 8 - 8
-    if card.mode == "2p":
+    devices = last_device()
+    if card.mode == "2p" and devices.everyone_on(KEYBOARD):  # the keys that stand for the buttons
+        p1 = visuals.blit_outlined_text(surface, font, cluster_keys("p1"), config.COLOR_PLAYER_1, (left, who_y))
+        visuals.blit_outlined_text(surface, font, cluster_keys("p2"), config.COLOR_PLAYER_2, (p1.right + 16, who_y))
+    elif card.mode == "2p":
         p1 = visuals.blit_outlined_text(surface, font, "P1: LEFT", config.COLOR_PLAYER_1, (left, who_y))
         visuals.blit_outlined_text(surface, font, "P2: RIGHT", config.COLOR_PLAYER_2, (p1.right + 16, who_y))
+    elif devices[who] == KEYBOARD:
+        visuals.blit_outlined_text(surface, font, f"KEYS {cluster_keys(who)}", config.COLOR_PLAYER_1, (left, who_y))
     else:
         visuals.blit_outlined_text(surface, font, "EITHER PAD PLAYS", config.COLOR_PLAYER_1, (left, who_y))

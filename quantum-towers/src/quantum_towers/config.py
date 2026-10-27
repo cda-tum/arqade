@@ -1,43 +1,16 @@
 """Single source of truth for input mapping and tuning constants.
 
-Two genuinely independent mappings are involved in "which gate does this
-physical button fire, and what does the on-screen legend call it" -- an
-earlier version of this file conflated them (using one number for both),
-which is exactly what caused the first real-hardware mapping bug:
+Which gate a button fires is decided by where it sits, not by its wiring:
+GATE_AT_POSITION says which gate is PRINTED/shown at each of the 6 physical
+button positions (row-major, matching BUTTON_LABELS' order), the same for
+both players' pads. GATE_BUTTONS follows from the two. Raw button numbers
+(which differ from the print order on the cabinet: the button printed "X" is
+raw 0) and the keyboard layout are shared by all games and live in
+arqade_common.input; re-run --input-test on new hardware.
 
-  - GATE_AT_POSITION: which gate is PRINTED/shown at each of the 6 physical
-    button positions (row-major, matching BUTTON_LABELS' order). This is
-    about the cabinet's fixed layout, not its wiring, and is the same for
-    both players' pads.
-  - INPUT_CONFIG[player]["buttons"]: which RAW hardware button number
-    (as `joystick.get_button(n)` sees it) each GATE is wired to. This is
-    hardware/wiring-specific and can differ from the position order
-    entirely -- confirmed via --input-test (2026-09-30) that on the real
-    IconicArcade cabinet it does NOT follow print order at all (e.g. the
-    button printed "X" is raw button 0, but the gate shown at that position,
-    Y, is wired to a different raw number than you'd guess from the label).
-
-If the cabinet's wiring ever changes (or this runs on different hardware),
-re-run --input-test and update the `buttons` dicts below; GATE_AT_POSITION
-and BUTTON_LABELS (the legend's fixed layout) should stay as-is since that
-layout was separately confirmed correct.
-
-P1's encoder also emits a keyboard keystroke matching each button's own
-printed letter (l/x/r/b/y/a) *in addition to* the joystick signal -- so P1's
-dev keyboard fallback below is deliberately chosen to avoid all six of those
-letters; a fallback key that collided would double-fire two actions from one
-real button press on the cabinet (this is exactly what caused the "one
-button does two things" symptom in the first bug report: physical "A" sent
-both raw button 1 *and* the keystroke "a", and "a" was gate X's old fallback
-key). P2's encoder does not emit keystrokes, so no such collision risk there.
-
-The "push up to confirm" gesture reads the stick as an ANALOG AXIS
-(`vertical_axis`, SDL convention: negative = up), not a hat switch -- this
-cabinet's sticks don't send hat events at all. Confirmed by reusing the
-exact axis index and deadzone Quantum Pong already validated on this same
-hardware for paddle movement (`vertical_axis: 1`, `AXIS_DEADZONE = 0.25`);
-`hat_index` is kept as a harmless secondary check in case a future stick on
-this cabinet does have one, but the axis is what actually works today.
+The "push up to confirm" gesture reads the stick's vertical axis (SDL
+convention: negative = up) past AXIS_DEADZONE, the value Quantum Pong
+validated on this same hardware, or the d-pad or the up key.
 """
 
 from pathlib import Path
@@ -62,86 +35,17 @@ BUTTON_LABELS = ("L", "X", "R", "Y", "B", "A")
 # BUTTON_LABELS) -- None means no gate is mapped to that position. This is
 # about the cabinet's fixed physical layout, NOT wiring, so it's the same
 # for both players regardless of how their individual pads are wired (see
-# INPUT_CONFIG's "buttons" dicts for the actual raw hardware numbers). Must
+# arqade_common.input for the actual raw hardware numbers). Must
 # move in lockstep with BUTTON_LABELS -- these two are parallel arrays over
 # the same 6 physical positions, not independently reorderable.
 GATE_AT_POSITION: tuple[str | None, ...] = ("X", "Y", "Z", None, "H", "RESET")
 
-INPUT_CONFIG = {
-    "p1": {
-        "joystick_index": 0,
-        "hat_index": 0,  # digital d-pad, if the stick has one -- most don't on this cabinet
-        "vertical_axis": 1,  # confirmed on this cabinet via Quantum Pong's paddle input
-        "horizontal_axis": 0,  # initials entry only; Gate Drop reads axis 0 on this cabinet
-        "buttons": {
-            "X": 4,
-            "Y": 0,
-            "Z": 5,
-            "H": 2,
-            "RESET": 1,
-        },
-        "keyboard": {
-            "X": "K_q",
-            "Y": "K_w",
-            "Z": "K_e",
-            "H": "K_d",
-            "RESET": "K_f",
-        },
-        "up_keyboard": "K_UP",
-        "down_keyboard": "K_DOWN",  # pause menu only
-        "left_keyboard": "K_LEFT",  # initials entry only
-        "right_keyboard": "K_RIGHT",
-    },
-    "p2": {
-        "joystick_index": 1,
-        "hat_index": 0,
-        "vertical_axis": 1,
-        "horizontal_axis": 0,
-        "buttons": {
-            "X": 4,
-            "Y": 0,
-            "Z": 5,
-            "H": 2,
-            "RESET": 1,
-        },
-        "keyboard": {
-            "X": "K_KP4",
-            "Y": "K_KP5",
-            "Z": "K_KP6",
-            "H": "K_KP7",
-            "RESET": "K_KP9",
-        },
-        "up_keyboard": "K_KP8",  # numpad 8 -- already spatially "up"
-        "down_keyboard": "K_KP2",  # pause menu only
-        "left_keyboard": "K_KP1",  # initials entry only (4 and 6 are gates)
-        "right_keyboard": "K_KP3",
-    },
-    "system": {
-        # Quit combo: Start + Select held together, on either controller.
-        # Confirm button: printed A (raw 1), back: printed B (raw 2). The
-        # cabinet-wide convention is A = confirm, B = back, Start = start the
-        # game and pause it -- see "Button convention" and "Pausing" in
-        # ../AGENTS.md. Raw 1 and 2 are also the RESET and H gates; they only
-        # act as confirm/back on the title screen and in the pause menu.
-        "confirm_button": 1,
-        "back_button": 2,
-        # Raw 9 is the button printed START and raw 8 is SELECT -- the
-        # reverse of what these were set to originally. EmulationStation's own
-        # es_input.cfg for this pad agrees (select id=8, start id=9), and the
-        # symptom was unmistakable: SELECT confirmed menus, because the game
-        # read raw 8 as "start". The quit combo is unaffected either way,
-        # which is why it went unnoticed for so long.
-        "start_button": 9,
-        "select_button": 8,
-        "keyboard_quit": "K_ESCAPE",
-        # Dev keyboard for the pause menu: P pauses/resumes (P is not one of
-        # the l/x/r/b/y/a letters P1's encoder types), Enter picks, Backspace
-        # resumes, and each player's up/down keys move the selection.
-        "keyboard_pause": "K_p",
-        "keyboard_menu_confirm": "K_RETURN",
-        "keyboard_menu_back": "K_BACKSPACE",
-    },
-}
+# Which printed button (see arqade_common.input) each gate is on, from the
+# two tables above: the same for both players and on the keyboard, where each
+# player's half has the pad's 2x3 buttons. A confirms and B goes back in the
+# menus (they are also the RESET and H gates, which only act as confirm/back
+# on the title screen and in the pause menu); Start starts and pauses.
+GATE_BUTTONS = {gate: label.lower() for label, gate in zip(BUTTON_LABELS, GATE_AT_POSITION) if gate}
 
 # How far the vertical axis must move (SDL convention: negative = up) before
 # it counts as "pushed up" -- same value Quantum Pong already confirmed on

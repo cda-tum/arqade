@@ -1,0 +1,21 @@
+{
+  "id": "quantum-towers",
+  "title": "Quantum Towers",
+  "tagline": "Climb a tower of quantum states: apply X, Y, Z and H gates to match each floor, then push up.",
+  "description": "Each floor of your tower shows a target qubit state. Apply quantum gates (X, Y, Z, H, or RESET to |0>) until your qubit matches it, then push up to climb; push up on a wrong state and you are stunned. Two players race side by side, and clearing floors in the fewest steps charges an attack that knocks your rival back down. Alone, climb against the clock for a top-10 time.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "F G H / V B for the gates (as on the pad), W to climb, Space to pause",
+      "p2": "U I O / K L for the gates (as on the pad), Up to climb, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Apply gates until your qubit matches the floor's target state.",
+    "Push up to climb. A push up on a wrong state stuns you.",
+    "Each gate sits on one of the pad's buttons, shown at the bottom of the screen.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}
