@@ -20,6 +20,7 @@ import math
 import random
 
 import pygame
+from arqade_common.input import KEYBOARD
 
 from qurves import config, rules
 from qurves.fx import Fx
@@ -38,6 +39,7 @@ CAPTIONS = (
     "P2 HIT THE WALL: P1 TAKES THE ROUND",
 )
 PROMPT = "PRESS ANY BUTTON TO START"
+KEYBOARD_PROMPT = "PRESS ANY KEY TO START"  # when everyone is on the keyboard
 
 # --- the demo (pure) ---------------------------------------------------------------
 
@@ -174,7 +176,8 @@ class TutorialScreen:
         r._center(r._glow(CAPTIONS[self.demo.phase], r.font16, config.COLOR_FPS), 326)
         self._draw_controls(surface, mode)
         if int(blink_t * 2) % 2 == 0:
-            r._center(r._glow(PROMPT, r.font16, WHITE), 512)
+            prompt = KEYBOARD_PROMPT if r.devices.everyone_on(KEYBOARD) else PROMPT
+            r._center(r._glow(prompt, r.font16, WHITE), 512)
 
     # --- the demo -------------------------------------------------------------------
 
@@ -273,8 +276,10 @@ class TutorialScreen:
             self._stick(s, (stick_x, y), config.PLAYER_COLORS[stick_player])
             self._cluster(s, (cluster_x, y), config.PLAYER_COLORS[button_player])
             self._start(s, (start_x, y), config.PLAYER_COLORS[stick_player])
-            for x, device, action in ((stick_x, "STICK", "STEER"), (cluster_x, "X Y B A", "STEER"),
-                                      (start_x, "START", "PAUSE")):
+            side = ("p1", "p2")[pad]  # names the controls for this side's keys or pad
+            for x, device, action in ((stick_x, r.name("stick", side), "STEER"),
+                                      (cluster_x, r.name("face", side), "STEER"),
+                                      (start_x, r.name("start", side), "PAUSE")):
                 self._label(device, r.font8, config.COLOR_TEXT, (x, y + 44))
                 self._label(action, r.font8, config.COLOR_DIM, (x, y + 58))
 

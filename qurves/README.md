@@ -42,20 +42,23 @@ dismissed it doesn't steer. A rematch from the result screen skips it.
   turns solid. You only lose a round when every copy has crashed.
 - Speed rises every 10 s. Last one standing takes the round; first to 3 wins.
 
-| Action | Cabinet | Keyboard (dev only) |
+| Action | Pad | Keyboard |
 |---|---|---|
-| Steer, 2 players | either pad's stick, or its X Y B A buttons | P1 W A S D or T F G H, P2 I J K L or arrows |
-| Steer, 4 players | left stick: P1, left buttons: P3, right stick: P2, right buttons: P4 | the same keys, one set per player |
-| Title menu | stick up or down picks a row, A picks it, Start always starts | W S, Enter, P |
-| Pick 2 or 4 players | stick left or right on the PLAYERS row | A or D, J or L |
+| Steer, 2 players | either pad's stick or d-pad, or its X Y B A buttons | P1 W A S D or G C V B, P2 arrows or I J K L |
+| Steer, 4 players | left stick: P1, left buttons: P3, right stick: P2, right buttons: P4 | P1 W A S D, P3 G C V B, P2 arrows, P4 I J K L |
+| Title menu | stick up or down picks a row, A picks it, Start always starts | W S or arrows, B or L, Space or Enter |
+| Pick 2 or 4 players | stick left or right on the PLAYERS row | A D or left right |
 | Dismiss HOW TO PLAY | any button | any key |
-| Back (result screen) | B | Backspace |
-| Rematch (result screen) | A or Start | Enter |
-| Pause (resume or quit to the title) | Start | P |
-| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Esc |
+| Back (result screen) | B | V or K |
+| Rematch (result screen) | A or Start | B, L, Space or Enter |
+| Pause (resume or quit to the title) | Start | Space or Enter |
+| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Space + L-Shift or Enter + R-Shift |
 
-The keyboard is a dev fallback only. On the cabinet the loader passes
-`--no-keyboard`.
+The keys are the layout shared by all the games (`../common`): each side of
+the keyboard is a pad, with the pad's 2x3 buttons on F G H / C V B and
+U I O / J K L. On-screen hints name the keys or the pad buttons, whichever
+each side last used. There is no quit key (Esc leaves fullscreen in a
+browser). On the cabinet the loader passes `--no-keyboard`.
 
 ## Sound
 
@@ -105,6 +108,18 @@ uv run python -m qurves --fps    # with the FPS overlay
 uv run pytest
 uv run python tools/snapshot.py /tmp/qurves-snaps   # render a scripted match to PNGs
 ```
+
+In the browser (pygbag's test server on http://localhost:8000), from the
+repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve qurves
+```
+
+In the browser, quitting (Start + Select, or QUIT on the title) goes back to
+the title and tells the page around the game (`arqade:quit`). Pads use the
+cabinet's button numbers by default; `--pad-layout xbox` reads an Xbox-style
+pad on a PC instead, and browser gamepads use the browser's standard layout.
 
 ## Layout
 

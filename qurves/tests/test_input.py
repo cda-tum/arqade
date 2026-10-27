@@ -1,7 +1,7 @@
 import pygame
 
 from qurves import input as qinput
-from qurves.input import Input, hat_direction, latest_direction, should_quit, stick_direction
+from qurves.input import Input, latest_direction, should_quit, stick_direction
 
 
 def test_the_stick_reads_its_dominant_axis_past_the_deadzone():
@@ -10,12 +10,6 @@ def test_the_stick_reads_its_dominant_axis_past_the_deadzone():
     assert stick_direction(0.9, 0.3, 0.25) == (1, 0)
     assert stick_direction(-0.5, 0.6, 0.25) == (0, 1)
     assert stick_direction(-0.8, 0.1, 0.25) == (-1, 0)
-
-
-def test_the_hat_reads_positive_y_as_up():
-    assert hat_direction((0, 1)) == (0, -1)
-    assert hat_direction((-1, 0)) == (-1, 0)
-    assert hat_direction((0, 0)) is None
 
 
 def test_holding_two_direction_buttons_steers_by_the_newer_one():
@@ -80,6 +74,7 @@ def pads_input():
     pygame.init()
     inp = Input()
     inp.joysticks = [FakePad(), FakePad()]
+    inp.pads.pad = lambda slot: inp.joysticks[slot]  # the fakes are P1's and P2's pads
     return inp
 
 
@@ -130,3 +125,27 @@ def test_a_key_press_counts_as_any_button_only_with_the_keyboard_on():
         assert not inp.frame_input().any_button
     finally:
         qinput.set_keyboard_enabled(True)
+
+
+class _Keys:
+    def __init__(self, held):
+        self.held = held
+
+    def __getitem__(self, key):
+        return key in self.held
+
+
+def test_the_shared_keyboard_steers_with_its_stick_keys_and_its_button_keys(monkeypatch):
+    """P1: W A S D are the stick, G C V B the X Y B A buttons. P2: arrows, I J K L."""
+    pygame.init()
+    inp = Input()
+    held = {pygame.K_w, pygame.K_v, pygame.K_RIGHT, pygame.K_i}
+    monkeypatch.setattr(qinput, "read_keys", lambda: _Keys(held))
+    inp.update(1 / 60)
+    fi = inp.frame_input()
+    assert fi.stick == ((0, -1), (1, 0)) and fi.pad == ((0, 1), (0, -1))
+    held.clear()
+    held.update({pygame.K_b, pygame.K_SPACE})  # P1's A (also steers right) and Start
+    inp.update(1 / 60)
+    fi = inp.frame_input()
+    assert fi.confirm and fi.pick and fi.pause and fi.pad == ((1, 0), None)
