@@ -11,7 +11,7 @@ from brawl_ket.input import Input, deadzone, edge_presses, nav_push, should_quit
 
 
 def test_deadzone_cuts_the_middle() -> None:
-    dz = config.INPUT_CONFIG["axis_deadzone"]
+    dz = config.AXIS_DEADZONE
     assert dz == 0.25
     assert deadzone(dz * 0.9) == 0 and deadzone(-dz * 0.9) == 0
     assert deadzone(0.3) == 1 and deadzone(-0.3) == -1
@@ -51,10 +51,41 @@ def test_no_keyboard_reads_nothing() -> None:
         binput.set_keyboard_enabled(True)
 
 
-def test_p1_keymap_avoids_the_pad_letters() -> None:
-    forbidden = {pygame.K_l, pygame.K_x, pygame.K_r, pygame.K_b, pygame.K_y, pygame.K_a}
-    codes = {getattr(pygame, name) for names in config.KEYMAP["p1"].values() for name in names}
-    assert codes and not codes & forbidden
+class Keys:
+    """Stands in for pygame.key.get_pressed(): these keys are down."""
+
+    def __init__(self, *held: int) -> None:
+        self.held = held
+
+    def __getitem__(self, key: int) -> bool:
+        return key in self.held
+
+
+def test_the_shared_keyboard_fights(monkeypatch) -> None:
+    """P1: W A S D, B = A, V = B, G = X, C = Y, Space = Start. P2: arrows, L K I J, Enter."""
+    pygame.init()
+    inp = Input()
+    monkeypatch.setattr(binput, "read_keys", lambda: Keys(pygame.K_d, pygame.K_w, pygame.K_b, pygame.K_g,
+                                                         pygame.K_LEFT, pygame.K_DOWN, pygame.K_k, pygame.K_j,
+                                                         pygame.K_RETURN))
+    inp.update(1 / 60)
+    fi = inp.frame_input()
+    p1, p2 = fi.fighters["p1"], fi.fighters["p2"]
+    assert (p1.dx, p1.up, p1.down, p1.a, p1.b, p1.x, p1.y) == (1, True, False, True, False, True, False)
+    assert (p2.dx, p2.up, p2.down, p2.a, p2.b, p2.x, p2.y) == (-1, False, True, False, True, False, True)
+    assert fi.confirms == {"p1": True, "p2": True} and fi.pauses == {"p1": False, "p2": True}
+    assert fi.backs == {"p1": False, "p2": True}
+
+
+def test_start_and_select_quit_from_the_keyboard_too_but_there_is_no_quit_key(monkeypatch) -> None:
+    pygame.init()
+    inp = Input()
+    monkeypatch.setattr(binput, "read_keys", lambda: Keys(pygame.K_ESCAPE))
+    inp.update(1 / 60)
+    assert not inp.quit_combo()
+    monkeypatch.setattr(binput, "read_keys", lambda: Keys(pygame.K_SPACE, pygame.K_LSHIFT))
+    inp.update(1 / 60)
+    assert inp.quit_combo() and inp.select_held_time > 0
 
 
 def test_with_no_pads_and_no_keys_both_fighters_are_idle() -> None:
@@ -62,7 +93,6 @@ def test_with_no_pads_and_no_keys_both_fighters_are_idle() -> None:
     binput.set_keyboard_enabled(False)
     try:
         inp = Input()
-        inp.joysticks = []
         inp.update(1 / 60)
         fi = inp.frame_input()
         assert fi.fighters == {"p1": IDLE, "p2": IDLE}
@@ -71,6 +101,16 @@ def test_with_no_pads_and_no_keys_both_fighters_are_idle() -> None:
         assert not inp.quit_combo() and inp.select_held_time == 0.0
     finally:
         binput.set_keyboard_enabled(True)
+
+
+class FakeSlots:
+    """PadSlots with these pads in it, P1's first."""
+
+    def __init__(self, *pads) -> None:
+        self.pads = pads
+
+    def pad(self, slot: int):
+        return self.pads[slot] if slot < len(self.pads) else None
 
 
 class FakePad:
@@ -96,17 +136,18 @@ class FakePad:
         return 0
 
 
-def test_any_button_is_any_raw_button_going_down_but_never_the_stick() -> None:
+def test_any_button_is_any_raw_button_going_down_but_never_the_stick(monkeypatch) -> None:
+    from arqade_common.input import ENCODER
     pygame.init()
     binput.set_keyboard_enabled(False)
     try:
         inp = Input()
         pad = FakePad()
-        inp.joysticks = [pad]
+        monkeypatch.setattr(binput, "_pads", FakeSlots(pad))
         pad.axes = [1.0, -1.0]
         inp.update(1 / 60)
         assert not inp.frame_input().any_button
-        pad.down = {config.INPUT_CONFIG["system"]["select_button"]}    # not A, not Start
+        pad.down = {ENCODER.buttons["select"]}    # not A, not Start
         inp.update(1 / 60)
         assert inp.frame_input().any_button
         inp.update(1 / 60)                  # held: not again
@@ -121,7 +162,6 @@ def test_any_button_is_any_raw_button_going_down_but_never_the_stick() -> None:
 def test_any_button_from_events_and_keys_only_with_the_keyboard_on() -> None:
     pygame.init()
     inp = Input()
-    inp.joysticks = []
     inp.handle(pygame.event.Event(pygame.JOYBUTTONDOWN, joy=0, instance_id=0, button=5))
     inp.update(1 / 60)
     assert inp.frame_input().any_button

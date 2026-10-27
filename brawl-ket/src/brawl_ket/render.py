@@ -17,14 +17,17 @@ draw_fight call.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 
 import pygame
+from arqade_common.input import KEYBOARD, PAD, LastDevice
 
 from . import match as M
 from . import palette as P
 from . import basis
+from .input import button_name
 from .config import (
     CARD_FRAMES,
     CHARGE_CAP,
@@ -669,9 +672,16 @@ def tags_of(match: M.Match) -> dict[str, str]:
     return {p: f"CPU{p[1]}" if match.cpu[p] else p.upper() for p in M.PLAYERS}
 
 
+# A printed button in a teaching line ("A: ", "Y SWITCHES", "DOWN+X"), named for the player's device
+_BUTTON_WORD = re.compile(r"\b(DOWN|[ABXY])\b")
+
+
 class Renderer:
-    def __init__(self, surface: pygame.Surface) -> None:
+    def __init__(self, surface: pygame.Surface, devices: LastDevice | None = None) -> None:
         self.surface = surface
+        # Keyboard or pad per player, for the button hints (without one: the pads' printed names)
+        self.devices = devices if devices is not None else LastDevice(PAD)
+        self.humans: frozenset[str] = frozenset()      # the sides people play (their keys on the HUD)
         self._stages: dict[str, tuple[pygame.Surface, list]] = {}
         self._previews: dict[str, pygame.Surface] = {}     # CHOOSE YOUR STAGE's, scaled once each
         self.preview_dim = pygame.Surface((PREVIEW_W, PREVIEW_H), pygame.SRCALPHA)
@@ -1716,7 +1726,7 @@ class Renderer:
         """Which colour this player's buttons hit in right now: A their own, B the other."""
         rects = {}
         for i, (button, colour) in enumerate(legend_colours(f).items()):
-            label = outlined(button, 8, P.WHITE)
+            label = outlined(self._side_keys(button, key), 8, P.WHITE)
             box = pygame.Rect(x + i * (LEGEND_CHIP + 4), y - 2, LEGEND_CHIP, 12)
             pygame.draw.rect(self.surface, P.INK, box.inflate(2, 2), border_radius=3)
             pygame.draw.rect(self.surface, colour, box, border_radius=2)
@@ -1756,7 +1766,7 @@ class Renderer:
             surf.fill(colour, part)
             surf.fill(P.lighten(colour, 0.5), (part.x, part.y, part.w, 1))
         if meter.full and "super" in f.char.extra and (self.t // 12) % 2 == 0:
-            tag = outlined("A+B!", 8, P.GOLD)
+            tag = outlined(self._side_keys("A+B!", key), 8, P.GOLD)
             tx = frame.right + 8 if side < 0 else frame.left - 8 - tag.get_width()
             surf.blit(tag, (tx, SUPER_BAR_Y - 2))
 
@@ -1830,6 +1840,7 @@ class Renderer:
         self.use_stage(match.stage)
         self.tags = tags_of(match)
         state = match.state
+        self.humans = frozenset() if state == M.TITLE else frozenset(p for p in M.PLAYERS if not match.cpu[p])
         if state == M.TITLE:
             if match.card:
                 self._rules_card(match)
@@ -1882,6 +1893,32 @@ class Renderer:
     def _prompt(self, text: str, y: float, color=P.WHITE) -> None:
         if (self.t // (BLINK // 2)) % 2 == 0:
             blit_center(self.surface, outlined(text, 8, color), (W / 2, y))
+
+    # --- button names: each player's keys or pad ------------------------------------------------
+
+    def _n(self, control: str, who: str | None = None) -> str:
+        """A control's name ("a", "start", "stick", ...) for one player's device, or for
+        both players' when `who` is None ("SPACE / ENTER"; just "START" on pads)."""
+        return button_name(control, who, self.devices)
+
+    def _keys(self, text: str, who: str | None = None) -> str:
+        """A line with the pad's printed buttons in it, each named for `who`'s device."""
+        return _BUTTON_WORD.sub(lambda m: self._n(m.group(1).lower(), who), text)
+
+    def _combo(self, text: str, who: str | None = None) -> str:
+        """A short label like "A+B" or "DOWN+X" for one player, or for both ("B+V / L+K")."""
+        if who is not None:
+            return self._keys(text, who)
+        return " / ".join(dict.fromkeys(self._keys(text, p) for p in M.PLAYERS))
+
+    def _side_keys(self, text: str, key: str) -> str:
+        """A label on a side's own panel or HUD: that player's names, the printed ones for the CPU."""
+        return self._keys(text, key) if key in self.humans else text
+
+    def _menu_who(self, match: M.Match) -> str | None:
+        """Who a hint is for: with a CPU in the match, the one menu cursor is worked by either
+        pad, so the player who pressed something last; two players: both (None)."""
+        return self.devices.latest if any(match.cpu.values()) else None
 
     def _logo(self, center_y: float, size: int = 48) -> None:
         """BRAWL-KET: BRAWL in P1's blue, KET in P2's red, the cabinet's two sides."""
@@ -1948,7 +1985,7 @@ class Renderer:
     def _attract_overlay(self) -> None:
         self._band(H - 58, H)
         self._logo(H - 36, size=24)
-        self._prompt("PRESS START", H - 12, P.GOLD)
+        self._prompt(f"PRESS {self._n('start')}", H - 12, P.GOLD)
         blit_center(self.surface, outlined("DEMO", 8, P.MIST), (W / 2, 64))
 
     def _select(self, match: M.Match) -> None:
@@ -1965,9 +2002,11 @@ class Renderer:
                 self._select_side(key, side, match.fighter(key), match.ready[key])
         blit_center(surf, outlined("VS", 32, P.GOLD, thick=2), (W / 2, 104))
         self._portraits(match)
-        hint = "STICK: CHOOSE   A: READY   B: BACK"
+        who = self._menu_who(match)
+        stick, a, b = self._n("stick", who), self._n("a", who), self._n("b", who)
+        hint = f"{stick}: CHOOSE   {a}: READY   {b}: BACK"
         if any(match.cpu.values()) and match.picking:
-            hint = f"STICK: CHOOSE {self.tags[match.picking]}'S FIGHTER   A: READY   B: BACK"
+            hint = f"{stick}: CHOOSE {self.tags[match.picking]}'S FIGHTER   {a}: READY   {b}: BACK"
         blit_center(surf, outlined(hint, 8, P.MIST), (W / 2, H - 5))
 
     def _select_side(self, key: str, side: int, char: Character, ready: bool) -> None:
@@ -1987,8 +2026,8 @@ class Renderer:
         blit_center(surf, outlined(char.name, 16, color, thick=2), (cx, floor + 18))
         blit_center(surf, outlined(TRAITS.get(char.name, ""), 8, P.MIST), (cx, floor + 34))
         if char.copy_paste:                 # DOS: what his Y does, and his one colour, on one line
-            self._parts(((CLASSICAL_LINES[1] + "  ", P.MIST), (CLASSICAL_LINES[-1], BASIS_BODY[char.fixed_basis])),
-                        (cx, floor + 45))
+            self._parts(((self._side_keys(CLASSICAL_LINES[1], key) + "  ", P.MIST),
+                         (CLASSICAL_LINES[-1], BASIS_BODY[char.fixed_basis])), (cx, floor + 45))
         top = list_top(char)
         left = round(cx - LIST_W / 2)
         for i, (slot, how) in enumerate(X_INPUTS):
@@ -1996,7 +2035,7 @@ class Renderer:
             move = char.extra.get(slot) if slot == "super" else char.moves[slot]
             if move is None:                # no super yet
                 continue
-            surf.blit(outlined(how, 8, P.GOLD), (left, y))
+            surf.blit(outlined(self._side_keys(how, key), 8, P.GOLD), (left, y))
             surf.blit(outlined(move_label(move), 8, P.WHITE), (left + LIST_NAME_X, y))
             self._colour_chip(move, (left + LIST_W, y + 4))
         if ready:
@@ -2093,7 +2132,9 @@ class Renderer:
             pip.center = (round(W / 2 + (i - (n - 1) / 2) * 16), name_y + 24)
             pygame.draw.rect(surf, P.INK, pip.inflate(2, 2))
             pygame.draw.rect(surf, P.GOLD if i == match.stage_pick else P.SLATE, pip)
-        blit_center(surf, outlined("STICK: CHOOSE   A: FIGHT!   B: BACK", 8, P.MIST), (W / 2, H - 12))
+        who = self._menu_who(match)
+        hint = f"{self._n('stick', who)}: CHOOSE   {self._n('a', who)}: FIGHT!   {self._n('b', who)}: BACK"
+        blit_center(surf, outlined(hint, 8, P.MIST), (W / 2, H - 12))
 
     def _colour_chip(self, move, right_mid) -> None:
         """The colour a move hits in, as a word: YOURS (your basis's), OTHER, or BOTH (a Y)."""
@@ -2154,12 +2195,13 @@ class Renderer:
                 blit_center(surf, outlined("H", 16, P.WHITE, thick=2), (320, floor - 150))
         for i, parts in enumerate(CARD_LINES):
             y = 274 + 18 * i
+            parts = tuple((self._keys(t), c) for t, c in parts)     # Y: both players' names for it
             if i == beat:
                 self._parts(parts, (W / 2, y))
             else:
                 text = "".join(t for t, _ in parts)
                 blit_center(surf, outlined(text, 8, P.SLATE), (W / 2, y))
-        self._prompt("PRESS START", H - 14, P.GOLD)
+        self._prompt(f"PRESS {self._n('start')}", H - 14, P.GOLD)
 
     def _tutorial(self, match: M.Match, events: list) -> None:
         """HOW TO PLAY: the goal, the scene (a real fight, drawn off screen by a second
@@ -2185,19 +2227,23 @@ class Renderer:
         pygame.draw.rect(surf, P.INK, steps.inflate(4, 4), border_radius=8)
         pygame.draw.rect(surf, P.NIGHT, steps, border_radius=7)
         lit = lesson.caption if lesson is not None else 0
+        who = self._menu_who(match)
         for i, parts in enumerate(LESSON_LINES):
             y = steps.y + 10 + 12 * i
+            parts = tuple((self._keys(t, who), c) for t, c in parts)
             if i == lit:
                 self._parts(parts, (0, y), left=steps.x + 8)
             else:
                 img = outlined("".join(t for t, _ in parts), 8, P.lighten(P.SLATE, 0.15))
                 surf.blit(img, img.get_rect(midleft=(steps.x + 8, y)))
-        self._controls(pygame.Rect(334, panel.y, W - 334 - 14, steps.bottom - panel.y))
-        self._prompt(ANY_BUTTON, H - 14, P.GOLD)
+        self._controls(pygame.Rect(334, panel.y, W - 334 - 14, steps.bottom - panel.y), who)
+        on_keys = self.devices[who] == KEYBOARD if who else self.devices.everyone_on(KEYBOARD)
+        self._prompt(ANY_BUTTON.replace("BUTTON", "KEY") if on_keys else ANY_BUTTON, H - 14, P.GOLD)
 
-    def _controls(self, box: pygame.Rect) -> None:
+    def _controls(self, box: pygame.Rect, who: str | None = None) -> None:
         """The stick and the 2x3 buttons as on the cabinet (L X R over Y B A), the used
-        ones lit, and what each does. Both pads are the same."""
+        ones lit, and what each does. Both pads are the same; on the keyboard each name is
+        `who`'s key, or both players' (P1 / P2)."""
         surf = self.surface
         pygame.draw.rect(surf, P.INK, box.inflate(4, 4), border_radius=8)
         pygame.draw.rect(surf, P.NIGHT, box, border_radius=7)
@@ -2210,7 +2256,7 @@ class Renderer:
         pygame.draw.line(surf, P.INK, (sx, sy + 10), (sx, sy - 4), 4)
         _ball(surf, (sx, sy - 6), 7, P.BAD)
         pygame.draw.circle(surf, P.lighten(P.BAD, 0.5), (sx - 2, sy - 9), 2)
-        surf.blit(outlined("STICK", 8, P.GOLD), (box.x + 48, sy - 12))
+        surf.blit(outlined(self._n("stick", who), 8, P.GOLD), (box.x + 48, sy - 12))
         surf.blit(outlined("WALK, JUMP, CROUCH", 8, P.WHITE), (box.x + 48, sy))
         # the buttons
         used = {b for b, _ in BUTTON_JOBS if len(b) == 1}
@@ -2219,20 +2265,30 @@ class Renderer:
             for col, label in enumerate(labels):
                 c = (box.x + 14 + 24 * col, top + 24 * row)
                 on = label in used
+                name = self._n(label.lower(), who)
+                name = name if len(name) == 1 else label     # one player's key, else as printed
                 _ball(surf, c, 9, P.GOLD if on else P.SLATE)
-                blit_center(surf, font(8).render(label, False, P.INK if on else P.MIST), (c[0] + 1, c[1] + 1))
-        for i, (label, job) in enumerate(BUTTON_JOBS):
+                blit_center(surf, font(8).render(name, False, P.INK if on else P.MIST), (c[0] + 1, c[1] + 1))
+        rows = [(outlined(self._combo(label, who), 8, P.GOLD), outlined(job, 8, P.WHITE)) for label, job in BUTTON_JOBS]
+        # the names' column, moved left (not past the cluster) when both players' keys are long
+        widest = max(tag.get_width() + 6 + job.get_width() for tag, job in rows)
+        tag_x = box.x + max(76, min(90, box.w - 6 - widest))
+        for i, (tag, job) in enumerate(rows):
             y = top - 8 + 14 * i
-            tag = outlined(label, 8, P.GOLD)
-            surf.blit(tag, (box.x + 90, y))
-            surf.blit(outlined(job, 8, P.WHITE), (box.x + max(108, 96 + tag.get_width()), y))
+            surf.blit(tag, (tag_x, y))
+            surf.blit(job, (max(tag_x + 18, tag_x + 6 + tag.get_width()), y))
         # Start, a pill of its own below the cluster
-        pill = pygame.Rect(box.x + 10, box.y + 180, 60, 16)
+        start = font(8).render(self._n("start", who), False, P.INK)
+        pill = pygame.Rect(box.x + 10, box.y + 180, max(60, start.get_width() + 12), 16)
         pygame.draw.rect(surf, P.INK, pill.inflate(4, 4), border_radius=8)
         pygame.draw.rect(surf, P.GOLD, pill, border_radius=7)
-        blit_center(surf, font(8).render("START", False, P.INK), (pill.centerx + 1, pill.centery + 1))
-        surf.blit(outlined("PAUSE", 8, P.WHITE), (box.x + 90, pill.y + 4))
-        blit_center(surf, outlined("THE SAME ON BOTH PADS", 8, P.MIST), (box.centerx, box.bottom - 18))
+        blit_center(surf, start, (pill.centerx + 1, pill.centery + 1))
+        surf.blit(outlined("PAUSE", 8, P.WHITE), (max(box.x + 90, pill.right + 10), pill.y + 4))
+        if who is None:
+            note = "THE SAME ON BOTH PADS" if self.devices.everyone_on(PAD) else "KEYS SHOWN AS P1 / P2"
+        else:
+            note = "THE SAME ON BOTH PADS" if self.devices[who] == PAD else f"{who.upper()}'S KEYS"
+        blit_center(surf, outlined(note, 8, P.MIST), (box.centerx, box.bottom - 18))
 
     def _stamp(self, text: str, center, color) -> None:
         img = outlined(text, 16, color, thick=2)
@@ -2244,7 +2300,8 @@ class Renderer:
     def _round_intro(self, match: M.Match) -> None:
         self._band(CALL_Y - 26, CALL_Y + (52 if match.hint else 26))
         if match.hint:
-            blit_center(self.surface, outlined(HINT, 8, P.GOLD), (W / 2, CALL_Y + 38))
+            blit_center(self.surface, outlined(self._keys(HINT, self._menu_who(match)), 8, P.GOLD),
+                        (W / 2, CALL_Y + 38))
         if match.t < M.FIGHT_CALL:
             self._call(f"ROUND {match.round_no}", P.WHITE, age=match.t)
         else:
@@ -2274,7 +2331,7 @@ class Renderer:
         blit_center(self.surface, outlined(f"{name}  {match.wins['p1']} - {match.wins['p2']}", 16, P.WHITE,
                                            thick=2), (W / 2, CALL_Y + 20))
         if match.t >= MATCH_RESULT_LOCK:
-            self._prompt("A: REMATCH     B: TITLE", CALL_Y + 60, P.GOLD)
+            self._prompt(self._keys("A: REMATCH     B: TITLE", self._menu_who(match)), CALL_Y + 60, P.GOLD)
 
     def _pause(self, match: M.Match) -> None:
         surf = self.surface
@@ -2291,4 +2348,6 @@ class Renderer:
             blit_center(surf, outlined(item, 8, P.GOLD if on else P.MIST), (W / 2, y))
             if on:
                 blit_center(surf, outlined(">", 8, P.GOLD), (W / 2 - 70, y))
-        blit_center(surf, outlined("A: PICK   START: RESUME", 8, P.lighten(P.SLATE, 0.3)), (W / 2, box.bottom - 10))
+        p = self.devices.latest         # one player works the pause menu
+        hint = f"{self._n('a', p)}: PICK   {self._n('start', p)}: RESUME"
+        blit_center(surf, outlined(hint, 8, P.lighten(P.SLATE, 0.3)), (W / 2, box.bottom - 10))

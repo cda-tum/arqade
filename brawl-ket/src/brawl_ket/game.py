@@ -2,20 +2,27 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 
 import pygame
+from arqade_common import runtime, web
 
 from . import config
 from .audio import make_audio
 from .display import make_display, present
 from .fonts import load_font
-from .input import PLAYERS, Input
-from .match import TITLE, FrameInput, Match
+from .input import PLAYERS, Input, get_events, last_device, start_devices
+from .match import FIGHT, ROUND_END, ROUND_INTRO, TITLE, FrameInput, Match
 from .render import Renderer
 
 STEP = 1.0 / config.FPS
 MAX_FRAME_DT = 0.1      # a stall (a window drag, a slow load) must not make the sim sprint to catch up
+# Same as the folder name in the web build and the "id" in game.json.
+GAME_ID = "brawl-ket"
+# While a match is being fought (its rounds, their calls, the pause), for the page
+# events. The menus, HOW TO PLAY, the result screen and the title's demo are outside it.
+PLAYING = (ROUND_INTRO, FIGHT, ROUND_END)
 
 
 def merge_pending(pending: FrameInput, now: FrameInput) -> FrameInput:
@@ -51,9 +58,34 @@ def consume(pending: FrameInput) -> FrameInput:
     )
 
 
-def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
+async def _leave(inp: Input, match: Match, surface: pygame.Surface, window: pygame.Surface | None) -> bool:
+    """A player asked to quit: True ends the program. In the browser there is
+    nothing to hand back to, so instead the game tells the page (which may
+    take the player back to its game list) and returns to its title -- once
+    the quit buttons are let go, or the title would quit again at once."""
+    if not runtime.is_browser():
+        return True
+    web.post_event(web.QUIT, GAME_ID)
+    clock = pygame.time.Clock()
+    while True:
+        for event in get_events():
+            inp.handle(event)
+        inp.update(clock.tick(config.FPS) / 1000.0)
+        if not inp.quit_combo() and inp.select_held_time == 0.0:
+            break
+        present(surface, window)
+        pygame.display.flip()
+        await asyncio.sleep(0)
+    match.quit = False
+    match._to_title()
+    match.wait_release = True
+    return False
+
+
+async def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
     pygame.init()
     pygame.joystick.init()
+    start_devices()
     surface, window = make_display(fullscreen, window_size)
     pygame.display.set_caption("Brawl-Ket")
     pygame.mouse.set_visible(False)
@@ -61,34 +93,43 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
     inp = Input()
     audio = make_audio()
     match = Match()
-    renderer = Renderer(surface)
+    renderer = Renderer(surface, last_device())
     fps_font = load_font(8)
     clock = pygame.time.Clock()
     pending = FrameInput()
     acc = 0.0
+    playing = False     # a match is on (for the page's game-start / game-end events)
 
     while True:
-        dt = min(clock.tick(config.FPS) / 1000.0, MAX_FRAME_DT)
+        dt = min(runtime.frame_seconds(clock.tick(config.FPS) / 1000.0), MAX_FRAME_DT)
         quit_requested = False
-        for event in pygame.event.get():
+        for event in get_events():
             if event.type == pygame.QUIT:
                 quit_requested = True
             inp.handle(event)
         inp.update(dt)
-        if quit_requested or inp.quit_combo() or inp.keyboard_quit:
-            break
+        if inp.quit_combo():
+            quit_requested = True
         if match.state == TITLE and inp.select_held_time * config.FPS >= config.BACK_HOLD_TO_QUIT:
-            break
+            quit_requested = True
 
-        pending = merge_pending(pending, inp.frame_input())
-        acc += dt
-        events: list = []
-        while acc >= STEP:
-            acc -= STEP
-            events += match.update(pending)
-            pending = consume(pending)
-        if match.quit:          # QUIT on the title: the same way out as Start + Select
-            break
+        if not quit_requested:
+            pending = merge_pending(pending, inp.frame_input())
+            acc += dt
+            events: list = []
+            while acc >= STEP:
+                acc -= STEP
+                events += match.update(pending)
+                pending = consume(pending)
+            quit_requested = match.quit     # QUIT on the title: the same way out as Start + Select
+        if (match.state in PLAYING and not quit_requested) != playing:
+            playing = not playing
+            web.post_event(web.GAME_START if playing else web.GAME_END, GAME_ID)
+        if quit_requested:
+            if await _leave(inp, match, surface, window):
+                break
+            pending, acc = FrameInput(), 0.0
+            continue
 
         audio.play_events(events)
         renderer.draw(match, events)
@@ -97,3 +138,4 @@ def run(fullscreen: bool, window_size: str, show_fps: bool) -> None:
             surface.blit(label, (config.INTERNAL_WIDTH - label.get_width() - 4, config.INTERNAL_HEIGHT - 10))
         present(surface, window)
         pygame.display.flip()
+        await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere

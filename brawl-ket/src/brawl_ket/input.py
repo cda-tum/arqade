@@ -1,17 +1,29 @@
-"""Pads and the dev keyboard, polled once per display frame.
+"""Pads and the keyboard, polled once per display frame.
 
-Per pad: the analog stick (axes 0 and 1, deadzoned; the hat only as a fallback,
-which the cabinet never needs because it has none) and the A, B, X and Y buttons
-as edge-triggered presses. Start confirms, pauses and starts; Select only joins
-Start for the quit combo. Any button at all (L, R and Select too) going down is
-`any_button`, which takes the HOW TO PLAY card away; with the keyboard on, so does
-any key but the stick's. The pure helpers are unit tested; reading real pads
-is verified on the cabinet with --input-test.
+Devices, pad layouts and the two-player keyboard are shared by all games (see
+arqade_common.input). Per player: the analog stick (deadzoned; the d-pad and
+the direction keys count too) and the A, B, X and Y buttons as edge-triggered
+presses. Start confirms, pauses and starts; Select only joins Start for the
+quit combo. Any button at all (L, R and Select too) going down is
+`any_button`, which takes the HOW TO PLAY card away; with the keyboard on, so
+does any key but the stick's. The pure helpers are unit tested; reading real
+pads is verified on the cabinet with --input-test.
 """
 
 from __future__ import annotations
 
 import pygame
+from arqade_common.input import (
+    BUTTONS,
+    DIRECTIONS,
+    KEYBOARD,
+    KEYBOARD_LAYOUT,
+    LastDevice,
+    PadLayout,
+    PadSlots,
+    default_pad_layout,
+    read_player,
+)
 
 from . import config
 from .fighter import FighterInput
@@ -44,12 +56,42 @@ def read_keys():
     return pygame.key.get_pressed() if _keyboard_enabled else _NoKeys()
 
 
-def _codes(names: list[str]) -> list[int]:
-    return [getattr(pygame, name) for name in names]
+# Which pad is whose, and how to read its buttons. main() calls
+# set_pad_layout() and the game loop start_devices() once at start-up.
+_pads = PadSlots()
+_pad_layout = default_pad_layout()
+# Keyboard or pad, per player, so on-screen hints name what they're holding.
+_last_device = LastDevice()
 
 
-def keyboard_quit_held(keys) -> bool:
-    return bool(keys[getattr(pygame, config.INPUT_CONFIG["system"]["keyboard_quit"])])
+def set_pad_layout(layout: PadLayout) -> None:
+    global _pad_layout
+    _pad_layout = layout
+
+
+def pad_layout() -> PadLayout:
+    return _pad_layout
+
+
+def start_devices() -> None:
+    """Pick up the pads already connected (call after pygame.joystick.init())."""
+    _pads.scan()
+
+
+def get_events() -> list[pygame.event.Event]:
+    """pygame.event.get(), noting pads that connect or disconnect on the way.
+    Every event loop in the game uses this instead of pygame.event.get():
+    in a browser, a gamepad only appears after its first button press."""
+    events = pygame.event.get()
+    for event in events:
+        _pads.handle_event(event)
+        _last_device.handle_event(event, _pads, keyboard=_keyboard_enabled)
+    return events
+
+
+def last_device() -> LastDevice:
+    """Who last used their keys or their pad, for the screens' button hints."""
+    return _last_device
 
 
 def nav_push(prev: tuple[int, int], now: tuple[int, int]) -> tuple[int, int]:
@@ -60,7 +102,7 @@ def nav_push(prev: tuple[int, int], now: tuple[int, int]) -> tuple[int, int]:
 # --- pure helpers ----------------------------------------------------------------------
 
 
-def deadzone(value: float, dz: float = config.INPUT_CONFIG["axis_deadzone"]) -> int:
+def deadzone(value: float, dz: float = config.AXIS_DEADZONE) -> int:
     """-1, 0 or 1: the axis value, zero inside the deadzone."""
     if value <= -dz:
         return -1
@@ -80,97 +122,65 @@ def edge_presses(prev: set, now: set) -> set:
 
 
 def should_quit(*, p1_start: bool, p1_select: bool, p2_start: bool, p2_select: bool) -> bool:
-    """Start + Select held together on the same pad."""
+    """Start + Select held together by one player. There is deliberately no
+    quit key: Esc leaves fullscreen in a browser, and the PC launcher handles
+    Esc itself (it ends the game process)."""
     return (p1_start and p1_select) or (p2_start and p2_select)
 
 
 class Input:
     def __init__(self) -> None:
-        self.joysticks: list = []
-        self.keymap = {p: {act: _codes(names) for act, names in config.KEYMAP[p].items()} for p in PLAYERS}
-        self._down: dict[str, set[int]] = {p: set() for p in PLAYERS}
-        self._keys_prev: dict[str, set[str]] = {p: set() for p in PLAYERS}
+        self._buttons_prev: dict[str, frozenset[str]] = {p: frozenset() for p in PLAYERS}
         self._stick_prev: dict[str, tuple[int, int]] = {p: (0, 0) for p in PLAYERS}
         self.frame = FrameInput()
         self.start_select = {p: (False, False) for p in PLAYERS}
-        self.select_held_time = 0.0     # seconds Select has been held on either pad
-        self.keyboard_quit = False
+        self.select_held_time = 0.0     # seconds Select has been held on either side
         self._button_event = False      # a JOYBUTTONDOWN (or, with the keyboard on, a KEYDOWN)
-        self._stick_keys = {k for p in PLAYERS for act in ("left", "right", "up", "down")
-                            for k in self.keymap[p][act]}
-        self.rescan()
-
-    def rescan(self) -> None:
-        self.joysticks = []
-        for i in range(pygame.joystick.get_count()):
-            joy = pygame.joystick.Joystick(i)
-            joy.init()
-            self.joysticks.append(joy)
+        self._stick_keys = {getattr(pygame, KEYBOARD_LAYOUT[p][d]) for p in PLAYERS for d in DIRECTIONS}
 
     def handle(self, event: pygame.event.Event) -> None:
-        if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
-            self.rescan()
-        elif event.type == pygame.JOYBUTTONDOWN or (event.type == pygame.KEYDOWN and _keyboard_enabled
-                                                     and event.key not in self._stick_keys):
+        if event.type == pygame.JOYBUTTONDOWN or (event.type == pygame.KEYDOWN and _keyboard_enabled
+                                                   and event.key not in self._stick_keys):
             self._button_event = True
 
-    def _read_pad(self, player: str) -> tuple[set[int], int, bool, bool]:
-        """(buttons down, dx, up, down) for one pad."""
-        cfg = config.INPUT_CONFIG[player]
-        if cfg["joystick_index"] >= len(self.joysticks):
-            return set(), 0, False, False
-        joy = self.joysticks[cfg["joystick_index"]]
+    def _read(self, player: str, keys) -> tuple[frozenset[str], int, bool, bool]:
+        """(buttons held, dx, up, down) for one player, from their pad and keys."""
+        pad = _pads.pad(PLAYERS.index(player))
         try:
-            down = {b for b in range(joy.get_numbuttons()) if joy.get_button(b)}
-            ax_i, ay_i = cfg["axes"]
-            dx = deadzone(joy.get_axis(ax_i)) if joy.get_numaxes() > ax_i else 0
-            up, dn = vertical(joy.get_axis(ay_i)) if joy.get_numaxes() > ay_i else (False, False)
-            if dx == 0 and not up and not dn and joy.get_numhats() > cfg["hat_index"]:
-                hx, hy = joy.get_hat(cfg["hat_index"])
-                dx, up, dn = hx, hy > 0, hy < 0
-        except pygame.error:
-            return set(), 0, False, False
-        return down, dx, up, dn
+            state = read_player(player, keys, pad, _pad_layout)
+        except pygame.error:            # the pad went away mid-read
+            state = read_player(player, keys, None, _pad_layout)
+        dx = deadzone(state.stick_x)
+        up, dn = vertical(state.stick_y)
+        if dx == 0:                     # the d-pad or the direction keys
+            dx = state["right"] - state["left"]
+        up = up or state["up"]
+        dn = dn or state["down"]
+        return frozenset(b for b in BUTTONS if state[b]), dx, up, dn
 
     def update(self, dt: float) -> None:
         keys = read_keys()
-        system = config.INPUT_CONFIG["system"]
-        a_btn, b_btn, x_btn, y_btn = (system["a_button"], system["b_button"], system["x_button"],
-                                      system["y_button"])
-        start = system["start_button"]
-        self.keyboard_quit = keyboard_quit_held(keys)
-        frame = FrameInput(activity=self.keyboard_quit, any_button=self._button_event)
+        frame = FrameInput(any_button=self._button_event)
         self._button_event = False
         for p in PLAYERS:
-            down, dx, up, dn = self._read_pad(p)
-            held_keys = {act for act, codes in self.keymap[p].items() if any(keys[k] for k in codes)}
-            if dx == 0:
-                dx = ("right" in held_keys) - ("left" in held_keys)
-            up = up or "up" in held_keys
-            dn = dn or "down" in held_keys
-            pressed = edge_presses(self._down[p], down)
-            self._down[p] = down
-            new_keys = edge_presses(self._keys_prev[p], held_keys)
-            self._keys_prev[p] = held_keys
-            a = a_btn in pressed or "a" in new_keys
-            start_pressed = start in pressed or "start" in new_keys
-            frame.fighters[p] = FighterInput(
-                dx=dx, up=up, down=dn, a=a,
-                b=b_btn in pressed or "b" in new_keys,
-                x=x_btn in pressed or "x" in new_keys,
-                y=y_btn in pressed or "y" in new_keys,
-            )
+            held, dx, up, dn = self._read(p, keys)
+            pressed = edge_presses(self._buttons_prev[p], held)
+            self._buttons_prev[p] = held
+            a = "a" in pressed
+            start_pressed = "start" in pressed
+            frame.fighters[p] = FighterInput(dx=dx, up=up, down=dn, a=a, b="b" in pressed,
+                                             x="x" in pressed, y="y" in pressed)
             frame.confirms[p] = a or start_pressed
-            frame.backs[p] = b_btn in pressed or "b" in new_keys
+            frame.backs[p] = "b" in pressed
             frame.pauses[p] = start_pressed
             frame.nav[p] = nav_push(self._stick_prev[p], (dx, dn - up))
             self._stick_prev[p] = (dx, dn - up)
-            if down or (held_keys - {"left", "right", "up", "down"}):
+            if held:
                 frame.held = True
-            if pressed or (new_keys - {"left", "right", "up", "down"}):
+            if pressed:
                 frame.any_button = True
-            self.start_select[p] = (start in down, system["select_button"] in down)
-            if down or dx or up or dn or held_keys:
+            self.start_select[p] = ("start" in held, "select" in held)
+            if held or dx or up or dn:
                 frame.activity = True
         self.frame = frame
         if any(select for _start, select in self.start_select.values()):
@@ -184,3 +194,20 @@ class Input:
     def quit_combo(self) -> bool:
         (s1, sel1), (s2, sel2) = self.start_select["p1"], self.start_select["p2"]
         return should_quit(p1_start=s1, p1_select=sel1, p2_start=s2, p2_select=sel2)
+
+
+# --- button names, for on-screen hints ----------------------------------------------------
+
+
+def button_name(control: str, player: str | None = None, devices: LastDevice | None = None) -> str:
+    """A control's on-screen name ("a", "start", "stick", ...) for one player's keys or pad,
+    or for both players' when player is None (e.g. "SPACE / ENTER"; one name when both are
+    on pads). "stick" is the stick or the direction keys."""
+    devices = devices or _last_device
+    if player is None:
+        return " / ".join(dict.fromkeys(button_name(control, p, devices) for p in PLAYERS))
+    if control == "stick":
+        if devices[player] == KEYBOARD:
+            return "WASD" if player == "p1" else "ARROWS"
+        return "STICK"
+    return devices.label(control, player)

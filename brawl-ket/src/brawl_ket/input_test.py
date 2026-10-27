@@ -14,6 +14,7 @@ from . import config
 from . import palette as P
 from .display import present
 from .fonts import load_font
+from .input import get_events, pad_layout
 
 
 def _joystick_lines(joy) -> list[str]:
@@ -31,19 +32,19 @@ def _joystick_lines(joy) -> list[str]:
 def run_input_test(surface: pygame.Surface, window: pygame.Surface | None) -> None:
     clock = pygame.time.Clock()
     font = load_font(8)
-    system = config.INPUT_CONFIG["system"]
+    layout = pad_layout()
     joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
     for joy in joysticks:
         joy.init()
 
     while True:
         clock.tick(config.FPS)
-        if any(event.type == pygame.QUIT for event in pygame.event.get()):
+        if any(event.type == pygame.QUIT for event in get_events()):
             return
         keys = pygame.key.get_pressed()
         if keys[pygame.K_ESCAPE]:
             return
-        combo = (system["start_button"], system["select_button"])
+        combo = (layout.buttons["start"], layout.buttons["select"])
         for joy in joysticks:
             if joy.get_numbuttons() > max(combo) and all(joy.get_button(b) for b in combo):
                 return
