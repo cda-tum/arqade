@@ -9,6 +9,7 @@ config.py / input.py.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import random
@@ -17,10 +18,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pygame
+from arqade_common import runtime, web
+from arqade_common.input import KEYBOARD, PAD
 
 from superconductor import config, tutorial
 from superconductor.display import make_display, present
-from superconductor.input import Input, keyboard_enabled
+from superconductor.input import ACTION_BUTTONS, Input, keyboard_enabled
 from superconductor.lattice import LAYOUTS, Lattice
 from superconductor.rules import Board
 
@@ -826,6 +829,9 @@ PAD_LAYOUT = (("L", "X", "R"), ("Y", "B", "A"))
 PAD_ACTIONS = ((("STICK",), "DRAW ROUTE"), (("A", "R"), "NEXT PAIR"), (("L",), "PREVIOUS PAIR"),
                (("B",), "OTHER END"), (("X",), "UNDO A STEP"), (("START",), "PAUSE"))
 BUTTON_COL = {"A": PAIR_COLORS[1], "R": PAIR_COLORS[1], "L": PAIR_COLORS[4], "B": GOLD, "X": MISCAL_COL}
+KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}  # the keys that stand in for each player's stick
+# Same as the folder name in the web build and the "id" in game.json.
+GAME_ID = "superconductor"
 
 
 def draw_button(S, x, y, label, col, r=None):
@@ -854,7 +860,7 @@ def draw_stick(S, x, y, t, r=None):
 # The game
 # =====================================================================
 class Game:
-    def __init__(self, fullscreen, window_size, show_fps):
+    def __init__(self, fullscreen, window_size, show_fps, pad_layout=None):
         global AUDIO
         pygame.mixer.pre_init(SR, -16, 1, 512)
         pygame.init()
@@ -871,7 +877,8 @@ class Game:
         except Exception:
             AUDIO = False
         build_sounds()
-        self.inp = Input()
+        self.inp = Input(pad_layout)
+        self.playing = False  # a match is on (for the page's game-start / game-end events)
         self.show_fps = show_fps
         self.state = "title"
         self.mode = "single"
@@ -1092,14 +1099,15 @@ class Game:
             if int(t * 3) % 2 == 0:
                 text(S, ">", 20, GOLD, mx - 80 * U, y)
                 text(S, "<", 20, GOLD, mx + 80 * U, y)
-            text(S, "A: back to the game list", 8, GREY, mx, y + 30 * U)
+            text(S, f"{self.name('a')}: back to the game list", 8, GREY, mx, y + 30 * U)
 
         if self.mode != "versus":
             best = self.hiscores.get(self._hiscore_key(), 0)
             text(S, f"BEST {best:06d}", 10, GOLD, mx, 530 * U)
         if int(t * 2) % 2 == 0:
-            text(S, "PRESS START TO PLAY", 14, WHITE, W / 2, 640 * U)
-        text(S, "STICK: CHOOSE    A: OK    START: PLAY", 8, DIM, W / 2, 690 * U)
+            text(S, f"PRESS {self.name('start')} TO PLAY", 14, WHITE, W / 2, 640 * U)
+        text(S, f"{self.name('stick')}: CHOOSE    {self.name('a')}: OK    {self.name('start')}: PLAY",
+             8, DIM, W / 2, 690 * U)
 
     def draw_tutorial(self, S):
         """HOW TO PLAY: the goal, a scene playing it, the buttons, then go."""
@@ -1124,10 +1132,22 @@ class Game:
         for r, letters in enumerate(PAD_LAYOUT):
             for c, letter in enumerate(letters):
                 draw_button(S, bx + c * 44 * U, cy + r * 44 * U, letter, BUTTON_COL.get(letter))
+        who = self.inp.devices.latest if self.mode == "single" else None  # whose keys or pad to name
         if self.mode != "single":
-            text(S, "BOTH PADS", crisp(11), GREY, bx + 124 * U, cy + 22 * U, "left")
+            both = "BOTH PADS" if self.inp.devices.everyone_on(PAD) else "BOTH PLAYERS"
+            text(S, both, crisp(11), GREY, bx + 124 * U, cy + 22 * U, "left")
+        on_keys = self.inp.devices.everyone_on(KEYBOARD) if who is None else self.inp.devices[who] == KEYBOARD
         y = 384 * U
-        for names, action in PAD_ACTIONS:
+        if on_keys:  # the keys by name, not the pad's buttons
+            rows = [(self.name(names[0].lower(), who) if names[0] in ("STICK", "START")
+                     else self.name("/".join(names).lower(), who), action) for names, action in PAD_ACTIONS]
+            imgs = [font(round(crisp(11) * U)).render(f"{keys}:", True, GOLD) for keys, _ in rows]
+            action_x = x0 + max(78 * U, max(img.get_width() for img in imgs) + 12 * U)
+            for (keys, action), img in zip(rows, imgs):
+                S.blit(img, img.get_rect(midleft=(int(x0), int(y))))
+                text(S, action, crisp(11), WHITE, action_x, y, "left")
+                y += 36 * U
+        for names, action in () if on_keys else PAD_ACTIONS:
             for k, name in enumerate(names):
                 x = x0 + (16 + 32 * k) * U
                 if name == "STICK":
@@ -1143,7 +1163,8 @@ class Game:
             y += 36 * U
 
         if self.state_t >= tutorial.MIN_SHOW and int(t * 2.5) % 2 == 0:
-            text(S, "PRESS ANY BUTTON TO START", crisp(16), WHITE, W / 2, 668 * U)
+            any_button = "ANY KEY" if self.inp.devices.everyone_on(KEYBOARD) else "ANY BUTTON"
+            text(S, f"PRESS {any_button} TO START", crisp(16), WHITE, W / 2, 668 * U)
 
     def draw_play(self, S):
         t = self.t
@@ -1158,14 +1179,18 @@ class Game:
                 text(S, "waiting for the other chip", 8, GREY, rect.centerx, rect.centery + 18 * U)
         if len(self.views) > 1:
             pygame.draw.line(S, SUBSTRATE_EDGE, (W / 2, 40 * U), (W / 2, H - 40 * U), px(1))
-        text(S, "STICK: ROUTE   A/R: NEXT   L: PREV   B: OTHER END   X: UNDO   START: PAUSE",
-             8, DIM, W / 2, H - 14 * U)
+        who = self.inp.devices.latest if self.mode == "single" else None
+        n = lambda k: self.name(k, who)  # noqa: E731
+        text(S, f"{n('stick')}: ROUTE   {n('a/r')}: NEXT   {n('l')}: PREV   {n('b')}: OTHER END   "
+                f"{n('x')}: UNDO   {n('start')}: PAUSE", 8, DIM, W / 2, H - 14 * U)
 
     def draw_paused(self, S):
         self.draw_play(S)
         veil(S, (0, 0, W, H), 170)
         text(S, "PAUSED", 32, WHITE, W / 2, H / 2 - 30 * U)
-        text(S, "START / A / B: RESUME     SELECT: MENU", 10, GREY, W / 2, H / 2 + 20 * U)
+        p = self.inp.devices.latest  # one player works the menu
+        n = lambda k: self.name(k, p)  # noqa: E731
+        text(S, f"{n('start')} / {n('a')} / {n('b')}: RESUME     {n('select')}: MENU", 10, GREY, W / 2, H / 2 + 20 * U)
 
     def draw_over(self, S):
         self.draw_play(S)
@@ -1190,7 +1215,7 @@ class Game:
             else:
                 text(S, f"BEST {self.hiscores.get(self._hiscore_key(), 0):06d}", 10, GOLD, W / 2, 400 * U)
         if self.state_t > 1.5 and int(self.state_t * 2.5) % 2:
-            text(S, "PRESS A OR B", 12, WHITE, W / 2, 500 * U)
+            text(S, f"PRESS {self.name('a')} OR {self.name('b')}", 12, WHITE, W / 2, 500 * U)
 
     def draw_input_test(self, S):
         inp = self.inp
@@ -1201,9 +1226,9 @@ class Game:
             text(S, "No joysticks detected.", 10, RED, 40 * U, y, "left")
             y += 30 * U
         for i, j in inp.joys.items():
-            who = [p for p in ("p1", "p2") if config.INPUT_CONFIG[p]["joystick_index"] == i]
-            text(S, "JOY %d: %s %s" % (i, j.get_name()[:40], ("-> " + who[0].upper()) if who else ""),
-                 10, CYAN, 40 * U, y, "left")
+            slot = inp.pads.slot_of(j.get_instance_id())
+            who = "-> P%d" % (slot + 1) if slot is not None else ""
+            text(S, "JOY %d: %s %s" % (i, j.get_name()[:40], who), 10, CYAN, 40 * U, y, "left")
             y += 22 * U
             axes = "  ".join("a%d:%+.2f" % (k, j.get_axis(k)) for k in range(j.get_numaxes()))
             text(S, "axes " + axes, 8, WHITE, 60 * U, y, "left")
@@ -1220,10 +1245,50 @@ class Game:
         for i, p in enumerate(("p1", "p2")):
             held = sorted(inp.prev_buttons[p]) + ([inp.dir[p]] if inp.dir[p] else [])
             text(S, "%s actions: %s" % (p.upper(), ", ".join(held) or "-"), 10, WHITE, 40 * U, y + (60 + i * 24) * U, "left")
-        text(S, "Mapping lives in superconductor/config.py (INPUT_CONFIG)", 8, DIM, W / 2, H - 30 * U)
+        text(S, "Mapping lives in arqade_common/input.py (shared by all games)", 8, DIM, W / 2, H - 30 * U)
+
+    # ------------------------------------------------------------ button names
+    def name(self, control, player=None):
+        """A control's on-screen name for one player's keys or pad, or for
+        both players' when player is None (e.g. "SPACE / ENTER"). "stick" is
+        the stick or the direction keys; "a/r" names both buttons."""
+        if player is None:
+            return " / ".join(dict.fromkeys(self.name(control, p) for p in ("p1", "p2")))
+        if control == "stick":
+            return KEYBOARD_STICKS[player] if self.inp.devices[player] == KEYBOARD else "STICK"
+        return "/".join(self.inp.devices.label(b, player) for b in control.split("/"))
 
     # ------------------------------------------------------------ loop
-    def run(self, input_test=False):
+    def _note_playing(self):
+        now = self.state in ("play", "paused")
+        if now != self.playing:
+            self.playing = now
+            web.post_event(web.GAME_START if now else web.GAME_END, GAME_ID)
+
+    async def _leave(self):
+        """A player asked to quit: True ends the program. In the browser there
+        is nothing to hand back to, so instead the game tells the page (which
+        may take the player back to its game list) and returns to its title --
+        once the quit buttons are let go, or the title would quit again at once."""
+        if not runtime.is_browser():
+            return True
+        if self.state in ("play", "paused"):  # the match ends before the player leaves
+            self.to_menu()
+            self._note_playing()
+        web.post_event(web.QUIT, GAME_ID)
+        while self.inp.quit_combo or self.inp.back_held > 0:
+            for e in pygame.event.get():
+                self.inp.handle(e)
+            self.inp.update(0.0)
+            self.inp.end_frame()
+            present(self.screen, self.window)
+            pygame.display.flip()
+            await asyncio.sleep(0)
+        self.quit_requested = False
+        self.to_menu()
+        return False
+
+    async def run(self, input_test=False):
         if input_test:
             self.set_state("inputtest")
         S = self.screen
@@ -1240,19 +1305,25 @@ class Game:
                 self.inp.handle(e)
             self.inp.update(dt)
             if self.inp.quit_combo and self.state != "inputtest":
-                break
+                if await self._leave():
+                    break
+                self.inp.end_frame()
+                continue
             pump_sfx()
 
             S.fill(BG)
             if self.state == "title":
                 if pygame.K_F1 in self.inp.ev_keys:
                     self.set_state("inputtest")
-                elif pygame.K_ESCAPE in self.inp.ev_keys or self.inp.back_held > config.BACK_HOLD_TO_QUIT:
-                    running = False
+                elif self.inp.back_held > config.BACK_HOLD_TO_QUIT:
+                    self.quit_requested = True
                 else:
                     self.update_title(dt)
-                if self.quit_requested:
-                    break  # QUIT: the same clean exit as Start + Select
+                if self.quit_requested:  # QUIT, or holding Select: the same clean exit as Start + Select
+                    if await self._leave():
+                        break
+                    self.inp.end_frame()
+                    continue
                 if self.state == "title":
                     self.draw_title(S)
                 elif self.state == "tutorial":
@@ -1287,7 +1358,9 @@ class Game:
             present(S, self.window)
             pygame.display.flip()
             self.inp.end_frame()
+            self._note_playing()
+            await asyncio.sleep(0)  # hand the frame to the browser (pygbag); no-op elsewhere
 
 
-def run(*, fullscreen=False, window_size="1280x720", show_fps=False, input_test=False):
-    Game(fullscreen, window_size, show_fps).run(input_test)
+async def run(*, fullscreen=False, window_size="1280x720", show_fps=False, input_test=False, pad_layout=None):
+    await Game(fullscreen, window_size, show_fps, pad_layout).run(input_test)

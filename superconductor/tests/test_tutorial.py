@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import pygame
@@ -164,7 +165,7 @@ def test_dismissing_press_does_not_act_in_the_match(game):
     board.update(0.6)  # both opening pairs are there
     station = list(board.cursors["p1"].path)
     pad = FakePad()
-    game.inp.joys = {0: pad}
+    game.inp.pads.pad = lambda slot: pad if slot == 0 else None  # P1's pad
     pad.down.add(1)  # printed A goes down: it closes the card...
     frame(game, game.update_tutorial, presses={"button"})
     assert game.state == "play"
@@ -218,7 +219,7 @@ def test_back_to_title_never_lands_on_quit(game):
 
 
 def test_quit_leaves_the_loop(game, monkeypatch):
-    # the real loop: A on QUIT (P1's dev key J) must return from run()
+    # the real loop: A on QUIT (P1's key B) must return from run()
     from superconductor import game as game_mod
 
     frames = []
@@ -230,6 +231,30 @@ def test_quit_leaves_the_loop(game, monkeypatch):
 
     monkeypatch.setattr(game_mod.Game, "draw_title", draw_title)
     game.menu_row = 2
-    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_j, mod=0, unicode="j", scancode=0))
-    game.run()
+    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_b, mod=0, unicode="b", scancode=0))
+    asyncio.run(game.run())
     assert game.quit_requested
+
+
+def test_in_the_browser_quit_goes_back_to_the_title(game, monkeypatch):
+    """A on QUIT tells the page and returns to the title instead of ending."""
+    from superconductor import game as game_mod
+
+    sent = []
+    browser = {"on": True}
+    monkeypatch.setattr(game_mod.runtime, "is_browser", lambda: browser["on"])
+    monkeypatch.setattr(game_mod.web, "post_event", lambda kind, game_id: sent.append(kind))
+    frames = []
+
+    def draw_title(self, S):
+        frames.append(1)
+        assert len(frames) < 60, "the loop didn't end"
+        if len(frames) == 20:  # a browser has no window to close, so stop being one to end the test
+            browser["on"] = False
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+
+    monkeypatch.setattr(game_mod.Game, "draw_title", draw_title)
+    game.menu_row = 2
+    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_b, mod=0, unicode="b", scancode=0))
+    asyncio.run(game.run())
+    assert sent == [game_mod.web.QUIT] and game.state == "title" and len(frames) >= 20

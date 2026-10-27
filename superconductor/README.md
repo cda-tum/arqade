@@ -108,6 +108,12 @@ uv run python -m superconductor.main --input-test   # live joystick/keyboard sta
 uv run pytest
 ```
 
+In the browser (pygbag's test server on http://localhost:8000), from the repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve superconductor
+```
+
 The game renders natively at 1920×1080, the cabinet panel's own resolution, so SDL never
 rescales it (see `../AGENTS.md`). Layout values in `game.py` are written for a 1280×720
 design and multiplied by `U = height / 720`. If the Pi can't keep up, set
@@ -117,13 +123,18 @@ screen opens the input test.
 
 ### Controls
 
-| | Cabinet pad | P1 keyboard | P2 keyboard |
+| | Pad | P1 keyboard | P2 keyboard |
 |---|---|---|---|
-| Draw route / step back | Stick | E S D F | Arrow keys |
-| Next station | A or R | J | `.` |
-| Previous station | L | I | N |
-| Other end of this pair | B | K | `,` |
-| Undo one step | X | U | M |
+| Draw route / step back | Stick or d-pad | W A S D | Arrow keys |
+| Next station | A or R | B or H | L or O |
+| Previous station | L | F | U |
+| Other end of this pair | B | V | K |
+| Undo one step | X | G | I |
+| Start / Select | Start / Select | Space / L-Shift | Enter / R-Shift |
+
+The keys are the layout shared by all the games (`../common`), the pad's 2x3 buttons on
+F G H / C V B and U I O / J K L; on-screen hints name the keys or the pad buttons,
+whichever each player last used.
 
 - Moving back the way you came also undoes one step. A Bell jump has no "way back" on the
   stick, so undo it with X. Reaching the partner commits the route automatically.
@@ -135,14 +146,18 @@ screen opens the input test.
   scripted scene played by the game's own rules, and the cabinet's 2x3 button cluster with
   the used buttons lit. Any button closes it (presses in the first 0.3 s are ignored, so
   the Start that picked the match can't skip it); that press does nothing in the match.
-- In-game, Start (or P) pauses. Select (or Esc) pauses too, and from the pause menu it
+- In-game, Start pauses. Select pauses too, and from the pause menu it
   goes back to the title.
 - **Quit:** QUIT on the title, or hold Start and Select together on either pad, or hold
-  Select (or press Esc) for 2 s on the title screen.
-- Start is raw 9 and Select raw 8, confirmed on the cabinet. B resumes from the pause menu
-  and leaves the game-over screen, per the cabinet's button convention (`../AGENTS.md`).
-- The keyboard is a dev fallback only. P1's keys avoid `l x r b y a`, which the cabinet's P1
-  encoder types too (see `../AGENTS.md`). On the cabinet the loader passes `--no-keyboard`.
+  Select for 2 s on the title screen. There is no quit key: Esc leaves fullscreen in a
+  browser, and the PC launcher's Esc ends the game on its own. In the browser, quitting
+  goes back to the title and tells the page around the game (`arqade:quit`).
+- B resumes from the pause menu and leaves the game-over screen, per the cabinet's button
+  convention (`../AGENTS.md`).
+- On the cabinet the loader passes `--no-keyboard` (Batocera types P1's pad as keystrokes
+  too, see `../AGENTS.md`). Pads use the cabinet's button numbers by default;
+  `--pad-layout xbox` reads an Xbox-style pad on a PC instead, and browser gamepads use the
+  browser's standard layout.
 
 High scores (per mode and chip, not for versus) are saved to
 `~/.superconductor_hiscores.json`, which is `/userdata/system/` on Batocera.
@@ -156,7 +171,7 @@ High scores (per mode and chip, not for versus) are saved to
 | `input.py` | Pad and keyboard to actions, with stick auto-repeat |
 | `tutorial.py` | The scripted scenes (title legend, HOW TO PLAY) and when a press closes the card |
 | `game.py` | Menus, drawing, sound and the main loop |
-| `config.py` | Input mapping and every tuning constant (speed, timers, ramp, scoring) |
+| `config.py` | Every tuning constant (speed, timers, ramp, scoring) |
 
 ## Deploy to the cabinet
 

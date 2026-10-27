@@ -65,3 +65,22 @@ def test_printed_start_confirms_and_printed_select_goes_back():
     inp = Input()
     inp.handle(pygame.event.Event(pygame.JOYBUTTONDOWN, button=8, joy=0, instance_id=0))
     assert inp.back and not inp.confirm
+
+
+def test_the_shared_keyboard_plays_and_a_quick_tap_still_counts():
+    """P1: B or H is next (A or R), V the other end (B), G undo (X), F previous
+    (L), Space Start. A key tapped within one frame still counts."""
+    from superconductor.input import Input
+
+    pygame.init()
+    inp = Input()
+    for key in (pygame.K_h, pygame.K_k, pygame.K_SPACE, pygame.K_d):
+        inp.handle(pygame.event.Event(pygame.KEYDOWN, key=key))
+    inp.update(1 / 60)
+    assert inp.hit("p1", "next") and inp.hit("p2", "other") and inp.confirm and inp.pause
+    assert inp.move["p1"] == "right"
+    inp.end_frame()
+    for key in (pygame.K_g, pygame.K_f):
+        inp.handle(pygame.event.Event(pygame.KEYDOWN, key=key))
+    inp.update(1 / 60)
+    assert inp.hit("p1", "undo") and inp.hit("p1", "prev") and not inp.hit("p1", "next")
