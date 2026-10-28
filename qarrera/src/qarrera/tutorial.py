@@ -20,6 +20,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import random
+from dataclasses import dataclass
 
 from qarrera import config
 from qarrera.camera import Director
@@ -49,6 +50,30 @@ CAPTIONS = {
 STICK_LINES = ("UP: FASTER", "DOWN: SLOWER", "LET GO: KEEPS ITS SPEED", "LEFT/RIGHT: CHANGE WIRE")
 BUTTON_LINES = ("X: FASTER   B: SLOWER", "Y / A: WIRE LEFT / RIGHT")
 
+
+def stick_key_lines(up: str, down: str, left: str, right: str) -> tuple[str, ...]:
+    """STICK_LINES when someone plays on the keyboard: the keys' names (e.g.
+    "W/UP") in place of the stick's directions."""
+    return (f"{up}: FASTER", f"{down}: SLOWER", "LET GO: KEEPS ITS SPEED", f"{left}, {right}: CHANGE WIRE")
+
+
+def button_key_lines(x: str, b: str, y: str, a: str) -> tuple[str, ...]:
+    """BUTTON_LINES with the keys' names for the X B Y A buttons."""
+    return (f"{x}: FASTER   {b}: SLOWER", f"{y}: WIRE LEFT", f"{a}: WIRE RIGHT")
+
+
+@dataclass(frozen=True)
+class Side:
+    """What the card calls one side's controls: the left or the right pad
+    (or half of the keyboard), its stick, and its X Y B A buttons."""
+
+    whole: str
+    stick: str
+    buttons: str
+
+
+PAD_SIDES = (Side("LEFT PAD", "LEFT STICK", "BUTTONS"), Side("RIGHT PAD", "RIGHT STICK", "BUTTONS"))
+
 _starts: dict[str, tuple[float, int, int]] = {}
 
 
@@ -58,16 +83,19 @@ def goal_lines(target: int) -> tuple[str, ...]:
             "FALL OFF THE SCREEN: BACK IN LAST.")
 
 
-def pad_lines(humans: int) -> tuple[tuple[tuple[str, str | None], ...], ...]:
+def pad_lines(humans: int, sides: tuple[Side, Side] = PAD_SIDES) -> tuple[tuple[tuple[str, str | None], ...], ...]:
     """Who drives with which pad, as lines of (text, player whose colour it
-    is in, or None for plain): the same split as config.CONTROLS."""
+    is in, or None for plain): the same split as config.CONTROLS. `sides`
+    names the left and the right side's controls (pads, or keys)."""
+    left, right = sides
     if humans == 1:
-        return ((("EITHER PAD: ", None), ("P1", "p1")),)
+        either = "EITHER PAD" if sides == PAD_SIDES else f"{left.whole} OR {right.whole}"
+        return (((f"{either}: ", None), ("P1", "p1")),)
     if humans == 2:
-        return ((("LEFT PAD: ", None), ("P1", "p1"), ("  RIGHT PAD: ", None), ("P2", "p2")),)
-    right = ((("RIGHT PAD: ", None), ("P2", "p2")) if humans == 3 else
-             (("RIGHT STICK: ", None), ("P2", "p2"), (" BUTTONS: ", None), ("P4", "p4")))
-    return ((("LEFT STICK: ", None), ("P1", "p1"), (" BUTTONS: ", None), ("P3", "p3")), right)
+        return (((f"{left.whole}: ", None), ("P1", "p1"), (f"  {right.whole}: ", None), ("P2", "p2")),)
+    second = (((f"{right.whole}: ", None), ("P2", "p2")) if humans == 3 else
+              ((f"{right.stick}: ", None), ("P2", "p2"), (f" {right.buttons}: ", None), ("P4", "p4")))
+    return (((f"{left.stick}: ", None), ("P1", "p1"), (f" {left.buttons}: ", None), ("P3", "p3")), second)
 
 
 def demo_start(track: Track) -> tuple[float, int, int]:

@@ -10,6 +10,7 @@ frame is drawn into a 960x540 target, then scaled onto the window.
 from __future__ import annotations
 
 import ctypes
+import sys
 
 import numpy as np
 import pygame
@@ -198,6 +199,21 @@ FLAT_ATTRS = ((0, 3), (1, 2), (2, 4))
 assert sum(s for _, s in LIT_ATTRS) == STRIDE
 
 
+# A 32-bit surface with these masks holds its pixels in RGBA byte order (on a
+# little-endian machine: the Pi, a PC, WebAssembly), as GL takes them.
+RGBA_MASKS = (0xFF, 0xFF00, 0xFF0000, 0xFF000000)
+
+
+def rgba_bytes(surface: pygame.Surface) -> bytes:
+    """The surface's pixels as RGBA bytes: a plain copy when it holds them
+    that way already, else converted by pygame.image.tobytes, which takes
+    about 2 ms for the 960x540 HUD layer in the browser."""
+    if (sys.byteorder == "little" and surface.get_bitsize() == 32 and surface.get_masks() == RGBA_MASKS
+            and surface.get_pitch() == surface.get_width() * 4):
+        return surface.get_buffer().raw
+    return pygame.image.tobytes(surface, "RGBA")
+
+
 class Texture:
     def __init__(self, surface: pygame.Surface, smooth: bool = False, repeat: bool = False) -> None:
         self.id = GL.glGenTextures(1)
@@ -210,7 +226,7 @@ class Texture:
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, wrap)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, wrap)
         GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, self.size[0], self.size[1], 0, GL.GL_RGBA,
-                        GL.GL_UNSIGNED_BYTE, pygame.image.tostring(surface, "RGBA"))
+                        GL.GL_UNSIGNED_BYTE, rgba_bytes(surface))
 
     def update(self, surface: pygame.Surface, rect: pygame.Rect | None = None) -> None:
         """Upload the surface again; with rect, just that part of it."""
@@ -219,7 +235,7 @@ class Texture:
             rect = pygame.Rect((0, 0), self.size)
         rect = rect.clip(pygame.Rect((0, 0), self.size))
         if rect.w and rect.h:
-            data = pygame.image.tostring(surface.subsurface(rect), "RGBA")
+            data = rgba_bytes(surface if rect.size == surface.get_size() else surface.subsurface(rect))
             GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, rect.x, rect.y, rect.w, rect.h, GL.GL_RGBA,
                                GL.GL_UNSIGNED_BYTE, data)
 
@@ -259,4 +275,4 @@ class Target:
         """What is in it, as a pygame surface (for screenshots and the reels)."""
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, self.fbo)
         data = GL.glReadPixels(0, 0, self.size[0], self.size[1], GL.GL_RGBA, GL.GL_UNSIGNED_BYTE)
-        return pygame.image.fromstring(bytes(data), self.size, "RGBA", True)
+        return pygame.image.frombytes(bytes(data), self.size, "RGBA", True)

@@ -299,6 +299,13 @@ class Match:
         self.paused = False
         self._set_state(TITLE)
 
+    def back_to_title(self) -> None:
+        """Back on the title after a quit that had nowhere to go (the browser),
+        with the settings kept and QUIT no longer picked."""
+        self.quit = False
+        self.row = 0
+        self._to_title()
+
     def _on_title(self, inp: FrameInput, events: list) -> None:
         if inp.nav in ((0, -1), (0, 1)):
             self.row = (self.row + inp.nav[1]) % len(MENU_ROWS)

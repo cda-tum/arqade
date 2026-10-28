@@ -4,10 +4,31 @@ version = "0.1.0"
 description = "Slot-car racing on the wires of a quantum circuit: set your speed, change wires, and every power-up is a gate"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
+# pygame-ce on PCs and in the browser (pygbag only has pygame-ce). The cabinet
+# keeps Batocera's own pygame 2.5.2, so the code sticks to what both offer.
+# numpy and PyOpenGL are not on the cabinet: deploy_batocera.sh brings them.
 dependencies = [
+    "pygame-ce>=2.5.6",
     "numpy==1.26.4",
-    "pygame==2.5.2",
     "pyopengl==3.1.10",
+    "arqade-common",
+]
+
+[tool.uv.sources]
+arqade-common = { path = "../common", editable = true }
+
+# The browser build (../tools/build_web.py): numpy is installed from pygbag's
+# package repository as the game starts, PyOpenGL (pure Python) is bundled.
+[tool.arqade.web]
+packages = ["numpy"]
+bundle = ["pyopengl==3.1.10"]
+# Of PyOpenGL's ~2900 files, only the parts `from OpenGL import GL` uses (its
+# core and the ARB and KHR extensions): pygbag unpacks every file as the game
+# starts, and all of them took 5 s.
+bundle_only = [
+    "OpenGL/*.py", "OpenGL/arrays", "OpenGL/platform",
+    "OpenGL/GL/*.py", "OpenGL/GL/VERSION", "OpenGL/GL/ARB", "OpenGL/GL/KHR",
+    "OpenGL/raw/*.py", "OpenGL/raw/GL/*.py", "OpenGL/raw/GL/VERSION", "OpenGL/raw/GL/ARB", "OpenGL/raw/GL/KHR",
 ]
 
 [build-system]

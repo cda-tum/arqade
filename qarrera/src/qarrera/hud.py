@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 
 import pygame
+from arqade_common.input import KEYBOARD, PAD, LastDevice
 
 from qarrera import config, racers, tutorial
 from qarrera.fonts import load_font
@@ -26,6 +27,11 @@ SUFFIX = {1: "ST", 2: "ND", 3: "RD"}
 OFF = (34, 38, 64)  # an unused button, an empty bar
 # The cabinet's 2x3 buttons as printed, and what each does in a race (None: unused)
 CLUSTER = (("L", None), ("X", "FASTER"), ("R", None), ("Y", "LEFT"), ("B", "SLOWER"), ("A", "RIGHT"))
+# The left and the right pad, or half of the keyboard each ("p1" and "p2" in
+# arqade_common's device memory). With 3 or 4 people, P3 and P4 share them.
+SIDES = ("p1", "p2")
+KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}  # the keys that stand in for each side's stick
+KEYBOARD_SIDES = {"p1": "LEFT KEYS", "p2": "RIGHT KEYS"}
 
 
 def ordinal(i: int) -> str:
@@ -63,7 +69,10 @@ def panel_model_box(rect: pygame.Rect) -> pygame.Rect:
 
 
 class Hud:
-    def __init__(self) -> None:
+    def __init__(self, devices: LastDevice | None = None) -> None:
+        # Which side of the keyboard or which pad was used last, so the hints
+        # name what each side is holding.
+        self.devices = devices or LastDevice()
         self.font8 = load_font(8)
         self.font16 = load_font(16)
         self.font32 = load_font(32)
@@ -96,6 +105,35 @@ class Hud:
         s.fill(config.COLOR_PANEL + (235,), r)
         pygame.draw.rect(s, border, r, 2)
         return r
+
+    # --- button names ---------------------------------------------------------------------
+
+    def name(self, control: str, side: str | None = None, sep: str = " / ") -> str:
+        """A control's on-screen name for one side's device ("p1" the left
+        pad or keys, "p2" the right), or for both sides' when `side` is None,
+        e.g. "SPACE / ENTER", or "START" when both are on pads. "stick" is the
+        stick or the direction keys, "face" the X Y B A buttons that steer."""
+        if side is None:
+            return sep.join(dict.fromkeys(self.name(control, s) for s in SIDES))
+        on_keys = self.devices[side] == KEYBOARD
+        if control == "stick":
+            return KEYBOARD_STICKS[side] if on_keys else "STICK"
+        if control == "face":
+            return " ".join(self.devices.label(b, side) for b in ("x", "y", "b", "a"))
+        return self.devices.label(control, side)
+
+    def ways(self, pad: str, first: str, second: str) -> str:
+        """Two directions on every side, e.g. "STICK UP / DOWN" on pads, or
+        "W / S OR UP / DOWN" on both halves of the keyboard."""
+        names = (f"{pad}{first.upper()} / {second.upper()}" if self.devices[side] == PAD else
+                 f"{self.name(first, side)} / {self.name(second, side)}" for side in SIDES)
+        return " OR ".join(dict.fromkeys(names))
+
+    def sides(self) -> tuple[tutorial.Side, tutorial.Side]:
+        """The HOW TO PLAY card's names for the left and the right controls."""
+        return tuple(tutorial.Side(KEYBOARD_SIDES[side], KEYBOARD_STICKS[side], self.name("face", side))
+                     if self.devices[side] == KEYBOARD else pads
+                     for side, pads in zip(SIDES, tutorial.PAD_SIDES))
 
     # --- the whole layer ----------------------------------------------------------------------
 
@@ -224,7 +262,8 @@ class Hud:
             self.center(s, self.text(line, self.font8, config.color_of(player), False), y)
             y += 18
         if match.t >= config.RESULT_LOCK:
-            self.center(s, self.text("A: REMATCH   B: TITLE", self.font8, config.COLOR_TEXT), r.bottom + 8)
+            hint = f"{self.name('a')}: REMATCH   {self.name('b')}: TITLE"
+            self.center(s, self.text(hint, self.font8, config.COLOR_TEXT), r.bottom + 8)
 
     def pause(self, s: pygame.Surface, match: Match) -> None:
         s.fill((4, 5, 12, 150), (0, 0, W, H))
@@ -264,13 +303,13 @@ class Hud:
         y += 6
         for line in ("LEAD THE PACK: EVERY SECOND IN FRONT COUNTS",
                      "OFF THE SCREEN: BACK IN AT THE BACK OF THE PACK",
-                     "STICK UP / DOWN: FASTER / SLOWER, AND IT STAYS",
-                     "LEFT / RIGHT: CHANGE WIRE",
-                     "3-4 PLAYERS: P3 + P4 USE X Y B A"):
+                     f"{self.ways('STICK ', 'up', 'down')}: FASTER / SLOWER, AND IT STAYS",
+                     f"{self.ways('', 'left', 'right')}: CHANGE WIRE",
+                     f"3-4 PLAYERS: P3 + P4 USE {self.name('face')}"):
             self.center(s, self.text(line, self.font8, config.COLOR_DIM, False), y)
             y += 13
         if int(self.time * 2) % 2:
-            self.center(s, self.text("PRESS START", self.font16, WHITE, False), r.bottom - 30)
+            self.center(s, self.text(f"PRESS {self.name('start')}", self.font16, WHITE, False), r.bottom - 30)
 
     def select(self, s: pygame.Surface, match: Match) -> None:
         """Frames and words; the racers turn in 3D underneath, in the boxes."""
@@ -304,10 +343,13 @@ class Hud:
                     s.fill(color if k < value else (34, 38, 64), cell)
                 by += 15 if wide else 11
             locked = p in match.locked
-            hint = ("READY!" if locked else "A: LOCK IN") if match.humans <= 2 else "START: GO"
+            side = p if match.humans == 2 else None  # alone, either side locks in
+            hint = (("READY!" if locked else f"{self.name('a', side)}: LOCK IN") if match.humans <= 2
+                    else f"{self.name('start')}: GO")
             img = self.text(hint, self.font8, GOLD_TEXT if locked else config.COLOR_DIM, False)
             s.blit(img, img.get_rect(bottomright=(rect.right - 8, rect.bottom - 8)))
-        self.center(s, self.text("STICK: CHOOSE   START: RACE   B: BACK", self.font8, config.COLOR_DIM, False), H - 13)
+        hint = f"{self.name('stick')}: CHOOSE   {self.name('start')}: RACE   {self.name('b')}: BACK"
+        self.center(s, self.text(hint, self.font8, config.COLOR_DIM, False), H - 13)
 
     # --- the HOW TO PLAY card -------------------------------------------------------------------
 
@@ -333,23 +375,29 @@ class Hud:
         s.blit(self.text("CONTROLS", self.font16, GOLD_TEXT, False), (x0, y))
         y += 28
         self.stick(s, x0 + 24, y + 22)
-        for i, line in enumerate(tutorial.STICK_LINES):
+        pads = self.devices.everyone_on(PAD)
+        stick_lines = tutorial.STICK_LINES if pads else tutorial.stick_key_lines(
+            *(self.name(d, sep="/") for d in ("up", "down", "left", "right")))
+        for i, line in enumerate(stick_lines):
             s.blit(self.text(line, self.font8, config.COLOR_TEXT, False), (x0 + 64, y + 4 + 15 * i))
         y += 62
         for i, (label, action) in enumerate(CLUSTER):
             c = (x0 + 12 + (i % 3) * 26, y + 12 + (i // 3) * 26)
             pygame.draw.circle(s, INK, c, 12)
             pygame.draw.circle(s, GOLD_TEXT if action else OFF, c, 11)
-            img = self.text(label, self.font8, INK if action else config.COLOR_DIM, False)
+            # the left side's: the printed letters, or its keys
+            img = self.text(self.name(label.lower(), "p1"), self.font8, INK if action else config.COLOR_DIM, False)
             s.blit(img, img.get_rect(center=(c[0] + 1, c[1] + 1)))
-        for i, line in enumerate(tutorial.BUTTON_LINES):
+        button_lines = tutorial.BUTTON_LINES if pads else tutorial.button_key_lines(
+            *(self.name(b, sep="/") for b in ("x", "b", "y", "a")))
+        for i, line in enumerate(button_lines):
             s.blit(self.text(line, self.font8, config.COLOR_TEXT, False), (x0 + 88, y + 8 + 15 * i))
         y += 66
-        img = self.text("START", self.font8, GOLD_TEXT, False)
+        img = self.text(self.name("start"), self.font8, GOLD_TEXT, False)
         s.blit(img, (x0, y))
         s.blit(self.text(": PAUSE", self.font8, config.COLOR_TEXT, False), (x0 + img.get_width(), y))
         y += 22
-        for line in tutorial.pad_lines(match.humans):
+        for line in tutorial.pad_lines(match.humans, self.sides()):
             x = x0
             for text, player in line:
                 img = self.text(text, self.font8, config.color_of(player) if player else config.COLOR_DIM, False)
@@ -357,7 +405,8 @@ class Hud:
                 x += img.get_width()
             y += 14
         if int(self.time * 2) % 2 == 0:
-            self.center(s, self.text("PRESS ANY BUTTON TO START", self.font16, WHITE), H - 48)
+            prompt = "PRESS ANY KEY TO START" if self.devices.everyone_on(KEYBOARD) else "PRESS ANY BUTTON TO START"
+            self.center(s, self.text(prompt, self.font16, WHITE), H - 48)
 
     def tutorial_demo(self, s: pygame.Surface, box: pygame.Rect, demo, popups: list,
                       lead_mark: tuple | None) -> None:
