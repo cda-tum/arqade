@@ -495,6 +495,20 @@ the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Dro
   load pygame-ce (the build script's generated `main.py` does). A quick key
   tap from a test script can be missed by games that poll held keys; hold
   keys for a few frames when automating.
+- **Releases:** the "Release web games" workflow (`.github/workflows/release.yml`,
+  run by hand from the Actions tab with a version like `1.2.0`) tests every
+  ported game on pygame-ce and pygame 2.5.2, builds them all and publishes
+  release `v<version>` with one asset, `arqade-games-<version>.zip`. The
+  release notes give the version and sha256 for the website's
+  `games.config.json`. GitHub only offers the button once the workflow file
+  is on the default branch.
+- **The Python runtime ships in the bundle** (`_runtime/`, about 25 MB, shared
+  by all games) instead of loading from pygame-web.github.io, so players'
+  browsers only talk to the site hosting the games. `RUNTIME_FILES` in
+  `tools/build_web.py` lists the files; after a pygbag upgrade, or if a game
+  needs a new pygbag package (numpy, say), run every game once and look for
+  404s under `_runtime/`. Folders starting with `_` in the bundle are shared
+  files, not games.
 - **What the build script changes in pygbag's page** (`tools/build_web.py`):
   the game is scaled by whole device pixels (2x, 3x, ...; pygbag's own
   sizing stretches to any factor, which makes pixel art ragged), the game

@@ -1,0 +1,102 @@
+# Release the browser builds of the games.
+#
+# Run it from the Actions tab ("Run workflow") with a version such as 1.2.0.
+# It tests every ported game (a game with a game.json) on pygame-ce and on
+# the cabinet's pygame 2.5.2, builds them all with pygbag
+# (tools/build_web.py), and publishes GitHub release v<version> with one
+# asset, arqade-games-<version>.zip: one folder per game plus _runtime/, the
+# Python runtime the games share. A website pins a version and downloads that
+# zip at build time.
+name: Release web games
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 1.2.0 (creates tag v1.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ inputs.version }}
+  # The tests open pygame displays and mixers; there is no screen or sound card.
+  SDL_VIDEODRIVER: dummy
+  SDL_AUDIODRIVER: dummy
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Version is new and looks like 1.2.3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must look like 1.2.3"; exit 1; }
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release v$VERSION already exists"; exit 1
+          fi
+
+  test:
+    needs: check-version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # pygame-ce runs the games on PCs and in the browser; the cabinet keeps
+        # Batocera's pygame 2.5.2, so the code must work with both.
+        pygame: [pygame-ce, cabinet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Tests on pygame-ce
+        if: matrix.pygame == 'pygame-ce'
+        run: |
+          for dir in common $(dirname */game.json); do
+            echo "::group::$dir"
+            (cd "$dir" && uv run pytest -q)
+            echo "::endgroup::"
+          done
+      - name: Tests on pygame 2.5.2 (the cabinet's)
+        if: matrix.pygame == 'cabinet'
+        run: |
+          uv venv -p 3.11 "$RUNNER_TEMP/cabinet"
+          uv pip install --python "$RUNNER_TEMP/cabinet" pygame==2.5.2 pytest
+          for dir in common $(dirname */game.json); do
+            echo "::group::$dir"
+            (cd "$dir" && PYTHONPATH=src:../common/src "$RUNNER_TEMP/cabinet/bin/python" -m pytest -q -p no:cacheprovider)
+            echo "::endgroup::"
+          done
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build every game for the browser
+        run: uv run --project tools tools/build_web.py --version "$VERSION"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip="build/arqade-games-$VERSION.zip"
+          sha=$(sha256sum "$zip" | cut -d' ' -f1)
+          games=$(unzip -Z1 "$zip" | grep -E '^[a-z0-9-]+/game\.json$' | cut -d/ -f1 | paste -sd ' ')
+          cat > notes.md <<EOF
+          Browser builds of: $games
+
+          To use it on the website, set in \`games.config.json\`:
+
+          \`\`\`json
+          "version": "$VERSION",
+          "sha256": "$sha"
+          \`\`\`
+          EOF
+          gh release create "v$VERSION" "$zip" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Arqade games $VERSION" --notes-file notes.md
