@@ -1,6 +1,7 @@
 import random
 
 import pytest
+from arqade_common.input import ENCODER
 
 from qarrera import config, racers, tutorial
 from qarrera.match import COUNTDOWN, MATCH_END, MENU_ROWS, RACE, SELECT, TITLE, TUTORIAL, FrameInput, Match, controls_for
@@ -392,17 +393,17 @@ def test_a_locks_in_the_racer_under_the_cursor_and_does_not_move_it(humans, pad)
     from qarrera.input import Input
 
     pygame.init()
-    inp = Input()
+    inp = Input(ENCODER)
     pads = [FakePad(), FakePad()]
-    inp.joysticks = pads
+    inp.pads.pad = lambda slot: pads[slot]  # the fakes are the left and the right pad
     m = to_select(humans)
     player = "p1" if humans == 1 or pad == 0 else "p2"
     before = dict(m.picks)
-    press_raw(m, inp, pads, pad, config.INPUT_CONFIG["system"]["confirm_buttons"][0])
+    press_raw(m, inp, pads, pad, ENCODER.buttons["a"])
     assert player in m.locked and m.picks == before
-    press_raw(m, inp, pads, pad, config.INPUT_CONFIG["system"]["back_buttons"][0])  # B unlocks, nothing moves
+    press_raw(m, inp, pads, pad, ENCODER.buttons["b"])  # B unlocks, nothing moves
     assert player not in m.locked and m.picks == before and m.state == SELECT
-    for raw in config.INPUT_CONFIG["pads"][pad]["buttons"]["up"] + config.INPUT_CONFIG["pads"][pad]["buttons"]["left"]:
+    for raw in (ENCODER.buttons["x"], ENCODER.buttons["y"]):
         press_raw(m, inp, pads, pad, raw)  # X and Y don't steer the cursor either: the stick does
     assert m.picks == before
 
@@ -413,14 +414,33 @@ def test_with_three_people_the_button_player_still_steers_with_the_buttons():
     from qarrera.input import Input
 
     pygame.init()
-    inp = Input()
+    inp = Input(ENCODER)
     pads = [FakePad(), FakePad()]
-    inp.joysticks = pads
+    inp.pads.pad = lambda slot: pads[slot]
     m = to_select(3)
     p3 = m.picks["p3"]
-    press_raw(m, inp, pads, 0, config.INPUT_CONFIG["pads"][0]["buttons"]["right"][0])  # A: P3's "right"
+    press_raw(m, inp, pads, 0, ENCODER.buttons["a"])  # A: P3's "right"
     from qarrera.match import SELECT_COLS
 
     n = len(racers.ROSTER)
     col = (p3 % SELECT_COLS + 1) % SELECT_COLS
     assert m.picks["p3"] == min(n - 1, (p3 // SELECT_COLS) * SELECT_COLS + col) and not m.locked
+
+
+# --- the HOW TO PLAY card names pads or keys ------------------------------------------------------
+
+def _plain(lines):
+    return ["".join(text for text, _player in line) for line in lines]
+
+
+def test_the_card_says_which_pad_drives_whom():
+    assert _plain(tutorial.pad_lines(1)) == ["EITHER PAD: P1"]
+    assert _plain(tutorial.pad_lines(2)) == ["LEFT PAD: P1  RIGHT PAD: P2"]
+    assert _plain(tutorial.pad_lines(4)) == ["LEFT STICK: P1 BUTTONS: P3", "RIGHT STICK: P2 BUTTONS: P4"]
+
+
+def test_on_the_keyboard_the_card_names_the_keys():
+    keys = (tutorial.Side("LEFT KEYS", "WASD", "G C V B"), tutorial.Side("RIGHT KEYS", "ARROWS", "I J K L"))
+    assert _plain(tutorial.pad_lines(1, keys)) == ["LEFT KEYS OR RIGHT KEYS: P1"]
+    assert _plain(tutorial.pad_lines(3, keys)) == ["WASD: P1 G C V B: P3", "RIGHT KEYS: P2"]
+    assert tutorial.stick_key_lines("W/UP", "S/DOWN", "A/LEFT", "D/RIGHT")[3] == "A/LEFT, D/RIGHT: CHANGE WIRE"

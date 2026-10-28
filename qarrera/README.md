@@ -22,7 +22,8 @@ slot-car tracks.
 - the lead as the score, and resets for whoever falls off the screen;
 - boost pads, jumps, and gates that come and go;
 - sound effects;
-- `--input-test` and a deploy script.
+- `--input-test` and a deploy script;
+- the browser, from the same code (pygbag, WebGL 2; see "In the browser").
 
 Its logo is `../batocera/logos/logo_qarrera.py`, and its menu entry is in
 `../batocera/gamelist.xml`. It has no clips in the attract reels yet (see
@@ -40,7 +41,8 @@ below).
   - TRACK.
   - LEAD: the seconds in front that win, 30, 60 or 90.
   - QUIT: A here leaves the game, back to the cabinet's menu (or the PC
-    launcher's). Start still starts, and B does nothing on the title.
+    launcher's; in the browser, back to the title). Start still starts, and
+    B does nothing on the title.
 
   The default is one player against 3 EASY bots, first to 60 s in front.
 - **Racer select:** like Mario Kart's. Everyone moves their own cursor over
@@ -115,9 +117,24 @@ Who drives with what depends on the number of people:
 That's the same split as in Qurves. A person's racer rides on a ring in
 their colour, so it stands out among the bots.
 
-Keyboard (dev only; the cabinet passes `--no-keyboard`):
-- P1: W A S D. P3: T F G H. P2: I J K L. P4: the arrow keys.
-- Enter starts (and locks P1 in), Backspace goes back, P pauses, Esc quits.
+On the keyboard each side is a pad, with the layout shared by all the games
+(`../common`): the left side's stick is W A S D and its X Y B A buttons
+G C V B, the right side's are the arrows and I J K L. So with 3 or 4 people,
+P1 drives with W A S D, P3 with G C V B, P2 with the arrows and P4 with
+I J K L.
+
+| | Left side | Right side |
+|---|---|---|
+| Stick | W A S D | arrows |
+| X Y B A (faster, wire left, slower, wire right) | G C V B | I J K L |
+| Start (start, pause) | Space | Enter |
+| Select (with Start: quit) | Left Shift | Right Shift |
+
+A on the keyboard (B, or L) confirms menus and locks a racer in, B (V, or K)
+goes back. On-screen hints name the keys or the pad buttons, whichever each
+side last used. There is no quit key (Esc leaves fullscreen in a browser).
+The cabinet passes `--no-keyboard`, and `--pad-layout xbox` reads an
+Xbox-style pad on a PC.
 
 ## Leading and resets
 
@@ -427,7 +444,8 @@ hum on purpose: it would grate on a public cabinet.
 | `hud.py` | The 2D layer: HUD, popups, warnings, scoreboards, title, racer select, the HOW TO PLAY card, pause. |
 | `render.py` | Everything drawn each frame, in 3D and on the layer. |
 | `sound.py` | The synthesized sound effects. |
-| `input.py` | Pads and the dev keyboard into a `FrameInput`. |
+| `input.py` | Pads and the keyboard (through `../common`'s `arqade_common.input`) into a `FrameInput`. |
+| `webgl.py` | PyOpenGL's platform in the browser: GL from WebGL. |
 | `tools/snapshot.py` | Renders the title, the racer select, the HOW TO PLAY card, every track mid-race and a match result to PNGs, headless with real OpenGL. |
 | `tools/balance.py` | The roster's balance check. |
 
@@ -467,3 +485,35 @@ other games' (the first time, ES then needs a restart to list it, and
 game was experimental, its loader parked at
 `/userdata/games/qircuit/qircuit.pygame`; the deploy removes that old folder
 and any experimental-mode link to it, and keeps its vendored wheels.
+
+### In the browser
+
+```bash
+uv run --project tools tools/build_web.py --serve qarrera   # from the repo root: http://localhost:8000
+```
+
+The browser build (pygbag) runs the same code, PyOpenGL and numpy included:
+- **OpenGL:** pygame-ce opens a WebGL 2 context for the OpenGL ES 3.0 that
+  `gfx.open_window` asks for, and the ES shaders run on it unchanged.
+  PyOpenGL loads its GL functions with ctypes, as on the cabinet, from the
+  running WebAssembly module itself (`webgl.py`, registered in
+  `__init__.py`). There it skips `glGetError` after each call, which in
+  WebGL costs about 0.2 ms.
+- **numpy** comes from pygbag's own package repository (2.0.2, a 3 MB
+  download); `tools/build_web.py` installs it as the game starts, once SDL's
+  video is up, because SDL finds no display if numpy loads first.
+  **PyOpenGL** is pure Python and goes into the game's archive, only the
+  parts `OpenGL.GL` uses (`[tool.arqade.web]` in `pyproject.toml`).
+- WebGL is stricter than desktop GL and GLES: drawing into the 960x540 target
+  while its own texture is still bound fails there ("feedback loop"), so
+  `Renderer.present` unbinds it.
+- The window is the 960x540 frame itself; the page scales it.
+- Quitting (Start + Select, or QUIT on the title) goes back to the title and
+  tells the page around the game (`arqade:quit`); `arqade:game-start` and
+  `arqade:game-end` go out around a race.
+
+Measured in Edge on a laptop (2026-10-28): 60 fps on the title and in a race
+with bots (a frame's Python takes about 11 ms there; on a busy machine it
+drops to about 45), first frame about 8 s after the page opens with nothing
+cached. The extra download over a pygame-only game is about 3.3 MB: numpy
+(2.9 MB) and PyOpenGL, which makes the game's own archive 0.4 MB.

@@ -28,9 +28,10 @@ import random
 
 import numpy as np
 import pygame
+from arqade_common.input import LastDevice
 from OpenGL import GL
 
-from qarrera import camera, config, mesh, voxels
+from qarrera import camera, config, gfx, mesh, voxels
 from qarrera.art import Atlas
 from qarrera.camera import gl
 from qarrera.fonts import load_font
@@ -83,7 +84,7 @@ class World:
 
 
 class Renderer:
-    def __init__(self, window_size: tuple[int, int], es: bool) -> None:
+    def __init__(self, window_size: tuple[int, int], es: bool, devices: LastDevice | None = None) -> None:
         self.window_size = window_size
         self.target = Target(W, H)
         self.lit = Program(es, LIT_VS, LIT_FS)
@@ -107,8 +108,9 @@ class Renderer:
         flipped = quad.copy()
         flipped[:, 4] = 1 - flipped[:, 4]
         self.screen_flipped = Mesh(flipped, FLAT_ATTRS)
-        self.hud = Hud()
-        self.layer = pygame.Surface((W, H), pygame.SRCALPHA)
+        self.hud = Hud(devices)  # devices: what each side last used, for the button hints
+        # in RGBA byte order, so the texture upload can take its pixels as they are (gfx.Texture.update)
+        self.layer = pygame.Surface((W, H), pygame.SRCALPHA, 32, gfx.RGBA_MASKS)
         self.layer_tex = Texture(self.layer)
         self.popups: list[list] = []  # [x, y, z, text, color, age] in the world
         self.smoke: list[list] = []  # [x, y, z, age, rgb, size]
@@ -198,6 +200,9 @@ class Renderer:
         GL.glBindTexture(GL.GL_TEXTURE_2D, self.target.tex)
         self.flat.int("u_tex", 0)
         self.screen_flipped.draw()
+        # Unbound again: drawing into the target while its own texture is bound
+        # is an error in WebGL ("feedback loop"), even where nothing samples it.
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
         GL.glEnable(GL.GL_DEPTH_TEST)
 
     def snapshot(self) -> pygame.Surface:
@@ -288,8 +293,9 @@ class Renderer:
                                STREAK, 0.4])
 
     def _gate_beams(self, race) -> None:
-        """A glowing bar between a SWAP's or CNOT's two wires, hovering."""
-        parts = []
+        """A glowing bar between a SWAP's or CNOT's two wires, hovering. All
+        gates' bars in one mesh.quads: each numpy call has its overhead."""
+        corners = []
         for g in race.gates:
             if self._hidden(g.age, g.life):
                 continue
@@ -301,8 +307,13 @@ class Renderer:
             tx, ty = -dy / n * 1.2, dx / n * 1.2
             a, b = gl(x0 + tx, y0 + ty, z), gl(x1 + tx, y1 + ty, z)
             c, d = gl(x1 - tx, y1 - ty, z), gl(x0 - tx, y0 - ty, z)
-            parts.append(mesh.quads(a, b, c, d, (0, 0, 1), mesh.rgb(config.CNOT_COLOR), glow=0.7))
-        self.beams.set(np.concatenate(parts) if parts else np.zeros((0, mesh.STRIDE), np.float32))
+            corners.append((a, b, c, d))
+        if corners:
+            q = np.asarray(corners, dtype=np.float32)
+            self.beams.set(mesh.quads(q[:, 0], q[:, 1], q[:, 2], q[:, 3], (0, 0, 1), mesh.rgb(config.CNOT_COLOR),
+                                      glow=0.7))
+        else:
+            self.beams.set(np.zeros((0, mesh.STRIDE), np.float32))
 
     def _hidden(self, age: float, life: float) -> bool:
         """A gate in its last GATE_FADE seconds blinks."""

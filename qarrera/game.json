@@ -1,0 +1,23 @@
+{
+  "id": "qarrera",
+  "title": "Qarrera",
+  "tagline": "Slot-car racing in 3D on the wires of a quantum circuit: lead the pack, every second in front counts.",
+  "description": "Race on the four wires of a quantum circuit against up to seven others, people or computer racers at three levels. Set your speed and change wires to pass; the leader scores, and the first to 30, 60 or 90 seconds in front wins. Fall off the screen and you are put back in at the back of the pack. The gates on the track are power-ups: a SWAP trades wires, a CNOT copies your racer for an extra life, ERR fires an error bug down your wire and ZENO drops a trap behind you. Ten racers from the other Arqade games, three tracks, for 1 to 4 players.",
+  "players": "1-4",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W / S faster and slower, A / D to change wire (or G V C B), Space to pause",
+      "p2": "Up / Down faster and slower, Left / Right to change wire (or I K J L), Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Up and down set the speed your racer holds; left and right change to the next wire.",
+    "Be in front: every second in the lead counts, and the first to the target wins.",
+    "Tuck in behind a racer for a slipstream, then pull out and pass.",
+    "Off the screen, you are put back in at the back of the pack.",
+    "With 3 or 4 players, each pad's stick is one player and its X Y B A buttons another.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

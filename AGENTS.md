@@ -457,7 +457,7 @@ as long as it keeps to what the existing ones do:
 ## Browser build (pygbag) and shared code (`common/`, `tools/`)
 
 The games also run in the browser, compiled to WebAssembly by pygbag, from
-the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Drop, Qurves, Pauli Invaders (error-invaders), Superconductor, Ion Surfer, Quantum Towers, Overquqed, Brawl-Ket, Gate Prix (the 2D Classic; not Gate Prix 2).
+the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Drop, Qurves, Pauli Invaders (error-invaders), Superconductor, Ion Surfer, Quantum Towers, Overquqed, Brawl-Ket, Gate Prix (the 2D Classic; not Gate Prix 2), Qarrera.
 
 - **pygame-ce on PCs and in the browser, pygame 2.5.2 on the cabinet.**
   pygbag only has pygame-ce, and the cabinet has no pip, so a ported game
@@ -494,6 +494,30 @@ the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Dro
   `build/arqade-games-<version>.zip` (one folder per game);
   `--serve <game>` runs one game on pygbag's test server (localhost:8000,
   add `#debug` to the URL for the Python console). `build/` is git-ignored.
+- **More than pygame (Qarrera: numpy and OpenGL).** A game lists what else
+  it needs under `[tool.arqade.web]` in its `pyproject.toml`: `packages`
+  from pygbag's own repository (numpy 2.0.2, a 3 MB download; it also has
+  zengl, pyglm, pymunk, ...), `bundle` for pure-Python packages from PyPI
+  copied into the game's archive, `bundle_only` to keep just the files it
+  uses (pygbag unpacks every file at start: all ~2900 of PyOpenGL's took 5 s).
+  Hard-won, with pygbag 0.9.3:
+  - **numpy must load after SDL's video starts.** Once numpy's WebAssembly
+    modules are loaded, `pygame.display.init()` fails ("The video driver did
+    not add any displays"); started before, it keeps working. pygbag
+    installs whatever `main.py` imports before anything runs, so the
+    generated `main.py` never imports these packages: it starts the video,
+    then installs them with `aio.pep0723.pip_install`, then imports the game.
+    Any `import numpy` statement in `main.py`, even inside a function,
+    brings the failure back.
+  - **PyOpenGL works, through ctypes,** with a platform of our own
+    (`qarrera/webgl.py`): the GL functions are exported by the running
+    module, so `ctypes.CDLL(None)` finds them. `pygame.OPENGL` with an ES
+    3.0 request gives a WebGL 2 context, and GLSL ES 3.00 shaders run as they
+    are. Turn PyOpenGL's error checking off there: `glGetError` waits for the
+    GPU, 0.2 ms a call.
+  - **WebGL is stricter than GL ES:** a draw into a framebuffer whose own
+    texture is bound on any unit fails ("feedback loop"), sampled or not;
+    PyOpenGL's `GL_PACK_*` pixel-store calls log INVALID_ENUMs.
 - **pygbag quirks:** `main.py` must itself `import pygame`, or pygbag doesn't
   load pygame-ce (the build script's generated `main.py` does). A quick key
   tap from a test script can be missed by games that poll held keys; hold
