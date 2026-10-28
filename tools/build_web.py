@@ -285,6 +285,8 @@ RUNTIME_FILES = [
     "cdn/0.9.3/cpython312/main.data",
     "cdn/index-0.9.3-cp312.json",
     "cdn/cp312/pygame_ce-2.5.7-cp312-cp312-wasm32_bi_emscripten.whl",
+    # Qarrera's [tool.arqade.web] packages.
+    "cdn/cp312/numpy-2.0.2-cp312-cp312-pyodide_2024_0_wasm32.whl",
     "cdn/vtx.js",
     "cdn/vt/xterm.js",
     "cdn/vt/xterm.css",
