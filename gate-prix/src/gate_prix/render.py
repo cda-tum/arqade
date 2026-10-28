@@ -67,6 +67,7 @@ import random
 from collections import OrderedDict
 
 import pygame
+from arqade_common.input import KEYBOARD, PLAYERS, LastDevice
 
 from gate_prix import bloch, config, icons, sprites, track, wordmark
 from gate_prix.circuit import GATES
@@ -131,6 +132,7 @@ SHOT = (255, 200, 90)
 TEXT_CACHE = 600  # rendered texts kept (least recently used dropped first)
 ORDINALS = ("1st", "2nd", "3rd", "4th", "5th", "6th")
 NAMES = {"p1": "P1", "p2": "P2"}
+KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}  # the keys that stand in for each stick
 
 
 LEVEL_LINES = {
@@ -177,6 +179,16 @@ def _alpha(size, rgba, radius=0):
     return s
 
 
+def _veil(size, rgb, alpha: int) -> pygame.Surface:
+    """A shade of one colour over the whole screen: one alpha for the surface rather than
+    one per pixel. It looks the same and blits 6x faster in the browser (960x540: 2 ms
+    rather than 13 ms a frame under WebAssembly)."""
+    s = pygame.Surface(size)
+    s.fill(rgb)
+    s.set_alpha(alpha)
+    return s
+
+
 def warp_level(race: Race, racer) -> float:
     """How strong the LIGHT SPEED! warp is now: 1 as the check's boost starts, fading to 0
     as it ends (0 when there is none)."""
@@ -206,8 +218,10 @@ def shake(speed: float, frame: int, seed: int) -> float:
 
 
 class Renderer:
-    def __init__(self, surface: pygame.Surface) -> None:
+    def __init__(self, surface: pygame.Surface, devices: LastDevice | None = None) -> None:
         self.surface = surface
+        # Who last used their keys or their pad, so the hints name what they're holding.
+        self.devices = devices or LastDevice()
         self.cache = SpriteCache.shared()
         spread = config.VIEW_2P_SPREAD
         self.views = {1: [RoadView((0, 0, W, H))],
@@ -228,9 +242,10 @@ class Renderer:
         self._tunnel = {size: [self._tunnel_frame(size, k) for k in range(LINE_FRAMES)]
                         for size in SIZES}
         self._tint = {size: [self._edge_tint(size, a) for a in TINTS] for size in SIZES}
-        self._shade = {a: _alpha((W, H), (*INK, a)) for a in (110, 150, 170, 215)}
+        self._shade = {a: _veil((W, H), INK, a) for a in (110, 150, 170, 215)}
         self._panels: dict[tuple, pygame.Surface] = {}
-        self._buttons = [self._a_button(k / (PULSE - 1)) for k in range(PULSE)]
+        self._buttons: dict[str, list[pygame.Surface]] = {}  # the A button's pulse, by its name
+        self.a_button("A")
         self._markers = sprites.markers()
         self._frozen: dict[str, tuple[Race, pygame.Surface]] = {}  # player: (race, still)
         self._blind = self._blind_badge()
@@ -275,6 +290,45 @@ class Renderer:
         r = img.get_rect(**anchor)
         self.surface.blit(img, r)
         return r
+
+    def put_fit(self, s: str, px: int, width: int, col=WHITE, **anchor) -> pygame.Rect:
+        """`put`, a size or two smaller if the text is wider than `width` (the keyboard's
+        key names are longer than the pad's buttons)."""
+        while px > 9 and self.text(s, px, col).get_width() > width:
+            px -= 1
+        return self.put(s, px, col, **anchor)
+
+    # --- Button names, for the hints ------------------------------------------------------
+
+    def name(self, action: str, player: str | None = None) -> str:
+        """A control's on-screen name for one player's device ("A" on a pad, "B" or "L" on
+        the keyboard), or for both players' when `player` is None ("B / L"). "stick" is
+        the stick or the direction keys, "back" the stick pulled back (or its key) and
+        "quit" the Start + Select combo."""
+        players = (player,) if player else PLAYERS
+        if action in ("stick", "back", "quit"):
+            names = [self._own_name(action, p) for p in players]
+            return " / ".join(dict.fromkeys(names))
+        return self.devices.label(action, player) if player else self.devices.shared_label(action)
+
+    def _own_name(self, action: str, player: str) -> str:
+        pad = self.devices[player] != KEYBOARD
+        if action == "stick":
+            return "STICK" if pad else KEYBOARD_STICKS[player]
+        if action == "back":
+            return "BACK" if pad else self.devices.label("down", player)
+        return f"{self.devices.label('start', player)} + {self.devices.label('select', player)}"
+
+    def hint_player(self, match: Match, car: str) -> str:
+        """Whose device a car's hints name: its player's; with one player either pad (or
+        either player's keys) drives, so whoever pressed something last."""
+        return self.devices.latest if match.mode == 1 else car
+
+    def a_button(self, name: str) -> list[pygame.Surface]:
+        """The held item's big button, labelled `name` (A, or its key), in its PULSE steps."""
+        if name not in self._buttons:
+            self._buttons[name] = [self._a_button(k / (PULSE - 1), name) for k in range(PULSE)]
+        return self._buttons[name]
 
     def panel(self, w: int, h: int, edge=None, alpha: int = 200) -> pygame.Surface:
         key = (w, h, edge, alpha)
@@ -373,8 +427,9 @@ class Renderer:
             out[state] = pygame.transform.smoothscale(s, (DOT + 4, DOT + 4))
         return out
 
-    def _a_button(self, glow: float) -> pygame.Surface:
-        """The held item's big A button, at one step of its pulse (0 dim to 1 bright)."""
+    def _a_button(self, glow: float, name: str = "A") -> pygame.Surface:
+        """The held item's big A button (labelled `name`), at one step of its pulse (0 dim
+        to 1 bright)."""
         ss = 2
         d = 46
         s = pygame.Surface((d * ss, d * ss), pygame.SRCALPHA)
@@ -383,7 +438,7 @@ class Renderer:
         pygame.draw.circle(s, (*ring, round(90 + 120 * glow)), (c, c), c)
         pygame.draw.circle(s, INK, (c, c), c - 3 * ss)
         pygame.draw.circle(s, mix((210, 60, 70), (255, 110, 110), glow), (c, c), c - 5 * ss)
-        letter = font(26 * ss).render("A", True, WHITE)
+        letter = font((26 if len(name) == 1 else 13) * ss).render(name, True, WHITE)
         s.blit(letter, letter.get_rect(center=(c, c + ss)))
         return pygame.transform.smoothscale(s, (d, d))
 
@@ -773,6 +828,7 @@ class Renderer:
                 edge = mix((110, 116, 150), GOLD, k / (PULSE - 1))
             self.surface.blit(self.panel(w, h, edge, 225), (px, py))
             name = racer.item
+            use = self.name("a", self.hint_player(match, racer.car.id))  # A, or its key
             self.surface.blit(icons.icon(name, ICON), (px + 6, py + (h - ICON) // 2))
             if narrow:
                 self.put(name, 15 if len(name) <= 7 else 14, ITEM_COLORS[name],
@@ -780,7 +836,7 @@ class Renderer:
                 if full:
                     self.put("ITEM FULL", 13, FULL, midleft=(px + 54, py + 39))
                 else:
-                    self.put("PRESS A", 13, GOLD, midleft=(px + 54, py + 39))
+                    self.put(f"PRESS {use}", 13, GOLD, midleft=(px + 54, py + 39))
             else:
                 self.put(name, 20 if len(name) <= 7 else 14, ITEM_COLORS[name],
                          midleft=(px + 58, py + 20))
@@ -790,7 +846,7 @@ class Renderer:
                              midleft=(px + 58, py + 46))
                 else:
                     self.put(ITEM_LINES[name], 12, WHITE, midleft=(px + 58, py + 46))
-                self.surface.blit(self._buttons[k], (px + w - 54, py + 9))
+                self.surface.blit(self.a_button(use)[k], (px + w - 54, py + 9))
         elif racer.split:
             self.surface.blit(self.panel(w, 34, GHOST_TEXT, 200), (px, py))
             word = "GATE" if racer.split_rows == 1 else "GATES"
@@ -816,7 +872,8 @@ class Renderer:
         tip = match.banner(p, "tip")
         if tip is not None:
             ty = rect.y + 312
-            img = self.text(f"PRESS A TO USE {tip.value}", 20 if narrow else 24, GOLD)
+            use = self.name("a", self.hint_player(match, p))  # A, or its key
+            img = self.text(f"PRESS {use} TO USE {tip.value}", 20 if narrow else 24, GOLD)
             w = img.get_width() + TIP_ICON + 34
             left = cx - w // 2
             self.surface.blit(self.panel(w, 44, GOLD, 220), (left, ty - 22))
@@ -913,13 +970,15 @@ class Renderer:
                 self.put("◀", 14, arrow if not lo else EMPTY, center=(vx - 70, y))
                 self.put("▶", 14, arrow if not hi else EMPTY, center=(vx + 70, y))
         self.put(field_line(match), 13, LABEL, center=(cx, 382))
+        # both players read the title: the hints name both their devices ("B / L")
+        stick, back, a, start = (self.name(k) for k in ("stick", "back", "a", "start"))
         if (self.frame // 30) % 2 == 0:
-            self.put("PRESS START", 22, (255, 230, 120), center=(cx, 414))
+            self.put(f"PRESS {start}", 22, (255, 230, 120), center=(cx, 414))
         self.surface.blit(self.panel(720, 58, None, 190), (cx - 360, 443))  # over the car
-        self.put("STICK UP / DOWN: CHOOSE   LEFT / RIGHT: CHANGE   A OR START: RACE", 14, SOFT,
-                 center=(cx, 458))
-        self.put("IN THE RACE   STICK: STEER   BACK: BRAKE   BACK + STEER: DRIFT   A: ITEM   "
-                 "START: PAUSE", 12, LABEL, center=(cx, 486))
+        self.put_fit(f"{stick} UP / DOWN: CHOOSE   LEFT / RIGHT: CHANGE   {a} OR {start}: RACE",
+                     14, 704, SOFT, center=(cx, 458))
+        self.put_fit(f"IN THE RACE   {stick}: STEER   {back}: BRAKE   {back} + STEER: DRIFT   "
+                     f"{a}: ITEM   {start}: PAUSE", 12, 704, LABEL, center=(cx, 486))
         if match.attract:
             self.put("DEMO", 14, LABEL, topright=(W - 16, 12))
         self.put("MUSIC: VAPORMALL BY BOLT ACTION", 11, LABEL, topleft=(16, 12))  # its licence
@@ -936,7 +995,10 @@ class Renderer:
             if chosen:
                 self.put("▶", 18, (255, 230, 120), center=(x + 50, iy))
             self.put(item, 22, WHITE if chosen else (150, 156, 180), center=(W // 2, iy))
-        self.put("A: PICK   B OR START: RESUME", 11, LABEL, center=(W // 2, y + h - 18))
+        p = self.devices.latest  # one player works the menu
+        a, b, start = (self.name(k, p) for k in ("a", "b", "start"))
+        self.put_fit(f"{a}: PICK   {b} OR {start}: RESUME", 11, w - 16, LABEL,
+                     center=(W // 2, y + h - 18))
 
     def _result(self, match: Match) -> None:
         surf = self.surface
@@ -960,7 +1022,9 @@ class Renderer:
             self._circuit_rows(match, row, y)
             y += RESULT_PANEL[1] + 6
         if match.t >= config.RESULT_LOCK:
-            self.put("A: REMATCH        B: TITLE", 18, (255, 230, 120), center=(cx, H - 22))
+            who = self.devices.latest if match.mode == 1 else None
+            a, b = self.name("a", who), self.name("b", who)
+            self.put(f"{a}: REMATCH        {b}: TITLE", 18, (255, 230, 120), center=(cx, H - 22))
 
     def _circuit_rows(self, match: Match, row, y: int) -> None:
         """A player's panel: their accuracy and check on the left; their whole circuit
@@ -1008,9 +1072,16 @@ class Renderer:
                  center=(sx + SPHERE + 12, y + 2 + SPHERE // 2))
 
 
-def loading_screen(surface: pygame.Surface) -> None:
-    """Shown while the sprites are drawn at start-up."""
+def loading_screen(surface: pygame.Surface, done: float | None = None) -> None:
+    """Shown while the sprites are drawn at start-up; with `done` (0 to 1), a bar of how
+    far it got."""
     surface.fill((10, 14, 34))
     for s, px, y in (("GATE PRIX", 64, H // 2 - 30), ("LOADING...", 18, H // 2 + 40)):
         img = font(px).render(s, True, WHITE)
         surface.blit(img, img.get_rect(center=(W // 2, y)))
+    if done is not None:
+        bar = pygame.Rect(0, 0, 300, 8)
+        bar.center = (W // 2, H // 2 + 76)
+        pygame.draw.rect(surface, (40, 46, 80), bar, border_radius=4)
+        pygame.draw.rect(surface, GOLD, (bar.x, bar.y, round(bar.w * min(1.0, done)), bar.h),
+                         border_radius=4)

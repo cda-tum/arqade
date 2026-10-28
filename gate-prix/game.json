@@ -1,0 +1,22 @@
+{
+  "id": "gate-prix",
+  "title": "Gate Prix",
+  "tagline": "Kart racing through a dilution fridge: steer through the right gates to build a quantum circuit.",
+  "description": "A behind-the-car kart racer for 1 or 2 players against computer racers (EASY, TOUGH or BRUTAL). Gate arches stand across the track: drive through the glowing one in each row to build the target quantum circuit, gate by gate. Every right gate is a boost, and the CIRCUIT CHECK before the final lap turns a better circuit into a faster warp. Item boxes give you MEASURE, TUNNEL, SPLIT, QEC and DECOHERENCE to use on the way.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "A / D to steer, S to brake (S + steer drifts), B to use your item, Space to pause",
+      "p2": "Left / Right to steer, Down to brake (Down + steer drifts), L to use your item, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Your kart accelerates by itself: steer it through the glowing gate in every row.",
+    "Each right gate adds to your circuit and gives you a boost; a wrong one breaks your streak.",
+    "Before the final lap the CIRCUIT CHECK compares your circuit with the target: the more right, the bigger the warp.",
+    "Pull back and steer to drift; let go for a mini-turbo. A uses the item a box gave you.",
+    "Start (Space or Enter) pauses the game."
+  ]
+}

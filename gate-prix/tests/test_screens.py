@@ -355,3 +355,87 @@ def test_the_text_cache_is_bounded_and_keeps_what_is_still_used(renderer):
     assert len(renderer._text) <= TEXT_CACHE
     assert renderer.text("LAP 1/3", 12) is keep
     assert ("0", 10, (255, 255, 255), True) not in renderer._text  # the oldest went first
+
+
+# --- Hints that name what the players hold -----------------------------------------------------
+
+
+def _texts_drawn(renderer, monkeypatch, *matches) -> set[str]:
+    """Every text the renderer draws for these matches (one frame each)."""
+    seen: set[str] = set()
+    real = type(renderer).text
+
+    def text(self, s, *args, **kwargs):
+        seen.add(s)
+        return real(self, s, *args, **kwargs)
+
+    monkeypatch.setattr(type(renderer), "text", text)
+    for m in matches:
+        renderer.draw(m)
+    monkeypatch.undo()
+    return seen
+
+
+def _screens(mode: int) -> list[Match]:
+    """The title, the HOW TO PLAY card, a race with an item and its tip, the pause and the
+    result, for `mode` players."""
+    from gate_prix.match import RESULT
+
+    title = Match(random.Random(3))
+    title.mode = mode
+    title.update(DT, FrameInput())
+    card = Match(random.Random(3))
+    card.mode = mode
+    card._set(HOWTO)
+    race = started(mode)
+    race.race.racer("p1").item = "MEASURE"
+    race.banners["p1"].append(Banner("tip", "MEASURE", 1.0))
+    paused = started(mode)
+    paused.update(DT, frame(p1={"start": True}))
+    result = started(mode)
+    result._freeze()
+    result._set(RESULT)
+    result.t = config.RESULT_LOCK + 0.1
+    return [title, card, race, paused, result]
+
+
+def test_on_the_pads_the_hints_name_the_pads_buttons(renderer, monkeypatch):
+    """The cabinet's screens: before anyone presses anything, off the browser, it's pads."""
+    seen = _texts_drawn(renderer, monkeypatch, *_screens(1))
+    for want in ("PRESS START", "STICK UP / DOWN: CHOOSE   LEFT / RIGHT: CHANGE   A OR START: RACE",
+                 "PRESS ANY BUTTON TO START", "START + SELECT: QUIT",
+                 "EITHER PAD DRIVES", "PRESS A TO USE MEASURE", "A: PICK   B OR START: RESUME",
+                 "A: REMATCH        B: TITLE"):
+        assert want in seen, want
+    # the card's controls (its picture was drawn at start-up)
+    pads = ("STICK LEFT / RIGHT", "STICK BACK", "A", "START")
+    assert renderer.howto.names("p1") == renderer.howto.names(None) == pads
+
+
+def test_on_the_keyboard_the_hints_name_the_keys(monkeypatch):
+    """The browser's screens: everyone starts on the keyboard, P1 on W A S D with B for A,
+    P2 on the arrows with L; the title, which both read, names both."""
+    from arqade_common.input import KEYBOARD, LastDevice
+
+    from gate_prix.render import Renderer
+
+    keys = Renderer(pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT)),
+                    LastDevice(KEYBOARD))
+    seen = _texts_drawn(keys, monkeypatch, *_screens(1))
+    for want in ("PRESS SPACE / ENTER",
+                 "WASD / ARROWS UP / DOWN: CHOOSE   LEFT / RIGHT: CHANGE   B / L OR SPACE / "
+                 "ENTER: RACE",
+                 "A / D: STEER", "S: BRAKE", "S + STEER: DRIFT", "B: USE YOUR ITEM",
+                 "SPACE: PAUSE", "PRESS ANY KEY TO START", "SPACE + L-SHIFT: QUIT",
+                 "WASD OR ARROW KEYS DRIVE", "PRESS B TO USE MEASURE",
+                 "B: PICK   V OR SPACE: RESUME", "B: REMATCH        V: TITLE"):
+        assert want in seen, want
+    assert not [s for s in seen if "STICK" in s or "START:" in s or "PRESS START" in s]
+    assert keys.howto.names("p1") == ("A / D", "S", "B", "SPACE")
+    assert keys.howto.names("p2") == ("LEFT / RIGHT", "DOWN", "L", "ENTER")
+    two = _texts_drawn(keys, monkeypatch, *_screens(2))
+    for want in ("P1: WASD KEYS     P2: ARROW KEYS", "SPACE + L-SHIFT / ENTER + R-SHIFT: QUIT",
+                 "PRESS B", "B / L: REMATCH        V / K: TITLE"):
+        assert want in two, want
+    # the 2P card names both players' keys (its picture was drawn at start-up)
+    assert keys.howto.names(None) == ("A / D, LEFT / RIGHT", "S / DOWN", "B / L", "SPACE / ENTER")

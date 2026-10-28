@@ -2,7 +2,10 @@
 
 Its parts: the goal in three lines, a looping demo of the core mechanic, the controls drawn
 as the cabinet's pad (the stick, the L X R / Y B A cluster with A lit, and START) and a
-blinking PRESS ANY BUTTON TO START. The match decides when it goes; this module only draws.
+blinking PRESS ANY BUTTON TO START. The controls' words name what the players hold: the
+stick and the pad's buttons, or their keys ("A / D: STEER", "B: USE YOUR ITEM"), and
+everyone on the keyboard reads PRESS ANY KEY TO START. The match decides when it goes; this
+module only draws.
 
 The demo is no animation of its own: `Demo` runs a real `Race` on THE FRIDGE with the
 game's own AI at BRUTAL (every right arch) on P1's car, alone. It starts a little before the race's first
@@ -14,6 +17,7 @@ drives on with its flames lit, then starts over. `Demo` is pure and unit tested;
 from __future__ import annotations
 
 import pygame
+from arqade_common.input import KEYBOARD, PLAYERS
 
 from gate_prix import ai, bloch, config, track
 from gate_prix.race import Race
@@ -29,6 +33,7 @@ GOAL = (
 )
 CAPTIONS = ("STEER INTO THE GLOWING GATE", "RIGHT GATE: BOOST!", "WRONG GATE: NO BOOST")
 PROMPT = "PRESS ANY BUTTON TO START"
+KEYBOARD_PROMPT = "PRESS ANY KEY TO START"  # when everyone is on the keyboard
 CLUSTER = (("L", "X", "R"), ("Y", "B", "A"))  # the cabinet's buttons as printed
 
 
@@ -111,28 +116,56 @@ class TutorialCard:
         self.sprites: list = []
         self.demo = Demo()
         self.t = 0.0
-        self.controls = self._controls_picture()
+        self._pictures: dict[tuple[str, ...], pygame.Surface] = {}  # by the controls' names
+        self.controls_picture(self.names(None))  # both players' first one, drawn now
 
     def reset(self) -> None:
         self.demo.restart()
         self.t = 0.0
 
+    def names(self, player: str | None) -> tuple[str, str, str, str]:
+        """(steer, brake, item, pause) named for `player`'s device, or for both players'
+        when None: the stick and the pad's buttons ("STICK BACK", "A"), or their keys ("S",
+        "B / L")."""
+        r = self.r
+        players = (player,) if player else PLAYERS
+
+        def joined(name, sep=" / ") -> str:
+            return sep.join(dict.fromkeys(name(p) for p in players))
+
+        def pad(p) -> bool:
+            return r.devices[p] != KEYBOARD
+
+        steer = joined(lambda p: "STICK LEFT / RIGHT" if pad(p)
+                       else f"{r.name('left', p)} / {r.name('right', p)}", ", ")
+        brake = joined(lambda p: "STICK BACK" if pad(p) else r.name("down", p))
+        return steer, brake, r.name("a", player), r.name("start", player)
+
     def draw(self, surface: pygame.Surface, mode: int, dt: float) -> None:
         self.t += dt
         self.demo.update(dt)
         r = self.r
+        devices = r.devices
+        # one player: either pad (or either player's keys) drives, so whoever pressed last
+        player = devices.latest if mode == 1 else None
         surface.blit(r._backdrop, (0, 0))
         surface.blit(r._shade[215], (0, 0))
         r.put("HOW TO PLAY", 40, GOLD, center=(W // 2, 38))
         for i, line in enumerate(GOAL):
             r.put(line, 16, SOFT if i else WHITE, center=(W // 2, 80 + 22 * i))
         self._draw_demo(surface)
-        surface.blit(self.controls, (520, DEMO_RECT[1]))
-        who = "P1: LEFT PAD     P2: RIGHT PAD" if mode == 2 else "EITHER PAD DRIVES"
+        surface.blit(self.controls_picture(self.names(player)), (520, DEMO_RECT[1]))
+        if mode == 2:
+            sides = {"p1": ("LEFT PAD", "WASD KEYS"), "p2": ("RIGHT PAD", "ARROW KEYS")}
+            who = "     ".join(f"{p.upper()}: {sides[p][devices[p] == KEYBOARD]}"
+                               for p in PLAYERS)
+        else:
+            who = "WASD OR ARROW KEYS DRIVE" if devices[player] == KEYBOARD else "EITHER PAD DRIVES"
         r.put(who, 13, LABEL, center=(520 + 200, DEMO_RECT[1] + DEMO_RECT[3] - 16))
         if int(self.t * 2) % 2 == 0:
-            r.put(PROMPT, 24, GOLD, center=(W // 2, 470))
-        r.put("START + SELECT: QUIT", 11, LABEL, center=(W // 2, 516))
+            prompt = KEYBOARD_PROMPT if devices.everyone_on(KEYBOARD) else PROMPT
+            r.put(prompt, 24, GOLD, center=(W // 2, 470))
+        r.put(f"{r.name('quit', player)}: QUIT", 11, LABEL, center=(W // 2, 516))
 
     def _draw_demo(self, surface: pygame.Surface) -> None:
         r, demo, view = self.r, self.demo, self.view
@@ -151,9 +184,15 @@ class TutorialCard:
         if demo.phase == 1 and demo.after < 1.0:
             r.put("+BOOST", 22, (110, 190, 255), center=(x + w // 2, y + h - 78))
 
-    # --- The controls, drawn once --------------------------------------------------------
+    # --- The controls, drawn once for each way of naming them ------------------------------
 
-    def _controls_picture(self) -> pygame.Surface:
+    def controls_picture(self, names: tuple[str, str, str, str]) -> pygame.Surface:
+        """The controls panel for these names (see `names`), drawn on first use."""
+        if names not in self._pictures:
+            self._pictures[names] = self._controls_picture(*names)
+        return self._pictures[names]
+
+    def _controls_picture(self, steer: str, brake: str, item: str, pause: str) -> pygame.Surface:
         r = self.r
         s = pygame.Surface((400, DEMO_RECT[3]), pygame.SRCALPHA)
         s.blit(r.panel(400, DEMO_RECT[3], (200, 205, 225), 220), (0, 0))
@@ -171,10 +210,10 @@ class TutorialCard:
         pygame.draw.circle(s, (30, 60, 110), (cx, cy), 14)
         pygame.draw.circle(s, col, (cx, cy), 12)
         pygame.draw.circle(s, (210, 235, 255), (cx - 4, cy - 4), 4)
-        lines = (("STICK LEFT / RIGHT: STEER", WHITE), ("STICK BACK: BRAKE", WHITE),
-                 ("STICK BACK + STEER: DRIFT", GOLD))
+        lines = ((f"{steer}: STEER", WHITE), (f"{brake}: BRAKE", WHITE),
+                 (f"{brake} + STEER: DRIFT", GOLD))
         for i, (text, c) in enumerate(lines):
-            img = r.text(text, 15, c)
+            img = self._fit(text, c)
             s.blit(img, img.get_rect(midleft=(112, 34 + 24 * i)))
         img = r.text("let go of a drift for a mini-turbo", 11, LABEL, shadow=False)
         s.blit(img, img.get_rect(midleft=(112, 106)))
@@ -188,7 +227,7 @@ class TutorialCard:
                 pygame.draw.circle(s, GOLD if lit else UNLIT, (x, y), 11, 2)
                 img = r.text(label, 11, WHITE if lit else UNLIT, shadow=False)
                 s.blit(img, img.get_rect(center=(x, y + 1)))
-        img = r.text("A: USE YOUR ITEM", 15, WHITE)
+        img = self._fit(f"{item}: USE YOUR ITEM", WHITE)
         s.blit(img, img.get_rect(midleft=(112, by - 6)))
         img = r.text("boxes on the road give one", 11, LABEL, shadow=False)
         s.blit(img, img.get_rect(midleft=(112, by + 14)))
@@ -198,7 +237,14 @@ class TutorialCard:
         pygame.draw.rect(s, (150, 160, 200), pill, 2, border_radius=10)
         img = r.text("START", 10, WHITE, shadow=False)
         s.blit(img, img.get_rect(center=(pill.centerx, pill.centery + 1)))
-        img = r.text("START: PAUSE", 15, WHITE)
+        img = self._fit(f"{pause}: PAUSE", WHITE)
         s.blit(img, img.get_rect(midleft=(112, 200)))
         return s
+
+    def _fit(self, text: str, col) -> pygame.Surface:
+        """A line of the controls at 15 px, smaller if long key names would overrun the panel."""
+        px = 15
+        while px > 10 and self.r.text(text, px, col).get_width() > 280:
+            px -= 1
+        return self.r.text(text, px, col)
 

@@ -159,17 +159,18 @@ the title screen credits it, and so does this README: music by
 
 ## Controls
 
-| Action | Cabinet | P1 keyboard | P2 keyboard |
+| Action | Pad | P1 keyboard | P2 keyboard |
 |---|---|---|---|
-| Steer | stick left / right | S / F | Left / Right |
-| Brake | stick pulled straight back | D | Down |
-| Drift (let go for the mini-turbo) | stick pulled back and steered | D + S / F | Down + Left / Right |
-| Use the item; confirm in menus | A | Q | . |
-| Title: choose a row / change its value | stick up, down / left, right | E, D / S, F | arrows |
-| Back (pause menu, result) | B | W | , |
-| Start the race; pause (RESUME / QUIT TO TITLE) | Start | 1 | 2 |
-| Select (only for the quit) | Select | 3 | 4 |
-| Quit | Start + Select on one pad | 1 + 3, or Esc | 2 + 4, or Esc |
+| Steer | stick (or d-pad) left / right | A / D | Left / Right |
+| Brake | stick pulled straight back | S | Down |
+| Drift (let go for the mini-turbo) | stick pulled back and steered | S + A / D | Down + Left / Right |
+| Use the item; confirm in menus | A | B | L |
+| Title: choose a row / change its value | stick up, down / left, right | W, S / A, D | arrows |
+| Back (pause menu, result) | B | V | K |
+| Start the race; pause (RESUME / QUIT TO TITLE) | Start | Space | Enter |
+| Select (only for the quit) | Select | Left Shift | Right Shift |
+| Quit | Start + Select on one pad | Space + Left Shift | Enter + Right Shift |
+| Skip HOW TO PLAY | any button | any key but the stick's | any key but the stick's |
 
 - **Title:** four rows, **PLAYERS** (1 or 2), **BOTS** (0 up to 6 minus the players; 5 by
   default), **LEVEL** (EASY, TOUGH or BRUTAL; EASY by default, dimmed when there are no bots) and **QUIT**. The stick
@@ -192,15 +193,19 @@ the title screen credits it, and so does this README: music by
 - **Pause:** Start, on either pad. The stick moves, A picks, B or Start resumes.
 - **Idle:** 60 s untouched anywhere (paused too) returns to the title, its rows reset (1
   player, 5 bots, EASY).
-- With 1 player either pad drives. The accelerator is automatic.
-- The keyboard is a dev fallback only: P1's keys avoid `l x r b y a`, which the cabinet's
-  P1 encoder also types, and the cabinet's loader passes `--no-keyboard`. The stick is read
-  as an analog axis (axis 0 steers, axis 1 brakes), never a hat.
+- With 1 player either pad (or either player's keys) drives. The accelerator is automatic.
+- The keys are the layout shared by all the games (`../common`), and the on-screen hints
+  name the keys or the pad's buttons, whichever each player last used ("PRESS B TO USE
+  TUNNEL", "SPACE: PAUSE"). There is no quit key (Esc leaves fullscreen in a browser). On
+  the cabinet the loader passes `--no-keyboard`, because Batocera's evmapy types keys for
+  P1's pad. The stick is read as an analog axis (axis 0 steers, axis 1 brakes), never a
+  hat; pads join as P1, then P2, as they appear.
 
 ## Setup (dev machine)
 
-Requires [uv](https://docs.astral.sh/uv/). Python 3.11 and pygame 2.5.2 exactly, as on
-the cabinet.
+Requires [uv](https://docs.astral.sh/uv/). Python 3.11; pygame-ce on a PC and in the
+browser, while the cabinet keeps its pygame 2.5.2, so the code uses only what both have
+(run the tests on both, `../common/README.md`).
 
 ```bash
 cd gate-prix
@@ -212,7 +217,19 @@ uv run python -m gate_prix --input-test          # live pad and keyboard state
 uv run python -m gate_prix --selftest 600 --shots /tmp/gate-prix-shots
 ```
 
-From the repo root, `./arqade.sh` runs it from the ARQADE launcher's menu too.
+From the repo root, `./arqade.sh` runs it from the ARQADE launcher's menu too, and in the
+browser (pygbag's test server on http://localhost:8000):
+
+```bash
+uv run --project tools tools/build_web.py --serve gate-prix
+```
+
+In the browser, quitting (Start + Select, or QUIT on the title) goes back to the title and
+tells the page around the game (`arqade:quit`); `arqade:game-start` and `arqade:game-end`
+frame each race. Pads use the cabinet's button numbers by default; `--pad-layout xbox`
+reads an Xbox-style pad on a PC instead, and browser gamepads use the browser's standard
+layout. There the sprites are drawn a kind per frame behind a loading bar (about 10 s
+under WebAssembly, 2 s natively), and the sound effects one per frame on the title.
 
 `--selftest SECONDS` plays a scripted session through the real loop and renderer, as fast
 as the machine draws: the title and the attract race, BOTS stepped down and up, the menu
@@ -239,7 +256,8 @@ rules, items, the AI (its levels and the ladder alone on the track, and who beat
 level over many seeds), the road projection and sprite cache, the
 match flow (title, attract, countdown, pause, idle, finish, result), the qubit's states
 and pictures, the gantry drawn at its exact size through the start, the input (axes,
-presses, the armed Start + Select quit, keyboard fallbacks, `--no-keyboard`), the QUIT row
+presses, the armed Start + Select quit, the shared keyboard, browser gamepads,
+`--no-keyboard`), the hints for pads and keys, quitting in the browser, the QUIT row
 and the HOW TO PLAY card, the demo, the minimap, the renderer drawing every effect from its
 caches only, the sound table, and a short scripted session of the real loop.
 
@@ -275,8 +293,8 @@ caches only, the sound table, and a short scripted session of the real loop.
 | `tutorial.py` | The HOW TO PLAY card and its demo (a real race, the AI on P1's car). |
 | `render.py` | The views, the HUD, the banners and the screens. |
 | `audio.py` | Synthesised effects and the engine hum (pitch follows speed); silent without a mixer. |
-| `input.py`, `display.py` | Pads and dev keys; the 960x540 surface scaled onto the screen. |
-| `game.py`, `main.py` | The fixed 60 Hz loop; the command line. `selftest.py`: the scripted session. |
+| `input.py`, `display.py` | Pads and the keyboard (through `arqade_common`); the 960x540 surface scaled onto the screen. |
+| `game.py`, `main.py` | The fixed 60 Hz loop (async, for the browser); the command line. `selftest.py`: the scripted session. |
 | `input_test.py`, `config.py` | The input diagnostic; every number, colour and button. |
 
 Rendering is 960x540 (each 2P view 480x540, projecting the road as if 640 wide so the cars
@@ -290,9 +308,9 @@ per frame, only blitted from the start-up caches.
 ./deploy_batocera.sh                    # or ./deploy_batocera.sh root@10.42.0.100
 ```
 
-It copies the package to `/userdata/games/gate_prix/` and writes the loader
-`/userdata/roms/pygame/gate_prix.pygame`, which calls `main(["--fullscreen",
-"--no-keyboard"])`. The first time, the game also needs its `batocera/gamelist.xml` entry
+It copies the package and the shared `arqade_common` to `/userdata/games/gate_prix/` and
+writes the loader `/userdata/roms/pygame/gate_prix.pygame`, which runs
+`asyncio.run(main(["--fullscreen", "--no-keyboard"]))`. The first time, the game also needs its `batocera/gamelist.xml` entry
 and one EmulationStation restart (with the go-ahead, see `../AGENTS.md`). Later deploys
 only replace the code. For `--input-test` on the cabinet, point the loader at
 `main(["--input-test", "--fullscreen"])` for a while, as AGENTS.md describes.

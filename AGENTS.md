@@ -457,7 +457,7 @@ as long as it keeps to what the existing ones do:
 ## Browser build (pygbag) and shared code (`common/`, `tools/`)
 
 The games also run in the browser, compiled to WebAssembly by pygbag, from
-the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Drop, Qurves, Pauli Invaders (error-invaders), Superconductor, Ion Surfer, Quantum Towers, Overquqed, Brawl-Ket.
+the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Drop, Qurves, Pauli Invaders (error-invaders), Superconductor, Ion Surfer, Quantum Towers, Overquqed, Brawl-Ket, Gate Prix (the 2D Classic; not Gate Prix 2).
 
 - **pygame-ce on PCs and in the browser, pygame 2.5.2 on the cabinet.**
   pygbag only has pygame-ce, and the cabinet has no pip, so a ported game

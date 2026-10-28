@@ -1,3 +1,5 @@
+import asyncio
+
 from gate_prix.main import main
 
-main()
+asyncio.run(main())

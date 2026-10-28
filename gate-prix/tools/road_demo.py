@@ -107,7 +107,7 @@ def main(argv=None) -> None:
             steer = (1 if keys[right] else 0) - (1 if keys[left] else 0)
             if p < len(pads) and pads[p].get_numaxes():
                 axis = pads[p].get_axis(0)
-                if abs(axis) > config.INPUT_CONFIG["axis_deadzone"]:
+                if abs(axis) > config.AXIS_DEADZONE:
                     steer = axis
             if len(views) == 1 and p == 0 and not steer:
                 right2, left2 = keys[pygame.K_RIGHT], keys[pygame.K_LEFT]
