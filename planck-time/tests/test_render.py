@@ -5,11 +5,14 @@ import random
 
 import pygame
 import pytest
+from arqade_common.input import KEYBOARD, PAD, LastDevice
 
 from planck_time import config
+from planck_time import palette as P
 from planck_time import session as S
 from planck_time.hiscores import Hiscores
 from planck_time.microgames import PlayerInput
+from planck_time.pixel import control_hint, outlined, set_buttons
 from planck_time.render import Renderer
 from planck_time.session import FrameInput, Session
 
@@ -57,6 +60,40 @@ def test_a_whole_run_renders(surface, mode):
     assert (S.GAME_OVER if mode == 1 else S.MATCH_RESULT) in seen
 
 
+def devices(p1, p2):
+    """Players on these devices, as if each had pressed something on it."""
+    d = LastDevice(p1)
+    d._devices["p2"] = p2
+    return d
+
+
+@pytest.mark.parametrize("on", ((KEYBOARD, KEYBOARD), (KEYBOARD, PAD), (PAD, KEYBOARD)))
+@pytest.mark.parametrize("mode", (1, 2))
+def test_a_whole_run_renders_with_keyboard_players(surface, mode, on):
+    s = Session(random.Random(mode), Hiscores(None))
+    s.mode = mode
+    r = Renderer(surface, devices(*on))
+    begin(s, r)
+    drive(s, r, 30, play=lambda g: g.bot())  # keycaps in the intros and in every microgame's hint
+    seen = drive(s, r, 60, play=lambda g: PlayerInput())
+    assert (S.GAME_OVER if mode == 1 else S.MATCH_RESULT) in seen
+
+
+def test_a_hint_names_a_keyboard_players_key_as_a_keycap(surface):
+    def pixels(img):
+        return pygame.image.tobytes(img, "RGBA")
+    try:
+        set_buttons({"a": "A", "stick": "STICK", "keys": ""})
+        pad = control_hint("{a} WHEN THEY MATCH", 8, P.WHITE)
+        assert pixels(pad) == pixels(outlined("A WHEN THEY MATCH", 8, P.WHITE))  # pads: as it always was
+        set_buttons({"a": "B", "stick": "WASD", "keys": "yes"})
+        keys = control_hint("{a} WHEN THEY MATCH", 8, P.WHITE)
+        text = outlined("B WHEN THEY MATCH", 8, P.WHITE)
+        assert keys.get_height() > text.get_height() and keys.get_width() > text.get_width()  # the cap round B
+    finally:
+        set_buttons({"a": "A", "stick": "STICK", "keys": ""})
+
+
 def test_title_attract_name_entry_and_hiscores_render(surface):
     s = Session(random.Random(0), Hiscores(None))
     r = Renderer(surface)
@@ -71,10 +108,11 @@ def test_title_attract_name_entry_and_hiscores_render(surface):
     assert S.HISCORES in drive(s, r, 1.0)
 
 
-def test_pause_menu_renders(surface):
+@pytest.mark.parametrize("on", ((PAD, PAD), (KEYBOARD, KEYBOARD), (KEYBOARD, PAD)))
+def test_pause_menu_renders(surface, on):
     s = Session(random.Random(0), Hiscores(None))
     s.mode = 2
-    r = Renderer(surface)
+    r = Renderer(surface, devices(*on))
     begin(s, r)
     drive(s, r, config.PAUSE_GRACE + 0.05)
     s.update(DT, FrameInput(activity=True, pauses={"p1": True, "p2": False}))

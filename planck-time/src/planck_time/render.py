@@ -18,14 +18,18 @@ import random
 from types import SimpleNamespace
 
 import pygame
-from arqade_common.input import KEYBOARD, LastDevice
+from arqade_common.input import KEYBOARD, PAD, LastDevice
+
+from arqade_common import keycaps
 
 from planck_time import config
 from planck_time import palette as P
 from planck_time import session as S
 from planck_time import tutorial as T
 from planck_time.microgames import BOSSES
-from planck_time.pixel import backdrop, blit_center, button, orb, outlined, set_buttons
+from planck_time.pixel import (
+    KEY_COLORS, backdrop, blit_center, button, control_hint, draw_keycap, font, on_keys, orb, outlined, set_buttons,
+)
 
 W, H = config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT
 SW, SH = config.SCREEN_W, config.SCREEN_H
@@ -151,7 +155,20 @@ class Renderer:
 
     def _buttons_for(self, p: str) -> None:
         """Before drawing one player's screen, so its hints name their buttons."""
-        set_buttons({"a": self.devices.label("a", p), "stick": self._stick(p)})
+        keys = self.devices[p] == KEYBOARD
+        set_buttons({"a": self.devices.label("a", p), "stick": self._stick(p), "keys": "yes" if keys else ""})
+        if keys:
+            set_buttons({d: self.devices.label(d, p) for d in ("up", "down", "left", "right")})
+
+    def _key_hint(self, parts, players, color) -> pygame.Surface:
+        """A hint line naming each player's controls, keys as keycaps (for
+        screens anyone on the keyboard reads): parts = ((controls, action), ...)."""
+        def name(control, p):
+            if control == "stick":
+                return self._stick(p), False
+            return self.devices.label(control, p), self.devices[p] == KEYBOARD
+        items = keycaps.hint_items(parts, players, name)
+        return keycaps.key_hint_surface(font(8), items, *KEY_COLORS, color)
 
     # --- the frame ------------------------------------------------------------------------
 
@@ -316,11 +333,18 @@ class Renderer:
         pygame.draw.rect(screen, P.NIGHT, panel, border_radius=7)
         pygame.draw.rect(screen, P.GOLD if s.first_time else P.SLATE, panel, 1, border_radius=7)
         self._input_icon(screen, game.INPUT, (SW // 2, panel.y + 24), s.t, s.first_time)
-        label = outlined(INPUT_LABELS[game.INPUT].format(a=button("a"), stick=button("stick")), 8, P.WHITE)
+        label = control_hint(INPUT_LABELS[game.INPUT], 8, P.WHITE)
         blit_center(screen, label, (SW // 2, panel.bottom - 10))
 
     def _input_icon(self, screen, kind: str, center, t: float, demo: bool) -> None:
         cx, cy = center
+        if on_keys():  # the keys themselves, not the pad's stick and A
+            if kind in ("stick+a", "stick"):
+                self._key_stick_icon(screen, (cx - 22 if kind == "stick+a" else cx, cy), t, demo)
+            if kind != "stick":
+                rate = 1.6 if kind == "stick+a" else 8.0 if kind == "mash" else 2.0
+                self._key_a_icon(screen, (cx + 22 if kind == "stick+a" else cx, cy + 4), t, demo, rate)
+            return
         if kind == "stick+a":
             self._stick_icon(screen, (cx - 22, cy), t, demo)
             self._a_icon(screen, (cx + 22, cy + 4), t, demo, rate=1.6)
@@ -347,6 +371,25 @@ class Renderer:
                 x = cx + side * 24
                 for k in range(3):
                     screen.fill(P.WHITE, (x + side * k * 3, cy - 2 + k * 2, 2, 2))
+
+    def _key_stick_icon(self, screen, center, t: float, demo: bool) -> None:
+        """The four keys that stand in for the stick, left and right lighting
+        in turn as the demo tilts."""
+        cx, cy = center
+        w = keycaps.keycap_size(font(8), "W")[0]
+        step = w + keycaps.GAP
+        tilt = math.sin(t * 7) if demo else 0.0
+        x0, y0 = cx - step - w // 2, cy - 11
+        for name, col, row in (("up", 1, 0), ("left", 0, 1), ("down", 1, 1), ("right", 2, 1)):
+            lit = (name == "left" and tilt < -0.3) or (name == "right" and tilt > 0.3)
+            draw_keycap(screen, button(name), 8, (x0 + col * step, y0 + row * step), lit=lit)
+
+    def _key_a_icon(self, screen, center, t: float, demo: bool, rate: float) -> None:
+        """The key that stands in for A, going down (and gold) as the demo presses."""
+        cx, cy = center
+        down = demo and (t * rate) % 1.0 < 0.35
+        w, h = keycaps.keycap_size(font(16), button("a"))
+        draw_keycap(screen, button("a"), 16, (cx - w // 2, cy - h // 2 + (2 if down else -2)), lit=down)
 
     def _a_icon(self, screen, center, t: float, demo: bool, rate: float) -> None:
         cx, cy = center
@@ -461,7 +504,9 @@ class Renderer:
             head = outlined("DRAW!", 32, P.GOLD)
         score = outlined(f"{s.scores['p1']}  -  {s.scores['p2']}", 16, P.WHITE)
         lines = [head, score]
-        if s.t >= config.MATCH_RESULT_LOCK:
+        if s.t >= config.MATCH_RESULT_LOCK and not self.devices.everyone_on(PAD):
+            lines.append(self._key_hint(((("a",), "REMATCH"), (("b",), "TITLE")), S.PLAYERS, P.MIST))
+        elif s.t >= config.MATCH_RESULT_LOCK:
             a, b = (self.devices.shared_label(k) for k in ("a", "b"))
             lines.append(outlined(f"{a}: REMATCH     {b}: TITLE", 8, P.MIST, shadow=False))
         self._banner(lines)
@@ -474,8 +519,11 @@ class Renderer:
             on = i == s.pause_index
             lines.append(outlined(f"> {item} <" if on else item, 16 if on else 8, P.GOLD if on else P.WHITE))
         p = self.devices.latest  # one player works the menu
-        pick, back, start = (self.devices.label(k, p) for k in ("a", "b", "start"))
-        lines.append(outlined(f"{pick}: PICK   {start} / {back}: RESUME", 8, P.MIST, shadow=False))
+        if self.devices[p] == KEYBOARD:
+            lines.append(self._key_hint(((("a",), "PICK"), (("start",), "RESUME")), (p,), P.MIST))
+        else:
+            pick, back, start = (self.devices.label(k, p) for k in ("a", "b", "start"))
+            lines.append(outlined(f"{pick}: PICK   {start} / {back}: RESUME", 8, P.MIST, shadow=False))
         self._banner(lines)
 
     def _name_entry(self, s: S.Session) -> None:
@@ -499,6 +547,8 @@ class Renderer:
         p = self.devices.latest
         a, b = (self.devices.label(k, p) for k in ("a", "b"))
         foot = outlined(f"{self._stick(p)}: LETTER    {a}: NEXT    {b}: BACK", 8, P.WHITE)
+        if self.devices[p] == KEYBOARD:
+            foot = self._key_hint(((("stick",), "LETTER"), (("a",), "NEXT"), (("b",), "BACK")), (p,), P.WHITE)
         surf.fill(P.INK, (0, 300, W, 24))
         blit_center(surf, foot, (W // 2, 312))
 
@@ -568,19 +618,32 @@ class Renderer:
         for i, line in enumerate(T.GOAL[s.mode]):
             surf.blit(outlined(line, 8, P.WHITE, shadow=False), (x0, panel.y + 30 + i * 14))
         surf.blit(outlined("CONTROLS", 8, P.GOLD), (x0, panel.y + 104))
-        self._controls(demo, (panel.centerx, panel.y + 146))
         d = self.devices
-        if s.mode == 1:
-            names = (self._stick(player), d.label("a", player), d.label("start", player))
+        players = (player,) if s.mode == 1 else S.PLAYERS
+        if all(d[p] == KEYBOARD for p in players):
+            self._key_controls(demo, (panel.centerx, panel.y + 146), players)
         else:
-            names = (self._shared_stick(), d.shared_label("a"), d.shared_label("start"))
-        rows = [(outlined(f"{key}:", 8, P.GOLD, shadow=False), outlined(action, 8, P.WHITE, shadow=False))
-                for key, action in zip(names, ("MOVE / POINT", "PRESS / PICK", "PAUSE"))]
-        action_x = x0 + 6 + max(56, max(key.get_width() for key, _ in rows) + 8)
-        for i, (key, action) in enumerate(rows):
-            y = panel.y + 182 + i * 14
-            surf.blit(key, (x0 + 6, y))
-            surf.blit(action, (action_x, y))
+            self._controls(demo, (panel.centerx, panel.y + 146))
+        actions = ("MOVE / POINT", "PRESS / PICK", "PAUSE")
+        if any(d[p] == KEYBOARD for p in players):  # keys as keycaps, so B can't pass for the pad's B
+            keys = [self._key_hint((((control,), ""),), players, P.GOLD) for control in ("stick", "a", "start")]
+            action_x = x0 + 6 + max(56, max(key.get_width() for key in keys) + 8)
+            for i, (key, action) in enumerate(zip(keys, actions)):
+                y = panel.y + 180 + i * 17
+                surf.blit(key, (x0 + 6, y - 3))
+                surf.blit(outlined(action, 8, P.WHITE, shadow=False), (action_x, y))
+        else:
+            if s.mode == 1:
+                names = (self._stick(player), d.label("a", player), d.label("start", player))
+            else:
+                names = (self._shared_stick(), d.shared_label("a"), d.shared_label("start"))
+            rows = [(outlined(f"{key}:", 8, P.GOLD, shadow=False), outlined(action, 8, P.WHITE, shadow=False))
+                    for key, action in zip(names, actions)]
+            action_x = x0 + 6 + max(56, max(key.get_width() for key, _ in rows) + 8)
+            for i, (key, action) in enumerate(rows):
+                y = panel.y + 182 + i * 14
+                surf.blit(key, (x0 + 6, y))
+                surf.blit(action, (action_x, y))
         side = {p: "KEYS" if d[p] == KEYBOARD else "PAD" for p in S.PLAYERS}
         if s.mode == 1:
             pads = [("EITHER SIDE PLAYS" if d.everyone_on(KEYBOARD) else "EITHER PAD PLAYS", P.MIST)]
@@ -595,6 +658,30 @@ class Renderer:
         if int(self.t * 2) % 2 == 0:
             any_button = "ANY KEY" if d.everyone_on(KEYBOARD) else "ANY BUTTON"
             blit_center(surf, outlined(f"PRESS {any_button} TO START", 16, P.WHITE), (W // 2, H - 26))
+
+    def _key_controls(self, demo, center, players) -> None:
+        """_controls for keyboard players: each one's keys for the stick, A and
+        Start, side by side; the keys light as the demo tilts and presses."""
+        surf = self.surface
+        cx, cy = center
+        f = font(8)
+        w = keycaps.keycap_size(f, "W")[0]
+        step = w + keycaps.GAP
+        dx, dy = demo.stick if demo.stick_left > 0 else (0, 0)
+        pushed = {"left": dx < 0, "right": dx > 0, "up": dy < 0, "down": dy > 0, "a": demo.a_left > 0}
+
+        def width(p):
+            return 3 * step + 6 + keycaps.keycap_size(f, self.devices.label("a", p))[0] + 6 + \
+                keycaps.keycap_size(f, self.devices.label("start", p))[0]
+        total = sum(width(p) for p in players) + 18 * (len(players) - 1)
+        x = cx - total // 2
+        for p in players:
+            label = self.devices.label
+            for name, col, row in (("up", 1, 0), ("left", 0, 1), ("down", 1, 1), ("right", 2, 1)):
+                draw_keycap(surf, label(name, p), 8, (x + col * step, cy - 14 + row * step), lit=pushed[name])
+            right = draw_keycap(surf, label("a", p), 8, (x + 3 * step + 4, cy + 2), lit=pushed["a"]).right
+            draw_keycap(surf, label("start", p), 8, (right + 6, cy + 2))
+            x += width(p) + 18
 
     def _controls(self, demo, center) -> None:
         """The cabinet's pad as it is built: the stick, the 2x3 buttons printed

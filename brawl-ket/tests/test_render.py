@@ -1995,3 +1995,35 @@ def test_an_error_window_never_goes_under_the_hud():
     assert window_at(300.0, 200.0) == (300.0, 200.0)                # over the head, as ever
     x, bottom = window_at(300.0, FLOOR_Y - 120 - 140)               # one frozen high in the air
     assert bottom - WINDOW_H >= WINDOW_TOP and x != 300.0
+
+
+@pytest.mark.parametrize("devices", [("keyboard", "keyboard"), ("keyboard", "pad"), ("pad", "keyboard")])
+@pytest.mark.parametrize("who", [None, "p1", "p2"])
+def test_the_controls_name_keys_not_pad_letters_for_keyboard_players(surface, monkeypatch, devices, who):
+    """On the keys, CONTROLS draws keycaps (no stick, no round buttons) and the names in it are
+    the keys; with one player on each, every button name says whose it is."""
+    from arqade_common.input import LastDevice
+    from brawl_ket import render as R
+    d = LastDevice(devices[0])
+    d._devices["p2"] = devices[1]
+    names, balls = [], []
+    real = R.outlined
+    monkeypatch.setattr(R, "_ball", lambda *a, **k: balls.append(a))
+    monkeypatch.setattr(R, "outlined", lambda t, *a, **k: (names.append(t), real(t, *a, **k))[1])
+    Renderer(surface, d)._controls(pygame.Rect(334, 72, 292, 256), who)
+    players = ["p1", "p2"] if who is None else [who]
+    if any(d[p] == "keyboard" for p in players):
+        assert not balls                                    # no pad drawn
+    if all(d[p] == "keyboard" for p in players):
+        assert not {"A", "X", "Y", "START"} & set(names)
+    if who is None and devices[0] != devices[1]:
+        joined = " | ".join(names)
+        assert "P1 B / P2 A" in joined or "P1 A / P2 L" in joined
+        assert "B / A" not in joined.replace("P1 B / P2 A", "")
+
+
+def test_mixed_lesson_lines_fit_without_their_key_names():
+    from brawl_ket.render import LESSON_LINES, LESSON_VIEW, font
+    pygame.init()
+    for parts in LESSON_LINES:
+        assert font(8).size("".join(t for t, _ in parts[1:]))[0] <= LESSON_VIEW.w - 16

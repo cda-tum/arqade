@@ -309,3 +309,25 @@ def test_the_core_events_make_sounds(make_menu):
     frame(g)
     g.lose(ion, "ION LOST")
     assert {"kick", "ion_add", "photon", "lost"} <= set(g.sounds.played)
+
+
+# ---------------------------------------------------------------- control hints
+@pytest.mark.parametrize("mode", [1, 2, 3, game_mod.SANDBOX])
+@pytest.mark.parametrize("devices", [("keyboard", "keyboard"), ("keyboard", "pad"), ("pad", "keyboard")])
+def test_how_to_play_draws_for_keyboard_players(make_menu, mode, devices):
+    g = make_menu()
+    g.controls.devices._devices.update(p1=devices[0], p2=devices[1])
+    g.open_tutorial(mode, None if mode == game_mod.SANDBOX else "ABCDEF")
+    g.draw()
+    g.state, g.tutorial = "menu", None
+    g.seed_edit = True
+    g.draw()
+
+
+def test_mixed_devices_name_each_players_own_face_keys(make_menu):
+    g = make_menu()
+    g.controls.devices._devices.update(p1="keyboard", p2="pad")
+    g.open_tutorial(3, "ABCDEF")
+    assert g.tutorial._faces() == "P1: G V C B, P2: X B Y A"
+    g.controls.devices._devices.update(p1="keyboard", p2="keyboard")
+    assert g.tutorial._faces() == "G V C B / I K J L"

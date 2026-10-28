@@ -15,6 +15,8 @@ import math
 import pygame
 from arqade_common.input import KEYBOARD, PAD, PLAYERS, LastDevice
 
+from arqade_common import keycaps
+
 from qurves import config, rules
 from qurves.fonts import load_font
 from qurves.fx import Fx
@@ -455,7 +457,11 @@ class Renderer:
                 self.surface.blit(img, (x - img.get_width() // 2, H // 2 + 24 - img.get_height() // 2),
                                   special_flags=pygame.BLEND_ADD)
                 x += gap
-            if match.t >= config.MATCH_RESULT_LOCK:
+            if match.t >= config.MATCH_RESULT_LOCK and not self.devices.everyone_on(PAD):
+                keys = self.key_hint(((("a", "start"), "REMATCH"), (("b",), "TITLE")), PLAYERS, self.font16,
+                                     config.COLOR_TEXT)
+                self._center(keys, H // 2 + 88, add=False)
+            elif match.t >= config.MATCH_RESULT_LOCK:
                 a, start, b = (self.name(k) for k in ("a", "start", "b"))
                 self._center(self._plain(f"{a} / {start}: REMATCH      {b}: TITLE", self.font16, config.COLOR_TEXT),
                              H // 2 + 88, add=False)
@@ -471,6 +477,11 @@ class Renderer:
             self._center(self._glow(label, self.font16, config.COLOR_FPS if active else config.COLOR_TEXT),
                          H // 2 + 6 + i * 34)
         side = self.devices.latest  # one player works the menu
+        if self.devices[side] == KEYBOARD:
+            keys = self.key_hint(((("stick",), "CHOOSE"), (("a",), "PICK"), (("start",), "RESUME")), (side,),
+                                 self.font8, config.COLOR_DIM)
+            self._center(keys, H // 2 + 96, add=False)
+            return
         stick, pick, start, back = (self.name(k, side) for k in ("stick", "a", "start", "b"))
         self._center(self._plain(f"{stick}: CHOOSE    {pick}: PICK    {start} / {back}: RESUME", self.font8,
                                  config.COLOR_DIM),
@@ -490,6 +501,37 @@ class Renderer:
         if control == "face":
             return " ".join(self.devices.label(b, side) for b in ("x", "y", "b", "a"))
         return self.devices.label(control, side)
+
+    def key_items(self, parts, sides) -> tuple:
+        """keycaps.hint_items for hints a keyboard player reads: parts =
+        ((controls, action), ...); each side's keys become keycaps, a pad's
+        buttons (and WASD / ARROWS) are written, so a key never passes for a
+        pad button."""
+        def name(control, side):
+            return self.name(control, side), self.devices[side] == KEYBOARD and control != "stick"
+        return keycaps.hint_items(parts, sides, name)
+
+    def key_hint(self, parts, sides, font, color) -> pygame.Surface:
+        return self.key_line(self.key_items(parts, sides), font, color)
+
+    def key_line(self, items, font, color) -> pygame.Surface:
+        """keycaps.key_hint_surface in this game's colours, cached."""
+        key = ("keys", items, id(font), color)
+        if key not in self._cache:
+            self._cache[key] = keycaps.key_hint_surface(font, items, config.COLOR_BACKGROUND, config.COLOR_DIM,
+                                                        config.COLOR_TEXT, color, config.COLOR_TEXT)
+        return self._cache[key]
+
+    def _quit_keys(self) -> tuple:
+        """The quit combo for key_line, as keycaps: each side's two keys (or
+        buttons) together, "SPACE + L-SHIFT / ENTER + R-SHIFT"."""
+        keys: list[str] = []
+        for side in PLAYERS:
+            combo = [self.name("start", side), "+", self.name("select", side)]
+            if self.devices[side] != KEYBOARD:
+                combo = [keycaps.Plain(" + ".join(combo[::2]))]
+            keys += (["/"] if keys else []) + combo
+        return tuple(keys)
 
     def _quit_combo(self) -> str:
         return " / ".join(dict.fromkeys(f"{self.name('start', p)} + {self.name('select', p)}" for p in PLAYERS))
@@ -517,10 +559,21 @@ class Renderer:
         if match.mode == 4:
             if self.devices.everyone_on(PAD):
                 sides = "EACH PAD: THE STICK IS ONE PLAYER, THE X Y B A BUTTONS ANOTHER"
-            else:
-                sides = (f"LEFT: P1 {self.name('stick', 'p1')}, P3 {self.name('face', 'p1')}     "
-                         f"RIGHT: P2 {self.name('stick', 'p2')}, P4 {self.name('face', 'p2')}")
-            self._center(self._plain(sides, self.font8, config.COLOR_TEXT), 494, add=False)
+                self._center(self._plain(sides, self.font8, config.COLOR_TEXT), 494, add=False)
+            else:  # each side's own keys (as keycaps) or buttons
+                items = []
+                for label, (side, stick, face) in (("LEFT", ("p1", "P1", "P3")), ("RIGHT", ("p2", "P2", "P4"))):
+                    face_keys = tuple(self.devices.label(b, side) for b in ("x", "y", "b", "a"))
+                    if self.devices[side] != KEYBOARD:
+                        face_keys = (keycaps.Plain(" ".join(face_keys)),)
+                    items.append(((keycaps.Plain(f"{label}: {stick} {self.name('stick', side)}, {face} "),
+                                   *face_keys), ""))
+                self._center(self.key_line(tuple(items), self.font8, config.COLOR_TEXT), 494, add=False)
+        if not self.devices.everyone_on(PAD):
+            keys = self.key_items(((("stick",), "CHOOSE"), (("a",), "PICK"), (("start",), "PLAY")), PLAYERS)
+            items = (*keys, ((keycaps.Plain("QUIT: "), *self._quit_keys()), ""))
+            self._center(self.key_line(items, self.font8, config.COLOR_DIM), 512, add=False)
+            return
         stick, pick, start = (self.name(k) for k in ("stick", "a", "start"))
         self._center(self._plain(f"{stick}: CHOOSE     {pick}: PICK     {start}: PLAY     QUIT: {self._quit_combo()}",
                                  self.font8, config.COLOR_DIM), 512, add=False)

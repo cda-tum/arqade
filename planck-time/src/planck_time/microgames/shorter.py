@@ -26,7 +26,7 @@ import pygame
 
 from planck_time import palette as P
 from planck_time.microgames.base import IDLE, H, Microgame, PlayerInput, register
-from planck_time.pixel import backdrop, blit_center, card, outlined, result_overlay
+from planck_time.pixel import backdrop, blit_center, card, control_hint, outlined, result_overlay
 
 KINDS = ("X", "Y", "Z", "H")  # all self-inverse: a pair of any of them cancels
 SLOTS = 4  # gates per wire
@@ -248,6 +248,6 @@ class Shorter(Microgame):
                     a, b = (c[0] - 22 * d[0], c[1] - 22 * d[1]), (c[0] + 22 * d[0], c[1] + 22 * d[1])
                     pygame.draw.line(surf, P.INK, a, b, 9)
                     pygame.draw.line(surf, P.BAD, a, b, 5)
-        hint = "A ON THE SHORTER ONE" if self.stage == 0 else "PAIRS CANCEL! PICK SHORTER"
-        blit_center(surf, outlined(hint, 8, P.WHITE), (120, H - 14))
+        hint = "{a} ON THE SHORTER ONE" if self.stage == 0 else "PAIRS CANCEL! PICK SHORTER"
+        blit_center(surf, control_hint(hint, 8, P.WHITE), (120, H - 14))
         result_overlay(surf, self.result, self.since_end, seed=11)

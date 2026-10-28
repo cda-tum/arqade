@@ -950,10 +950,15 @@ def draw_title(S):
         if on and blink:
             text(S, ">", 16, col, W/2 - 120, y); text(S, "<", 16, col, W/2 + 120, y)
     if note: text(S, note, 8, note_col, W/2, 600)
-    stick, a, b, start = (button_name(k) for k in ("stick", "a", "b", "start"))
-    hint = ("%s select  ·  %s ok  ·  %s go" % (stick, a, start) if menu["step"] == 0
-            else "%s select  ·  %s/%s play  ·  %s back" % (stick, a, start, b))
-    text(S, hint, 8, (119, 119, 119), W/2, 664)
+    if inp.devices.everyone_on(PAD):
+        stick, a, b, start = (button_name(k) for k in ("stick", "a", "b", "start"))
+        hint = ("%s select  ·  %s ok  ·  %s go" % (stick, a, start) if menu["step"] == 0
+                else "%s select  ·  %s/%s play  ·  %s back" % (stick, a, start, b))
+        text(S, hint, 8, (119, 119, 119), W/2, 664)
+    else:
+        lines = title_hints(menu["step"])
+        for i, line in enumerate(lines):
+            text(S, line, 8, (119, 119, 119), W/2, 664 + (i - (len(lines) - 1) / 2) * 16)
     text(S, "HI %06d (%s)   ·   MUNICH QUANTUM SOFTWARE FORUM" % (hiscores.get(mode, 0), mode.upper()),
          8, (85, 85, 102), W/2, 700)
 
@@ -968,6 +973,22 @@ def button_name(name, player=None):
     if name == "stick":
         return KEYBOARD_STICKS[player] if inp.devices[player] == KEYBOARD else "STICK"
     return inp.devices.label(name, player)
+
+def key_hint(pairs, player=None):
+    """A "KEY: ACTION" hint line, e.g. "B: PICK  ·  SPACE: RESUME". pairs are
+    (control, action); player None names both players' keys ("B/L: OK")."""
+    return "  ·  ".join("%s: %s" % (button_name(c, player).replace(" / ", "/"), action) for c, action in pairs)
+
+def title_hints(step):
+    """The title menu's hint lines when someone plays on the keyboard: one
+    line naming both players' keys, or, with one player on keys and one on a
+    pad, a line each, so a key letter never stands next to a button letter."""
+    pairs = ((("stick", "SELECT"), ("a", "OK"), ("start", "GO")) if step == 0
+             else (("stick", "SELECT"), ("a", "PLAY"), ("b", "BACK")))
+    if inp.devices.everyone_on(KEYBOARD):
+        return [key_hint(pairs)]
+    return ["%s %s  %s" % (p.upper(), "KEYS" if inp.devices[p] == KEYBOARD else "PAD", key_hint(pairs, p))
+            for p in ("p1", "p2")]
 
 # ---------------- HOW TO PLAY ----------------
 DEMO = pygame.Rect(56, 232, 440, 330)   # the demo scene's panel
@@ -1030,13 +1051,26 @@ def draw_tutorial(S):
     # flashing
     kx = 728
     text(S, "CONTROLS", 16, YELLOW, kx, 252)
+    players = ("p1", "p2") if g is not None and g.two else (inp.devices.latest,)
+    if any(inp.devices[p] == KEYBOARD for p in players):
+        draw_key_controls(S, players, d["lit"], kx)
+    else:
+        draw_pad_controls(S, t, d["lit"], kx)
+
+    if int(t / 0.45) % 3 != 2:
+        any_button = "ANY KEY" if inp.devices.everyone_on(KEYBOARD) else "ANY BUTTON"
+        text(S, "PRESS %s TO START" % any_button, 16, WHITE, W/2, 668)
+
+def draw_pad_controls(S, t, lit, kx):
+    """The HOW TO PLAY controls for pads: the stick, the button cluster and
+    what each does."""
     jx, jy = 590, 330
     pygame.draw.circle(S, DIM, (jx, jy), 30, 2)
     pygame.draw.line(S, GREY, (jx, jy), (jx + int(math.sin(t * 2.4) * 12), jy - 14), 6)
     pygame.draw.circle(S, WHITE, (jx + int(math.sin(t * 2.4) * 12), jy - 16), 12)
     for r, row in enumerate(("LXR", "YBA")):
         for c, label in enumerate(row):
-            draw_button(S, 680 + c * 52, 306 + r * 50, label, label in "AB", label.lower() in d["lit"])
+            draw_button(S, 680 + c * 52, 306 + r * 50, label, label in "AB", label.lower() in lit)
     who = None if g is not None and g.two else inp.devices.latest   # whose keys or pad to name
     keys = [button_name(k, who) for k in ("stick", "a", "b", "start")]
     size = 16 if max(font(16).size(k)[0] for k in keys) <= 92 else 8   # long key names: smaller
@@ -1046,11 +1080,89 @@ def draw_tutorial(S):
         text(S, key, size, WHITE, 556, y, "left")
         text(S, action, 16, GREY, action_x, y, "left")
     if g is not None and g.two:
-        text(S, "SAME ON BOTH PADS" if inp.devices.everyone_on(PAD) else "SAME FOR BOTH PLAYERS", 8, GREY, kx, 562)
+        text(S, "SAME ON BOTH PADS", 8, GREY, kx, 562)
 
-    if int(t / 0.45) % 3 != 2:
-        any_button = "ANY KEY" if inp.devices.everyone_on(KEYBOARD) else "ANY BUTTON"
-        text(S, "PRESS %s TO START" % any_button, 16, WHITE, W/2, 668)
+CONTROL_ACTIONS = (("stick", "MOVE"), ("a", "FIRE"), ("b", "SWITCH COLOR"), ("start", "PAUSE"))
+ARROW_KEYS = {"UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}
+
+def draw_keycap(S, rect, label, lit):
+    """One keyboard key: a rounded cap with its name (an arrow for the arrow
+    keys), yellow while the demo presses it."""
+    if lit: glow(S, rect.centerx, rect.centery, 36, YELLOW, 0.6)
+    pygame.draw.rect(S, YELLOW if lit else WHITE, rect, border_radius=5)
+    pygame.draw.rect(S, DIM, rect, 2, border_radius=5)
+    if label in ARROW_KEYS:
+        dx, dy = ARROW_KEYS[label]
+        cx, cy, k = rect.centerx, rect.centery, rect.h // 5
+        tip = (cx + dx * k, cy + dy * k)
+        pygame.draw.polygon(S, BG, (tip, (cx - dx * k - dy * k, cy - dy * k - dx * k),
+                                    (cx - dx * k + dy * k, cy - dy * k + dx * k)))
+    else:
+        size = 16 if font(16).size(label)[0] <= rect.w - 8 else 8
+        text(S, label, size, BG, rect.centerx + 1, rect.centery + 1)
+
+def key_group_width(cap):
+    step = cap + cap // 8
+    return int(5.5 * step - (step - cap))
+
+def draw_key_group(S, player, x, y, cap, lit):
+    """A player's keys as on the keyboard, top-left at (x, y): the four
+    direction keys, then the switch and fire keys over the pause key."""
+    key = lambda name: inp.devices.label(name, player)
+    step = cap + cap // 8
+    cells = [(key("up"), 1, 0, 1, False), (key("left"), 0, 1, 1, False),
+             (key("down"), 1, 1, 1, False), (key("right"), 2, 1, 1, False),
+             (key("b"), 3.5, 0, 1, "b" in lit), (key("a"), 4.5, 0, 1, "a" in lit),
+             (key("start"), 3.5, 1, 2, False)]
+    for label, col, row, span, on in cells:
+        rect = pygame.Rect(int(x + col * step), int(y + row * step), int(span * step - (step - cap)), cap)
+        draw_keycap(S, rect, label, on)
+
+def draw_small_pad(S, x, y, lit):
+    """A pad player's stick and button cluster, small, top-left at (x, y)."""
+    pygame.draw.circle(S, DIM, (x + 16, y + 26), 16, 2)
+    pygame.draw.circle(S, WHITE, (x + 16, y + 20), 7)
+    for r, row in enumerate(("LXR", "YBA")):
+        for c, label in enumerate(row):
+            bx, by = x + 52 + c * 26, y + 12 + r * 26
+            if label.lower() in lit:
+                glow(S, bx, by, 24, YELLOW, 0.6); pygame.draw.circle(S, YELLOW, (bx, by), 10)
+                text(S, label, 8, BG, bx + 1, by + 1)
+            elif label in "AB":
+                pygame.draw.circle(S, WHITE, (bx, by), 10); text(S, label, 8, BG, bx + 1, by + 1)
+            else:
+                pygame.draw.circle(S, DIM, (bx, by), 10, 2)
+
+def draw_key_controls(S, players, lit, kx):
+    """The HOW TO PLAY controls when someone plays on the keyboard: keycaps
+    (and, for a pad player next to them, a small pad), then a table of what
+    each key does: one key column per player."""
+    if len(players) == 1:
+        p = players[0]
+        draw_key_group(S, p, kx - key_group_width(32) // 2, 288, 32, lit)
+    else:
+        for p, cx in zip(players, (kx - 86, kx + 86)):
+            on_keys = inp.devices[p] == KEYBOARD
+            text(S, "%s %s" % (p.upper(), "KEYS" if on_keys else "PAD"), 8, GREY, cx, 284)
+            if on_keys:
+                draw_key_group(S, p, cx - key_group_width(24) // 2, 300, 24, lit)
+            else:
+                draw_small_pad(S, cx - 56, 300, lit)
+    columns = [[button_name(c, p) for c, _ in CONTROL_ACTIONS] for p in players]
+    action_w = max(font(16).size(a)[0] for _, a in CONTROL_ACTIONS)
+    for size, gap in ((16, 20), (8, 16)):
+        widths = [max(font(size).size(k)[0] for k in col) for col in columns]
+        if 556 + sum(widths) + gap * len(widths) + action_w <= W - 24: break
+    heads = ["%s %s" % (p.upper(), "KEYS" if inp.devices[p] == KEYBOARD else "PAD") for p in players]
+    if len(players) > 1: widths = [max(w, font(8).size(h)[0]) for w, h in zip(widths, heads)]
+    x = 556
+    for head, col, w in zip(heads, columns, widths):
+        if len(players) > 1: text(S, head, 8, GREY, x, 396, "left")
+        for i, k in enumerate(col):
+            text(S, k, size, WHITE, x, 422 + i * 34, "left")
+        x += w + gap
+    for i, (_, action) in enumerate(CONTROL_ACTIONS):
+        text(S, action, 16, GREY, x, 422 + i * 34, "left")
 
 def draw_over(S):
     draw_game(S)
@@ -1081,7 +1193,8 @@ def draw_pause(S):
     if inp.devices[p] == PAD:
         hint = "UP/DOWN select  ·  FIRE pick  ·  START resume"
     else:
-        hint = "UP/DOWN select  ·  %s pick  ·  %s resume" % (button_name("a", p), button_name("start", p))
+        hint = "%s/%s: SELECT  ·  %s" % (button_name("up", p), button_name("down", p),
+                                          key_hint((("a", "PICK"), ("start", "RESUME")), p))
     text(S, hint, 8, (119, 119, 119), W/2, box.bottom - 20)
 
 def draw_input_test(S):

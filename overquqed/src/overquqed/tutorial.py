@@ -16,6 +16,7 @@ from overquqed import palette as P, sprites
 from overquqed.config import INTERNAL_HEIGHT, INTERNAL_WIDTH
 from overquqed.fonts import text
 from overquqed.hud import panel_box, rich
+from overquqed.input import PLAYERS
 from overquqed.render import tile_px
 
 TYPE_SPEED = 45.0  # characters per second
@@ -27,21 +28,34 @@ class Beat:
     wait: str  # "A" | an event kind ("fridge", "serve", "gate:X", ...)
     highlight: tuple[str, ...] = ()
     order: str | None = None  # spawn this order when the beat starts
+    # The lines for keyboard players, if `lines` names pad buttons: {a} and
+    # {b} become their keys (a pad's letters would name the wrong keys).
+    keys: tuple[str, ...] = ()
 
 
 SCRIPT = (
     Beat(("Welcome to the ancilla kitchen! I'm Chef Ket.",
           "Guests order quantum states. Let's cook!"), "A"),
     Beat(("Surface Code wants a |0>. Fresh qubits come",
-          "out of the Dilution Fridge in |0>. Face it, press A."), "fridge", ("fridge",), "0"),
+          "out of the Dilution Fridge in |0>. Face it, press A."), "fridge", ("fridge",), "0",
+         ("Surface Code wants a |0>, fresh from the Dilution",
+          "Fridge. Face the Fridge and take one: {a}.")),
     Beat(("The arrow points up: that's |0>. Now put it on",
-          "the PASS with A to serve it."), "serve", ("pass",)),
+          "the PASS with A to serve it."), "serve", ("pass",), None,
+         ("The arrow points up: that's |0>. Now put it on",
+          "the PASS to serve it: {a}.")),
     Beat(("Next up: |1>. Put a fresh qubit on the Pauli-X",
-          "Flipper (A), then tap B to flip it."), "gate:X", ("fridge", "x"), "1"),
+          "Flipper (A), then tap B to flip it."), "gate:X", ("fridge", "x"), "1",
+         ("Next up: |1>. Put a fresh qubit on the Pauli-X",
+          "Flipper: {a}. Then flip it: tap {b}.")),
     Beat(("Flipped! X turns |0> into |1>.",
-          "Pick it up (A) and serve it."), "serve", ("x", "pass")),
+          "Pick it up (A) and serve it."), "serve", ("x", "pass"), None,
+         ("Flipped! X turns |0> into |1>.",
+          "Pick it up ({a}) and serve it.")),
     Beat(("Now |+>, a superposition! Put a |0> in the",
-          "Hadamard Blender and HOLD B."), "gate:H", ("fridge", "h"), "+"),
+          "Hadamard Blender and HOLD B."), "gate:H", ("fridge", "h"), "+",
+         ("Now |+>, a superposition! Put a |0> in the",
+          "Hadamard Blender and HOLD {b}.")),
     Beat(("See the arrow swing onto the equator?",
           "Blend it again and it un-blends! Serve it now."), "serve", ("h", "pass")),
     Beat(("Guests only accept fidelity F >= 0.8. Below that",
@@ -68,6 +82,20 @@ class Tutorial:
     @property
     def beat(self) -> Beat:
         return SCRIPT[self.i]
+
+    def _who(self) -> str | None:
+        """The one player in training, or None for both."""
+        players = self.scene.players
+        return PLAYERS[players[0]] if len(players) == 1 else None
+
+    @property
+    def lines(self) -> tuple[str, ...]:
+        """The beat's lines, naming the keys for keyboard players."""
+        beat, inp = self.beat, self.scene.app.inp
+        who = self._who()
+        if not beat.keys or inp.on_pads(who):
+            return beat.lines
+        return tuple(line.format(a=inp.name("a", who), b=inp.name("b", who)) for line in beat.keys)
 
     def _next(self) -> None:
         self.i += 1
@@ -107,7 +135,7 @@ class Tutorial:
             return
         self.t += dt
         self.oops = max(0.0, self.oops - dt)
-        full = sum(len(line) for line in self.beat.lines)
+        full = sum(len(line) for line in self.lines)
         self.shown = min(full, self.shown + dt * TYPE_SPEED)
         if inp.any_pressed("start"):
             self._finish()
@@ -142,14 +170,16 @@ class Tutorial:
         surf.blit(portrait, (11, y + 11))
         surf.blit(text("CHEF KET", 8, (170, 120, 40)), (52, y + 6))
         remaining = int(self.shown)
-        for li, line in enumerate(beat.lines):
+        lines = self.lines
+        for li, line in enumerate(lines):
             part = line[:max(0, remaining)]
             remaining -= len(line)
             if part:
                 surf.blit(rich(part, P.INK), (52, y + 19 + li * 12))
-        full = sum(len(line) for line in beat.lines)
+        full = sum(len(line) for line in lines)
         if self.shown >= full and beat.wait == "A" and int(t * 3) % 2 == 0:
-            a = text(f"{self.scene.app.inp.name('a')} >", 8, (200, 60, 60))
+            inp, who = self.scene.app.inp, self._who()
+            a = text(f"{inp.name('a')} >" if inp.on_pads(who) else f"{inp.name('a', who)}: NEXT", 8, (200, 60, 60))
             surf.blit(a, (INTERNAL_WIDTH - 12 - a.get_width(), y + h - 12))
         skip = text(f"{self.scene.app.inp.name('start')}: SKIP", 8, P.TEXT_DIM, shadow=P.INK)
         surf.blit(skip, (INTERNAL_WIDTH - skip.get_width() - 4, y - 11))

@@ -69,6 +69,13 @@ class RoundScene(Scene):
             return {self.active_chef}
         return {0, 1}
 
+    def chef_keys(self) -> dict[int, dict[str, str]]:
+        """The keys behind the A / B prompts, for chefs cooked from the keyboard."""
+        inp = self.app.inp
+        owners = {c: PLAYERS[self.players[0]] for c in (0, 1)} if self.solo else dict(enumerate(PLAYERS))
+        return {c: {"A": inp.name("a", p), "B": inp.name("b", p)}
+                for c, p in owners.items() if not inp.on_pads(p)}
+
     def chef_inputs(self, inp: Input) -> list[ChefInput]:
         out = [IDLE, IDLE]
         if self.solo:
@@ -215,7 +222,7 @@ class RoundScene(Scene):
     def draw(self, surf: pygame.Surface) -> None:
         t = self.clock
         self.view.draw(surf, self.world.t, self.active_chefs(), self.colors(),
-                       hints=self.tutorial is None or self.tutorial.show_hints)
+                       hints=self.tutorial is None or self.tutorial.show_hints, keys=self.chef_keys())
         self.dining.draw(surf, t)
         for f in self.floaters:
             y = f.y - round(f.t * 18)

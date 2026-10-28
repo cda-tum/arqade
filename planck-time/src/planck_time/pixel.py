@@ -13,6 +13,7 @@ from functools import lru_cache
 
 import pygame
 
+from arqade_common import keycaps
 from planck_time import palette as P
 from planck_time.fonts import load_font
 
@@ -20,8 +21,9 @@ _FONTS: dict[int, pygame.font.Font] = {}
 
 # What the controls are called on the screen being drawn: the renderer sets
 # them before each player's screen, so a hint says "A" and "STICK" to a pad
-# player and names the keys ("B", "WASD") to one on the keyboard.
-_BUTTONS = {"a": "A", "stick": "STICK"}
+# player and names the keys ("B", "WASD") to one on the keyboard ("keys" set;
+# then also "up", "down", "left" and "right", the keys the stick stands for).
+_BUTTONS = {"a": "A", "stick": "STICK", "keys": ""}
 
 
 def button(name: str) -> str:
@@ -31,6 +33,52 @@ def button(name: str) -> str:
 
 def set_buttons(names: dict[str, str]) -> None:
     _BUTTONS.update(names)
+
+
+def on_keys() -> bool:
+    """Whether the player being drawn is on the keyboard: then their keys are
+    drawn as keycaps, never as the pad's stick or A button."""
+    return bool(_BUTTONS["keys"])
+
+
+KEY_COLORS = (P.CREAM, P.INK, P.INK)  # a keycap's face, edge and letter
+KEY_LIT = P.GOLD  # the face of a key the demo is pressing
+
+
+def draw_keycap(surf: pygame.Surface, name: str, size: int, topleft, lit: bool = False) -> pygame.Rect:
+    """One key as a keycap in the game's colours, gold while pressed."""
+    face, edge, ink = KEY_COLORS
+    return keycaps.draw_keycap(surf, font(size), name, topleft, KEY_LIT if lit else face, edge, ink)
+
+
+def control_hint(template: str, size: int, color, outline=P.INK, shadow: bool = True) -> pygame.Surface:
+    """outlined() for a hint naming the controls, e.g. "{a} WHEN THEY MATCH":
+    {a} and {stick} become the player's names for them, and on the keyboard
+    the {a} key is a keycap, so "B" reads as the B key, not the pad's B button."""
+    text = template.replace("{stick}", button("stick"))
+    if not on_keys() or "{a}" not in text:
+        return outlined(text.replace("{a}", button("a")), size, color, outline, shadow)
+    pieces = text.split("{a}")
+    w, h = keycaps.keycap_size(font(size), button("a"))
+    parts: list[tuple[str, pygame.Surface | None, int]] = []  # (kind, image, gap before)
+    for i, piece in enumerate(pieces):
+        if i:
+            parts.append(("key", None, 4 if pieces[i - 1].endswith(" ") else 1))
+        if piece.strip():
+            gap = 4 if i and piece.startswith(" ") else 1 if i else 0
+            parts.append(("text", outlined(piece.strip(), size, color, outline, shadow), gap))
+    height = max([h + 1] + [img.get_height() for _, img, _ in parts if img])
+    width = sum(gap + (img.get_width() if img else w) for _, img, gap in parts)
+    out = pygame.Surface((width, height), pygame.SRCALPHA)
+    x = 0
+    for kind, img, gap in parts:
+        x += gap
+        if img is None:
+            x = draw_keycap(out, button("a"), size, (x, (height - h) // 2)).right
+        else:
+            out.blit(img, (x, (height - img.get_height()) // 2))
+            x += img.get_width()
+    return out
 
 
 def font(size: int) -> pygame.font.Font:

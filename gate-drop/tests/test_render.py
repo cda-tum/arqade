@@ -1,6 +1,8 @@
 import random
 
 import pygame
+import pytest
+from arqade_common.input import KEYBOARD, PAD, LastDevice
 
 from gate_drop import config
 from gate_drop import match as m
@@ -52,12 +54,23 @@ def press(*players, back=False, nav=None):
     return fi
 
 
+def devices(p1, p2):
+    """Players on these devices, as if each had pressed something on it."""
+    d = LastDevice(p1)
+    d._devices["p2"] = p2
+    return d
+
+
+# The hints with pads (the cabinet), the keyboard (keycaps) and one of each.
+DEVICES = pytest.mark.parametrize("on", ((PAD, PAD), (KEYBOARD, KEYBOARD), (KEYBOARD, PAD), (PAD, KEYBOARD)))
+
+
 class Harness:
-    def __init__(self):
+    def __init__(self, on=(PAD, PAD)):
         pygame.init()
         self.surface = pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT))
         self.mt = Match(random.Random(0), Hiscores(None))
-        self.renderer = Renderer(self.surface)
+        self.renderer = Renderer(self.surface, devices(*on))
         self.rng = random.Random(1)
         self.seen = set()
 
@@ -77,8 +90,9 @@ class Harness:
                     self.mt.boards[player].grid.set(pos, None)
 
 
-def test_every_versus_screen_renders_without_errors():
-    h = Harness()
+@DEVICES
+def test_every_versus_screen_renders_without_errors(on):
+    h = Harness(on)
     h.frame()
     h.frame(press("p1"))  # to the setup screen
     h.frame(press("p1", nav={"p2": (1, 0)}))  # p1 ready, p2 changes its level
@@ -103,8 +117,9 @@ def test_every_versus_screen_renders_without_errors():
     assert h.seen >= {m.TITLE, m.SETUP, m.TUTORIAL, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
 
 
-def test_every_single_player_screen_renders_without_errors():
-    h = Harness()
+@DEVICES
+def test_every_single_player_screen_renders_without_errors(on):
+    h = Harness(on)
     h.frame(press(nav={"p1": (0, -1)}))  # 1 player
     h.frame(press("p1"))
     h.frame(press("p1"))  # ready

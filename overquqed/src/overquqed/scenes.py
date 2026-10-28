@@ -152,7 +152,10 @@ class TitleScene(Scene):
                 surf.blit(text(">", 16, P.GOLD, shadow=P.INK), (x - 22 - bob, y))
                 surf.blit(text("<", 16, P.GOLD, shadow=P.INK), (x + label.get_width() + 6 + bob, y))
         n = self.app.inp.name
-        center(surf, text(f"{n('stick')}: CHOOSE   {n('a')}: OK   {n('start')}: PLAY", 8, P.TEXT_DIM, shadow=P.INK), 304)
+        hint = f"{n('stick')}: CHOOSE   {n('a')}: OK   {n('start')}: PLAY"
+        if len(hint) * 8 > INTERNAL_WIDTH - 8:  # e.g. "P1 B / P2 A" for one player on keys, one on a pad
+            hint = hint.replace("   ", "  ")
+        center(surf, text(hint, 8, P.TEXT_DIM, shadow=P.INK), 304)
         center(surf, text("original game for the MQSF gaming corner", 8, (150, 140, 170)), 346)
 
 
@@ -208,16 +211,26 @@ class JoinScene(Scene):
                 spr = pygame.transform.scale(frames[("down", 0)], (48, 66))
                 spr.set_alpha(70)
                 surf.blit(spr, (x + 56, 110))
+                if not self.app.inp.on_pads(PLAYERS[i]):  # a key: "PRESS B" would read as the pad's B
+                    if int(self.t * 2) % 2 == 0:
+                        lbl = text(f"{self.app.inp.name('a', PLAYERS[i])}: JOIN", 8, P.TEXT)
+                        surf.blit(lbl, (x + 80 - lbl.get_width() // 2, 202))
+                    continue
                 if int(self.t * 2) % 2 == 0:
                     lbl = text(f"PRESS {self.app.inp.name('a', PLAYERS[i])}", 8, P.TEXT)
                     surf.blit(lbl, (x + 80 - lbl.get_width() // 2, 196))
                 lbl = text("TO JOIN", 8, P.TEXT)
                 surf.blit(lbl, (x + 80 - lbl.get_width() // 2, 208))
         if len(self.joined) == 1:
-            y_name = self.app.inp.name("y", PLAYERS[self.joined[0]])
-            center(surf, text(f"Solo? Press {y_name} in the kitchen to swap chefs.", 8, P.TEXT_DIM), 256)
+            solo = PLAYERS[self.joined[0]]
+            y_name = self.app.inp.name("y", solo)
+            if self.app.inp.on_pads(solo):
+                center(surf, text(f"Solo? Press {y_name} in the kitchen to swap chefs.", 8, P.TEXT_DIM), 256)
+            else:
+                center(surf, text(f"Solo? In the kitchen, {y_name}: SWAP CHEFS.", 8, P.TEXT_DIM), 256)
         n = self.app.inp.name
-        center(surf, text(f"{n('a')} / {n('start')} again: LET'S COOK", 8, P.WHITE), 282)
+        go = f"{n('a')} / {n('start')}" if self.app.inp.on_pads() else n("start")  # Start does it too
+        center(surf, text(f"{go} again: LET'S COOK", 8, P.WHITE), 282)
         left = max(0, self.AUTO_GO - self.t)
         center(surf, text(f"starting in {int(left) + 1}", 8, P.TEXT_DIM), 300)
         center(surf, text(f"{self.app.inp.name('b')}: BACK", 8, (90, 80, 110)), 340)
@@ -337,7 +350,8 @@ class LevelSelectScene(Scene):
                     col = (90, 80, 110)
                 surf.blit(text(line, 8, col), (x + 8 + (r // 3) * 124, yy + 13 + (r % 3) * 11))
         n = self.app.inp.name
-        center(surf, text(f"{n('a')}/{n('start')}: COOK   {n('b')}: BACK", 8, P.TEXT_DIM), 350)
+        cook = f"{n('a')}/{n('start')}" if self.app.inp.on_pads() else n("start")  # Start does it too
+        center(surf, text(f"{cook}: COOK   {n('b')}: BACK", 8, P.TEXT_DIM), 350)
 
 
 def _wrap_px(s: str, chars: int) -> list[str]:
@@ -466,5 +480,6 @@ class ResultsScene(Scene):
             if self.level.tutorial:
                 center(surf, text("Now try the Superconducting Snack Bar!", 8, P.TEXT), 250)
             if int(self.t * 2) % 2 == 0:
-                center(surf, text(f"{self.app.inp.name('a')} / {self.app.inp.name('start')}: CONTINUE", 8, P.WHITE),
-                       300)
+                n = self.app.inp.name
+                go = f"{n('a')} / {n('start')}" if self.app.inp.on_pads() else n("start")  # Start does it too
+                center(surf, text(f"{go}: CONTINUE", 8, P.WHITE), 300)

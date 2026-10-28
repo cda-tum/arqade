@@ -17,7 +17,7 @@ import sys
 
 import pygame
 from arqade_common import runtime, web
-from arqade_common.input import PAD_LAYOUTS
+from arqade_common.input import KEYBOARD, PAD_LAYOUTS
 
 from quantum_pong import config, fonts, screens, sound, sprites, title
 from quantum_pong import gates as gates_mod
@@ -139,12 +139,16 @@ def _pause_buttons_held(p1_raw, p2_raw) -> dict[str, tuple]:
     }
 
 
-def _pause_hint() -> str:
+def _pause_hint() -> str | tuple:
     """The pause menu's hint for whoever pressed something last (one player
-    works the menu; both players' keys wouldn't fit)."""
+    works the menu; both players' keys wouldn't fit). On the keyboard it is
+    keycaps (see screens.draw_pause_menu), so "B" reads as the B key and not
+    as the pad's B button."""
     devices = last_device()
     player = devices.latest
     pick, back, start = (devices.label(a, player) for a in ("a", "b", "start"))
+    if devices[player] == KEYBOARD:
+        return (((pick,), "PICK"), ((start,), "RESUME"))
     return f"{pick}: PICK   {start} / {back}: RESUME"
 
 

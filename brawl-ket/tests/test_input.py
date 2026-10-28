@@ -178,3 +178,28 @@ def test_any_button_from_events_and_keys_only_with_the_keyboard_on() -> None:
         assert not inp.frame_input().any_button
     finally:
         binput.set_keyboard_enabled(True)
+
+
+def _devices(d1: str, d2: str):
+    from arqade_common.input import LastDevice
+    devices = LastDevice(d1)
+    devices._devices["p2"] = d2
+    return devices
+
+
+def test_hints_name_each_players_keys_or_buttons() -> None:
+    from arqade_common.input import KEYBOARD, PAD
+    pads, keys = _devices(PAD, PAD), _devices(KEYBOARD, KEYBOARD)
+    assert binput.button_name("a", None, pads) == "A" and binput.button_name("start", None, pads) == "START"
+    assert binput.button_name("a", None, keys) == "B / L" and binput.button_name("b", "p1", keys) == "V"
+    assert not binput.mixed_devices(pads) and not binput.mixed_devices(keys)
+
+
+def test_one_on_keys_one_on_a_pad_says_whose_letter_is_whose() -> None:
+    # "B / A" would read as the B key standing for the pad's A button
+    from arqade_common.input import KEYBOARD, PAD
+    mixed = _devices(KEYBOARD, PAD)
+    assert binput.mixed_devices(mixed)
+    assert binput.button_name("a", None, mixed) == "P1 B / P2 A"
+    assert binput.button_name("start", None, mixed) == "SPACE / START"     # nothing to mix up
+    assert binput.button_name("stick", None, mixed) == "WASD / STICK"
