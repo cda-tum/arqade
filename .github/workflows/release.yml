@@ -6,7 +6,8 @@
 # (tools/build_web.py), and publishes GitHub release v<version> with one
 # asset, arqade-games-<version>.zip: one folder per game plus _runtime/, the
 # Python runtime the games share. A website pins a version and downloads that
-# zip at build time.
+# zip at build time; with WEBSITE_REPO and WEBSITE_DEPLOY_KEY set (see the
+# last step), the new version is also pinned in that website repo at once.
 name: Release web games
 
 on:
@@ -100,3 +101,31 @@ jobs:
           gh release create "v$VERSION" "$zip" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Arqade games $VERSION" --notes-file notes.md
+          echo "SHA=$sha" >> "$GITHUB_ENV"
+
+      # Optional: pin the new release in a website repo right away. Needs the
+      # repository variable WEBSITE_REPO (owner/name of a repo with a
+      # games.config.json) and the secret WEBSITE_DEPLOY_KEY (the private half
+      # of a deploy key with write access to that repo). Without them, skipped.
+      - name: Pin the release in the website repo
+        if: vars.WEBSITE_REPO != ''
+        env:
+          WEBSITE_REPO: ${{ vars.WEBSITE_REPO }}
+          DEPLOY_KEY: ${{ secrets.WEBSITE_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::warning::WEBSITE_DEPLOY_KEY is not set: $WEBSITE_REPO was not updated"; exit 0
+          fi
+          key="$RUNNER_TEMP/website_key"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone --depth 1 "git@github.com:$WEBSITE_REPO.git" "$RUNNER_TEMP/website"
+          cd "$RUNNER_TEMP/website"
+          jq --arg v "$VERSION" --arg s "$SHA" '.version = $v | .sha256 = $s' games.config.json > games.config.tmp
+          mv games.config.tmp games.config.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Pin the games to release $VERSION" \
+            -m "https://github.com/$GITHUB_REPOSITORY/releases/tag/v$VERSION"
+          git push origin HEAD:main
