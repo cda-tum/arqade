@@ -1,6 +1,6 @@
 {
   "id": "quantum-towers",
-  "title": "Quantum Towers",
+  "title": "Qlimbers",
   "tagline": "Climb a tower of quantum states: apply X, Y, Z and H gates to match each floor, then push up.",
   "description": "Each floor of your tower shows a target qubit state. Apply quantum gates (X, Y, Z, H, or RESET to |0>) until your qubit matches it, then push up to climb; push up on a wrong state and you are stunned. Two players race side by side, and clearing floors in the fewest steps charges an attack that knocks your rival back down. Alone, climb against the clock for a top-10 time.",
   "players": "1-2",
