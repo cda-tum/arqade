@@ -1133,8 +1133,9 @@ class Game:
             else:  # one on keys, one on a pad: each player's own names
                 done = "UP/DOWN change   LEFT/RIGHT move   " + ", ".join(
                     f"{p.upper()}: {self.name('a', p)} or {self.name('b', p)}" for p in ("p1", "p2")) + " done"
+            # just under the last item; the control lines below move down to make room
             text(s, f"{done}   (empty = random)", self.f_tiny,
-                 TEXT_DIM, (W / 2, 236 + len(self.MAIN_ITEMS) * 42))
+                 TEXT_DIM, (W / 2, 236 + len(self.MAIN_ITEMS) * 42 - 14))
         lines = [
             f"BLUE (P1): {self.name('stick', 'p1').lower()} = select electrode / voltage",
             f"RED (P2): {self.name('stick', 'p2').lower()} = select electrode / voltage",
@@ -1147,8 +1148,9 @@ class Game:
                      f"{self.name('a', p)}: confirm   {self.name('b', p)}: back   {self.name('start', p)}: pause"
                      for who, p in (("BLUE (P1)", "p1"), ("RED (P2)", "p2"))]
             lines.append("Co-op: one shared waveform, one ion.")
+        y0, step = (494, 20) if self.seed_edit else (486, 22)  # clear of the seed hint, above the records
         for i, ln in enumerate(lines):
-            text(s, ln, self.f_small, TEXT_DIM, (W / 2, 486 + i * 22))
+            text(s, ln, self.f_small, TEXT_DIM, (W / 2, y0 + i * step))
         rec = f"Records  Solo {self.best.get('solo', 0)}   Co-op {self.best.get('coop', 0)}"
         text(s, rec, self.f_tiny, (110, 120, 160), (W / 2, 560))
 

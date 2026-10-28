@@ -1289,8 +1289,10 @@ class Game:
             return (f"{n('stick')}: ROUTE   {n('a/r')}: NEXT   {n('l')}: PREV   {n('b')}: OTHER END   "
                     f"{n('x')}: UNDO   {n('start')}: PAUSE")
         lines = [hint(who)] if who is not None else self.hint_lines(hint)
+        # one line sits 14 up; two (a line per device) pack into the strip below the co-op chip
+        bottom, step = (14, 14) if len(lines) == 1 else (10, 13)
         for i, line in enumerate(lines):
-            text(S, line, 8, DIM, W / 2, H - (14 + (len(lines) - 1 - i) * 14) * U)
+            text(S, line, 8, DIM, W / 2, H - (bottom + (len(lines) - 1 - i) * step) * U)
 
     def draw_paused(self, S):
         self.draw_play(S)
