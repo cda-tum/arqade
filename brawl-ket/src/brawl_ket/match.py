@@ -434,6 +434,13 @@ class Match:
         self.state = state
         self.t = 0
 
+    def back_to_title(self) -> None:
+        """Leave whatever is going on for the title, which waits for every button to be let
+        go: the browser's way of quitting (a web page has no game list to go back to)."""
+        self.quit = False
+        self._to_title()
+        self.wait_release = True
+
     def _to_title(self) -> None:
         self.fight = None
         self.lesson = None
