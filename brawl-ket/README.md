@@ -181,19 +181,27 @@ Each fighter's super, and how to get out of it:
 
 ## Controls
 
-| Action | Cabinet | P1 keyboard | P2 keyboard |
+| Action | Pad | P1 keyboard | P2 keyboard |
 |---|---|---|---|
-| Walk / jump / crouch | stick | E S D F | arrows |
-| Light (and confirm in menus) | A | Q | . |
-| Heavy (and back in menus) | B | W | , |
-| Special | X | T | / |
-| Switch basis (H) | Y | G | ; |
-| Start / pause (resume or quit to the title) | Start | 1 | 2 |
-| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Esc | Esc |
+| Walk / jump / crouch | stick or d-pad | W A S D | arrows |
+| Light (and confirm in menus) | A | B | L |
+| Heavy (and back in menus) | B | V | K |
+| Special | X | G | I |
+| Switch basis (H) | Y | C | J |
+| Super (bar full) | A + B | B + V | L + K |
+| Start / pause (resume or quit to the title) | Start | Space | Enter |
+| Quit | QUIT on the title, Start + Select, or hold Select 2 s on the title | Space + L-Shift | Enter + R-Shift |
 
-P1's dev keys avoid the pad's own letters (l, x, r, b, y, a; see
-`../AGENTS.md`). The keyboard is a dev fallback only: on the cabinet the
-loader passes `--no-keyboard`.
+The keys are the layout shared by all the games (`../common`): each player's
+half of the keyboard is a pad, its 2x3 buttons on F G H / C V B and
+U I O / J K L. On-screen hints name the keys or the pad buttons, whichever
+each player last used: the HUD's A / B chips, A+B!, the fighters' specials,
+HOW TO PLAY and the menus' hints. There is no quit key (Esc leaves fullscreen
+in a browser, and the PC launcher's Esc ends the game on its own). On the
+cabinet the loader passes `--no-keyboard`, because Batocera's evmapy turns
+P1's pad into key presses (see `../AGENTS.md`). Pads use the cabinet's
+button numbers by default; `--pad-layout xbox` reads an Xbox-style pad on a
+PC instead, and browser gamepads use the browser's standard layout.
 
 ## Setup (dev machine)
 
@@ -209,6 +217,17 @@ uv run python tools/snapshot.py /tmp/brawl-snaps   # poses, moves, fights and sc
 uv run python tools/benchmark.py                    # frame cost (on the cabinet: see below)
 uv run python tools/balance.py                      # bot-against-bot win rates for every pairing
 ```
+
+In the browser (pygbag's test server on http://localhost:8000), from the
+repo root:
+
+```bash
+uv run --project tools tools/build_web.py --serve brawl-ket
+```
+
+In the browser, quitting (Start + Select, or QUIT on the title) goes back to
+the title and tells the page around the game (`arqade:quit`);
+`arqade:game-start` / `arqade:game-end` go round each match's rounds.
 
 ## Layout
 
@@ -228,7 +247,7 @@ uv run python tools/balance.py                      # bot-against-bot win rates 
 | `kids.py` | ALICE & BOB's couriers, KEY EXCHANGE's toss and big photon, TELEPORT's flash, BELL DIVE's streaks, a decohered Bob and his HUD icon (checked pixel for pixel against their approved look script). |
 | `bot.py` | The CPU for the attract demo and the tests. |
 | `audio.py` | Chiptune effects, adapted from Planck Time's. No music. |
-| `input.py`, `config.py` | Pads and the dev keyboard; every tuning number and button. |
+| `input.py`, `config.py` | Pads and the keyboard (through `../common`'s `arqade_common`); every tuning number. |
 
 ## Deploying to the cabinet
 

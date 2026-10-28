@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from brawl_ket import config
 from brawl_ket.fighter import FighterInput
 from brawl_ket.main import parse_args
@@ -16,6 +18,11 @@ def test_defaults_are_a_windowed_dev_run() -> None:
 def test_the_cabinet_loader_flags_parse() -> None:
     args = parse_args(["--fullscreen", "--no-keyboard"])
     assert args.fullscreen and args.no_keyboard
+
+
+def test_a_pad_layout_can_be_picked() -> None:
+    assert parse_args([]).pad_layout is None
+    assert parse_args(["--pad-layout", "xbox"]).pad_layout == "xbox"
 
 
 def test_the_input_test_screen_runs_and_leaves_on_quit() -> None:
@@ -45,7 +52,7 @@ def test_the_game_runs_headless_and_quits(monkeypatch) -> None:
             pygame.event.post(pygame.event.Event(pygame.QUIT))
 
     monkeypatch.setattr(pygame.display, "flip", flip)
-    game.run(fullscreen=False, window_size="640x360", show_fps=True)
+    asyncio.run(game.run(fullscreen=False, window_size="640x360", show_fps=True))
     assert frames["n"] >= 30
 
 
@@ -69,8 +76,88 @@ def test_quit_on_the_title_ends_the_game_loop(monkeypatch) -> None:
             pygame.event.post(pygame.event.Event(pygame.QUIT))
 
     monkeypatch.setattr(game.Input, "update", update)
-    game.run(fullscreen=False, window_size="640x360", show_fps=False)
+    asyncio.run(game.run(fullscreen=False, window_size="640x360", show_fps=False))
     assert frames["n"] < 30
+
+
+def test_in_the_browser_the_page_hears_a_match_and_quitting_goes_back_to_the_title(monkeypatch) -> None:
+    """Through the menus into a round (arqade:game-start), then Start + Select: the match ends
+    (arqade:game-end), the page is told (arqade:quit), and the game carries on at its title."""
+    import pygame
+
+    from brawl_ket import game
+    from brawl_ket import match as M
+
+    sent = []
+    browser = {"on": True}
+    monkeypatch.setattr(game.runtime, "is_browser", lambda: browser["on"])
+    monkeypatch.setattr(game.web, "post_event", lambda kind, game_id: sent.append(kind))
+    matches = []
+
+    class Recorded(M.Match):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            matches.append(self)
+
+    monkeypatch.setattr(game, "Match", Recorded)
+    real_update = game.Input.update
+    script = {"n": 0, "quit": 0}
+
+    def update(self, dt):
+        real_update(self, dt)
+        script["n"] += 1
+        assert script["n"] < 900, "the script got stuck"
+        m = matches[0]
+        tap = script["n"] % 2 == 0                  # a fresh press every other frame
+        if script["quit"]:                          # Start + Select held a few frames, then let go
+            script["quit"] += 1
+            if script["quit"] < 6:
+                self.start_select["p1"] = (True, True)
+            elif m.state == M.TITLE and script["quit"] == 20:
+                browser["on"] = False               # a browser has no window to close: stop being one
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+        elif m.state in (M.TITLE, M.SELECT, M.STAGE_SELECT) and tap:
+            self.frame.confirms = {"p1": True, "p2": True}
+        elif m.state == M.TUTORIAL and tap:
+            self.frame.any_button = True
+        elif m.state == M.FIGHT:
+            script["quit"] = 1
+            self.start_select["p1"] = (True, True)
+
+    monkeypatch.setattr(game.Input, "update", update)
+    asyncio.run(game.run(fullscreen=False, window_size="640x360", show_fps=False))
+    assert sent == [game.web.GAME_START, game.web.GAME_END, game.web.QUIT]
+    assert matches[0].state == M.TITLE and not matches[0].quit
+
+
+def test_in_the_browser_quit_on_the_title_goes_back_to_the_title(monkeypatch) -> None:
+    """A on QUIT tells the page and stays on the title instead of ending."""
+    import pygame
+
+    from brawl_ket import game
+
+    sent = []
+    browser = {"on": True}
+    monkeypatch.setattr(game.runtime, "is_browser", lambda: browser["on"])
+    monkeypatch.setattr(game.web, "post_event", lambda kind, game_id: sent.append(kind))
+    real_update = game.Input.update
+    frames = {"n": 0}
+
+    def update(self, dt):
+        real_update(self, dt)
+        frames["n"] += 1
+        if frames["n"] == 3:
+            self.frame.nav["p1"] = (0, -1)          # up: round to QUIT
+        elif frames["n"] == 5:
+            self.frame.confirms["p1"] = True
+        elif frames["n"] == 40:
+            browser["on"] = False
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+        assert frames["n"] < 120, "the loop did not end"
+
+    monkeypatch.setattr(game.Input, "update", update)
+    asyncio.run(game.run(fullscreen=False, window_size="640x360", show_fps=False))
+    assert sent == [game.web.QUIT] and frames["n"] >= 40
 
 
 def test_the_default_window_is_a_whole_multiple_of_the_internal_size() -> None:

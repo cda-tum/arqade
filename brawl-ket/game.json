@@ -1,0 +1,22 @@
+{
+  "id": "brawl-ket",
+  "title": "Brawl-Ket",
+  "tagline": "A one-on-one quantum fighting game: a hit only hurts in your rival's own colour.",
+  "description": "Every fighter is in a quantum basis, shown by the colour of their whole body: green attacks (X) only hurt green fighters, purple attacks (Z) only purple ones, and throws (Y) hurt both. A and your specials hit in your own colour, B in the other one, and Y switches your colour, like a Hadamard gate. Seven fighters with their own specials and supers, five stages, best of three rounds: against a friend, or against the CPU at three levels.",
+  "players": "1-2",
+  "thumbnail": "thumbnail.png",
+  "controls": {
+    "keyboard": {
+      "p1": "W A S D to walk, jump and crouch, B light (your colour), V heavy (the other colour), G special, C to switch colour, Space to pause",
+      "p2": "Arrows to walk, jump and crouch, L light, K heavy, I special, J to switch colour, Enter to pause"
+    },
+    "gamepad": true
+  },
+  "how_to_play": [
+    "Your body colour is your basis. Only an attack in your rival's colour hurts them.",
+    "A and your specials (X) hit in your own colour, B in the other one. A throw (B up close, pushing towards your rival) hurts either colour.",
+    "Y switches your colour: dodge an attack, or make your A hurt.",
+    "Hit in both colours to fill the SUPER bar, then press A and B together.",
+    "Knock your rival out: first to 2 rounds wins. Start (Space or Enter) pauses the game."
+  ]
+}
