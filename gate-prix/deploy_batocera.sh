@@ -39,15 +39,19 @@ STAGE_DIR="$(mktemp -d)"
 trap 'rm -rf "$STAGE_DIR"' EXIT
 
 cp -r "$SCRIPT_DIR/src/gate_prix" "$STAGE_DIR/gate_prix"
+# Code shared by all games goes next to the game's own package.
+cp -r "$SCRIPT_DIR/../common/src/arqade_common" "$STAGE_DIR/arqade_common"
 # The idle exit (../batocera/arqade_idle.py) goes beside the package.
 cp "$SCRIPT_DIR/../batocera/arqade_idle.py" "$STAGE_DIR/arqade_idle.py"
 find "$STAGE_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+rm -f "$STAGE_DIR/gate_prix/py.typed" "$STAGE_DIR/arqade_common/py.typed"
 
 cat > "$STAGE_DIR/${GAME_NAME}.pygame" <<EOF
 #!/usr/bin/env python
 """Batocera entry point for GATE PRIX.
 The real game lives at ${GAMES_DIR}, kept separate from the ROMs folder.
 """
+import asyncio
 import sys
 
 sys.path.insert(0, "${GAMES_DIR}")
@@ -56,7 +60,7 @@ import arqade_idle
 
 if __name__ == "__main__":
     arqade_idle.install()  # 20 s untouched: back to the game list
-    main(["--fullscreen", "--no-keyboard"])
+    asyncio.run(main(["--fullscreen", "--no-keyboard"]))
 EOF
 chmod +x "$STAGE_DIR/${GAME_NAME}.pygame"
 
@@ -66,15 +70,16 @@ if [ "$PUBLIC" = 1 ]; then  # the parked loader and its link go
 else  # a real loader in the ROMs folder would keep it public
     ssh "$HOST" "if [ -f '${LINK}' ] && [ ! -L '${LINK}' ]; then rm -f '${LINK}'; fi"
 fi
-ssh "$HOST" "mkdir -p '${GAMES_DIR}' && rm -rf '${GAMES_DIR}/gate_prix'"
+ssh "$HOST" "mkdir -p '${GAMES_DIR}' && rm -rf '${GAMES_DIR}/gate_prix' '${GAMES_DIR}/arqade_common'"
 scp -r "$STAGE_DIR/gate_prix" "$HOST:${GAMES_DIR}/gate_prix"
+scp -r "$STAGE_DIR/arqade_common" "$HOST:${GAMES_DIR}/arqade_common"
 scp "$STAGE_DIR/arqade_idle.py" "$HOST:${GAMES_DIR}/arqade_idle.py"
 scp "$STAGE_DIR/${GAME_NAME}.pygame" "$HOST:${ROM_FILE}"
 ssh "$HOST" "chmod +x '${ROM_FILE}'"
 
 echo
 echo "Deployed."
-echo "  Code:   ${GAMES_DIR}/gate_prix/"
+echo "  Code:   ${GAMES_DIR}/gate_prix/ and ${GAMES_DIR}/arqade_common/"
 echo "  Loader: ${ROM_FILE}"
 if [ "$PUBLIC" = 1 ]; then
     echo "A first public deploy needs the gamelist.xml entry and an EmulationStation restart (see ../AGENTS.md)."

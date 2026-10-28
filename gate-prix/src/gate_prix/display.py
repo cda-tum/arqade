@@ -4,12 +4,13 @@ Fullscreen (the cabinet) uses pygame's SCALED mode, so SDL does the exact x2 ups
 the 1920x1080 panel on the GPU. Windowed dev runs scale and blit by hand, because pygame
 2.5.2's SCALED mode can't pick the window's size: a whole-number scale is a plain scale,
 any other is smoothed (the art is smooth, not pixel art). Same approach as the sibling
-games.
+games. In the browser the page scales the canvas, so the display is the internal size.
 """
 
 from __future__ import annotations
 
 import pygame
+from arqade_common import runtime
 
 from gate_prix.config import INTERNAL_HEIGHT, INTERNAL_WIDTH
 
@@ -32,6 +33,10 @@ def compute_scaled_rect(internal_size: tuple[int, int], window_size: tuple[int, 
 def make_display(fullscreen: bool, window_size: str) -> tuple[pygame.Surface, pygame.Surface | None]:
     """(the surface to draw on, the window or None). Fullscreen draws straight onto the
     SCALED display, so the window is None and `present` does nothing."""
+    if runtime.is_browser():
+        # The page scales the canvas to fit (by whole pixels where it can), so draw
+        # straight onto a display of the internal size: no SCALED, no manual blit.
+        return pygame.display.set_mode((INTERNAL_WIDTH, INTERNAL_HEIGHT)), None
     if fullscreen:
         surface = pygame.display.set_mode((INTERNAL_WIDTH, INTERNAL_HEIGHT),
                                           pygame.SCALED | pygame.FULLSCREEN)

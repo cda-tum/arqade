@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Iterator
 from importlib import resources
 
 import pygame
@@ -625,13 +626,20 @@ class SpriteCache:
     _shared: SpriteCache | None = None
 
     def __init__(self) -> None:
+        for _ in self._build():
+            pass
+
+    def _build(self) -> Iterator[float]:
+        """Draw everything, yielding how much of it is done (0 to 1) after each kind."""
         self.scales = sprite_scales()
         self._log_lo = math.log(self.scales[0])
         self._log_step = math.log(self.scales[1] / self.scales[0])
-        self.images: dict[str, list[tuple[pygame.Surface, int, int]]] = {
-            kind: [render_sprite(kind, s) for s in self.scales] for kind in KINDS
-        }
-        for kind in CAR_KINDS:
+        self.images: dict[str, list[tuple[pygame.Surface, int, int]]] = {}
+        steps = len(KINDS) + len(CAR_KINDS)
+        for i, kind in enumerate(KINDS):
+            self.images[kind] = [render_sprite(kind, s) for s in self.scales]
+            yield (i + 1) / steps
+        for i, kind in enumerate(CAR_KINDS):
             base = self.images[kind]
             for k in range(1, TILTS + 1):
                 for sign in (-1, 1):
@@ -640,6 +648,7 @@ class SpriteCache:
                         for e, sc in zip(base, self.scales)]
             for f in range(GHOST_FRAMES):
                 self.images[f"{kind}:ghost{f}"] = [_ghost(e, f) for e in base]
+            yield (len(KINDS) + i + 1) / steps
 
     @classmethod
     def shared(cls) -> SpriteCache:
@@ -647,6 +656,17 @@ class SpriteCache:
         if cls._shared is None:
             cls._shared = cls()
         return cls._shared
+
+    @classmethod
+    def building(cls) -> Iterator[float]:
+        """Build the shared cache a kind at a time, yielding how much is done (0 to 1), so a
+        loading screen can show it, and the browser get its frames meanwhile. Nothing to do
+        when it is built already."""
+        if cls._shared is not None:
+            return
+        cache = cls.__new__(cls)
+        yield from cache._build()
+        cls._shared = cache
 
     def index(self, scale: float) -> int | None:
         """The nearest size for a scale, or None when it is too near or too far to draw."""

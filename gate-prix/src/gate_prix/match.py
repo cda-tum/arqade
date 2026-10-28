@@ -268,6 +268,12 @@ class Match:
         self.title_wait = wait
         self.idle = 0.0
 
+    def back_to_title(self) -> None:
+        """Leave whatever is going on for the title, which waits for every button to be let
+        go first (the browser's way of quitting: there is nothing to quit to)."""
+        self.quit_requested = False
+        self._to_title(wait=True)
+
     # --- The title ---------------------------------------------------------------------------
 
     def _on_title(self, dt: float, inp: FrameInput, events: list) -> None:

@@ -93,20 +93,16 @@ def test_gate_colours_are_shared_with_the_other_games():
     }
 
 
-def test_input_config_follows_the_cabinet():
-    ic = config.INPUT_CONFIG
-    assert ic["p1"]["joystick_index"] == 0 and ic["p2"]["joystick_index"] == 1
-    assert ic["p1"]["axes"] == (0, 1) and ic["p2"]["axes"] == (0, 1)
-    assert ic["axis_deadzone"] == 0.25
-    system = ic["system"]
-    assert (system["a_button"], system["back_button"]) == (1, 2)
-    assert (system["start_button"], system["select_button"]) == (9, 8)
+def test_input_follows_the_cabinet():
+    """The buttons are arqade_common's ENCODER layout on the cabinet (AGENTS.md: A = 1,
+    B = 2, Select = 8, Start = 9); the stick's axis 0 steers and axis 1 brakes."""
+    from arqade_common.input import ENCODER
 
-
-def test_p1_dev_keys_avoid_the_pads_own_letters():
-    forbidden = {"K_l", "K_x", "K_r", "K_b", "K_y", "K_a"}
-    for key_list in config.KEYMAP["p1"].values():
-        assert not forbidden & set(key_list)
+    assert (ENCODER.buttons["a"], ENCODER.buttons["b"]) == (1, 2)
+    assert (ENCODER.buttons["start"], ENCODER.buttons["select"]) == (9, 8)
+    assert ENCODER.stick_axes == (0, 1)
+    assert config.AXIS_DEADZONE == 0.25
+    assert config.AXIS_DEADZONE < config.STEP_THRESHOLD < 1
 
 
 def test_player_colours_left_blue_right_red():

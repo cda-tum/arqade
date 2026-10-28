@@ -17,6 +17,7 @@ import os
 import sys
 
 import pygame
+from arqade_common.input import ENCODER
 
 from gate_prix import ai, config, track
 from gate_prix.car import Controls, aim
@@ -42,12 +43,12 @@ def human(keys, pads, p):
     steer = (1.0 if keys[right] else 0.0) - (1.0 if keys[left] else 0.0)
     brake = 1.0 if keys[down] else 0.0
     item = bool(keys[use])
-    dead = config.INPUT_CONFIG["axis_deadzone"]
+    dead = config.AXIS_DEADZONE
     if p < len(pads) and pads[p].get_numaxes() >= 2:
         sx, sy = pads[p].get_axis(0), pads[p].get_axis(1)
         steer = sx if abs(sx) > dead else steer
         brake = 1.0 if sy > dead else brake
-        item = item or bool(pads[p].get_button(config.INPUT_CONFIG["system"]["a_button"]))
+        item = item or bool(pads[p].get_button(ENCODER.buttons["a"]))
     return Controls(steer, brake, item)
 
 

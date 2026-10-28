@@ -16,7 +16,8 @@ The title and the HOW TO PLAY card play "vapormall" by Bolt Action
 countdown starts, and comes back with the title.
 
 Everything is rendered in a background thread at start-up (a second or two on the Pi), so
-the game starts at once and a sound not ready yet is simply skipped. If the mixer can't
+the game starts at once and a sound not ready yet is simply skipped. The browser has no
+threads: there `update()`, once a frame, renders one sound at a time instead. If the mixer can't
 start (no sound card) the whole thing is a silent no-op, and so is the song if it can't be
 loaded: the cabinet never crashes over audio. The tone helpers are adapted from Gate
 Drop's audio.py (same repo).
@@ -28,9 +29,11 @@ import array
 import math
 import random
 import threading
+from collections.abc import Iterator
 from importlib import resources
 
 import pygame
+from arqade_common import runtime
 
 from gate_prix import config
 from gate_prix.match import Cue
@@ -138,50 +141,53 @@ def warp_sound() -> list[int]:
 
 
 def build_sfx() -> dict[str, list[int]]:
+    return dict(sfx_items())
+
+
+def sfx_items() -> Iterator[tuple[str, list[int]]]:
+    """Every effect as (name, samples), each made only when it is asked for (the browser
+    makes one a frame)."""
     whoosh = noise(0.45, 0.3, hold=1, seed=7, swell=True)
-    sfx = {
-        "blip": tone(880, 0.04, 0.2, "square"),
-        "select": _arp(("E5", "B5"), 0.05, 0.25),
-        "pause": tone(440, 0.09, 0.25, "triangle"),
-        "count": tone(660, 0.12, 0.28, "square", decay=6),
-        "go": tone(note("C6"), 0.35, 0.3, "square", decay=4),
-        "wrong": mix(tone(150, 0.2, 0.3, "saw", decay=8, slide=0.7),
-                     tone(158, 0.2, 0.22, "square", decay=8, slide=0.7)),
-        "miss": tone(220, 0.16, 0.25, "triangle", decay=10, slide=0.6),
-        "boost": whoosh,
-        "check": _arp(("C5", "E5", "G5"), 0.1, 0.26, "square"),
-        "perfect": _arp(("C5", "E5", "G5", "C6", "E6", "G6"), 0.09, 0.27, "pulse"),
-        "warp": warp_sound(),
-        "lap": _arp(("G5", "C6"), 0.08, 0.25, "triangle"),
-        "finish": _arp(("C5", "G5", "C6", "E6", "G6", "C7"), 0.1, 0.26, "triangle", decay=3),
-        "box": _arp(("A5", "E6", "A6"), 0.04, 0.22, "triangle"),
-        "box_empty": tone(330, 0.08, 0.2, "triangle", decay=20),
-        "box_full": tone(520, 0.05, 0.16, "triangle", decay=30),
-        "split": mix(tone(400, 0.25, 0.22, "saw", slide=2.0), tone(600, 0.25, 0.15, "saw", slide=0.66)),
-        "qec": _arp(("E6", "G6", "B6"), 0.05, 0.22, "sine", decay=4),
-        "split_end": tone(500, 0.12, 0.18, "triangle", slide=0.6),
-        "bump": mix(tone(90, 0.12, 0.4, "sine", decay=25, slide=0.6),
-                    noise(0.08, 0.25, decay=40, hold=4, seed=3)),
-        "result": _arp(("C5", "E5", "G5", "C6"), 0.09, 0.25, "triangle"),
-        # the second playtest's items and hazards
-        "zap": mix(tone(1400, 0.18, 0.2, "square", slide=0.35), tone(2100, 0.1, 0.1, "sine", decay=20)),
-        "collapsed": mix(tone(700, 0.35, 0.24, "saw", decay=5, slide=0.2),
-                         noise(0.3, 0.16, decay=8, hold=3, seed=11)),
-        "scored": _arp(("G5", "D6", "G6"), 0.05, 0.24, "pulse", decay=8),
-        "static": noise(0.32, 0.26, decay=7, hold=6, seed=5),
-        "deco_scored": _arp(("D6", "A5", "D6"), 0.05, 0.2, "triangle", decay=8),
-        "spin": mix(tone(520, 0.4, 0.22, "square", slide=0.3), noise(0.15, 0.2, decay=20, seed=9)),
-        "tunnel": mix(tone(300, 0.3, 0.16, "sine", slide=2.5), tone(450, 0.3, 0.1, "triangle", slide=2.5)),
-        "drop": tone(260, 0.2, 0.22, "triangle", slide=0.5),
-        "drift": tone(1200, 0.05, 0.14, "pulse", decay=20),
-        "turbo": mix(whoosh, tone(500, 0.2, 0.15, "saw", slide=2.0)),
-        "fizzle": tone(240, 0.22, 0.18, "saw", decay=10, slide=0.5),
-    }
+    yield "blip", tone(880, 0.04, 0.2, "square")
+    yield "select", _arp(("E5", "B5"), 0.05, 0.25)
+    yield "pause", tone(440, 0.09, 0.25, "triangle")
+    yield "count", tone(660, 0.12, 0.28, "square", decay=6)
+    yield "go", tone(note("C6"), 0.35, 0.3, "square", decay=4)
+    yield "wrong", mix(tone(150, 0.2, 0.3, "saw", decay=8, slide=0.7),
+                       tone(158, 0.2, 0.22, "square", decay=8, slide=0.7))
+    yield "miss", tone(220, 0.16, 0.25, "triangle", decay=10, slide=0.6)
+    yield "boost", whoosh
+    yield "check", _arp(("C5", "E5", "G5"), 0.1, 0.26, "square")
+    yield "perfect", _arp(("C5", "E5", "G5", "C6", "E6", "G6"), 0.09, 0.27, "pulse")
+    yield "warp", warp_sound()
+    yield "lap", _arp(("G5", "C6"), 0.08, 0.25, "triangle")
+    yield "finish", _arp(("C5", "G5", "C6", "E6", "G6", "C7"), 0.1, 0.26, "triangle", decay=3)
+    yield "box", _arp(("A5", "E6", "A6"), 0.04, 0.22, "triangle")
+    yield "box_empty", tone(330, 0.08, 0.2, "triangle", decay=20)
+    yield "box_full", tone(520, 0.05, 0.16, "triangle", decay=30)
+    yield "split", mix(tone(400, 0.25, 0.22, "saw", slide=2.0), tone(600, 0.25, 0.15, "saw", slide=0.66))
+    yield "qec", _arp(("E6", "G6", "B6"), 0.05, 0.22, "sine", decay=4)
+    yield "split_end", tone(500, 0.12, 0.18, "triangle", slide=0.6)
+    yield "bump", mix(tone(90, 0.12, 0.4, "sine", decay=25, slide=0.6),
+                      noise(0.08, 0.25, decay=40, hold=4, seed=3))
+    yield "result", _arp(("C5", "E5", "G5", "C6"), 0.09, 0.25, "triangle")
+    # the second playtest's items and hazards
+    yield "zap", mix(tone(1400, 0.18, 0.2, "square", slide=0.35), tone(2100, 0.1, 0.1, "sine", decay=20))
+    yield "collapsed", mix(tone(700, 0.35, 0.24, "saw", decay=5, slide=0.2),
+                           noise(0.3, 0.16, decay=8, hold=3, seed=11))
+    yield "scored", _arp(("G5", "D6", "G6"), 0.05, 0.24, "pulse", decay=8)
+    yield "static", noise(0.32, 0.26, decay=7, hold=6, seed=5)
+    yield "deco_scored", _arp(("D6", "A5", "D6"), 0.05, 0.2, "triangle", decay=8)
+    yield "spin", mix(tone(520, 0.4, 0.22, "square", slide=0.3), noise(0.15, 0.2, decay=20, seed=9))
+    yield "tunnel", mix(tone(300, 0.3, 0.16, "sine", slide=2.5), tone(450, 0.3, 0.1, "triangle", slide=2.5))
+    yield "drop", tone(260, 0.2, 0.22, "triangle", slide=0.5)
+    yield "drift", tone(1200, 0.05, 0.14, "pulse", decay=20)
+    yield "turbo", mix(whoosh, tone(500, 0.2, 0.15, "saw", slide=2.0))
+    yield "fizzle", tone(240, 0.22, 0.18, "saw", decay=10, slide=0.5)
     for i, name in enumerate(RIGHT_NOTES):
         ring = concat(tone(note(name), 0.05, 0.26, "pulse"),
                       tone(note(name) * 1.5, 0.12, 0.24, "triangle", decay=10))
-        sfx[f"right{i + 1}"] = mix(ring, whoosh)  # the boost's whoosh
-    return sfx
+        yield f"right{i + 1}", mix(ring, whoosh)  # the boost's whoosh
 
 
 def nitro_loop(seconds: float = 0.6, sr: int = SAMPLE_RATE) -> array.array:
@@ -270,6 +276,9 @@ def sounds_for(events: list, players=()) -> list[str]:
 
 
 class NullAudio:
+    def update(self) -> None:
+        pass
+
     def play_events(self, events: list, players=()) -> None:
         pass
 
@@ -306,7 +315,12 @@ class Audio:
             self.music = False
         self._done = False
         self._lock = threading.Lock()
-        threading.Thread(target=self._render_all, daemon=True).start()
+        self._steps: Iterator[None] | None = None
+        if runtime.is_browser():
+            # No threads in the browser: update() makes one sound a frame instead.
+            self._steps = self._render_steps()
+        else:
+            threading.Thread(target=self._render_all, daemon=True).start()
 
     def _sound(self, samples) -> pygame.mixer.Sound:
         buf = samples if isinstance(samples, array.array) else array.array("h", samples)
@@ -322,16 +336,31 @@ class Audio:
         return pygame.mixer.Sound(buffer=buf.tobytes())
 
     def _render_all(self) -> None:
+        for _ in self._render_steps():
+            pass
+
+    def _render_steps(self) -> Iterator[None]:
+        """Make every sound, yielding after each one."""
         nitro = self._sound(nitro_loop())
         nitro.set_volume(config.MASTER_VOLUME * NITRO_VOLUME)
         with self._lock:
             self.nitro_sound = nitro
-        for name, samples in build_sfx().items():
+        yield
+        for name, samples in sfx_items():
             snd = self._sound(samples)
             snd.set_volume(config.MASTER_VOLUME)
             with self._lock:
                 self.sounds[name] = snd
+            yield
         self._done = True
+
+    def update(self) -> None:
+        """Once a frame. In the browser it makes the next sound; elsewhere a thread does."""
+        if self._steps is not None:
+            try:
+                next(self._steps)
+            except StopIteration:
+                self._steps = None
 
     def ready(self) -> bool:
         return self._done

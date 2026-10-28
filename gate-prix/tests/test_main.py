@@ -1,6 +1,7 @@
-"""The command line, the input test, the audio and a short scripted session of the real
-loop (the full one is `--selftest 600`)."""
+"""The command line, the input test, the audio, a short scripted session of the real loop
+(the full one is `--selftest 600`) and the loop's quitting, on a PC and in the browser."""
 
+import asyncio
 import time
 
 import pygame
@@ -23,6 +24,11 @@ def test_the_cabinet_loader_and_launcher_flags_parse():
     assert args.fullscreen and args.no_keyboard and args.fps and args.window_size == "960x540"
 
 
+def test_a_pad_layout_can_be_picked():
+    assert parse_args([]).pad_layout is None  # the cabinet's (the browser's in a browser)
+    assert parse_args(["--pad-layout", "xbox"]).pad_layout == "xbox"
+
+
 def test_the_input_test_screen_runs_and_leaves_on_quit():
     from gate_prix.input_test import run_input_test
 
@@ -34,12 +40,92 @@ def test_the_input_test_screen_runs_and_leaves_on_quit():
 
 def test_a_short_scripted_session_runs_through_the_real_loop(tmp_path, capsys):
     with pytest.raises(SystemExit) as done:
-        main(["--selftest", "20", "--window-size", "960x540", "--shots", str(tmp_path),
-              "--seed", "3"])
+        asyncio.run(main(["--selftest", "20", "--window-size", "960x540", "--shots",
+                          str(tmp_path), "--seed", "3"]))
     assert done.value.code == 0
     out = capsys.readouterr().out
     assert "selftest ok" in out
     assert len(list(tmp_path.glob("*.png"))) >= 3  # the title, the attract race, the countdown
+
+
+def _run_frames(monkeypatch, on_frame, limit=400):
+    """The real game loop on the dummy video driver, with the match it makes passed to
+    on_frame(i, match) after each frame's flip. Returns the loop's exit code."""
+    from gate_prix import game
+    from gate_prix.match import Match
+    from gate_prix.sprites import SpriteCache
+
+    SpriteCache.shared()  # built beforehand: every flip counted is one of the game's frames
+    made: list[Match] = []
+
+    class Spy(Match):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            made.append(self)
+
+    frames = {"n": 0}
+    real_flip = pygame.display.flip
+
+    def flip():
+        real_flip()
+        frames["n"] += 1
+        assert frames["n"] < limit, "the loop didn't end"
+        if made:
+            on_frame(frames["n"], made[0])
+
+    monkeypatch.setattr(game, "Match", Spy)
+    monkeypatch.setattr(pygame.display, "flip", flip)
+    return asyncio.run(game.run(fullscreen=False, window_size="960x540", show_fps=True, seed=1))
+
+
+def test_start_and_select_end_the_game(monkeypatch):
+    from gate_prix.input import Input
+
+    combo = {"held": False}
+    monkeypatch.setattr(Input, "quit_combo", lambda self: combo["held"])
+
+    def on_frame(i, match):
+        combo["held"] = i == 20
+
+    assert _run_frames(monkeypatch, on_frame) == 0
+
+
+def test_in_the_browser_quitting_tells_the_page_and_goes_back_to_the_title(monkeypatch):
+    """There is nothing to quit to in a browser: Start + Select (mid-race here) and QUIT on
+    the title send arqade:quit and return to the title, and a race is framed by
+    arqade:game-start and arqade:game-end."""
+    from gate_prix import game
+    from gate_prix.input import Input
+    from gate_prix.match import COUNTDOWN, TITLE
+
+    sent = []
+    browser = {"on": True}
+    combo = {"held": False}
+    seen = {}
+    monkeypatch.setattr(game.runtime, "is_browser", lambda: browser["on"])
+    monkeypatch.setattr(game.web, "post_event", lambda kind, game_id: sent.append(kind))
+    monkeypatch.setattr(Input, "quit_combo", lambda self: combo["held"])
+
+    def on_frame(i, match):
+        combo["held"] = i == 30
+        if i == 5:
+            match._new_race([])  # as if past the HOW TO PLAY card
+            assert match.state == COUNTDOWN
+        elif i == 31:
+            seen["after combo"] = (match.state, match.race is None, list(sent))
+        elif i == 40:
+            match.quit_requested = True  # A on QUIT
+        elif i == 41:
+            seen["after QUIT"] = (match.state, match.quit_requested, list(sent))
+        elif i == 50:  # a browser has no window to close: stop being one to end the test
+            browser["on"] = False
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+
+    assert _run_frames(monkeypatch, on_frame) == 0
+    web = game.web
+    assert seen["after combo"] == (TITLE, True, [web.GAME_START, web.GAME_END, web.QUIT])
+    assert seen["after QUIT"] == (TITLE, False, [web.GAME_START, web.GAME_END, web.QUIT,
+                                                 web.QUIT])
 
 
 def test_every_cue_has_a_sound_and_the_effects_build():
