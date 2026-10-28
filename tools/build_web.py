@@ -34,10 +34,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tomllib
+import urllib.request
 import zipfile
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
@@ -174,9 +176,18 @@ def stage(game_dir: Path) -> Path:
 
 def pygbag(staged: Path, title: str, *, serve: bool) -> None:
     cmd = [sys.executable, "-m", "pygbag", *PYGBAG_ARGS, "--title", title]
-    if not serve:
-        cmd.append("--build")
-    subprocess.run([*cmd, str(staged)], check=True)
+    if serve:
+        subprocess.run([*cmd, str(staged)], check=True)
+        return
+    # pygbag downloads its page template without a timeout, so a dropped
+    # connection hangs it forever: give each build 10 minutes and one retry.
+    for attempt in (1, 2):
+        try:
+            subprocess.run([*cmd, "--build", str(staged)], check=True, timeout=600)
+            return
+        except subprocess.TimeoutExpired:
+            print(f"   pygbag timed out (attempt {attempt} of 2)")
+    sys.exit(f"pygbag kept timing out on {staged.name}")
 
 
 def make_thumbnail(game_dir: Path, target: Path) -> None:
@@ -254,6 +265,91 @@ def scale_by_whole_pixels(index_html: Path) -> None:
     index_html.write_text(html.replace("</body>", _WHOLE_PIXEL_SCALING + "</body>", 1))
 
 
+# --- Self-hosted runtime. By default pygbag pages load Python, pygame-ce and
+# a few helpers from pygame-web.github.io: every player's browser contacts
+# GitHub, and the games stop working if those files move. The bundle instead
+# carries them once, in _runtime/ next to the game folders (same paths as on
+# pygame-web.github.io), and each game page sends those requests there.
+PYGBAG_HOST = "https://pygame-web.github.io/"
+RUNTIME_DIR = "_runtime"
+
+# Every runtime file the games load, as a path on PYGBAG_HOST, for the pinned
+# pygbag version. Found by playing each game with the runtime served through a
+# recording proxy; a file missing here shows up as a 404 in the browser.
+RUNTIME_FILES = [
+    "cdn/0.9.3/pythons.js",
+    "cdn/0.9.3/empty.html",
+    "cdn/0.9.3/cpythonrc.py",
+    "cdn/0.9.3/cpython312/main.js",
+    "cdn/0.9.3/cpython312/main.wasm",
+    "cdn/0.9.3/cpython312/main.data",
+    "cdn/index-0.9.3-cp312.json",
+    "cdn/cp312/pygame_ce-2.5.7-cp312-cp312-wasm32_bi_emscripten.whl",
+    "cdn/vtx.js",
+    "cdn/vt/xterm.js",
+    "cdn/vt/xterm.css",
+    "cdn/vt/xterm-addon-image.js",
+]
+
+_RUNTIME_REDIRECT = """<script>
+// Added by tools/build_web.py: load pygbag's runtime from this bundle's
+// _runtime/ folder instead of pygame-web.github.io (see there).
+(() => {
+  const upstream = "%(host)s";
+  const local = new URL("../%(dir)s/", location.href).href;
+  const map = (url) => {
+    const u = new URL(url, location.href);
+    if (u.href.startsWith(upstream)) return local + u.href.slice(upstream.length);
+    // On any localhost page pygbag assumes its own test server
+    // (localhost:8000) and asks it for packages under /cdn/; those are in
+    // _runtime/cdn/ too.
+    const localhost = ["localhost", "127.0.0.1"].includes(u.hostname);
+    if ((localhost || u.origin === location.origin) && u.pathname.startsWith("/cdn/")) return local + u.pathname.slice(1);
+    return url;
+  };
+  const fetch0 = window.fetch;
+  window.fetch = (input, init) =>
+    fetch0(input instanceof Request ? new Request(map(input.url), input) : map(String(input)), init);
+  const open0 = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    return open0.call(this, method, map(String(url)), ...rest);
+  };
+})();
+</script>
+""" % {"host": PYGBAG_HOST, "dir": RUNTIME_DIR}
+
+
+def use_bundled_runtime(index_html: Path) -> None:
+    """Point the page's own references at ../_runtime/ and add the redirect
+    for the requests pygbag makes later (package index, wheels)."""
+    html = index_html.read_text()
+    config_cdn = re.compile(r'cdn : "' + re.escape(PYGBAG_HOST) + r'([^"]*)",')
+    if not config_cdn.search(html) or not html.startswith("<html"):
+        sys.exit(f"{index_html}: pygbag's template changed, check use_bundled_runtime()")
+    # pygbag's config.cdn must be absolute: some of its scripts resolve it
+    # relative to their own location, which doubles a relative path.
+    html = config_cdn.sub(
+        lambda m: f'cdn : new URL("../{RUNTIME_DIR}/{m[1]}", location.href).href,', html
+    )
+    # The rest (script and iframe sources) are resolved by the page itself.
+    html = html.replace(PYGBAG_HOST, f"../{RUNTIME_DIR}/")
+    index_html.write_text(_RUNTIME_REDIRECT + html)
+
+
+def mirror_runtime(bundle: Path) -> None:
+    """Download RUNTIME_FILES into bundle/_runtime/ (cached in build/runtime-cache)."""
+    cache = BUILD / "runtime-cache"
+    for rel in RUNTIME_FILES:
+        cached = cache / rel
+        if not cached.exists():
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            print(f"   runtime: {rel}")
+            urllib.request.urlretrieve(PYGBAG_HOST + rel, cached)
+        target = bundle / RUNTIME_DIR / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(cached, target)
+
+
 def assemble(game_dir: Path, staged: Path, bundle: Path) -> None:
     """build/bundle/<id>/: pygbag's output, game.json and thumbnail.png."""
     out = bundle / game_dir.name
@@ -261,6 +357,7 @@ def assemble(game_dir: Path, staged: Path, bundle: Path) -> None:
     shutil.copytree(staged / "build" / "web", out)
     accept_any_tar(out / "index.html")
     scale_by_whole_pixels(out / "index.html")
+    use_bundled_runtime(out / "index.html")
     (out / "game.json").write_text(json.dumps(manifest(game_dir), indent=2) + "\n")
     make_thumbnail(game_dir, out / "thumbnail.png")
 
@@ -295,6 +392,7 @@ def main() -> None:
         staged = stage(game_dir)
         pygbag(staged, manifest(game_dir)["title"], serve=False)
         assemble(game_dir, staged, bundle)
+    mirror_runtime(bundle)
     print(f"-> {zip_bundle(bundle, args.version).relative_to(REPO)}")
 
 

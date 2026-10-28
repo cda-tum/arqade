@@ -1,7 +1,8 @@
 """Single source of truth for resolution, timings, colours and input.
 
-P1 is the left side (blue), P2 the right (red). The pads' raw button numbers
-and the two-player keyboard live in arqade_common.input (see ../../../AGENTS.md).
+Joystick 0 = P1 (left, blue), joystick 1 = P2 (right, red). The raw button
+numbers are the ones confirmed on the cabinet (see ../../../AGENTS.md):
+printed A = 1, B = 2, X = 0, Y = 3, Start = 9, Select = 8.
 """
 
 from __future__ import annotations
@@ -111,9 +112,9 @@ COLOR_FPS = (248, 208, 104)
 
 
 # --- Input -------------------------------------------------------------------------
-# Raw button numbers and the keyboard layout live in arqade_common.input: printed A, B,
-# X and Y are the fight's buttons (and A or Start confirms, B goes back in menus), Start
-# pauses, Start + Select quits. The cabinet loader passes --no-keyboard, so the keystrokes
+# Pads, button numbers and the keyboard layout are shared by all games: see
+# arqade_common.input (A, B, X and Y fight; Start confirms and pauses; Start +
+# Select quits). The cabinet loader passes --no-keyboard, so the keystrokes
 # Batocera's evmapy fakes for P1's pad never reach the game.
 AXIS_DEADZONE = 0.25
 

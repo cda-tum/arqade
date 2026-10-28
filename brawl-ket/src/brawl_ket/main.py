@@ -21,7 +21,7 @@ from arqade_common.input import PAD_LAYOUTS
 
 from . import config, game
 from .display import make_display
-from .input import set_keyboard_enabled
+from .input import set_keyboard_enabled, set_pad_layout, start_devices
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -43,18 +43,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 async def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     set_keyboard_enabled(not args.no_keyboard)
+    if args.pad_layout:
+        set_pad_layout(PAD_LAYOUTS[args.pad_layout])
     if args.input_test:
         from .input_test import run_input_test
 
         pygame.init()
         pygame.joystick.init()
+        start_devices()
         surface, window = make_display(args.fullscreen, args.window_size)
         pygame.display.set_caption("Brawl-Ket")
         run_input_test(surface, window)
     else:
         await game.run(fullscreen=args.fullscreen, window_size=args.window_size,
-                       show_fps=args.fps or config.SHOW_FPS_DEFAULT,
-                       pad_layout=PAD_LAYOUTS.get(args.pad_layout))
+                 show_fps=args.fps or config.SHOW_FPS_DEFAULT)
     pygame.quit()
     sys.exit(0)
 

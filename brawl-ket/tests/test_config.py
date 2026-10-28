@@ -11,6 +11,18 @@ def test_frames_conversion() -> None:
     assert config.frames(0.5) == 30
 
 
+def test_button_mappings() -> None:
+    """The cabinet's buttons, from the shared pad layout: printed X Y A B = raw 0 3 1 2,
+    Start 9 and Select 8 (AGENTS.md, "Button convention")."""
+    from arqade_common.input import ENCODER
+    assert ENCODER.buttons["a"] == 1
+    assert ENCODER.buttons["b"] == 2
+    assert ENCODER.buttons["x"] == 0
+    assert ENCODER.buttons["y"] == 3
+    assert ENCODER.buttons["start"] == 9
+    assert ENCODER.buttons["select"] == 8
+
+
 def test_display_scaling() -> None:
     """Test that display dimensions scale evenly onto the cabinet."""
     cabinet_w, cabinet_h = 1920, 1080

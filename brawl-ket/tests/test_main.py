@@ -17,7 +17,8 @@ def test_defaults_are_a_windowed_dev_run() -> None:
 
 def test_the_cabinet_loader_flags_parse() -> None:
     args = parse_args(["--fullscreen", "--no-keyboard"])
-    assert args.fullscreen and args.no_keyboard
+    assert args.fullscreen and args.no_keyboard and args.pad_layout is None
+    assert parse_args(["--pad-layout", "xbox"]).pad_layout == "xbox"
 
 
 def test_a_pad_layout_can_be_picked() -> None:
@@ -185,3 +186,44 @@ def test_a_press_is_used_by_exactly_one_step() -> None:
     again = merge_pending(pending, FrameInput(fighters={"p1": FighterInput(dx=1), "p2": FighterInput()}))
     assert again.fighters["p1"].a and again.confirms["p1"] and again.nav["p1"] == (0, 1)
     assert again.any_button
+
+
+def test_in_the_browser_quit_goes_back_to_the_title(monkeypatch) -> None:
+    """Start + Select tells the page and returns to the title instead of ending; a match
+    in between is framed by game-start and game-end."""
+    import pygame
+
+    from brawl_ket import game
+    from brawl_ket.match import FIGHT, TITLE
+
+    sent = []
+    browser = {"on": True}
+    monkeypatch.setattr(game.runtime, "is_browser", lambda: browser["on"])
+    monkeypatch.setattr(game.web, "post_event", lambda kind, game_id: sent.append(kind))
+    real_update = game.Input.update
+    seen = {}
+    frames = {"n": 0}
+
+    def update(self, dt):
+        real_update(self, dt)
+        frames["n"] += 1
+        assert frames["n"] < 200, "the loop didn't end"
+        if 5 <= frames["n"] < 10:
+            self.start_select["p1"] = (True, True)
+        if frames["n"] == 60:       # a browser has no window to close, so stop being one to end the test
+            browser["on"] = False
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+
+    real_draw = game.Renderer.draw
+
+    def draw(self, match, events):
+        if frames["n"] == 3:        # pretend a round is on (paused: no fight to step), so the quit ends a match
+            match.state, match.paused = FIGHT, True
+        seen[frames["n"]] = match.state
+        real_draw(self, match, events) if match.state == TITLE else None
+
+    monkeypatch.setattr(game.Input, "update", update)
+    monkeypatch.setattr(game.Renderer, "draw", draw)
+    asyncio.run(game.run(fullscreen=False, window_size="640x360", show_fps=False))
+    assert sent == [game.web.GAME_START, game.web.GAME_END, game.web.QUIT]
+    assert seen[20] == TITLE and frames["n"] >= 60
