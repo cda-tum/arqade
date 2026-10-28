@@ -524,7 +524,9 @@ the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Dro
   keys for a few frames when automating.
 - **What the build script changes in pygbag's page** (`tools/build_web.py`):
   the game is scaled by whole device pixels (2x, 3x, ...; pygbag's own
-  sizing stretches to any factor, which makes pixel art ragged), the game
+  sizing stretches to any factor, which makes pixel art ragged) when that
+  fills at least 85% of the room, and else fits the room, smoothed below
+  2.5x (big games in small windows would stay 1x with wide margins), the game
   archive is accepted whether or not the server gzip-labels it, and
   `--can_close 1` drops pygbag's "Are you sure you want to navigate away?"
   prompt. Each patch checks pygbag's template still looks as expected, so a

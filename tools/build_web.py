@@ -208,8 +208,9 @@ def accept_any_tar(index_html: Path) -> None:
 # Replaces pygbag's own canvas sizing, which stretches the game to any size
 # (2.1x, say): pixels then come out 2 or 3 screen pixels wide, unevenly, and
 # pixel art looks ragged. This scales by whole device pixels instead, like
-# the cabinet's 1080p panel does, and falls back to a plain fit only when
-# the window is smaller than the game.
+# the cabinet's 1080p panel does, as long as that fills at least 85% of the
+# room. Otherwise (a 960x720 game in a 1600x900 window would stay 1x) it
+# fits the room, smoothed below 2.5x.
 _WHOLE_PIXEL_SCALING = """
 <script>
 // Added by tools/build_web.py: scale the game by whole pixels (see there).
@@ -219,11 +220,16 @@ _WHOLE_PIXEL_SCALING = """
     if (!canvas || !canvas.width || !canvas.height) return;
     const dpr = window.devicePixelRatio || 1;
     const room = Math.min(innerWidth * dpr / canvas.width, innerHeight * dpr / canvas.height);
-    const scale = room >= 1 ? Math.floor(room) : room;
+    // Whole device pixels when that still fills most of the room; otherwise
+    // (a big game in a small window would stay 1x with wide margins) the
+    // whole room, smoothed below 2.5x, where uneven pixels would show.
+    const whole = Math.floor(room);
+    const scale = whole >= 1 && whole / room >= 0.85 ? whole : room;
+    const crisp = scale === whole || scale >= 2.5;
     const width = `${canvas.width * scale / dpr}px`, height = `${canvas.height * scale / dpr}px`;
     if (canvas.style.width === width && canvas.style.height === height) return;
     Object.assign(canvas.style, { position: "absolute", inset: "0", margin: "auto",
-                                  width, height, imageRendering: "pixelated" });
+                                  width, height, imageRendering: crisp ? "pixelated" : "auto" });
   };
   addEventListener("resize", fit);
   // The game sets the canvas's own size when it opens its display, and SDL
