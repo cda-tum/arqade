@@ -7,6 +7,7 @@ Game state, physics and drawing. CLI / entry point: main.py; input mapping:
 config.py / input.py.
 """
 import asyncio
+import functools
 import json
 import math
 import random
@@ -194,9 +195,18 @@ def under_curve(pts, bounds):
     return strips
 
 
+@functools.lru_cache(maxsize=512)
+def rendered(font, s, color):
+    """The same text renders to the same image: the menus and the HUD redraw
+    a dozen mostly unchanged lines every frame, which in the browser cost
+    milliseconds of font rendering."""
+    return font.render(s, True, color)
+
+
 def text(surf, s, font, color, pos, anchor="center", alpha=None):
-    img = font.render(s, True, color)
+    img = rendered(font, s, tuple(color))
     if alpha is not None:
+        img = img.copy()  # not the cached image itself
         img.set_alpha(int(clamp(alpha, 0, 1) * 255))
     r = img.get_rect(**{anchor: pos})
     surf.blit(img, r)
