@@ -448,6 +448,20 @@ def test_game_over_goes_to_initials_when_the_score_qualifies(tmp_path):
     assert s.hiscores.entries[0].score == 1
 
 
+def test_a_new_high_score_is_posted_to_the_page(monkeypatch):
+    posted = []
+    monkeypatch.setattr(session.web, "post_score", lambda *a: posted.append(a))
+    s = make()
+    begin(s)
+    play_one(s, PRESS)
+    for _ in range(config.LIVES):
+        play_one(s)
+    run(s, config.GAME_OVER_TIME + 0.05)
+    for _ in range(3):
+        s.update(DT, confirm())
+    assert posted == [("planck-time", "default", 1, "AAA")]
+
+
 def test_game_over_goes_straight_to_the_table_otherwise(tmp_path):
     scores = Hiscores(tmp_path / "s.json")
     for _ in range(config.HISCORE_SLOTS):

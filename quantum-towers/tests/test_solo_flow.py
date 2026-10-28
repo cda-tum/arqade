@@ -303,6 +303,16 @@ def test_run_initials_saves_the_name_and_returns_the_rank(screen):
     assert [(e.name, e.seconds) for e in times.entries] == [("ZZZ", 10.0), ("CAB", 20.0)]
 
 
+def test_run_initials_posts_the_time_in_milliseconds(screen, monkeypatch):
+    posted = []
+    monkeypatch.setattr(main.web, "post_score", lambda *a: posted.append(a))
+    surface, script = screen
+    times = Times(None)
+    script([{}, {"confirm": True}, {}, {"confirm": True}, {}, {"confirm": True}, {}])
+    asyncio.run(main.run_initials(surface, None, times, 83.456))
+    assert posted == [("quantum-towers", "default", 83456, "AAA")]
+
+
 def test_run_initials_ignores_an_a_still_held_from_before(screen):
     surface, script = screen
     times = Times(None)

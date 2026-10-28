@@ -17,5 +17,8 @@
     "Push up to climb. A push up on a wrong state stuns you.",
     "Each gate sits on one of the pad's buttons, shown at the bottom of the screen.",
     "Start (Space or Enter) pauses the game."
+  ],
+  "scores": [
+    {"mode": "default", "label": "Solo time trial", "order": "asc", "format": "time", "max": 3600000}
   ]
 }

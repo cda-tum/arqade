@@ -22,6 +22,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
+from arqade_common import web
+
 from gate_drop import config, levels
 from gate_drop.board import Board, Event, PlayerInput
 from gate_drop.hiscores import Hiscores
@@ -425,6 +427,8 @@ class Match:
         if self.name_entry is not None:
             rank = self.hiscores.add(self.name_entry.name, self.score, self.level)
             self.new_rank = rank if rank >= 0 else None
+            if rank >= 0:
+                web.post_score("gate-drop", "default", self.score, self.name_entry.name)
             self.name_entry = None
 
     def _start_match(self, events: list) -> None:

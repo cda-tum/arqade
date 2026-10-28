@@ -334,6 +334,19 @@ def test_game_over_with_a_high_score_asks_for_initials():
     assert mt.state == m.TITLE
 
 
+def test_a_new_high_score_is_posted_to_the_page(monkeypatch):
+    posted = []
+    monkeypatch.setattr(m.web, "post_score", lambda *a: posted.append(a))
+    mt = in_round(mode=1)
+    mt.score = 4321
+    mt.boards["p1"].topped_out = True
+    run(mt, 0.1)
+    run(mt, config.GAME_OVER_TIME + 0.05)
+    for _ in range(3):
+        mt.update(1 / 60, press(confirm=["p1"]))
+    assert posted == [("gate-drop", "default", 4321, "AAA")]
+
+
 def test_game_over_without_a_high_score_shows_the_table():
     mt = in_round(mode=1)
     mt.boards["p1"].topped_out = True

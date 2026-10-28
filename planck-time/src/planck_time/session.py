@@ -31,6 +31,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
+from arqade_common import web
+
 from planck_time import config
 from planck_time.hiscores import Hiscores
 from planck_time.microgames import BOSSES, REGISTRY, Microgame, PlayerInput, play_time
@@ -483,6 +485,8 @@ class Session:
         if self.name_entry is not None:
             rank = self.hiscores.add(self.name_entry.name, self.score, self.level)
             self.new_rank = rank if rank >= 0 else None
+            if rank >= 0:
+                web.post_score("planck-time", "default", self.score, self.name_entry.name)
             self.name_entry = None
 
     def _start_session(self, events: list, tutorial: bool = False) -> None:

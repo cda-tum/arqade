@@ -6,10 +6,12 @@ import math
 
 import pygame
 
+from arqade_common import web
+
 from overquqed import config, hiscores, palette as P, sprites
 from overquqed.config import INTERNAL_WIDTH
 from overquqed.fonts import text
-from overquqed.game import Scene
+from overquqed.game import GAME_ID, Scene
 from overquqed.guests import GUESTS
 from overquqed.hud import panel_box, receipt_surface, rich, wrap
 from overquqed.input import PLAYERS, Input
@@ -391,6 +393,8 @@ class ResultsScene(Scene):
             hiscores.insert(self.app.hiscores, self.level.key, "", -1, self.stars)
         else:
             self.rank = hiscores.insert(self.app.hiscores, self.level.key, name, self.score, self.stars)
+            if self.rank >= 0:
+                web.post_score(GAME_ID, self.level.key, self.score, name)
         hiscores.save(config.HISCORE_FILE, self.app.hiscores)
 
     def _name(self) -> str:

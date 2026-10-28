@@ -484,6 +484,11 @@ the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Dro
 - **Optional page events** (`arqade_common.web.post_event`):
   `arqade:game-start` / `arqade:game-end` around a match, `arqade:quit`. They
   do nothing outside a browser or when nobody listens.
+- **High scores to the page:** when a player confirms initials for a new
+  local high score, the game calls `web.post_score(game_id, mode, score,
+  initials)` (`arqade:score`; times as integer milliseconds), and its
+  `game.json` declares each table under `"scores"` (`mode`, `label`, `order`
+  `desc`/`asc`, `format` `points`/`time`, `max`) for the website's high-score service.
 - **Each ported game has a `game.json`** (the manifest the website reads;
   `version` is filled in from `pyproject.toml` at build time). Its thumbnail
   is made from `batocera/logos/<package>-wide.png`.

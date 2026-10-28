@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import math
 import random
 import sys
 from dataclasses import fields, replace
@@ -941,7 +942,11 @@ async def run_initials(
 
     def save() -> int | None:
         rank = times.add(entry.name, seconds)
-        return rank if rank >= 0 else None
+        if rank < 0:
+            return None
+        # The page wants whole milliseconds (the table shows hundredths, truncated).
+        web.post_score(GAME_ID, "default", math.floor(seconds * 1000 + 1e-6), entry.name)
+        return rank
 
     while True:
         dt = runtime.frame_seconds(clock.tick(config.FPS) / 1000.0)

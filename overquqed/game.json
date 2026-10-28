@@ -18,5 +18,10 @@
     "A picks up, puts down and serves; B works the station in front of you.",
     "Playing alone? Y swaps between the two chefs.",
     "Start (Space or Enter) pauses the game."
+  ],
+  "scores": [
+    {"mode": "snackbar", "label": "Superconducting Snack Bar", "order": "desc", "format": "points", "max": 5000},
+    {"mode": "trattoria", "label": "Ion Trap Trattoria", "order": "desc", "format": "points", "max": 5000},
+    {"mode": "cosmic", "label": "Cosmic Cafe", "order": "desc", "format": "points", "max": 5000}
   ]
 }
