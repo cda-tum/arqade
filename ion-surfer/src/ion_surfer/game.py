@@ -162,6 +162,38 @@ def make_hole_sprite(radius):
     return s
 
 
+CURVE_STRIP = 96  # px: a potential curve's layer is blended in strips this wide
+
+
+def disjoint(rects):
+    """The rects, with each group of overlapping ones merged into one rect
+    around them and empty ones dropped: blending a layer twice in the same
+    place would darken it."""
+    out = []
+    for r in rects:
+        if not r.w or not r.h:
+            continue
+        r = r.copy()
+        i = r.collidelist(out)
+        while i != -1:
+            r.union_ip(out.pop(i))
+            i = r.collidelist(out)
+        out.append(r)
+    return out
+
+
+def under_curve(pts, bounds):
+    """Side-by-side strips covering a curve through `pts` drawn with a line up
+    to 10 px wide and filled below it, within `bounds`: each strip reaches
+    from a little above the curve's highest point near it to the bottom."""
+    strips = []
+    for x0 in range(bounds.left, bounds.right, CURVE_STRIP):
+        near = [y for x, y in pts if x0 - 12 <= x <= x0 + CURVE_STRIP + 12]
+        top = math.floor(min(near, default=bounds.top)) - 8
+        strips.append(pygame.Rect(x0, top, CURVE_STRIP, bounds.bottom - top).clip(bounds))
+    return strips
+
+
 def text(surf, s, font, color, pos, anchor="center", alpha=None):
     img = font.render(s, True, color)
     if alpha is not None:
@@ -197,7 +229,9 @@ class Game:
         self.f_plus = load_font("Rubik-Medium.ttf", 12)
 
         self.bg = make_vgrad(W, H, (6, 10, 24), (16, 26, 58))
+        # Translucent layers, kept transparent between frames (see blend()).
         self.fx = pygame.Surface((W, H), pygame.SRCALPHA)
+        self.fx_drawn = []
         self.layer = pygame.Surface((W, H), pygame.SRCALPHA)
         self.hatch_cap = make_hatch((255, 90, 130, 80))
         self.hatch_block = make_hatch((140, 160, 230, 45))
@@ -208,8 +242,12 @@ class Game:
         self.warn = pygame.Surface((60, GROUND), pygame.SRCALPHA)
         for x in range(60):
             pygame.draw.line(self.warn, (255, 60, 90, int(70 * (1 - x / 60))), (x, 0), (x, GROUND))
-        self.dim = pygame.Surface((W, H), pygame.SRCALPHA)
-        self.dim.fill((4, 7, 18, 190))
+        # A uniform shade: one alpha for the whole surface blends far faster
+        # than the same alpha in every pixel (in the browser above all), and
+        # looks the same.
+        self.dim = pygame.Surface((W, H))
+        self.dim.fill((4, 7, 18))
+        self.dim.set_alpha(190)
 
         self.best = {}
         try:
@@ -870,13 +908,25 @@ class Game:
         self.new_world(random_seed())
 
     # ---------- drawing ----------
+    def blend(self, layer, drawn, clear=None):
+        """Blends the drawn parts of a translucent, screen-sized layer onto the
+        screen, then clears them (`clear`, else the same rects). `drawn` must
+        cover every pixel drawn on the layer. The rest of it is transparent,
+        so blending all of it changed nothing, yet each such full-screen
+        blend took a large share of a frame in the browser build."""
+        drawn = disjoint(drawn)
+        for r in drawn:
+            self.screen.blit(layer, r.topleft, r)
+        for r in [clear] if clear is not None else drawn:
+            layer.fill((0, 0, 0, 0), r)
+
     def draw_laser(self, e, X):
         s = self.screen
         x = X(e.x)
         pulse = 0.8 + 0.2 * math.sin(self.t * 9 + e.x)
         left = [(x - beam_half(y), sy(y)) for y in range(0, GROUND + 1, 16)]
         right = [(x + beam_half(y), sy(y)) for y in range(GROUND, -1, -16)]
-        pygame.draw.polygon(self.fx, (170, 125, 255, int(40 * pulse)), left + right)
+        self.fx_drawn.append(pygame.draw.polygon(self.fx, (170, 125, 255, int(40 * pulse)), left + right))
         inner_l = [(x - beam_half(y) * 0.45, sy(y)) for y in range(0, GROUND + 1, 16)]
         inner_r = [(x + beam_half(y) * 0.45, sy(y)) for y in range(GROUND, -1, -16)]
         self.layer_laser.append(inner_l + inner_r)
@@ -924,14 +974,14 @@ class Game:
             y -= 60
 
         # translucent world layer: caps, defects, laser envelopes
-        self.fx.fill((0, 0, 0, 0))
+        self.fx_drawn = []
         self.layer_laser = []
         labels = []
         for e in self.ents:
             if e.type == "laser":
                 self.draw_laser(e, X)
             elif e.type == "cap":
-                pygame.draw.rect(self.fx, (255, 70, 120, 28), (X(e.x), 0, e.w, sy(e.h)))
+                self.fx_drawn.append(pygame.draw.rect(self.fx, (255, 70, 120, 28), (X(e.x), 0, e.w, sy(e.h))))
             elif e.type == "defect":
                 pts = [(X(e.x - 3 * e.w), GROUND)]
                 xx = e.x - 3 * e.w
@@ -940,14 +990,12 @@ class Game:
                     pts.append((X(xx), sy(e.a * math.exp(-q * q))))
                     xx += 6
                 pts.append((X(e.x + 3 * e.w), GROUND))
-                pygame.draw.polygon(self.fx, (255, 193, 77, 38), pts)
+                self.fx_drawn.append(pygame.draw.polygon(self.fx, (255, 193, 77, 38), pts))
                 labels.append((e, pts))
-        s.blit(self.fx, (0, 0))
+        self.blend(self.fx, self.fx_drawn)
         if self.layer_laser:
-            self.fx.fill((0, 0, 0, 0))
-            for poly in self.layer_laser:
-                pygame.draw.polygon(self.fx, (200, 165, 255, 45), poly)
-            s.blit(self.fx, (0, 0))
+            drawn = [pygame.draw.polygon(self.fx, (200, 165, 255, 45), poly) for poly in self.layer_laser]
+            self.blend(self.fx, drawn)
         for e in self.ents:
             if e.type == "laser":
                 self.draw_laser_streaks(e, X)
@@ -967,11 +1015,10 @@ class Game:
         last_i = math.ceil((cam + W) / EW)
         for c in self.curves:
             pts = [(sx, sy(self.potential(c, cam + sx))) for sx in range(0, W + 1, 6)]
-            self.layer.fill((0, 0, 0, 0))
             a = 55 if len(self.curves) == 1 else 34
-            pygame.draw.polygon(self.layer, (*c.color, a), pts + [(W, GROUND), (0, GROUND)])
-            pygame.draw.lines(self.layer, (*c.color, 70), False, pts, 10)
-            s.blit(self.layer, (0, 0))
+            drawn = pygame.draw.polygon(self.layer, (*c.color, a), pts + [(W, GROUND), (0, GROUND)])
+            drawn.union_ip(pygame.draw.lines(self.layer, (*c.color, 70), False, pts, 10))
+            self.blend(self.layer, under_curve(pts, drawn), clear=drawn)
             pygame.draw.lines(s, c.color, False, pts, 3)
             for i in range(first_i, last_i + 1):
                 self.ensure(c, i)
