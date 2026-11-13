@@ -487,6 +487,11 @@ the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Dro
 - **Optional page events** (`arqade_common.web.post_event`):
   `arqade:game-start` / `arqade:game-end` around a match, `arqade:quit`. They
   do nothing outside a browser or when nobody listens.
+- **High scores to the page:** when a player confirms initials for a new
+  local high score, the game calls `web.post_score(game_id, mode, score,
+  initials)` (`arqade:score`; times as integer milliseconds), and its
+  `game.json` declares each table under `"scores"` (`mode`, `label`, `order`
+  `desc`/`asc`, `format` `points`/`time`, `max`) for the website's high-score service.
 - **Each ported game has a `game.json`** (the manifest the website reads;
   `version` is filled in from `pyproject.toml` at build time). Its thumbnail
   is made from `batocera/logos/<package>-wide.png`.
@@ -527,8 +532,11 @@ the same code as the cabinet. Ported so far: Quantum Pong, Planck Time, Gate Dro
   ported game on pygame-ce and pygame 2.5.2, builds them all and publishes
   release `v<version>` with one asset, `arqade-games-<version>.zip`. The
   release notes give the version and sha256 for the website's
-  `games.config.json`. GitHub only offers the button once the workflow file
-  is on the default branch.
+  `games.config.json`. With the repository variable `WEBSITE_REPO` and the
+  secret `WEBSITE_DEPLOY_KEY` (a deploy key with write access to that repo),
+  the last step also pushes the new version and checksum to the website's
+  `main` at once. GitHub only offers the button once the workflow file is on
+  the default branch.
 - **The Python runtime ships in the bundle** (`_runtime/`, about 25 MB, shared
   by all games) instead of loading from pygame-web.github.io, so players'
   browsers only talk to the site hosting the games. `RUNTIME_FILES` in

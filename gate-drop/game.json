@@ -17,5 +17,8 @@
     "Two of the same gate next to each other on a wire cancel out.",
     "Cancel every error on your board to win the round.",
     "Start (Space or Enter) pauses the game."
+  ],
+  "scores": [
+    {"mode": "default", "label": "1 player", "order": "desc", "format": "points", "max": 9999999}
   ]
 }

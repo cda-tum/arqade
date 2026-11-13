@@ -26,6 +26,7 @@ from overquqed.config import AXIS_DEADZONE, REPEAT_DELAY, REPEAT_INTERVAL
 
 PLAYERS = ("p1", "p2")  # pad 0, pad 1
 DIRECTIONS = ("left", "right", "up", "down")
+FACE_BUTTONS = ("a", "b", "x", "y", "l", "r")  # printed letters, unlike START or STICK
 ACTIONS = DIRECTIONS + ("pick", "use", "swap", "start", "select")
 # The printed button behind each action.
 ACTION_BUTTONS = {
@@ -224,9 +225,24 @@ class Input:
         both players' when player is None (e.g. "SPACE / ENTER"). "stick" is
         the stick or the direction keys."""
         if player is None:
-            return " / ".join(dict.fromkeys(self.name(control, p) for p in PLAYERS))
+            names = [self.name(control, p) for p in PLAYERS]
+            if control in FACE_BUTTONS and not self.same_device():
+                # one on keys, one on a pad: "B / A" would read as one
+                # button standing for another, so say whose is whose
+                return " / ".join(f"{p.upper()} {n}" for p, n in zip(PLAYERS, names))
+            return " / ".join(dict.fromkeys(names))
         if control == "stick":
             if self.devices[player] == KEYBOARD:
                 return "WASD" if player == "p1" else "ARROWS"
             return "STICK"
         return self.devices.label(control, player)
+
+    def on_pads(self, player: str | None = None) -> bool:
+        """Whether the player (or, for None, everyone) is on a pad: the
+        screens then show the cabinet's buttons, otherwise keys."""
+        if player is None:
+            return all(self.devices[p] != KEYBOARD for p in PLAYERS)
+        return self.devices[player] != KEYBOARD
+
+    def same_device(self) -> bool:
+        return len({self.devices[p] for p in PLAYERS}) == 1

@@ -17,5 +17,8 @@
     "Every microgame uses only the stick and A.",
     "Solo: four lives, how many can you clear? Versus: the last one with hearts left wins.",
     "Start (Space or Enter) pauses the game."
+  ],
+  "scores": [
+    {"mode": "default", "label": "1 player", "order": "desc", "format": "points", "max": 9999}
   ]
 }

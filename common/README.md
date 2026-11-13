@@ -6,6 +6,8 @@ Code shared by the Arqade games:
   across the cabinet's arcade sticks, browser gamepads and Xbox pads; the
   shared two-player keyboard layout; pads assigned to players as they connect;
   which device each player last used, and button names for on-screen hints.
+- `arqade_common.keycaps`: keys drawn as keycaps, so hints for keyboard
+  players show the key (a "B" cap) rather than a pad button letter.
 - `arqade_common.runtime`: `is_browser()` and the few browser-only tweaks.
 - `arqade_common.web`: optional events to a web page that embeds a game.
 

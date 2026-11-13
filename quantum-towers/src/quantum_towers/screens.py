@@ -10,9 +10,12 @@ worth testing on their own.
 from __future__ import annotations
 
 import pygame
+from arqade_common.input import PAD
+
+from arqade_common import keycaps
 
 from quantum_towers import config, visuals
-from quantum_towers.input import button_name, last_device
+from quantum_towers.input import KEYBOARD, PLAYERS, button_name, last_device
 from quantum_towers.solo import format_time
 
 LEGEND_LINES = [
@@ -39,6 +42,24 @@ def button_grid() -> list[list[tuple[str, str | None]]]:
     here; conflating the two was the first real-hardware mapping bug)."""
     cells = list(zip(config.BUTTON_LABELS, config.GATE_AT_POSITION))
     return [cells[0:3], cells[3:6]]
+
+
+def draw_key_hint(
+    surface: pygame.Surface, font: pygame.font.Font, parts, players, color, centerx: int, y: int
+) -> None:
+    """A hint line for keyboard players, centred on `centerx` where a line of
+    text would have its top at `y`: parts = ((controls, action), ...), each
+    player's keys drawn as keycaps (a pad's buttons and WASD written), so a
+    key like B never passes for the pad's B button."""
+    devices = last_device()
+
+    def name(control, p):
+        return button_name(control, p), devices[p] == KEYBOARD and control != "stick"
+
+    items = keycaps.hint_items(parts, players, name)
+    width = keycaps.key_hint_size(font, items)[0]
+    keycaps.draw_key_hint(surface, font, items, (centerx - width // 2, y + font.get_height() // 2),
+                          config.COLOR_BACKGROUND, config.COLOR_TOWER, config.COLOR_TEXT, color)
 
 
 def blink_visible(t: float, period: float) -> bool:
@@ -84,6 +105,8 @@ def draw_title_screen(
 
     if show_prompt:
         prompt_text = f"PRESS {button_name('a')} OR {button_name('start')}"
+        if not last_device().everyone_on(PAD):  # "PRESS B OR SPACE" would read as the pad's B
+            prompt_text = f"PRESS {button_name('start')}"
         prompt = prompt_font.render(prompt_text, False, config.COLOR_FPS)
         surface.blit(
             prompt, prompt.get_rect(center=(config.INTERNAL_WIDTH // 2, config.INTERNAL_HEIGHT - 28))
@@ -179,6 +202,11 @@ def draw_pause_menu(
             visuals.blit_outlined_text(
                 surface, item_font, ">", config.COLOR_HINT, (rect.x - 16, y)
             )
+    p = last_device().latest
+    if last_device()[p] == KEYBOARD:
+        draw_key_hint(surface, hint_font, ((("a",), "PICK"), (("start",), "RESUME")), (p,), config.COLOR_TOWER,
+                      centerx, box.bottom - 16)
+        return
     visuals.blit_outlined_text_centered(
         surface, hint_font, pause_hint(), config.COLOR_TOWER, centerx, box.bottom - 16
     )
@@ -333,6 +361,11 @@ def draw_initials(
         if active and blink_visible(t, 0.5):
             _draw_arrow(surface, box.centerx, box.y - 9, pointing_up=True)
             _draw_arrow(surface, box.centerx, box.bottom + 8, pointing_up=False)
+    p = last_device().latest
+    if last_device()[p] == KEYBOARD:
+        parts = ((("stick",), "LETTER"), (("a",), "DONE" if entry.pos == 2 else "NEXT"), (("b",), "BACK"))
+        draw_key_hint(surface, small_font, parts, (p,), config.COLOR_TOWER, centerx, config.INTERNAL_HEIGHT - 22)
+        return
     visuals.blit_outlined_text_centered(
         surface, small_font, initials_hint(entry), config.COLOR_TOWER, centerx,
         config.INTERNAL_HEIGHT - 22,
@@ -373,7 +406,10 @@ def draw_times_table(
             (box.x + 41, f"{i + 1:>2}."), (box.x + 95, entry.name), (box.x + 149, format_time(entry.seconds)),
         ):
             visuals.blit_outlined_text(surface, row_font, text, color, (x, y))
-    if t >= config.TIMES_TABLE_LOCK:
+    if t >= config.TIMES_TABLE_LOCK and not last_device().everyone_on(PAD):
+        draw_key_hint(surface, small_font, ((("a",), "CONTINUE"),), PLAYERS, config.COLOR_TOWER, centerx,
+                      config.INTERNAL_HEIGHT - 22)
+    elif t >= config.TIMES_TABLE_LOCK:
         visuals.blit_outlined_text_centered(
             surface, small_font, f"{button_name('a')}: CONTINUE", config.COLOR_TOWER, centerx,
             config.INTERNAL_HEIGHT - 22

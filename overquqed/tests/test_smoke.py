@@ -92,6 +92,22 @@ def test_round_runs_to_results_and_back(app, monkeypatch):
     assert type(app.scene).__name__ == "LevelSelectScene"
 
 
+def test_a_new_high_score_is_posted_to_the_page(app, monkeypatch):
+    from overquqed import scenes
+    from overquqed.round_scene import RoundScene
+
+    posted = []
+    monkeypatch.setattr(scenes.web, "post_score", lambda *a: posted.append(a))
+    rs = RoundScene(app, levels.SNACK_BAR, [0])
+    rs.world.score = 321
+    app.switch(scenes.ResultsScene(app, rs))
+    for _ in range(3):
+        frames(app, 2, p1={"pick"})
+        frames(app, 2)
+    assert posted == [("overquqed", "snackbar", 321, "AAA")]
+    assert app.hiscores["snackbar"]["scores"][0] == {"name": "AAA", "score": 321}
+
+
 def test_quit_combo_stops_the_app(app):
     app.inp.next_held = {"p1": {"start", "select"}, "p2": set()}
     app.step(1 / 60, [])

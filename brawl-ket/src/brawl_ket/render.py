@@ -22,12 +22,12 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import pygame
-from arqade_common.input import KEYBOARD, PAD, LastDevice
+from arqade_common.input import KEYBOARD, PAD, LastDevice, label as key_label
 
 from . import match as M
 from . import palette as P
 from . import basis
-from .input import button_name
+from .input import button_name, mixed_devices
 from .config import (
     CARD_FRAMES,
     CHARGE_CAP,
@@ -674,6 +674,31 @@ def tags_of(match: M.Match) -> dict[str, str]:
 
 # A printed button in a teaching line ("A: ", "Y SWITCHES", "DOWN+X"), named for the player's device
 _BUTTON_WORD = re.compile(r"\b(DOWN|[ABXY])\b")
+
+
+def _keycap(surf: pygame.Surface, name: str, rect: pygame.Rect, lit: bool) -> None:
+    """A keyboard key with its name on it: what keyboard players see where the pad's
+    round buttons would be (gold when used, as the buttons are)."""
+    fill = P.GOLD if lit else P.SLATE
+    pygame.draw.rect(surf, P.INK, rect.inflate(2, 2).move(0, 1), border_radius=3)
+    pygame.draw.rect(surf, tuple(c * 6 // 10 for c in fill), rect.move(0, 1), border_radius=2)     # its lip
+    pygame.draw.rect(surf, fill, rect, border_radius=2)
+    if name:
+        blit_center(surf, font(8).render(name, False, P.INK if lit else P.MIST), (rect.centerx + 1, rect.centery + 1))
+
+
+_ARROW = {"up": ((0, -3), (-3, 1), (3, 1)), "down": ((0, 3), (-3, -1), (3, -1)),
+          "left": ((-3, 0), (1, -3), (1, 3)), "right": ((3, 0), (-1, -3), (-1, 3))}
+
+
+def _arrow_keys(surf: pygame.Surface, player: str, x: int, y: int, size: int, pitch: int) -> None:
+    """One player's direction keys as an inverted T (W A S D, or the arrows drawn as arrows)."""
+    for d, col, row in (("up", 1, 0), ("left", 0, 1), ("down", 1, 1), ("right", 2, 1)):
+        rect = pygame.Rect(x + col * pitch, y + row * pitch, size, size)
+        name = key_label(d, player, KEYBOARD)
+        _keycap(surf, name if len(name) == 1 else "", rect, False)
+        if len(name) > 1:
+            pygame.draw.polygon(surf, P.MIST, [(rect.centerx + px, rect.centery + py) for px, py in _ARROW[d]])
 
 
 class Renderer:
@@ -1909,7 +1934,10 @@ class Renderer:
         """A short label like "A+B" or "DOWN+X" for one player, or for both ("B+V / L+K")."""
         if who is not None:
             return self._keys(text, who)
-        return " / ".join(dict.fromkeys(self._keys(text, p) for p in M.PLAYERS))
+        names = [self._keys(text, p) for p in M.PLAYERS]
+        if mixed_devices(self.devices) and _BUTTON_WORD.search(text):      # "P1 B+V / P2 A+B"
+            return " / ".join(f"{p.upper()} {n}" for p, n in zip(M.PLAYERS, names))
+        return " / ".join(dict.fromkeys(names))
 
     def _side_keys(self, text: str, key: str) -> str:
         """A label on a side's own panel or HUD: that player's names, the printed ones for the CPU."""
@@ -2228,8 +2256,11 @@ class Renderer:
         pygame.draw.rect(surf, P.NIGHT, steps, border_radius=7)
         lit = lesson.caption if lesson is not None else 0
         who = self._menu_who(match)
+        mixed = who is None and mixed_devices(self.devices)
         for i, parts in enumerate(LESSON_LINES):
             y = steps.y + 10 + 12 * i
+            if mixed:       # "P1 B / P2 A: " leaves no room: CONTROLS beside names both
+                parts = parts[1:]
             parts = tuple((self._keys(t, who), c) for t, c in parts)
             if i == lit:
                 self._parts(parts, (0, y), left=steps.x + 8)
@@ -2242,47 +2273,95 @@ class Renderer:
 
     def _controls(self, box: pygame.Rect, who: str | None = None) -> None:
         """The stick and the 2x3 buttons as on the cabinet (L X R over Y B A), the used
-        ones lit, and what each does. Both pads are the same; on the keyboard each name is
-        `who`'s key, or both players' (P1 / P2)."""
+        ones lit, and what each does. Both pads are the same. On the keyboard, keys where
+        the pad would be: `who`'s, or both players' (P1 / P2). One player on the keys and
+        one on a pad: no pictures, each name says whose it is."""
         surf = self.surface
         pygame.draw.rect(surf, P.INK, box.inflate(4, 4), border_radius=8)
         pygame.draw.rect(surf, P.NIGHT, box, border_radius=7)
         pygame.draw.rect(surf, P.SLATE, box, 2, border_radius=7)
         blit_center(surf, outlined("CONTROLS", 8, P.GOLD), (box.centerx, box.y + 12))
-        # the stick: a ball on a shaft
-        sx, sy = box.x + 26, box.y + 52
-        pygame.draw.ellipse(surf, P.INK, (sx - 13, sy + 6, 26, 10))
-        pygame.draw.ellipse(surf, P.SLATE, (sx - 11, sy + 7, 22, 7))
-        pygame.draw.line(surf, P.INK, (sx, sy + 10), (sx, sy - 4), 4)
-        _ball(surf, (sx, sy - 6), 7, P.BAD)
-        pygame.draw.circle(surf, P.lighten(P.BAD, 0.5), (sx - 2, sy - 9), 2)
-        surf.blit(outlined(self._n("stick", who), 8, P.GOLD), (box.x + 48, sy - 12))
-        surf.blit(outlined("WALK, JUMP, CROUCH", 8, P.WHITE), (box.x + 48, sy))
-        # the buttons
+        players = list(M.PLAYERS) if who is None else [who]
+        devices = {self.devices[p] for p in players}
+        mode = "pad" if devices == {PAD} else "keys" if devices == {KEYBOARD} else "mixed"
         used = {b for b, _ in BUTTON_JOBS if len(b) == 1}
+        sx, sy = box.x + 26, box.y + 52
         top = box.y + 112
-        for row, labels in enumerate(CLUSTER):
-            for col, label in enumerate(labels):
-                c = (box.x + 14 + 24 * col, top + 24 * row)
-                on = label in used
-                name = self._n(label.lower(), who)
-                name = name if len(name) == 1 else label     # one player's key, else as printed
-                _ball(surf, c, 9, P.GOLD if on else P.SLATE)
-                blit_center(surf, font(8).render(name, False, P.INK if on else P.MIST), (c[0] + 1, c[1] + 1))
+        if mode == "pad":
+            # the stick: a ball on a shaft
+            pygame.draw.ellipse(surf, P.INK, (sx - 13, sy + 6, 26, 10))
+            pygame.draw.ellipse(surf, P.SLATE, (sx - 11, sy + 7, 22, 7))
+            pygame.draw.line(surf, P.INK, (sx, sy + 10), (sx, sy - 4), 4)
+            _ball(surf, (sx, sy - 6), 7, P.BAD)
+            pygame.draw.circle(surf, P.lighten(P.BAD, 0.5), (sx - 2, sy - 9), 2)
+            stick_x = box.x + 48
+        elif mode == "keys":
+            # the direction keys, an inverted T each
+            if who is not None:
+                _arrow_keys(surf, who, box.x + 4, sy - 16, 14, 16)
+                stick_x = box.x + 58
+            else:
+                for i, p in enumerate(players):
+                    _arrow_keys(surf, p, box.x + 6 + 46 * i, sy - 14, 12, 14)
+                stick_x = box.x + 102
+        else:
+            stick_x = box.x + 12
+        surf.blit(outlined(self._n("stick", who), 8, P.GOLD), (stick_x, sy - 12))
+        surf.blit(outlined("WALK, JUMP, CROUCH", 8, P.WHITE), (stick_x, sy))
+        # the buttons
+        if mode == "pad":
+            for row, labels in enumerate(CLUSTER):
+                for col, label in enumerate(labels):
+                    c = (box.x + 14 + 24 * col, top + 24 * row)
+                    on = label in used
+                    name = self._n(label.lower(), who)
+                    name = name if len(name) == 1 else label     # one player's key, else as printed
+                    _ball(surf, c, 9, P.GOLD if on else P.SLATE)
+                    blit_center(surf, font(8).render(name, False, P.INK if on else P.MIST), (c[0] + 1, c[1] + 1))
+        elif mode == "keys" and who is not None:     # the six keys standing in for the buttons, as laid out
+            for row, labels in enumerate(CLUSTER):
+                for col, label in enumerate(labels):
+                    rect = pygame.Rect(box.x + 5 + 24 * col, top - 9 + 24 * row, 18, 18)
+                    _keycap(surf, key_label(label.lower(), who, KEYBOARD), rect, label in used)
+        elif mode == "keys":                         # both players' six keys, one block each
+            for i, p in enumerate(players):
+                y0 = top - 16 + 32 * i
+                surf.blit(outlined(p.upper(), 8, PLAYER_COLORS[p]), (box.x + 6, y0 + 8))
+                for row, labels in enumerate(CLUSTER):
+                    for col, label in enumerate(labels):
+                        rect = pygame.Rect(box.x + 28 + 14 * col, y0 + 14 * row, 13, 13)
+                        _keycap(surf, key_label(label.lower(), p, KEYBOARD), rect, label in used)
         rows = [(outlined(self._combo(label, who), 8, P.GOLD), outlined(job, 8, P.WHITE)) for label, job in BUTTON_JOBS]
         # the names' column, moved left (not past the cluster) when both players' keys are long
         widest = max(tag.get_width() + 6 + job.get_width() for tag, job in rows)
-        tag_x = box.x + max(76, min(90, box.w - 6 - widest))
+        tag_x = box.x + max(76, min(90, box.w - 6 - widest)) if mode != "mixed" else box.x + 12
+        job_x = tag_x + 8 + max(tag.get_width() for tag, _ in rows) if mode == "mixed" else None   # one column
         for i, (tag, job) in enumerate(rows):
             y = top - 8 + 14 * i
             surf.blit(tag, (tag_x, y))
-            surf.blit(job, (max(tag_x + 18, tag_x + 6 + tag.get_width()), y))
-        # Start, a pill of its own below the cluster
-        start = font(8).render(self._n("start", who), False, P.INK)
-        pill = pygame.Rect(box.x + 10, box.y + 180, max(60, start.get_width() + 12), 16)
-        pygame.draw.rect(surf, P.INK, pill.inflate(4, 4), border_radius=8)
-        pygame.draw.rect(surf, P.GOLD, pill, border_radius=7)
-        blit_center(surf, start, (pill.centerx + 1, pill.centery + 1))
+            surf.blit(job, (job_x or max(tag_x + 18, tag_x + 6 + tag.get_width()), y))
+        # Start: a pill of its own below the cluster (on keys, the keys; mixed, the names)
+        if mode == "pad":
+            start = font(8).render(self._n("start", who), False, P.INK)
+            pill = pygame.Rect(box.x + 10, box.y + 180, max(60, start.get_width() + 12), 16)
+            pygame.draw.rect(surf, P.INK, pill.inflate(4, 4), border_radius=8)
+            pygame.draw.rect(surf, P.GOLD, pill, border_radius=7)
+            blit_center(surf, start, (pill.centerx + 1, pill.centery + 1))
+        elif mode == "keys":
+            pill = pygame.Rect(box.x + 10, box.y + 180, 0, 16)
+            for i, p in enumerate(players):
+                if i:
+                    slash = outlined("/", 8, P.MIST)
+                    surf.blit(slash, (pill.right + 4, pill.y + 4))
+                    pill.right += 8 + slash.get_width()
+                name = key_label("start", p, KEYBOARD)
+                cap = pygame.Rect(pill.right + (4 if i else 0), pill.y, font(8).size(name)[0] + 14, 16)
+                _keycap(surf, name, cap, True)
+                pill.width = cap.right - pill.x
+        else:
+            start = outlined(self._n("start", who), 8, P.GOLD)
+            pill = pygame.Rect(tag_x, box.y + 180, start.get_width(), 16)
+            surf.blit(start, (pill.x, pill.y + 4))
         surf.blit(outlined("PAUSE", 8, P.WHITE), (max(box.x + 90, pill.right + 10), pill.y + 4))
         if who is None:
             note = "THE SAME ON BOTH PADS" if self.devices.everyone_on(PAD) else "KEYS SHOWN AS P1 / P2"

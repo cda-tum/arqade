@@ -258,3 +258,36 @@ def test_in_the_browser_quit_goes_back_to_the_title(game, monkeypatch):
     pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_b, mod=0, unicode="b", scancode=0))
     asyncio.run(game.run())
     assert sent == [game_mod.web.QUIT] and game.state == "title" and len(frames) >= 20
+
+
+# ---------------------------------------------------------------- control hints
+def use_devices(game, p1, p2):
+    game.inp.devices._devices.update(p1=p1, p2=p2)
+
+
+def test_mixed_devices_get_a_hint_line_each(game):
+    from arqade_common.input import KEYBOARD, PAD
+    use_devices(game, KEYBOARD, PAD)
+    assert game.hint_lines(lambda p: f"{game.name('a', p)}: OK") == ["P1 KEYS  B: OK", "P2 PAD  A: OK"]
+    use_devices(game, KEYBOARD, KEYBOARD)
+    assert game.hint_lines(lambda p: f"{game.name('a', p)}: OK") == ["B / L: OK"]
+    use_devices(game, PAD, PAD)
+    assert game.hint_lines(lambda p: f"{game.name('a', p)}: OK") == ["A: OK"]
+
+
+@pytest.mark.parametrize("mode", ["single", "coop", "versus"])
+@pytest.mark.parametrize("devices", [("keyboard", "keyboard"), ("keyboard", "pad"), ("pad", "keyboard")])
+def test_every_screen_draws_for_keyboard_players(game, monkeypatch, mode, devices):
+    from superconductor import game as game_mod
+    monkeypatch.setattr(game_mod, "_fonts", {})  # fonts from an earlier pygame.init() are dead
+    monkeypatch.setattr(game_mod, "_text_cache", {})
+    use_devices(game, *devices)
+    game.mode = mode
+    S = pygame.Surface((320, 180))
+    for row in range(3):
+        game.menu_row = row
+        game.draw_title(S)
+    game.start_game()
+    game.state_t = 3.0
+    for draw in (game.draw_tutorial, game.draw_play, game.draw_paused, game.draw_over):
+        draw(S)

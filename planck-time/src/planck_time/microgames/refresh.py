@@ -12,8 +12,11 @@ from __future__ import annotations
 import pygame
 
 from planck_time import palette as P
+from arqade_common.keycaps import keycap_size
 from planck_time.microgames.base import H, W, Microgame, PlayerInput, register
-from planck_time.pixel import backdrop, blit_center, button, dither, orb, outlined, result_overlay
+from planck_time.pixel import (
+    backdrop, blit_center, button, control_hint, dither, draw_keycap, font, on_keys, orb, outlined, result_overlay,
+)
 
 START = 0.7
 LINE = 0.3  # falling below this fails
@@ -101,13 +104,17 @@ class Refresh(Microgame):
         # a big A that squashes on every press, with rising sparks
         bx, by = BUTTON
         down = 2 if pump > 0.5 else 0
-        pygame.draw.circle(surf, P.INK, (bx, by + 3), 15)
-        orb(surf, (bx, by + down), 13, P.BAD)
-        blit_center(surf, outlined(button("a"), 16, P.WHITE, shadow=False), (bx + 1, by + down))
+        if on_keys():  # on the keyboard: the key itself
+            w, h = keycap_size(font(16), button("a"))
+            draw_keycap(surf, button("a"), 16, (bx - w // 2, by - h // 2 + down), lit=down > 0)
+        else:
+            pygame.draw.circle(surf, P.INK, (bx, by + 3), 15)
+            orb(surf, (bx, by + down), 13, P.BAD)
+            blit_center(surf, outlined(button("a"), 16, P.WHITE, shadow=False), (bx + 1, by + down))
         if pump > 0:
             rise = round(14 * (1 - pump))
             for dx in (-12, 0, 12):
                 blit_center(surf, outlined("+", 8, P.GOLD), (BAR.centerx + dx, fill.y - 6 - rise))
 
-        blit_center(surf, outlined(f"MASH {button('a')}!", 8, P.WHITE), (W // 2, H - 14))
+        blit_center(surf, control_hint("MASH {a}!", 8, P.WHITE), (W // 2, H - 14))
         result_overlay(surf, self.result, self.since_end, seed=10)

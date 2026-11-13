@@ -17,7 +17,7 @@ import math
 import random
 
 import pygame
-from arqade_common.input import KEYBOARD, PAD
+from arqade_common.input import KEYBOARD, PAD, label as key_label
 
 from overquqed import palette as P
 from overquqed.bot import Bot
@@ -30,7 +30,7 @@ from overquqed.input import PLAYERS, Input
 from overquqed.ket import ket_surface
 from overquqed.levels import Level
 from overquqed.quantum import Noise
-from overquqed.render import KitchenView, tile_px
+from overquqed.render import KitchenView, draw_keycap, tile_px
 from overquqed.sprites import portrait
 from overquqed.world import IDLE, World
 
@@ -136,9 +136,9 @@ class DemoKitchen:
             return "", "SERVED! +POINTS"
         return "", "TWO ORDERS COME IN..."
 
-    def draw(self, surf: pygame.Surface, x: int, y: int) -> None:
+    def draw(self, surf: pygame.Surface, x: int, y: int, keys: dict[int, dict[str, str]] | None = None) -> None:
         s = self.scratch
-        self.view.draw(s, self.world.t, {0, 1}, P.PLAYER_COLORS)
+        self.view.draw(s, self.world.t, {0, 1}, P.PLAYER_COLORS, keys=keys)
         self.dining.draw(s, self.t)
         for lbl, fx, fy, t0 in self.floaters:
             age = self.t - t0
@@ -173,6 +173,42 @@ def draw_stick(surf: pygame.Surface, cx: int, cy: int, t: float) -> None:
     for ax, ay, pts in ((-21, 0, ((0, -3), (-3, 0), (0, 3))), (21, 0, ((0, -3), (3, 0), (0, 3))),
                         (0, -16, ((-3, 0), (0, -3), (3, 0)))):
         pygame.draw.polygon(surf, P.TEXT_DIM, [(cx + ax + px, cy + ay + py) for px, py in pts])
+
+
+STICK_ORDER = ("left", "up", "right", "down")  # draw_stick's wiggle, one key at a time
+
+
+def draw_arrow(surf: pygame.Surface, direction: str, cx: int, cy: int, color) -> None:
+    """A small arrow glyph for an arrow key (the font has none)."""
+    pts = {"up": ((0, -3), (-3, 1), (3, 1)), "down": ((0, 3), (-3, -1), (3, -1)),
+           "left": ((-3, 0), (1, -3), (1, 3)), "right": ((3, 0), (-1, -3), (-1, 3))}[direction]
+    pygame.draw.polygon(surf, color, [(cx + px, cy + py) for px, py in pts])
+
+
+def draw_keys(surf: pygame.Surface, player: str, x: int, y: int, t: float, pitch: int = 24, size: int = 20) -> int:
+    """One player's keys where the pad would be: the direction keys as an
+    inverted T (the one the stick would point at lit), then the six keys
+    standing in for the pad's buttons, in the pad's 2x3 layout, used ones
+    lit. Returns the width drawn."""
+    lit_dir = STICK_ORDER[int(t * 2) % 4]
+    for d, col, row in (("up", 1, 0), ("left", 0, 1), ("down", 1, 1), ("right", 2, 1)):
+        kx, ky = x + col * pitch, y + row * pitch
+        name = key_label(d, player, KEYBOARD)
+        fill = P.WHITE if d == lit_dir else (70, 56, 86)
+        ink = P.INK if d == lit_dir else (120, 106, 136)
+        if len(name) == 1:
+            draw_keycap(surf, name, kx, ky, fill, size, size, ink)
+        else:  # arrow keys: an arrow, not "LEFT"
+            draw_keycap(surf, "", kx, ky, fill, size, size)
+            draw_arrow(surf, d, kx + size // 2, ky + size // 2, ink)
+    gx = x + 3 * pitch + pitch // 2
+    for row, labels in enumerate(CLUSTER):
+        for col, button in enumerate(labels):
+            lit = LIT.get(button)
+            name = key_label(button.lower(), player, KEYBOARD)
+            draw_keycap(surf, name, gx + col * pitch, y + row * pitch, lit or (70, 56, 86), size, size,
+                        P.INK if lit else (120, 106, 136))
+    return gx + 2 * pitch + size - x
 
 
 class HowToPlayScene(Scene):
@@ -222,12 +258,15 @@ class HowToPlayScene(Scene):
             surf.blit(tk, (tx, y + 3))
             tx += tk.get_width() + 4
         pygame.draw.rect(surf, P.INK, (x + 3, y + 27, w + 2, h + 2))
-        demo.draw(surf, x + 4, y + 28)
+        demo.draw(surf, x + 4, y + 28, self._demo_keys())
         button, what = demo.caption()
         cy = y + h + 36
         parts = [text(what, 8, P.TEXT)]
         if button:
-            parts.insert(0, text(self._name(button) + ": ", 8, LIT[button]))
+            name = self._name(button)
+            if self._mode() == "mixed":  # the caption follows P1's chef
+                name = "P1 " + self.app.inp.name(button.lower(), "p1")
+            parts.insert(0, text(name + ": ", 8, LIT[button]))
         width = sum(p.get_width() for p in parts)
         cx = x + 4 + (w - width) // 2
         for p in parts:
@@ -240,13 +279,69 @@ class HowToPlayScene(Scene):
         who = PLAYERS[self.players[0]] if len(self.players) == 1 else None
         return self.app.inp.name(label.lower(), who)
 
+    def _addressed(self) -> list[str]:
+        return [PLAYERS[self.players[0]]] if len(self.players) == 1 else list(PLAYERS)
+
+    def _mode(self) -> str:
+        """"pad" or "keys" when everyone this card speaks to is on one of
+        them, "mixed" when one player is on the keys and one on a pad."""
+        devices = {self.app.inp.devices[p] for p in self._addressed()}
+        if devices == {KEYBOARD}:
+            return "keys"
+        return "mixed" if KEYBOARD in devices else "pad"
+
+    def _demo_keys(self) -> dict[int, dict[str, str]]:
+        """The demo chefs' A / B prompts as keys, for keyboard players (one
+        player watches both chefs; two players chef 1 and chef 2)."""
+        who = self._addressed()
+        owners = {0: who[0], 1: who[-1]}
+        inp = self.app.inp
+        return {c: {"A": inp.name("a", p), "B": inp.name("b", p)}
+                for c, p in owners.items() if not inp.on_pads(p)}
+
     def _draw_controls(self, surf: pygame.Surface, x: int, y: int) -> None:
         w = INTERNAL_WIDTH - 8 - x
         surf.blit(panel_box(w, self.demo.size[1] + 56, fill=P.HUD_BG, edge=(70, 56, 86)), (x, y))
         head = text("CONTROLS", 8, P.GOLD)
         surf.blit(head, (x + (w - head.get_width()) // 2, y + 8))
-        draw_stick(surf, x + 52, y + 50, self.t)
-        draw_cluster(surf, x + 118, y + 28)
+        mode = self._mode()
+        if mode == "mixed":
+            self._draw_mixed_legend(surf, x, y, w)
+        else:
+            if mode == "pad":
+                draw_stick(surf, x + 52, y + 50, self.t)
+                draw_cluster(surf, x + 118, y + 28)
+            else:
+                self._draw_keyboards(surf, x, y, w)
+            self._draw_legend(surf, x, y)
+        on_pads = self.app.inp.devices.everyone_on(PAD)
+        note = text("BOTH PADS THE SAME" if on_pads else "SAME FOR BOTH PLAYERS", 8, P.TEXT_DIM)
+        surf.blit(note, (x + (w - note.get_width()) // 2, y + 188))
+
+    def _draw_keyboards(self, surf: pygame.Surface, x: int, y: int, w: int) -> None:
+        """Where the pad would be: each keyboard player's keys."""
+        who = self._addressed()
+        if len(who) == 1:
+            width = 5 * 24 + 12 + 20
+            draw_keys(surf, who[0], x + (w - width) // 2, y + 30, self.t)
+            return
+        width = 5 * 17 + 8 + 14
+        gap = (w - 2 * width) // 3
+        for i, p in enumerate(who):
+            bx = x + gap + i * (width + gap)
+            tag = text(p.upper(), 8, P.PLAYER_COLORS[i])
+            surf.blit(tag, (bx + (width - tag.get_width()) // 2, y + 24))
+            draw_keys(surf, p, bx, y + 40, self.t, pitch=17, size=14)
+
+    def _draw_mixed_legend(self, surf: pygame.Surface, x: int, y: int, w: int) -> None:
+        """One player on keys, one on a pad: no pictures, but each row
+        names both players' own key or button, the action underneath."""
+        for i, (label, action, col) in enumerate(CONTROLS):
+            ly = y + 26 + i * 31
+            surf.blit(text(self._name(label), 8, col), (x + 8, ly))
+            surf.blit(text(action, 8, P.TEXT), (x + 24, ly + 12))
+
+    def _draw_legend(self, surf: pygame.Surface, x: int, y: int) -> None:
         for i, (label, action, col) in enumerate(CONTROLS):
             ly = y + 92 + i * 18
             key = text(self._name(label) + ":", 8, col)
@@ -256,6 +351,3 @@ class HowToPlayScene(Scene):
             else:  # a long key name (e.g. "WASD / ARROWS"): the action follows it
                 surf.blit(key, (x + 8, ly))
                 surf.blit(text(action, 8, P.TEXT), (x + 16 + key.get_width(), ly))
-        on_pads = self.app.inp.devices.everyone_on(PAD)
-        note = text("BOTH PADS THE SAME" if on_pads else "SAME FOR BOTH PLAYERS", 8, P.TEXT_DIM)
-        surf.blit(note, (x + (w - note.get_width()) // 2, y + 188))

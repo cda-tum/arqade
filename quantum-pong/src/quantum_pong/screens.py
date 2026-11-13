@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pygame
 
+from arqade_common import keycaps
+
 from quantum_pong import config
 from quantum_pong.pause import PAUSE_ITEMS
 from quantum_pong.title import TITLE_ITEMS
@@ -104,10 +106,11 @@ def draw_pause_menu(
     item_font: pygame.font.Font,
     hint_font: pygame.font.Font,
     selected: int,
-    hint_text: str = "A: PICK   START / B: RESUME",
+    hint_text: str | tuple = "A: PICK   START / B: RESUME",
 ) -> None:
     """Centred box over the frozen field, which the caller has already drawn.
-    `hint_text` names the buttons for the device of whoever is using the menu."""
+    `hint_text` names the buttons for the device of whoever is using the menu:
+    text for a pad, or keycap hints for the keyboard (see keycaps.draw_key_hint)."""
     veil = pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT), pygame.SRCALPHA)
     veil.fill((*config.COLOR_BACKGROUND, 170))
     surface.blit(veil, (0, 0))
@@ -122,5 +125,10 @@ def draw_pause_menu(
 
     _draw_items(surface, item_font, PAUSE_ITEMS, selected, box.centerx, box.y + 48)
 
-    hint = hint_font.render(hint_text, False, config.COLOR_HINT)
-    surface.blit(hint, hint.get_rect(center=(box.centerx, box.bottom - 14)))
+    if isinstance(hint_text, str):
+        hint = hint_font.render(hint_text, False, config.COLOR_HINT)
+        surface.blit(hint, hint.get_rect(center=(box.centerx, box.bottom - 14)))
+    else:
+        width = keycaps.key_hint_size(hint_font, hint_text)[0]
+        keycaps.draw_key_hint(surface, hint_font, hint_text, (box.centerx - width // 2, box.bottom - 14),
+                              config.COLOR_BACKGROUND, config.COLOR_HINT, config.COLOR_TEXT, config.COLOR_HINT)

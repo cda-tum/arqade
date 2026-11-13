@@ -17,6 +17,8 @@ import random
 import pygame
 from arqade_common.input import KEYBOARD, PLAYERS, LastDevice
 
+from arqade_common import keycaps
+
 from gate_drop import config, tutorial
 from gate_drop.board import Cnot, Gate
 from gate_drop.fonts import load_font
@@ -92,6 +94,7 @@ def make_logo(font: pygame.font.Font, text: str = "GATE DROP") -> pygame.Surface
 
 
 KEYBOARD_STICKS = {"p1": "WASD", "p2": "ARROWS"}  # the keys that stand in for each player's stick
+KEY_FACE = (46, 40, 84)  # keycaps: the panels' purple, white-edged
 
 
 class Renderer:
@@ -280,6 +283,10 @@ class Renderer:
                 arrow = outlined(self.font8, ">", config.GATE_COLORS["H"], shadow=False)
                 s.blit(arrow, (W // 2 - img.get_width() // 2 - 16, y))
         p = self.devices.latest  # one player works the menu
+        if self.devices[p] == KEYBOARD:
+            hint = self._keys(((("a",), "PICK"), (("start",), "RESUME")), p)
+            s.blit(hint, (W // 2 - hint.get_width() // 2, box.bottom - 20))
+            return
         pick, back, start = (self._name(k, p) for k in ("a", "b", "start"))
         hint = outlined(self.font8, f"{pick}: PICK   {start} / {back}: RESUME", shade(WHITE, 0.8), shadow=False)
         s.blit(hint, (W // 2 - hint.get_width() // 2, box.bottom - 18))
@@ -294,6 +301,20 @@ class Renderer:
                      for p in ((player,) if player else PLAYERS)]
             return " / ".join(dict.fromkeys(names))
         return self.devices.label(action, player) if player else self.devices.shared_label(action)
+
+    def _on_pads(self, player: str | None = None) -> bool:
+        """Whether a hint for `player` (both players when None) is read on pads
+        only: then it is the text it always was, else its keys are keycaps."""
+        return all(self.devices[p] != KEYBOARD for p in ((player,) if player else PLAYERS))
+
+    def _keys(self, parts, player: str | None = None) -> pygame.Surface:
+        """A hint line for keyboard players: parts = ((controls, action), ...);
+        keys are drawn as keycaps, a pad player's buttons (and WASD/ARROWS) written."""
+        def name(control, p):
+            return self._name(control, p), self.devices[p] == KEYBOARD and control != "stick"
+        items = keycaps.hint_items(parts, (player,) if player else PLAYERS, name)
+        return keycaps.key_hint_surface(self.font8, items, KEY_FACE, shade(WHITE, 0.7), WHITE, WHITE,
+                                        config.GATE_COLORS["H"])
 
     def _foot(self, *parts: str) -> pygame.Surface:
         """A footer line of hints, closer together if the key names make it long."""
@@ -505,12 +526,20 @@ class Renderer:
                 stamp = outlined(self.font16, "READY!", config.GATE_COLORS["T"])
             else:
                 who = self.devices.latest if match.mode == 1 else p
+                if not self._on_pads(who):
+                    stamp = self._keys(((("a",), "READY"),), who)
+                    s.blit(stamp, (cx - stamp.get_width() // 2, box.bottom - 28))
+                    continue
                 stamp = outlined(self.font8, f"{self._name('a', who)}: READY", WHITE, shadow=False)
             s.blit(stamp, (cx - stamp.get_width() // 2, box.bottom - 26))
         who = self.devices.latest if match.mode == 1 else None
+        s.fill(INK, (0, 242, W, 20))
+        if not self._on_pads(who):
+            foot = self._keys(((("stick",), "CHOOSE"), (("a",), "READY"), (("b",), "BACK")), who)
+            s.blit(foot, (W // 2 - foot.get_width() // 2, 246))
+            return
         foot = self._foot(f"{self._name('stick', who)}: CHOOSE", f"{self._name('a', who)}: READY",
                           f"{self._name('b', who)}: BACK")
-        s.fill(INK, (0, 242, W, 20))
         s.blit(foot, (W // 2 - foot.get_width() // 2, 248))
 
     def _name_entry(self, match: Match) -> None:
@@ -535,9 +564,13 @@ class Renderer:
                         arrow = outlined(self.font8, glyph, WHITE, shadow=False)
                         s.blit(arrow, (box.centerx - arrow.get_width() // 2, box.y + dy + 2))
         p = self.devices.latest
+        s.fill(INK, (0, 242, W, 20))
+        if not self._on_pads(p):
+            foot = self._keys(((("stick",), "LETTER"), (("a",), "NEXT"), (("b",), "BACK")), p)
+            s.blit(foot, (W // 2 - foot.get_width() // 2, 246))
+            return
         foot = self._foot(f"{self._name('stick', p)}: LETTER", f"{self._name('a', p)}: NEXT",
                           f"{self._name('b', p)}: BACK")
-        s.fill(INK, (0, 242, W, 20))
         s.blit(foot, (W // 2 - foot.get_width() // 2, 248))
 
     def _hiscores(self, match: Match) -> None:
@@ -584,7 +617,9 @@ class Renderer:
         elif state == MATCH_RESULT:
             winner = match.match_winner or "p1"
             lines = [outlined(self.font32, f"{winner.upper()} WINS!", config.PLAYER_COLORS[winner])]
-            if match.t >= config.MATCH_RESULT_LOCK:
+            if match.t >= config.MATCH_RESULT_LOCK and not self._on_pads():
+                lines.append(self._keys(((("a", "start"), "REMATCH"), (("b",), "TITLE"))))
+            elif match.t >= config.MATCH_RESULT_LOCK:
                 a, start, b = (self._name(k) for k in ("a", "start", "b"))
                 lines.append(outlined(self.font8, f"{a} / {start}: REMATCH     {b}: TITLE", WHITE, shadow=False))
         if not lines:
@@ -656,16 +691,66 @@ class Renderer:
             img = outlined(self.font8, "FIXED!", lighten(color, 0.5))
             s.blit(img, (ox + cols * CELL // 2 - img.get_width() // 2, oy + 40 - round(rise * 24)))
         p = self.devices.latest
-        lines = tutorial.caption(self.demo, self._name("a", p), self._name("stick", p))
+        a = self._name("a", p)
+        lines = tutorial.caption(self.demo, a, self._name("stick", p))
         for i, line in enumerate(lines):
+            y = oy + rows * CELL + 22 + i * 12
+            if self.devices[p] == KEYBOARD and line.startswith(f"{a}: "):  # the key as a keycap
+                img = self._keys(((("a",), line[len(a) + 2:]),), p)
+                s.blit(img, (72 - img.get_width() // 2, y - 2))
+                continue
             img = outlined(self.font8, line, WHITE, shadow=False)
-            s.blit(img, (72 - img.get_width() // 2, oy + rows * CELL + 22 + i * 12))
+            s.blit(img, (72 - img.get_width() // 2, y))
 
     def _controls(self, box: pygame.Rect, active: str | None, player: str | None = None) -> None:
         """The stick and the 2x3 cluster as printed on the cabinet (L X R over
         Y B A), plus Start: used buttons lit, the one the demo presses flashing
         white, and what each does listed beside them, named for `player`'s
-        device (both players' when None)."""
+        device (both players' when None). Keyboard players see their keys
+        instead of the pad, and keycaps in the list."""
+        players = (player,) if player else PLAYERS
+        if all(self.devices[p] == KEYBOARD for p in players):
+            self._key_drawing(box, active, players)
+        else:
+            self._pad_drawing(box, active)
+        if self._on_pads(player):
+            self._pad_legend(box, active, player)
+            return
+        s = self.surface
+        for i, (name, action) in enumerate(tutorial.CONTROLS):
+            y = box.y + 30 + i * 22
+            img = self._keys((((name.lower(),), action),), player)
+            if box.x + 140 + img.get_width() > box.right - 6:  # long key names: the action goes under them
+                img = self._keys((((name.lower(),), ""),), player)
+                s.blit(outlined(self.font8, action, WHITE, shadow=False), (box.x + 148, y + 9))
+                y -= 1
+            s.blit(img, (box.x + 140, y - 3))
+
+    def _key_drawing(self, box: pygame.Rect, active: str | None, players) -> None:
+        """The keys that play, a column per player: the four direction keys,
+        the two rotate keys and the pause key; used ones lit, the one the demo
+        presses white."""
+        s = self.surface
+        lit, dim = config.GATE_COLORS["H"], (70, 64, 110)
+        cap = keycaps.keycap_size(self.font8, "W")[0]
+        step = cap + keycaps.GAP
+        y0 = box.y + 28
+        lefts = (box.x + 49,) if len(players) == 1 else (box.x + 16, box.x + 82)
+        for p, x0 in zip(players, lefts):
+            cx = x0 + step + cap // 2
+            keys = (("up", x0 + step, y0), ("left", x0, y0 + step), ("down", x0 + step, y0 + step),
+                    ("right", x0 + 2 * step, y0 + step), ("b", cx - step + 1, y0 + 2 * step + 8),
+                    ("a", cx + 1, y0 + 2 * step + 8), ("start", None, y0 + 3 * step + 16))
+            for control, x, y in keys:
+                name = self.devices.label(control, p)
+                if x is None:
+                    x = cx - keycaps.keycap_size(self.font8, name)[0] // 2
+                used = control != "up"
+                face = WHITE if control == active else (lit if used else dim)
+                keycaps.draw_keycap(s, self.font8, name, (x, y), face, INK,
+                                    INK if used else shade(WHITE, 0.55))
+
+    def _pad_drawing(self, box: pygame.Rect, active: str | None) -> None:
         s = self.surface
         lit, dim = config.GATE_COLORS["H"], (70, 64, 110)
         # the stick: a ball on a shaft, leaning the way the demo pushes it
@@ -701,6 +786,10 @@ class Renderer:
         pygame.draw.rect(s, lit, start, border_radius=6)
         label = self.font8.render("START", False, INK)
         s.blit(label, label.get_rect(center=(start.centerx + 1, start.centery + 1)))
+
+    def _pad_legend(self, box: pygame.Rect, active: str | None, player: str | None) -> None:
+        s = self.surface
+        lit = config.GATE_COLORS["H"]
         # what each one does
         for i, (name, action) in enumerate(tutorial.CONTROLS):
             y = box.y + 30 + i * 22
@@ -752,7 +841,12 @@ class Renderer:
         if int(self.t * 2) % 2 == 0:
             press = outlined(self.font8, f"PRESS {self._name('start')}", config.GATE_COLORS["H"], shadow=False)
             s.blit(press, (W // 2 - press.get_width() // 2, menu.bottom + 6))
-        foot = self._foot(f"{self._name('stick')}: CHOOSE", f"{self._name('a')}: PICK", f"{self._name('start')}: PLAY")
         bar = pygame.Rect(0, 242, W, 20)
+        if not self._on_pads():
+            s.fill(INK, bar)
+            foot = self._keys(((("stick",), "CHOOSE"), (("a",), "PICK"), (("start",), "PLAY")))
+            s.blit(foot, (W // 2 - foot.get_width() // 2, 246))
+            return
+        foot = self._foot(f"{self._name('stick')}: CHOOSE", f"{self._name('a')}: PICK", f"{self._name('start')}: PLAY")
         s.fill(INK, bar)
         s.blit(foot, (W // 2 - foot.get_width() // 2, 248))

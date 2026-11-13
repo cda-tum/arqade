@@ -1,6 +1,8 @@
 import random
 
 import pygame
+import pytest
+from arqade_common.input import KEYBOARD, PAD, LastDevice
 
 from qurves import config, render, rules
 from qurves import match as m
@@ -14,11 +16,18 @@ def test_cells_map_inside_the_arena_below_the_hud():
     assert x < config.INTERNAL_WIDTH and y < config.INTERNAL_HEIGHT
 
 
-def play_through_every_screen(mode=2):
+def devices(p1, p2):
+    """Sides on these devices, as if each had pressed something on it."""
+    d = LastDevice(p1)
+    d._devices["p2"] = p2
+    return d
+
+
+def play_through_every_screen(mode=2, on=(PAD, PAD)):
     pygame.init()
     surface = pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT))
     mt = Match(random.Random(0))
-    renderer = Renderer(surface)
+    renderer = Renderer(surface, devices(*on))
 
     def frame(inp=None):
         events = mt.update(1 / 60, inp or FrameInput())
@@ -63,17 +72,25 @@ def test_four_player_screens_render_without_errors():
     assert seen >= {m.TITLE, m.TUTORIAL, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
 
 
+@pytest.mark.parametrize("on", ((KEYBOARD, KEYBOARD), (KEYBOARD, PAD), (PAD, KEYBOARD)))
+@pytest.mark.parametrize("mode", (2, 4))
+def test_every_screen_renders_for_keyboard_players(mode, on):
+    seen = play_through_every_screen(mode, on)  # keycaps on the title, the card and the result
+    assert seen >= {m.TITLE, m.TUTORIAL, m.COUNTDOWN, m.ROUND, m.ROUND_RESULT, m.MATCH_RESULT}
+
+
 def test_it_still_renders_with_glow_and_scanlines_off(monkeypatch):
     monkeypatch.setattr(config, "GLOW", False)
     monkeypatch.setattr(config, "SHOW_SCANLINES", False)
     play_through_every_screen()
 
 
-def test_the_pause_menu_renders():
+@pytest.mark.parametrize("on", ((PAD, PAD), (KEYBOARD, KEYBOARD)))
+def test_the_pause_menu_renders(on):
     pygame.init()
     surface = pygame.Surface((config.INTERNAL_WIDTH, config.INTERNAL_HEIGHT))
     mt = Match(random.Random(0))
-    renderer = Renderer(surface)
+    renderer = Renderer(surface, devices(*on))
     script = [FrameInput(confirm=True, activity=True)] + [FrameInput()] * 30 + [FrameInput(any_button=True)]
     for inp in script + [FrameInput()] * 200 + [FrameInput(pause=True)]:
         renderer.draw(mt, mt.update(1 / 60, inp), 1 / 60)

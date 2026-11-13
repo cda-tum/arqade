@@ -15,7 +15,7 @@ import pygame
 
 from planck_time import palette as P
 from planck_time.microgames.base import H, W, Microgame, PlayerInput, register
-from planck_time.pixel import backdrop, blit_center, button, card, outlined, result_overlay
+from planck_time.pixel import backdrop, blit_center, card, control_hint, result_overlay
 
 KINDS = ("X", "Y", "Z", "H")
 SLOT_X = W // 2
@@ -93,6 +93,6 @@ class Cancel(Microgame):
         if gone:  # the pair cancels: two rings popping
             k = min(1.0, self.since_end / 0.3)
             pygame.draw.circle(surf, P.GOLD, (SLOT_X, WIRE_Y), round(8 + 26 * k), 2)
-        blit_center(surf, outlined(f"{button('a')} WHEN THEY MATCH", 8, P.WHITE),
+        blit_center(surf, control_hint("{a} WHEN THEY MATCH", 8, P.WHITE),
                     (W // 2, H - 14))
         result_overlay(surf, self.result, self.since_end, seed=3)

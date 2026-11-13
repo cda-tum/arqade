@@ -199,13 +199,27 @@ class Input:
 # --- button names, for on-screen hints ----------------------------------------------------
 
 
+FACE_BUTTONS = ("a", "b", "x", "y", "l", "r")     # printed letters, unlike START or the stick
+
+
+def mixed_devices(devices: LastDevice | None = None) -> bool:
+    """One player on the keys, the other on a pad."""
+    devices = devices or _last_device
+    return len({devices[p] for p in PLAYERS}) > 1
+
+
 def button_name(control: str, player: str | None = None, devices: LastDevice | None = None) -> str:
     """A control's on-screen name ("a", "start", "stick", ...) for one player's keys or pad,
     or for both players' when player is None (e.g. "SPACE / ENTER"; one name when both are
     on pads). "stick" is the stick or the direction keys."""
     devices = devices or _last_device
     if player is None:
-        return " / ".join(dict.fromkeys(button_name(control, p, devices) for p in PLAYERS))
+        names = [button_name(control, p, devices) for p in PLAYERS]
+        if control in FACE_BUTTONS and mixed_devices(devices):
+            # one on keys, one on a pad: "B / A" would read as one button standing for
+            # another, so say whose is whose ("P1 B / P2 A")
+            return " / ".join(f"{p.upper()} {n}" for p, n in zip(PLAYERS, names))
+        return " / ".join(dict.fromkeys(names))
     if control == "stick":
         if devices[player] == KEYBOARD:
             return "WASD" if player == "p1" else "ARROWS"

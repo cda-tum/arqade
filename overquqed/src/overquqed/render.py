@@ -480,6 +480,18 @@ def draw_button_hint(surf, letter: str, cx: int, cy: int, color) -> None:
     surf.blit(g, (cx - 3, cy - 3))
 
 
+def draw_keycap(surf, label: str, x: int, y: int, fill, w: int = 0, h: int = 11, ink=None) -> pygame.Rect:
+    """A keyboard key with its name on it (what keyboard players see where
+    pad players see a round button). Top-left at (x, y); `w` 0 fits the name."""
+    g = text(label, 8, ink or P.INK)
+    w = max(w, g.get_width() + 5, h)
+    pygame.draw.rect(surf, P.INK, (x - 1, y - 1, w + 2, h + 3), border_radius=3)
+    pygame.draw.rect(surf, shade(fill, 0.6), (x, y + 1, w, h + 1), border_radius=2)
+    pygame.draw.rect(surf, fill, (x, y, w, h), border_radius=2)
+    surf.blit(g, (x + (w - g.get_width()) // 2 + 1, y + (h - 8) // 2 + 1))
+    return pygame.Rect(x, y, w, h)
+
+
 def station_item_pos(st: Station) -> tuple[int, int]:
     px, py = tile_px(st.x, st.y)
     offset = st.belt_offset * TILE * st.belt_dir if st.kind == "belt" else 0
@@ -508,7 +520,10 @@ class KitchenView:
         self.show_bars = not world.noise.is_noiseless
         self.dining_top = KITCHEN_Y + world.h * TILE
 
-    def draw(self, surf, t: float, active: set[int], colors, hints: bool = True) -> None:
+    def draw(self, surf, t: float, active: set[int], colors, hints: bool = True,
+             keys: dict[int, dict[str, str]] | None = None) -> None:
+        """`keys` names the keys of chefs cooked from the keyboard
+        ({chef: {"A": "B", "B": "V"}}): their prompts become keycaps."""
         w = self.world
         surf.blit(self.bg, (0, 0))
         self._dynamic_stations(surf, t)
@@ -536,7 +551,7 @@ class KitchenView:
                 labels.append((chef.held, hx, hy + bob))
         for chef in w.chefs:
             if chef.idx in active and hints:
-                self._target_hint(surf, chef, colors[chef.idx], t)
+                self._target_hint(surf, chef, colors[chef.idx], t, (keys or {}).get(chef.idx))
         for item, cx, cy in labels:
             draw_item_label(surf, item, cx, cy)
         for chef in w.chefs:
@@ -606,7 +621,7 @@ class KitchenView:
         pygame.draw.line(surf, P.WHITE, (cx - 12, cy), (cx + 12, cy))
         circuit.draw_gate_box(surf, SYMBOLS[st.kind], cx, cy)
 
-    def _target_hint(self, surf, chef: Chef, color, t: float) -> None:
+    def _target_hint(self, surf, chef: Chef, color, t: float, keys: dict[str, str] | None = None) -> None:
         w = self.world
         st = w.station_at(chef.target)
         if st is None:
@@ -630,7 +645,13 @@ class KitchenView:
         elif st.kind in ("pass", "bin") or st.accepts(chef.held):
             hint = "A"
         if hint and int(t * 2.5) % 3 != 2:
-            draw_button_hint(surf, hint, px + TILE - 3, py + 3, (120, 230, 120) if hint == "A" else (250, 120, 110))
+            fill = (120, 230, 120) if hint == "A" else (250, 120, 110)
+            if keys is not None:
+                g = text(keys[hint], 8, P.INK)
+                w = max(g.get_width() + 5, 11)
+                draw_keycap(surf, keys[hint], px + TILE + 2 - w, py - 2, fill, w)
+            else:
+                draw_button_hint(surf, hint, px + TILE - 3, py + 3, fill)
 
     def _cosmic(self, surf, t: float) -> None:
         c = self.world.cosmic

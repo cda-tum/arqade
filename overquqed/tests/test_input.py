@@ -117,3 +117,52 @@ def test_any_button_counts_keys_only_with_the_keyboard_on():
         assert not inp.any_button
     finally:
         inp_mod.set_keyboard_enabled(True)
+
+
+def _on(d1, d2):
+    from arqade_common.input import LastDevice
+
+    pygame.init()
+    inp = inp_mod.Input()
+    inp.devices = LastDevice(d1)
+    inp.devices._devices["p2"] = d2
+    return inp
+
+
+def test_hints_name_keys_for_the_keyboard_and_buttons_for_pads():
+    from arqade_common.input import KEYBOARD, PAD
+
+    pads = _on(PAD, PAD)
+    assert pads.name("a") == "A" and pads.name("start") == "START" and pads.on_pads()
+    keys = _on(KEYBOARD, KEYBOARD)
+    assert keys.name("a") == "B / L" and keys.name("b", "p1") == "V" and keys.name("stick", "p2") == "ARROWS"
+    assert not keys.on_pads() and not keys.on_pads("p1")
+
+
+def test_one_on_keys_one_on_a_pad_says_whose_letter_is_whose():
+    # "B / A" would read as the B key standing for the pad's A button.
+    from arqade_common.input import KEYBOARD, PAD
+
+    mixed = _on(KEYBOARD, PAD)
+    assert mixed.name("a") == "P1 B / P2 A"
+    assert mixed.name("start") == "SPACE / START"  # nothing to mix up there
+    assert not mixed.on_pads() and mixed.on_pads("p2")
+
+
+def test_training_day_names_the_keys_not_the_pad_letters():
+    from types import SimpleNamespace
+
+    from arqade_common.input import KEYBOARD, PAD
+    from overquqed import tutorial
+
+    for devices, expect in (((PAD, PAD), ("press A", "tap B")), ((KEYBOARD, KEYBOARD), (": B.", "tap V"))):
+        inp = _on(*devices)
+        tut = tutorial.Tutorial.__new__(tutorial.Tutorial)
+        tut.scene = SimpleNamespace(players=[0], app=SimpleNamespace(inp=inp))
+        text = []
+        for tut.i in range(len(tutorial.SCRIPT)):
+            text += tut.lines
+        joined = " ".join(text)
+        assert all(e in joined for e in expect), joined
+        if devices[0] == KEYBOARD:
+            assert not any(pad in joined for pad in ("press A", "with A", "(A)", "tap B", "HOLD B"))

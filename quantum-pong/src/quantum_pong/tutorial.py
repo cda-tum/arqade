@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 import pygame
 from arqade_common.input import KEYBOARD, PAD, PLAYERS, LastDevice
 
+from arqade_common import keycaps
+
 from quantum_pong import config, fonts, sprites
 from quantum_pong.gates import Gate, check_gate_collisions, is_live
 from quantum_pong.pong import (
@@ -231,6 +233,8 @@ class TutorialCard:
         on_pads = devices is None or devices.everyone_on(PAD)
         if on_pads:
             self._draw_controls(surface)
+        elif devices.everyone_on(KEYBOARD):
+            self._draw_keycaps(surface, devices)
         else:
             self._draw_key_controls(surface, devices)
 
@@ -272,6 +276,19 @@ class TutorialCard:
         surface.blit(move, move.get_rect(midleft=(FIELD_LEFT, y)))
         pause = self._text(f"{devices.shared_label('start')}: PAUSE", config.COLOR_TEXT)
         surface.blit(pause, pause.get_rect(midright=(FIELD_LEFT + FIELD_WIDTH, y)))
+
+    def _draw_keycaps(self, surface: pygame.Surface, devices: LastDevice) -> None:
+        """The same two controls when everyone is on the keyboard, as the keys
+        themselves: each player's up and down keys, and each one's pause key."""
+        y = CONTROLS_Y + 2
+        colors = (config.COLOR_BACKGROUND, config.COLOR_HINT, config.COLOR_TEXT, config.COLOR_TEXT)
+        p1, p2 = PLAYERS
+        move = ((devices.label("up", p1), devices.label("down", p1), "/",
+                 devices.label("up", p2), devices.label("down", p2)), "MOVE YOUR PADDLE")
+        keycaps.draw_key_hint(surface, self.font, (move,), (FIELD_LEFT, y), *colors)
+        pause = ((devices.label("start", p1), "/", devices.label("start", p2)), "PAUSE")
+        width = keycaps.key_hint_size(self.font, (pause,))[0]
+        keycaps.draw_key_hint(surface, self.font, (pause,), (FIELD_LEFT + FIELD_WIDTH - width, y), *colors)
 
     def _draw_controls(self, surface: pygame.Surface) -> None:
         """The stick and START, the only controls a match uses (both pads

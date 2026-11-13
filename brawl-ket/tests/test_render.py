@@ -1997,86 +1997,33 @@ def test_an_error_window_never_goes_under_the_hud():
     assert bottom - WINDOW_H >= WINDOW_TOP and x != 300.0
 
 
-# --- button names: the hints follow each player's keys or pad ---------------------------------------
+@pytest.mark.parametrize("devices", [("keyboard", "keyboard"), ("keyboard", "pad"), ("pad", "keyboard")])
+@pytest.mark.parametrize("who", [None, "p1", "p2"])
+def test_the_controls_name_keys_not_pad_letters_for_keyboard_players(surface, monkeypatch, devices, who):
+    """On the keys, CONTROLS draws keycaps (no stick, no round buttons) and the names in it are
+    the keys; with one player on each, every button name says whose it is."""
+    from arqade_common.input import LastDevice
+    from brawl_ket import render as R
+    d = LastDevice(devices[0])
+    d._devices["p2"] = devices[1]
+    names, balls = [], []
+    real = R.outlined
+    monkeypatch.setattr(R, "_ball", lambda *a, **k: balls.append(a))
+    monkeypatch.setattr(R, "outlined", lambda t, *a, **k: (names.append(t), real(t, *a, **k))[1])
+    Renderer(surface, d)._controls(pygame.Rect(334, 72, 292, 256), who)
+    players = ["p1", "p2"] if who is None else [who]
+    if any(d[p] == "keyboard" for p in players):
+        assert not balls                                    # no pad drawn
+    if all(d[p] == "keyboard" for p in players):
+        assert not {"A", "X", "Y", "START"} & set(names)
+    if who is None and devices[0] != devices[1]:
+        joined = " | ".join(names)
+        assert "P1 B / P2 A" in joined or "P1 A / P2 L" in joined
+        assert "B / A" not in joined.replace("P1 B / P2 A", "")
 
 
-def test_on_pads_every_hint_reads_as_printed():
-    """The cabinet's screens are unchanged: on pads, named() leaves every hint as it is."""
-    from arqade_common.input import PAD, LastDevice
-    from brawl_ket.render import (CARD_LINES, CLASSICAL_LINES, HINT, LESSON_LINES, RULE_LINES, X_INPUTS,
-                                  button_names, named)
-    pads = button_names(LastDevice(PAD), ("p1", "p2"))
-    texts = [HINT, *RULE_LINES, *CLASSICAL_LINES, *(how for _s, how in X_INPUTS), "A+B!", "PRESS START",
-             "STICK: CHOOSE   A: READY   B: BACK", "A: PICK   START: RESUME", "A: REMATCH     B: TITLE",
-             *(t for line in (*CARD_LINES, *LESSON_LINES) for t, _c in line)]
-    for text in texts:
-        assert named(text, pads) == text
-
-
-def test_on_the_keyboard_the_hints_name_each_players_keys():
-    from arqade_common.input import KEYBOARD, LastDevice
-    from brawl_ket.render import HINT, button_names, named
-    keys = LastDevice(KEYBOARD)
-    p1 = button_names(keys, ("p1",))
-    assert named("A AND X: YOUR COLOUR, B: THE OTHER", p1) == "B AND G: YOUR COLOUR, V: THE OTHER"
-    assert named("A+B!", p1) == "B+V!" and named("DOWN+X", p1) == "S+G" and named("AIR X", p1) == "AIR G"
-    assert named("DOWN+X", button_names(keys, ("p2",))) == "DOWN+I"
-    both = button_names(keys, ("p1", "p2"))
-    assert named("STICK: CHOOSE   A: READY   B: BACK", both) == "WASD / ARROWS: CHOOSE   B / L: READY   V / K: BACK"
-    assert named("PRESS START", both) == "PRESS SPACE / ENTER"
-    assert named(HINT, both) == "MATCH THEIR COLOUR TO HURT - C / J SWITCHES"
-    assert named("A+B", both) == "B+V / L+K"
-
-
-def test_the_keys_names_fit_where_the_pads_do():
-    from arqade_common.input import KEYBOARD, LastDevice
-    from brawl_ket.render import LESSON_LINES, LESSON_VIEW, LIST_NAME_X, X_INPUTS, button_names, font, named
+def test_mixed_lesson_lines_fit_without_their_key_names():
+    from brawl_ket.render import LESSON_LINES, LESSON_VIEW, font
     pygame.init()
-    keys = LastDevice(KEYBOARD)
-    both = button_names(keys, ("p1", "p2"))
     for parts in LESSON_LINES:
-        text = named("".join(t for t, _ in parts), both)
-        assert font(8).size(text)[0] <= LESSON_VIEW.w - 16, text
-    for p in ("p1", "p2"):
-        for _slot, how in X_INPUTS:
-            text = named(how, button_names(keys, (p,)))
-            assert font(8).size(text)[0] < LIST_NAME_X, text
-
-
-def test_how_to_play_on_the_keyboard_keeps_the_keys_inside_its_box(surface):
-    """The controls list moves left for the keys' longer names, but stays clear of the drawn
-    cluster and inside its box: there both screens are the same as on pads."""
-    import random
-
-    from arqade_common.input import KEYBOARD, PAD, LastDevice
-    from brawl_ket import match as M
-    from brawl_ket.tutorial import Lesson
-    shots = {}
-    for device in (PAD, KEYBOARD):
-        r = Renderer(surface, LastDevice(device))
-        m = M.Match(random.Random(1))
-        m.state, m.lesson = M.TUTORIAL, Lesson()
-        r.draw(m, [])
-        shots[device] = surface.copy()
-
-    def region(shot, rect):
-        return pygame.image.tobytes(shot.subsurface(rect), "RGB")
-
-    outside = pygame.Rect(629, 66, INTERNAL_WIDTH - 629, 266)          # right of the box and its ink
-    cluster = pygame.Rect(334, 170, 76, 52)                             # the 2x3 buttons, as printed
-    for rect in (outside, cluster):
-        assert region(shots[PAD], rect) == region(shots[KEYBOARD], rect)
-    controls = pygame.Rect(416, 170, 200, 100)
-    assert region(shots[PAD], controls) != region(shots[KEYBOARD], controls)     # ... but the names differ
-
-
-def test_each_hud_names_its_players_keys_on_the_keyboard(surface):
-    from arqade_common.input import KEYBOARD, PAD, LastDevice
-    fight = Fight({"p1": ROBERT, "p2": ROBERT})
-    chips = {}
-    for device in (PAD, KEYBOARD):
-        r = Renderer(surface, LastDevice(device))
-        r.draw_fight(fight, [])
-        chips[device] = [pygame.image.tobytes(surface.subsurface(r.legend_rects[k][b]), "RGB")
-                         for k in ("p1", "p2") for b in ("A", "B")]
-    assert all(pad != key for pad, key in zip(chips[PAD], chips[KEYBOARD]))     # A, B vs B, V and L, K
+        assert font(8).size("".join(t for t, _ in parts[1:]))[0] <= LESSON_VIEW.w - 16

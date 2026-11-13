@@ -17,9 +17,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pygame
+from arqade_common.input import PAD
+
+from arqade_common import keycaps
 
 from quantum_towers import config, fonts, screens, visuals
-from quantum_towers.input import KEYBOARD, button_name, cluster_keys, last_device
+from quantum_towers.input import KEYBOARD, PLAYERS, button_name, cluster_keys, last_device
 from quantum_towers.notation import render_state
 from quantum_towers.player import PlayerState, apply_action, confirm_climb, new_player
 from quantum_towers.quantum import apply_h, apply_x, apply_z, zero_state
@@ -261,6 +264,67 @@ def _draw_button(
         surface.blit(gate_surf, gate_surf.get_rect(center=(box.centerx + 1, box.centery + 1)))
 
 
+def _draw_key(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    center: tuple[int, int],
+    names: tuple[tuple[str, tuple[int, int, int]], ...],
+    gate: str | None,
+    pressed: bool,
+) -> None:
+    """_draw_button for keyboard players: a keycap where the button was, with
+    each player's key for that spot in their colour (one key in 1 PLAYER),
+    then the same gate square. Its right edge is the button's, so the gate
+    squares stay put."""
+    cx, cy = center
+    split = 3  # between two players' keys: a thin divider
+    text_w = sum(font.size(name)[0] for name, _ in names) + split * (len(names) - 1)
+    width = max(2 * _BUTTON_R, text_w + 4 + 2 * (len(names) == 1))
+    cap = pygame.Rect(cx + _BUTTON_R - width, cy - _BUTTON_R, width, 2 * _BUTTON_R)
+    face = config.COLOR_TARGET if pressed else config.COLOR_BACKGROUND
+    edge = config.COLOR_TOWER if gate is None else config.COLOR_TEXT
+    pygame.draw.rect(surface, edge, cap, border_radius=3)
+    pygame.draw.rect(surface, face, cap.inflate(0, -2).move(0, -1), border_radius=3)
+    pygame.draw.rect(surface, edge, cap.inflate(0, -2).move(0, -1), 1, border_radius=3)
+    x = cap.centerx - text_w // 2 + 1
+    for i, (name, color) in enumerate(names):
+        if i:
+            pygame.draw.line(surface, edge, (x + 1, cap.y + 3), (x + 1, cap.bottom - 5))
+            x += split
+        ink = config.COLOR_TOWER if gate is None else config.COLOR_TEXT_SHADOW if pressed else color
+        letter = font.render(name, False, ink)
+        surface.blit(letter, letter.get_rect(midleft=(x, cy)))
+        x += letter.get_width()
+    if gate is None:
+        return
+    box = pygame.Rect(cx + _BUTTON_R + 3, cy - _BOX // 2, _BOX, _BOX)
+    fill = config.COLOR_TARGET if pressed else config.COLOR_TOWER
+    pygame.draw.rect(surface, fill, box, border_radius=3)
+    pygame.draw.rect(surface, config.COLOR_TEXT if pressed else config.COLOR_TARGET, box, 2, border_radius=3)
+    ink = visuals._contrasting_text_color(fill)
+    if gate == "RESET":
+        visuals.draw_reset_icon(surface, box.center, ink)
+    else:
+        gate_surf = font.render(gate, False, ink)
+        surface.blit(gate_surf, gate_surf.get_rect(center=(box.centerx + 1, box.centery + 1)))
+
+
+def _draw_up_keys(
+    surface: pygame.Surface, font: pygame.font.Font, center: tuple[int, int], players, up: bool
+) -> None:
+    """_draw_stick for keyboard players: each one's up key (gold while the demo climbs)."""
+    devices = last_device()
+    colors = {"p1": config.COLOR_PLAYER_1, "p2": config.COLOR_PLAYER_2} if len(players) > 1 else {}
+    names = [devices.label("up", p) for p in players]
+    widths = [keycaps.keycap_size(font, n)[0] for n in names]
+    x = center[0] - (sum(widths) + 4 * (len(names) - 1)) // 2
+    for p, name, w in zip(players, names, widths):
+        ink = config.COLOR_TEXT_SHADOW if up else colors.get(p, config.COLOR_TEXT)
+        face = config.COLOR_TARGET if up else config.COLOR_BACKGROUND
+        keycaps.draw_keycap(surface, font, name, (x, center[1] - 10), face, config.COLOR_TEXT, ink)
+        x += w + 4
+
+
 def _draw_stick(surface: pygame.Surface, center: tuple[int, int], up: bool) -> None:
     """The stick from above-front: a base, the shaft, and the ball top, which
     leans up while the demo pushes."""
@@ -286,15 +350,27 @@ def _draw_controls(surface: pygame.Surface, card: Card, demo: DemoFrame) -> None
     # The printed layout, L X R over Y B A, each with the gate it fires.
     cluster_w = 3 * _CELL_W + 2 * _COL_GAP
     origin_x = box.right - 8 - cluster_w
-    _draw_stick(surface, ((box.x + origin_x) // 2, top + _ROW_H // 2 + 9), demo.stick_up)
+    who = last_device().latest if card.mode == "1p" else None  # whose keys or pad to name
+    players = (who,) if who else PLAYERS
+    on_keys = all(last_device()[p] == KEYBOARD for p in players)  # keys, not the pad
+    stick_at = ((box.x + origin_x) // 2, top + _ROW_H // 2 + 9)
+    if on_keys:
+        _draw_up_keys(surface, font, stick_at, players, demo.stick_up)
+    else:
+        _draw_stick(surface, stick_at, demo.stick_up)
+    colors = (config.COLOR_PLAYER_1, config.COLOR_PLAYER_2) if len(players) > 1 else (config.COLOR_TEXT,)
     for i, (label, gate) in enumerate(zip(config.BUTTON_LABELS, config.GATE_AT_POSITION)):
         row, col = divmod(i, 3)
         center = (origin_x + col * (_CELL_W + _COL_GAP) + _BUTTON_R, top + _BUTTON_R + row * _ROW_H)
-        _draw_button(surface, font, center, label, gate, pressed=gate is not None and demo.pressed == gate)
+        pressed = gate is not None and demo.pressed == gate
+        if on_keys:
+            names = tuple((last_device().label(label.lower(), p), c) for p, c in zip(players, colors))
+            _draw_key(surface, font, center, names, gate, pressed)
+        else:
+            _draw_button(surface, font, center, label, gate, pressed)
 
     y = top + 2 * _ROW_H + 4
     step = LINE + 2
-    who = last_device().latest if card.mode == "1p" else None  # whose keys or pad to name
     lines = (f"{button_name('up', who)}: CLIMB", "X Y Z H: GATES", "  : RESET TO |0>",
              f"{button_name('start', who)}: PAUSE")
     for i, text in enumerate(lines):
@@ -307,6 +383,11 @@ def _draw_controls(surface: pygame.Surface, card: Card, demo: DemoFrame) -> None
     if card.mode == "2p" and devices.everyone_on(KEYBOARD):  # the keys that stand for the buttons
         p1 = visuals.blit_outlined_text(surface, font, cluster_keys("p1"), config.COLOR_PLAYER_1, (left, who_y))
         visuals.blit_outlined_text(surface, font, cluster_keys("p2"), config.COLOR_PLAYER_2, (p1.right + 16, who_y))
+    elif card.mode == "2p" and not devices.everyone_on(PAD):  # one on keys: name them, the other's pad
+        x = left
+        for p, color in zip(PLAYERS, (config.COLOR_PLAYER_1, config.COLOR_PLAYER_2)):
+            text = cluster_keys(p) if devices[p] == KEYBOARD else f"{p.upper()}: PAD"
+            x = visuals.blit_outlined_text(surface, font, text, color, (x, who_y)).right + 16
     elif card.mode == "2p":
         p1 = visuals.blit_outlined_text(surface, font, "P1: LEFT", config.COLOR_PLAYER_1, (left, who_y))
         visuals.blit_outlined_text(surface, font, "P2: RIGHT", config.COLOR_PLAYER_2, (p1.right + 16, who_y))

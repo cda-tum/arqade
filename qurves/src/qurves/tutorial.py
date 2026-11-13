@@ -22,6 +22,8 @@ import random
 import pygame
 from arqade_common.input import KEYBOARD
 
+from arqade_common import keycaps
+
 from qurves import config, rules
 from qurves.fx import Fx
 
@@ -273,10 +275,19 @@ class TutorialScreen:
             else:
                 for name, x in ((stick_player, stick_x), (button_player, cluster_x)):
                     self._label(name.upper(), r.font16, config.PLAYER_COLORS[name], (x, top))
-            self._stick(s, (stick_x, y), config.PLAYER_COLORS[stick_player])
-            self._cluster(s, (cluster_x, y), config.PLAYER_COLORS[button_player])
-            self._start(s, (start_x, y), config.PLAYER_COLORS[stick_player])
             side = ("p1", "p2")[pad]  # names the controls for this side's keys or pad
+            if r.devices[side] == KEYBOARD:  # this side's keys, not its pad
+                label = r.devices.label
+                stick_keys = ((None, label("up", side), None),
+                              (label("left", side), label("down", side), label("right", side)))
+                self._keys(s, (stick_x, y), config.PLAYER_COLORS[stick_player], stick_keys)
+                face_keys = tuple(tuple(label(b.lower(), side) for b in row) for row in CLUSTER)
+                self._keys(s, (cluster_x, y), config.PLAYER_COLORS[button_player], face_keys)
+                self._key(s, label("start", side), r.font8, (start_x, y), config.PLAYER_COLORS[stick_player])
+            else:
+                self._stick(s, (stick_x, y), config.PLAYER_COLORS[stick_player])
+                self._cluster(s, (cluster_x, y), config.PLAYER_COLORS[button_player])
+                self._start(s, (start_x, y), config.PLAYER_COLORS[stick_player])
             for x, device, action in ((stick_x, r.name("stick", side), "STEER"),
                                       (cluster_x, r.name("face", side), "STEER"),
                                       (start_x, r.name("start", side), "PAUSE")):
@@ -328,6 +339,31 @@ class TutorialScreen:
                     text = self.r._plain(label, self.r.font8, lighten(color, 0.8))
                     _arrow(s, lighten(color, 0.3), (x + d[0] * 17, y + d[1] * 17), d, 3)
                 s.blit(text, text.get_rect(center=(x + 1, y + 1)))
+
+    def _keys(self, s: pygame.Surface, centre, color, names) -> None:
+        """Keys laid out like the pad's 2x3 cluster (the keyboard's are too):
+        the four that steer lit in the player's colour, with an arrow for
+        their direction (the arrow keys show theirs on the cap)."""
+        cx, cy = centre
+        for row, keys in enumerate(names):
+            for col, name in enumerate(keys):
+                if name is None:
+                    continue
+                x, y = cx + (col - 1) * 30, cy + (row * 2 - 1) * 14
+                d = BUTTON_DIR.get(CLUSTER[row][col])
+                self._key(s, name, self.r.font16, (x, y), color if d else None)
+                if d and name not in keycaps.ARROWS:
+                    _arrow(s, self.render.lighten(color, 0.3), (x + d[0] * 19, y + d[1] * 19), d, 3)
+
+    def _key(self, s: pygame.Surface, name: str, font, centre, color) -> None:
+        """One keycap centred on `centre`, lit in `color` (None: unused)."""
+        lighten, scale = self.render.lighten, self.render.scale
+        w, h = keycaps.keycap_size(font, name)
+        topleft = (centre[0] - w // 2, centre[1] - h // 2)
+        if color is None:
+            keycaps.draw_keycap(s, font, name, topleft, (14, 18, 34), UNLIT, UNLIT)
+        else:
+            keycaps.draw_keycap(s, font, name, topleft, scale(color, 0.4), lighten(color, 0.3), lighten(color, 0.8))
 
     def _start(self, s: pygame.Surface, centre, color) -> None:
         pill = pygame.Rect(0, 0, 50, 18)
