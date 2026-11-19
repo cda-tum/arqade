@@ -1,7 +1,7 @@
 # Brawl-Ket
 
 A one-on-one fighting game for the ARQADE cabinet (Batocera, `pygame`
-system), in the style of a small Street Fighter: health bars, light and heavy
+system), in the style of a classic arcade fighting game: health bars, light and heavy
 attacks, chains and specials. The quantum idea is one visible rule: each
 fighter is in a measurement basis, shown by their body colour, and only an
 attack of the matching colour hurts them. The name is a pun on bra-ket

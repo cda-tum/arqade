@@ -2,7 +2,7 @@
   "id": "brawl-ket",
   "title": "Brawl-Ket",
   "tagline": "A one-on-one fighting game where only a hit in your rival's colour hurts.",
-  "description": "A small Street Fighter-style brawler for two: health bars, light and heavy attacks, specials and supers, best of 3 rounds of 60 seconds. The quantum twist is one visible rule: each fighter is in a measurement basis, shown by their body colour, green or purple, and only an attack of the matching colour hurts them. Switch your own colour to make their hits bounce off. Seven fighters, among them BOHR, ERWIN the cat and ALICE & BOB, five stages, and a CPU opponent on three levels.",
+  "description": "A classic arcade fighting game for two: health bars, light and heavy attacks, specials and supers, best of 3 rounds of 60 seconds. The quantum twist is one visible rule: each fighter is in a measurement basis, shown by their body colour, green or purple, and only an attack of the matching colour hurts them. Switch your own colour to make their hits bounce off. Seven fighters, among them BOHR, ERWIN the cat and ALICE & BOB, five stages, and a CPU opponent on three levels.",
   "players": "1-2",
   "thumbnail": "thumbnail.png",
   "controls": {
